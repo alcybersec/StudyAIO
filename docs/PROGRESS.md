@@ -10,11 +10,11 @@
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 1.1 | Repo structure, Docker Compose, Makefile | ✅ Done | Git init, GitHub repo (alcybersec/StudyAIO), Docker Compose (api/worker/db/redis), FastAPI app factory, Celery worker, Alembic async setup, structlog, Pydantic Settings. Ports: db=5433, redis=6380 (avoid host conflicts). |
-| 1.2 | Database schema + Alembic migrations | ⬜ Not Started | |
-| 1.3 | File extractors (PDF, DOCX, PPTX) | ⬜ Not Started | |
-| 1.4 | Ingest stage (upload, hash, dedup) | ⬜ Not Started | |
-| 1.5 | Classify stage (Claude Code CLI + Review Items) | ⬜ Not Started | |
-| 1.6 | Extract stage (full extraction with images) | ⬜ Not Started | |
+| 1.2 | Database schema + Alembic migrations | ✅ Done | 9 SQLAlchemy models (Course, LectureArtifact, Extraction, Summary, Chunk, Flashcard, QuizQuestion, ReviewItem, PipelineRun). Alembic migration applied. All tables verified with correct columns, indexes, constraints, pgvector column. Fixed uuid7→uuid_extensions import. |
+| 1.3 | File extractors (PDF, DOCX, PPTX) | ✅ Done | BaseExtractor ABC + ExtractionResult dataclass. PdfExtractor (pymupdf), DocxExtractor (python-docx), PptxExtractor (python-pptx). Factory function get_extractor(). Per-page/slide text + image extraction. |
+| 1.4 | Ingest stage (upload, hash, dedup) | ✅ Done | Celery task ingest_file. SHA-256 dedup via artifact_service. File copied to data/uploads/. Creates LectureArtifact + PipelineRun records. |
+| 1.5 | Classify stage (Claude Code CLI + Review Items) | ✅ Done | AgentAdapter ABC with 5 methods. ClaudeCodeAdapter (subprocess). Agent factory. Classify Celery task with confidence scoring. ReviewItem creation for low confidence. Jinja2 prompt template. |
+| 1.6 | Extract stage (full extraction with images) | ✅ Done | Celery task extract_artifact. Runs appropriate extractor, saves images to data/extractions/<id>/images/, creates Extraction record with manifest JSON. Idempotent. |
 | 1.7 | Summarize stage (markdown + embedded images) | ⬜ Not Started | |
 | 1.8 | Celery pipeline orchestrator | ⬜ Not Started | |
 | 1.9 | Unit tests + fixtures | ⬜ Not Started | |
@@ -74,6 +74,8 @@
 |------|----------|-----------|
 | 2026-02-28 | Host ports: db=5433, redis=6380 | Avoid conflicts with existing services on 5432/6379 |
 | 2026-02-28 | UI service behind `ui` profile | Not needed for Milestone 1; won't start by default |
+| 2026-02-28 | uuid7 pip package imports as uuid_extensions | Fixed import in core/utils.py |
+| 2026-02-28 | Added alembic/ volume mount to docker-compose.yml | So migrations persist on host, not just in image |
 
 ## Issues & Blockers
 
