@@ -1,0 +1,11 @@
+{
+  "name": "studyaio-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'UI not yet initialized — run npm create vite@latest to scaffold'",
+    "build": "echo 'UI not yet initialized'",
+    "lint": "echo 'UI not yet initialized'"
+  }
+}
