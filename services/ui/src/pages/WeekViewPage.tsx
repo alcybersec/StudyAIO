@@ -4,11 +4,13 @@ import { useWeekDetail } from '../hooks/useApi'
 import { LoadingSpinner, EmptyState, PageHeader, Card } from '../components/ui'
 import { SummaryTab } from '../components/week/SummaryTab'
 import { ArtifactList } from '../components/week/ArtifactList'
+import { ScopedQA } from '../components/qa/ScopedQA'
 
-type Tab = 'summary' | 'flashcards' | 'quiz'
+type Tab = 'summary' | 'qa' | 'flashcards' | 'quiz'
 
 const tabs: { id: Tab; label: string; comingSoon?: boolean }[] = [
   { id: 'summary', label: 'Summary' },
+  { id: 'qa', label: 'Q&A' },
   { id: 'flashcards', label: 'Flashcards', comingSoon: true },
   { id: 'quiz', label: 'Quiz', comingSoon: true },
 ]
@@ -64,6 +66,12 @@ export function WeekViewPage() {
       {activeTab === 'summary' && (
         <Card>
           <SummaryTab summary={data.summary} />
+        </Card>
+      )}
+
+      {activeTab === 'qa' && courseCode && (
+        <Card>
+          <ScopedQA courseCode={courseCode} week={data.week} />
         </Card>
       )}
 

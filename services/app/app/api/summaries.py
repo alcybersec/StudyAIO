@@ -10,7 +10,12 @@ from app.services import summary_service
 router = APIRouter()
 
 
-@router.get("/summaries/{summary_id}", response_model=SummaryResponse)
+@router.get(
+    "/summaries/{summary_id}",
+    response_model=SummaryResponse,
+    summary="Get a summary",
+    description="Returns a generated weekly summary by ID, including markdown content, version, and source artifacts.",
+)
 async def get_summary(
     summary_id: str,
     session: AsyncSession = Depends(get_session),

@@ -173,3 +173,35 @@ class WeekDetailResponse(BaseModel):
     week: int
     summary: SummaryResponse | None
     artifacts: list[ArtifactResponse]
+
+
+# ── Q&A ──────────────────────────────────────────────────────────
+
+
+class QARequest(BaseModel):
+    """Request body for asking a question."""
+
+    question: str
+    course_code: str | None = None
+    week: int | None = None
+    top_k: int | None = None
+
+
+class Citation(BaseModel):
+    """A single citation referencing a source chunk."""
+
+    ref: int
+    chunk_id: str
+    text_snippet: str
+    course_code: str
+    week: int
+    page_ref: int
+    artifact_id: str = ""
+
+
+class QAResponse(BaseModel):
+    """Response with AI-generated answer and citations."""
+
+    answer: str
+    citations: list[Citation]
+    chunks_searched: int

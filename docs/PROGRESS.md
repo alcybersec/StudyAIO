@@ -1,6 +1,6 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 2 — Web UI MVP
+> **Current Milestone:** 3 — Search & Q&A
 > **Overall Status:** In Progress
 
 ---
@@ -32,17 +32,17 @@
 | 2.6 | Week view | ✅ Done | Tab bar (Summary active, Flashcards/Quiz "Coming Soon"), SummaryTab with react-markdown + remark-gfm + Tailwind prose classes, image path rewriting to /api/files/. ArtifactList (collapsible, file type icons, download links). |
 | 2.7 | Review Inbox page | ✅ Done | ReviewCard with SuggestionButtons (confidence %, clickable resolve), CustomResolutionForm (course/week/title inputs), dismiss. Filter tabs (Pending/Resolved/Dismissed). Success/error feedback. |
 | 2.8 | Navigation (sidebar + mobile) | ✅ Done | Desktop Sidebar (collapsible, course list with expand/collapse, pending review count badge). MobileNav bottom tab bar. AppLayout with responsive layout. Shared UI components: Badge, StatusBadge, Card, EmptyState, LoadingSpinner, PageHeader (breadcrumbs + actions). @tailwindcss/typography plugin activated. |
-| 2.9 | API documentation | ⬜ Not Started | |
+| 2.9 | API documentation | ✅ Done | docs/api.md with all 14 endpoints. OpenAPI tags + summaries/descriptions on every route for /docs Swagger UI. |
 
 ## Milestone 3 — Search & Q&A
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 3.1 | Indexing stage (chunking, embeddings, pgvector) | ⬜ Not Started | |
-| 3.2 | Similarity search with scope filtering | ⬜ Not Started | |
-| 3.3 | Q&A endpoint | ⬜ Not Started | |
-| 3.4 | Q&A UI with citations | ⬜ Not Started | |
-| 3.5 | Jump-to-source from citation | ⬜ Not Started | |
+| 3.1 | Indexing stage (chunking, embeddings, pgvector) | ✅ Done | EmbeddingProvider ABC + SentenceTransformerProvider (all-MiniLM-L6-v2, 384 dims). index_service.py (page-aware chunking, stable IDs, idempotent upsert). index_artifact Celery task. Alembic migration Vector(1536)→Vector(384). Orchestrator updated to 5-stage chain. 25 new tests (130 total). |
+| 3.2 | Similarity search with scope filtering | ✅ Done | search_service.py with pgvector cosine distance, JOINs for course/week filtering, similarity scoring. 4 unit tests (134 total). |
+| 3.3 | Q&A endpoint | ✅ Done | POST /api/qa/ask endpoint (embed→search→Claude→citations). answer_question() in ClaudeCodeAdapter with Jinja2 prompt. QARequest/QAResponse/Citation schemas. Scope filtering (all/course/week). 5 API tests (139 total). |
+| 3.4 | Q&A UI with citations | ✅ Done | QAPage, QuestionForm (scope selector), AnswerDisplay (inline [N] citations), CitationList. React Query mutation hook. /qa route + sidebar/mobile nav items. Session history (local state). |
+| 3.5 | Jump-to-source from citation | ✅ Done | ScopedQA component (pre-scoped to course+week). WeekView Q&A tab replaces "Coming Soon". Citations link to /courses/:code/weeks/:week with artifact+page params. Global Q&A citations also navigate to source. |
 
 ## Milestone 4 — Study Assets
 
@@ -78,6 +78,9 @@
 | 2026-02-28 | Tailwind CSS v4 with @tailwindcss/vite | Simpler config, no tailwind.config.js needed |
 | 2026-02-28 | uuid7 pip package imports as uuid_extensions | Fixed import in core/utils.py |
 | 2026-02-28 | Added alembic/ volume mount to docker-compose.yml | So migrations persist on host, not just in image |
+| 2026-02-28 | Local embeddings via sentence-transformers (all-MiniLM-L6-v2) | Avoid API keys/costs; EmbeddingProvider ABC is swappable for OpenAI/Voyage later |
+| 2026-02-28 | Vector(384) for chunk embeddings | Matches all-MiniLM-L6-v2 output; Alembic migration from Vector(1536) |
+| 2026-02-28 | EmbeddingProvider separate from AgentAdapter | Embeddings are deterministic, not generative; different concern from AI agents |
 
 ## Issues & Blockers
 

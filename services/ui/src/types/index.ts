@@ -113,3 +113,32 @@ export interface WeekDetail {
   summary: SummaryData | null
   artifacts: Artifact[]
 }
+
+export interface QARequest {
+  question: string
+  course_code?: string
+  week?: number
+  top_k?: number
+}
+
+export interface Citation {
+  ref: number
+  chunk_id: string
+  text_snippet: string
+  course_code: string
+  week: number
+  page_ref: number
+  artifact_id: string
+}
+
+export interface QAResponse {
+  answer: string
+  citations: Citation[]
+  chunks_searched: number
+}
+
+export interface QAExchange {
+  question: string
+  response: QAResponse
+  timestamp: string
+}

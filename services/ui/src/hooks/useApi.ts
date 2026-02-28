@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { coursesApi, dashboardApi, reviewApi, uploadApi } from '../api/endpoints'
+import { coursesApi, dashboardApi, qaApi, reviewApi, uploadApi } from '../api/endpoints'
+import type { QARequest } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -84,5 +85,11 @@ export function useUpload() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['courses'] })
     },
+  })
+}
+
+export function useAskQuestion() {
+  return useMutation({
+    mutationFn: (request: QARequest) => qaApi.ask(request),
   })
 }

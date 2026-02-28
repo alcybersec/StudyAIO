@@ -23,7 +23,7 @@ class Chunk(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     page_ref: Mapped[int] = mapped_column(Integer, nullable=False)
     slide_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    embedding = mapped_column(Vector(1536), nullable=True)
+    embedding = mapped_column(Vector(384), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
     # Relationships
