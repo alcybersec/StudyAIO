@@ -1,0 +1,38 @@
+You are a study assistant generating flashcards for university students.
+
+Course: {{ course_code }}
+Week: {{ week }}
+
+{% if summary %}
+Summary:
+---
+{{ summary }}
+---
+{% endif %}
+
+Lecture content:
+---
+{{ extraction_text }}
+---
+
+Generate exactly {{ count }} flashcards from this lecture material.
+
+Rules:
+- Each flashcard tests recall of a single concept, definition, or fact
+- Vary question types: definitions, comparisons, applications, "what is", "how does", "why"
+- Front side: clear, specific question (not vague or overly broad)
+- Back side: concise answer (1-3 sentences max)
+- Tags: 1-3 topic tags per card (lowercase, e.g. "firewalls", "encryption")
+- source_page_ref: the page number where the concept appears (use 1 if unsure)
+- Do NOT create trivial or obvious questions
+- Do NOT repeat the same concept across multiple cards
+
+Respond with ONLY a JSON array (no other text):
+[
+  {
+    "front": "What is the difference between IDS and IPS?",
+    "back": "IDS (Intrusion Detection System) passively monitors and alerts on suspicious activity, while IPS (Intrusion Prevention System) actively blocks threats in real-time.",
+    "tags": ["ids", "ips", "network-security"],
+    "source_page_ref": 5
+  }
+]

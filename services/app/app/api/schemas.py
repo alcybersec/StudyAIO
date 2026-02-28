@@ -178,6 +178,48 @@ class WeekDetailResponse(BaseModel):
 # ── Q&A ──────────────────────────────────────────────────────────
 
 
+# ── Assets ──────────────────────────────────────────────────────
+
+
+class FlashcardResponse(BaseModel):
+    """A generated flashcard."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    course_id: str
+    week: int
+    front: str
+    back: str
+    tags: list | dict
+    source_artifact_id: str
+    source_page_ref: int
+    generation_version: int
+    created_at: datetime
+
+
+class QuizQuestionResponse(BaseModel):
+    """A generated quiz question."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    course_id: str
+    week: int
+    question_type: str
+    question: str
+    options_json: list | dict | None
+    correct_answer: str
+    explanation: str
+    source_artifact_id: str
+    source_page_ref: int
+    generation_version: int
+    created_at: datetime
+
+
+# ── Q&A ──────────────────────────────────────────────────────────
+
+
 class QARequest(BaseModel):
     """Request body for asking a question."""
 
