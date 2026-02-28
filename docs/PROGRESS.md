@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
 > **Current Milestone:** 1 — Foundation & Pipeline (No UI)
-> **Overall Status:** Not Started
+> **Overall Status:** In Progress
 
 ---
 
@@ -9,7 +9,7 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1.1 | Repo structure, Docker Compose, Makefile | ⬜ Not Started | |
+| 1.1 | Repo structure, Docker Compose, Makefile | ✅ Done | Git init, GitHub repo (alcybersec/StudyAIO), Docker Compose (api/worker/db/redis), FastAPI app factory, Celery worker, Alembic async setup, structlog, Pydantic Settings. Ports: db=5433, redis=6380 (avoid host conflicts). |
 | 1.2 | Database schema + Alembic migrations | ⬜ Not Started | |
 | 1.3 | File extractors (PDF, DOCX, PPTX) | ⬜ Not Started | |
 | 1.4 | Ingest stage (upload, hash, dedup) | ⬜ Not Started | |
@@ -72,7 +72,8 @@
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| | | |
+| 2026-02-28 | Host ports: db=5433, redis=6380 | Avoid conflicts with existing services on 5432/6379 |
+| 2026-02-28 | UI service behind `ui` profile | Not needed for Milestone 1; won't start by default |
 
 ## Issues & Blockers
 

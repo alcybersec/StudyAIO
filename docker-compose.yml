@@ -1,0 +1,84 @@
+services:
+  ui:
+    build:
+      context: ./services/ui
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./services/ui/src:/app/src
+    profiles:
+      - ui
+
+  api:
+    build:
+      context: ./services/app
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/app/app:/app/app
+      - ./services/app/prompts:/app/prompts
+      - ./data:/app/data
+    env_file:
+      - .env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: ./services/app
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/app/app:/app/app
+      - ./services/app/prompts:/app/prompts
+      - ./data:/app/data
+    env_file:
+      - .env
+    command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=2
+
+  db:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-studyaio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-studyaio}
+      POSTGRES_DB: ${POSTGRES_DB:-studyaio}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-studyaio} -d ${POSTGRES_DB:-studyaio}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:
