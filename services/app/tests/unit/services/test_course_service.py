@@ -60,3 +60,50 @@ class TestGetCourseWeeks:
 
         result = await course_service.get_course_weeks(mock_session, "course-001")
         assert result == []
+
+
+@pytest.mark.asyncio
+class TestListCoursesWithStats:
+    """Tests for list_courses_with_stats."""
+
+    async def test_returns_empty_for_no_courses(self, mock_session):
+        """Returns empty list when there are no courses."""
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_session.execute.return_value = mock_result
+
+        result = await course_service.list_courses_with_stats(mock_session)
+        assert result == []
+
+    async def test_returns_stats_for_courses(self, mock_session):
+        """Returns courses with aggregate weeks and artifact counts."""
+        from datetime import datetime
+
+        mock_course = MagicMock()
+        mock_course.id = "course-001"
+        mock_course.code = "CSIT302"
+        mock_course.name = "Cybersecurity"
+        mock_course.term = None
+        mock_course.created_at = datetime(2024, 1, 1)
+        mock_course.updated_at = datetime(2024, 1, 2)
+
+        # First call: list_courses
+        courses_result = MagicMock()
+        courses_result.scalars.return_value.all.return_value = [mock_course]
+
+        # Second call: aggregate query
+        mock_stat_row = MagicMock()
+        mock_stat_row.course_id = "course-001"
+        mock_stat_row.weeks_covered = 5
+        mock_stat_row.total_artifacts = 12
+
+        stats_result = MagicMock()
+        stats_result.__iter__ = MagicMock(return_value=iter([mock_stat_row]))
+
+        mock_session.execute = AsyncMock(side_effect=[courses_result, stats_result])
+
+        result = await course_service.list_courses_with_stats(mock_session)
+        assert len(result) == 1
+        assert result[0]["code"] == "CSIT302"
+        assert result[0]["weeks_covered"] == 5
+        assert result[0]["total_artifacts"] == 12

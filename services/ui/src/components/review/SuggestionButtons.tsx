@@ -32,7 +32,7 @@ export function SuggestionButtons({ suggestions, onSelect, isLoading }: Suggesti
               key={opt.key}
               onClick={() => onSelect({ [opt.key]: opt.value })}
               disabled={isLoading}
-              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-2.5 min-h-[44px] text-sm font-medium rounded-lg border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-50 transition-colors"
             >
               <span>{String(opt.value)}</span>
               <span className="text-xs text-primary/60">{Math.round(opt.confidence * 100)}%</span>
@@ -53,7 +53,7 @@ export function SuggestionButtons({ suggestions, onSelect, isLoading }: Suggesti
             key={key}
             onClick={() => onSelect({ [key]: value })}
             disabled={isLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] text-sm font-medium rounded-lg border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-50 transition-colors"
           >
             <span className="text-xs text-gray-400">{key}:</span>
             <span>{String(value)}</span>

@@ -11,10 +11,11 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.schemas import PipelineRunResponse, UploadResponse
+from app.api.schemas import PipelineRunResponse, RetryResponse, UploadResponse
 from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import DuplicateFileError
+from app.pipeline.orchestrator import resume_pipeline
 from app.pipeline.orchestrator import run_pipeline
 from app.services import artifact_service, pipeline_service
 from app.services.event_service import PIPELINE_EVENTS_CHANNEL
@@ -99,6 +100,71 @@ async def get_upload_status(
         if not artifact:
             raise HTTPException(status_code=404, detail="Artifact not found")
     return [PipelineRunResponse.model_validate(r) for r in runs]
+
+
+# Stage that precedes each stage (used for retry status reset)
+_PRE_STAGE_STATUS = {
+    "ingest": "ingested",
+    "classify": "ingested",
+    "extract": "classified",
+    "summarize": "extracted",
+    "index": "summarized",
+    "assets": "indexed",
+}
+
+
+@router.post(
+    "/uploads/{artifact_id}/retry",
+    response_model=RetryResponse,
+    summary="Retry a failed pipeline",
+    description="Retries the processing pipeline for a failed artifact, resuming from the failed stage.",
+)
+async def retry_pipeline(
+    artifact_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> RetryResponse:
+    """Retry a failed artifact's pipeline from the failed stage."""
+    artifact = await artifact_service.get_artifact(session, artifact_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    if artifact.status != "failed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Artifact status is '{artifact.status}', not 'failed'. Only failed artifacts can be retried.",
+        )
+
+    # Find the latest failed pipeline run to determine which stage failed
+    runs = await pipeline_service.get_artifact_pipeline_runs(session, artifact_id)
+    failed_runs = [r for r in runs if r.status == "failed"]
+    if not failed_runs:
+        raise HTTPException(
+            status_code=400,
+            detail="No failed pipeline run found for this artifact",
+        )
+
+    latest_failed = failed_runs[-1]
+    failed_stage = latest_failed.stage
+
+    # Reset artifact status to pre-failure state
+    pre_status = _PRE_STAGE_STATUS.get(failed_stage, "ingested")
+    artifact.status = pre_status
+    await session.commit()
+
+    logger.info(
+        "retry_pipeline_dispatched",
+        artifact_id=artifact_id,
+        failed_stage=failed_stage,
+        reset_status=pre_status,
+    )
+
+    resume_pipeline(artifact_id, from_stage=failed_stage)
+
+    return RetryResponse(
+        artifact_id=artifact_id,
+        status=pre_status,
+        retrying_from_stage=failed_stage,
+    )
 
 
 @router.get(

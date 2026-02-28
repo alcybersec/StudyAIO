@@ -86,3 +86,92 @@ class TestGetUploadStatus:
             response = await async_client.get("/api/uploads/unknown-id/status")
 
         assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestRetryPipeline:
+    """Tests for POST /api/uploads/{artifact_id}/retry."""
+
+    async def test_retry_not_found(self, async_client):
+        """Retry returns 404 for unknown artifact."""
+        with patch(
+            "app.api.uploads.artifact_service.get_artifact",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = await async_client.post("/api/uploads/unknown-id/retry")
+
+        assert response.status_code == 404
+
+    async def test_retry_not_failed_returns_400(self, async_client):
+        """Retry returns 400 if artifact is not failed."""
+        mock_artifact = MagicMock()
+        mock_artifact.status = "processed"
+
+        with patch(
+            "app.api.uploads.artifact_service.get_artifact",
+            new_callable=AsyncMock,
+            return_value=mock_artifact,
+        ):
+            response = await async_client.post("/api/uploads/art-001/retry")
+
+        assert response.status_code == 400
+        assert "not 'failed'" in response.json()["detail"]
+
+    async def test_retry_failed_resumes_pipeline(self, async_client, mock_session):
+        """Retry dispatches resume_pipeline for failed artifact."""
+        mock_artifact = MagicMock()
+        mock_artifact.status = "failed"
+
+        mock_run = MagicMock()
+        mock_run.status = "failed"
+        mock_run.stage = "summarize"
+
+        with (
+            patch(
+                "app.api.uploads.artifact_service.get_artifact",
+                new_callable=AsyncMock,
+                return_value=mock_artifact,
+            ),
+            patch(
+                "app.api.uploads.pipeline_service.get_artifact_pipeline_runs",
+                new_callable=AsyncMock,
+                return_value=[mock_run],
+            ),
+            patch(
+                "app.api.uploads.resume_pipeline",
+            ) as mock_resume,
+        ):
+            response = await async_client.post("/api/uploads/art-001/retry")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["retrying_from_stage"] == "summarize"
+        assert data["status"] == "extracted"
+        mock_resume.assert_called_once_with("art-001", from_stage="summarize")
+
+    async def test_retry_no_failed_runs_returns_400(self, async_client):
+        """Retry returns 400 when no failed runs exist."""
+        mock_artifact = MagicMock()
+        mock_artifact.status = "failed"
+
+        mock_run = MagicMock()
+        mock_run.status = "completed"
+        mock_run.stage = "ingest"
+
+        with (
+            patch(
+                "app.api.uploads.artifact_service.get_artifact",
+                new_callable=AsyncMock,
+                return_value=mock_artifact,
+            ),
+            patch(
+                "app.api.uploads.pipeline_service.get_artifact_pipeline_runs",
+                new_callable=AsyncMock,
+                return_value=[mock_run],
+            ),
+        ):
+            response = await async_client.post("/api/uploads/art-001/retry")
+
+        assert response.status_code == 400
+        assert "No failed pipeline run" in response.json()["detail"]

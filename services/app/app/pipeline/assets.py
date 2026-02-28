@@ -167,9 +167,9 @@ async def _generate_assets(artifact_id: str) -> dict:
                 "quiz_count": len(quiz_questions),
             }
 
-        except (AssetGenerationError, AgentError):
+        except (AssetGenerationError, AgentError) as e:
             run.status = "failed"
-            run.error_message = str(artifact_id)
+            run.error_message = str(e)
             run.completed_at = datetime.utcnow()
             artifact.status = "failed"
             await session.commit()

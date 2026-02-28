@@ -1,15 +1,16 @@
 import { useDashboard } from '../hooks/useApi'
-import { LoadingSpinner, EmptyState, PageHeader } from '../components/ui'
+import { LoadingSpinner, ErrorBanner, PageHeader } from '../components/ui'
 import { ReviewAlert } from '../components/dashboard/ReviewAlert'
 import { ActivityFeed } from '../components/dashboard/ActivityFeed'
 import { CourseCard } from '../components/dashboard/CourseCard'
 import { QuickUpload } from '../components/dashboard/QuickUpload'
+import { EmptyState } from '../components/ui'
 
 export function DashboardPage() {
-  const { data, isLoading, error } = useDashboard()
+  const { data, isLoading, error, refetch } = useDashboard()
 
   if (isLoading) return <LoadingSpinner label="Loading dashboard..." />
-  if (error) return <EmptyState icon="!" title="Failed to load dashboard" description="Check that the API server is running." />
+  if (error) return <ErrorBanner message="Failed to load dashboard. Check that the API server is running." onRetry={refetch} />
 
   if (!data) return null
 

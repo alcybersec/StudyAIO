@@ -122,9 +122,9 @@ async def _index(artifact_id: str) -> dict:
                 "chunk_count": len(chunks),
             }
 
-        except IndexingError:
+        except IndexingError as e:
             run.status = "failed"
-            run.error_message = str(artifact_id)
+            run.error_message = str(e)
             run.completed_at = datetime.utcnow()
             artifact.status = "failed"
             await session.commit()

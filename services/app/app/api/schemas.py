@@ -139,6 +139,14 @@ class PipelineRunResponse(BaseModel):
     duration_ms: int | None
 
 
+class RetryResponse(BaseModel):
+    """Response after retrying a failed pipeline."""
+
+    artifact_id: str
+    status: str
+    retrying_from_stage: str
+
+
 # ── Dashboard ─────────────────────────────────────────────────────
 
 

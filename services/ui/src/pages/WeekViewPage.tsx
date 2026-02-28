@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useWeekDetail } from '../hooks/useApi'
-import { LoadingSpinner, EmptyState, PageHeader, Card } from '../components/ui'
+import { LoadingSpinner, EmptyState, ErrorBanner, PageHeader, Card } from '../components/ui'
 import { SummaryTab } from '../components/week/SummaryTab'
 import { ArtifactList } from '../components/week/ArtifactList'
 import { ScopedQA } from '../components/qa/ScopedQA'
@@ -20,11 +20,11 @@ const tabs: { id: Tab; label: string }[] = [
 export function WeekViewPage() {
   const { courseCode, weekNumber } = useParams<{ courseCode: string; weekNumber: string }>()
   const week = Number(weekNumber)
-  const { data, isLoading, error } = useWeekDetail(courseCode ?? '', week)
+  const { data, isLoading, error, refetch } = useWeekDetail(courseCode ?? '', week)
   const [activeTab, setActiveTab] = useState<Tab>('summary')
 
   if (isLoading) return <LoadingSpinner label="Loading week..." />
-  if (error) return <EmptyState icon="!" title="Failed to load week" />
+  if (error) return <ErrorBanner message="Failed to load week data." onRetry={refetch} />
   if (!data) return <EmptyState icon="?" title="Week not found" />
 
   return (

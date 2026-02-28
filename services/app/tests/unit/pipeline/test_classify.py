@@ -173,3 +173,39 @@ class TestClassifyStage:
 
         assert result["status"] == "waiting_review"
         mock_review_svc.create_review_item.assert_called_once()
+
+    @patch("app.pipeline.classify._extract_text_preview")
+    @patch("app.pipeline.classify.async_session_factory")
+    async def test_error_message_stores_exception_not_artifact_id(
+        self, mock_session_factory, mock_preview
+    ):
+        """Error message in PipelineRun stores the exception, not artifact_id."""
+        from app.pipeline.classify import _classify
+
+        artifact = MagicMock()
+        artifact.id = "art-001"
+        artifact.file_path = "/app/data/uploads/test.pdf"
+        artifact.file_type = "pdf"
+        artifact.original_filename = "test.pdf"
+
+        session = AsyncMock()
+        session.add = MagicMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = artifact
+        session.execute.return_value = mock_result
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
+        mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        # Return empty text preview to trigger ClassificationError
+        mock_preview.return_value = ""
+
+        with pytest.raises(ClassificationError, match="Could not extract text preview"):
+            await _classify("art-001")
+
+        # Verify the pipeline run error_message was set correctly
+        # The run object is the second positional arg to session.add
+        add_calls = session.add.call_args_list
+        assert len(add_calls) >= 1
+        run = add_calls[0][0][0]  # First call, first positional arg
+        assert run.error_message != "art-001"
+        assert "Could not extract text preview" in run.error_message
