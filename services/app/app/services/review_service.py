@@ -3,6 +3,7 @@
 from datetime import datetime
 
 import structlog
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.utils import generate_id
@@ -54,3 +55,118 @@ async def create_review_item(
     )
 
     return review
+
+
+async def list_pending_reviews(session: AsyncSession) -> list[ReviewItem]:
+    """Get all pending review items.
+
+    Args:
+        session: Database session.
+
+    Returns:
+        List of pending ReviewItem records.
+    """
+    result = await session.execute(
+        select(ReviewItem)
+        .where(ReviewItem.status == "pending")
+        .order_by(ReviewItem.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_review_item(session: AsyncSession, review_id: str) -> ReviewItem | None:
+    """Get a single review item by ID.
+
+    Args:
+        session: Database session.
+        review_id: ReviewItem UUID.
+
+    Returns:
+        ReviewItem if found, None otherwise.
+    """
+    result = await session.execute(
+        select(ReviewItem).where(ReviewItem.id == review_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def resolve_review_item(
+    session: AsyncSession,
+    review_id: str,
+    resolution: dict,
+) -> ReviewItem:
+    """Resolve a pending review item with a resolution.
+
+    Args:
+        session: Database session.
+        review_id: ReviewItem UUID.
+        resolution: Resolution data dict.
+
+    Returns:
+        Updated ReviewItem.
+
+    Raises:
+        ValueError: If review item not found or already resolved.
+    """
+    item = await get_review_item(session, review_id)
+    if not item:
+        raise ValueError(f"ReviewItem {review_id} not found")
+    if item.status != "pending":
+        raise ValueError(f"ReviewItem {review_id} is already {item.status}")
+
+    item.status = "resolved"
+    item.resolution_json = resolution
+    item.resolved_at = datetime.utcnow()
+    await session.flush()
+
+    logger.info(
+        "review_item_resolved",
+        review_id=review_id,
+        entity_type=item.entity_type,
+        entity_id=item.entity_id,
+    )
+    return item
+
+
+async def dismiss_review_item(
+    session: AsyncSession, review_id: str
+) -> ReviewItem:
+    """Dismiss a pending review item.
+
+    Args:
+        session: Database session.
+        review_id: ReviewItem UUID.
+
+    Returns:
+        Updated ReviewItem.
+
+    Raises:
+        ValueError: If review item not found or already resolved.
+    """
+    item = await get_review_item(session, review_id)
+    if not item:
+        raise ValueError(f"ReviewItem {review_id} not found")
+    if item.status != "pending":
+        raise ValueError(f"ReviewItem {review_id} is already {item.status}")
+
+    item.status = "dismissed"
+    item.resolved_at = datetime.utcnow()
+    await session.flush()
+
+    logger.info("review_item_dismissed", review_id=review_id)
+    return item
+
+
+async def count_pending_reviews(session: AsyncSession) -> int:
+    """Count pending review items.
+
+    Args:
+        session: Database session.
+
+    Returns:
+        Number of pending reviews.
+    """
+    result = await session.execute(
+        select(func.count(ReviewItem.id)).where(ReviewItem.status == "pending")
+    )
+    return result.scalar_one()

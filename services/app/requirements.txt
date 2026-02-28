@@ -24,6 +24,9 @@ pymupdf==1.25.3
 python-docx==1.1.2
 python-pptx==1.0.2
 
+# SSE
+sse-starlette>=2.0,<3.0
+
 # Utilities
 uuid7==0.1.0
 jinja2==3.1.5

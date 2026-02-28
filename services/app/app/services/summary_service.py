@@ -159,6 +159,65 @@ async def create_or_update_summary(
     return summary
 
 
+async def get_summary_by_id(session: AsyncSession, summary_id: str) -> Summary | None:
+    """Get a summary by its ID.
+
+    Args:
+        session: Database session.
+        summary_id: Summary UUID.
+
+    Returns:
+        Summary if found, None otherwise.
+    """
+    result = await session.execute(
+        select(Summary).where(Summary.id == summary_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_summary_for_week(
+    session: AsyncSession, course_code: str, week: int
+) -> Summary | None:
+    """Get the summary for a specific course code + week.
+
+    Args:
+        session: Database session.
+        course_code: Course code (e.g., "CSIT302").
+        week: Week number.
+
+    Returns:
+        Summary if found, None otherwise.
+    """
+    from app.models.course import Course as CourseModel
+
+    result = await session.execute(
+        select(Summary)
+        .join(CourseModel, Summary.course_id == CourseModel.id)
+        .where(CourseModel.code == course_code, Summary.week == week)
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_course_summaries(
+    session: AsyncSession, course_id: str
+) -> list[Summary]:
+    """Get all summaries for a course.
+
+    Args:
+        session: Database session.
+        course_id: Course UUID.
+
+    Returns:
+        List of Summary records ordered by week.
+    """
+    result = await session.execute(
+        select(Summary)
+        .where(Summary.course_id == course_id)
+        .order_by(Summary.week)
+    )
+    return list(result.scalars().all())
+
+
 def build_summary_file_path(summaries_dir: str, course_code: str, week: int) -> Path:
     """Build the file path for a summary markdown file.
 

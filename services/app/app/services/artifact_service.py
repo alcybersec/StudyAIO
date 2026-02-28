@@ -118,3 +118,44 @@ async def ingest_file(session: AsyncSession, source_path: str) -> LectureArtifac
     )
 
     return artifact
+
+
+async def get_artifact(session: AsyncSession, artifact_id: str) -> LectureArtifact | None:
+    """Get a single artifact by ID.
+
+    Args:
+        session: Database session.
+        artifact_id: Artifact UUID.
+
+    Returns:
+        LectureArtifact if found, None otherwise.
+    """
+    result = await session.execute(
+        select(LectureArtifact).where(LectureArtifact.id == artifact_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_artifacts(
+    session: AsyncSession,
+    course_id: str | None = None,
+    week: int | None = None,
+) -> list[LectureArtifact]:
+    """List artifacts with optional filters.
+
+    Args:
+        session: Database session.
+        course_id: Filter by course UUID.
+        week: Filter by week number.
+
+    Returns:
+        List of matching LectureArtifact records.
+    """
+    query = select(LectureArtifact)
+    if course_id is not None:
+        query = query.where(LectureArtifact.course_id == course_id)
+    if week is not None:
+        query = query.where(LectureArtifact.week == week)
+    query = query.order_by(LectureArtifact.created_at.desc())
+    result = await session.execute(query)
+    return list(result.scalars().all())

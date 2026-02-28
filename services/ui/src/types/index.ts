@@ -1,0 +1,115 @@
+export interface Course {
+  id: string
+  code: string
+  name: string | null
+  term: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CourseListItem extends Course {
+  weeks_covered: number
+  total_artifacts: number
+  last_updated: string | null
+}
+
+export interface WeekSummaryRow {
+  week: number
+  titles: string[]
+  artifact_count: number
+  summary_status: string
+  summary_id: string | null
+  flashcard_count: number
+  quiz_count: number
+}
+
+export interface CourseDetail {
+  course: Course
+  weeks: WeekSummaryRow[]
+}
+
+export interface Artifact {
+  id: string
+  course_id: string | null
+  week: number | null
+  title: string | null
+  original_filename: string
+  file_type: string
+  sha256: string
+  file_size_bytes: number
+  status: string
+  created_at: string
+}
+
+export interface SummaryData {
+  id: string
+  course_id: string
+  week: number
+  content_md: string
+  version: number
+  source_artifacts: string[] | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ReviewItem {
+  id: string
+  review_type: string
+  entity_type: string
+  entity_id: string
+  payload_json: Record<string, unknown>
+  suggested_values: Record<string, unknown>
+  status: string
+  resolution_json: Record<string, unknown> | null
+  created_at: string
+  resolved_at: string | null
+}
+
+export interface ActivityItem {
+  pipeline_run_id: string
+  artifact_id: string
+  filename: string | null
+  stage: string
+  status: string
+  started_at: string | null
+  completed_at: string | null
+  duration_ms: number | null
+}
+
+export interface DashboardData {
+  pending_review_count: number
+  recent_activity: ActivityItem[]
+  courses: CourseListItem[]
+}
+
+export interface UploadResult {
+  artifact_id: string
+  filename: string
+  status: string
+  pipeline_task_id: string | null
+}
+
+export interface PipelineEvent {
+  artifact_id: string
+  stage: string
+  status: string
+  message: string | null
+}
+
+export interface PipelineRun {
+  id: string
+  artifact_id: string
+  stage: string
+  status: string
+  error_message: string | null
+  started_at: string
+  completed_at: string | null
+  duration_ms: number | null
+}
+
+export interface WeekDetail {
+  course: Course
+  week: number
+  summary: SummaryData | null
+  artifacts: Artifact[]
+}
