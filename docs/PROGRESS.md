@@ -1,6 +1,6 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 1 — Foundation & Pipeline (No UI)
+> **Current Milestone:** 2 — Web UI MVP
 > **Overall Status:** In Progress
 
 ---
@@ -24,8 +24,8 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 2.1 | FastAPI endpoints (upload, courses, summaries, review) | ⬜ Not Started | |
-| 2.2 | React project setup (Vite, Tailwind, Router, Query) | ⬜ Not Started | |
+| 2.1 | FastAPI endpoints (upload, courses, summaries, review) | ✅ Done | 14 API endpoints: dashboard, courses (list/detail/week), uploads (POST/status/SSE), summaries, review-items (list/get/resolve/dismiss), files. Pydantic schemas, service read functions (course_service, pipeline_service + additions to artifact/review/summary services), SSE pipeline events via Redis pub/sub, exception handlers. 25 new tests (105 total). |
+| 2.2 | React project setup (Vite, Tailwind, Router, Query) | ✅ Done | Vite + React 18 + TypeScript. Tailwind CSS v4 with @tailwindcss/vite. React Router (5 routes), React Query, react-markdown. API client layer (typed fetch wrapper + per-resource endpoints). TypeScript types matching API schemas. Query/mutation hooks. SSE hook for pipeline events. Stub pages (Dashboard, Course, WeekView, Upload, ReviewInbox) with AppLayout. UI profile restriction removed from docker-compose.yml. |
 | 2.3 | Dashboard page | ⬜ Not Started | |
 | 2.4 | Upload page | ⬜ Not Started | |
 | 2.5 | Course page | ⬜ Not Started | |
@@ -73,7 +73,9 @@
 | Date | Decision | Rationale |
 |------|----------|-----------|
 | 2026-02-28 | Host ports: db=5433, redis=6380 | Avoid conflicts with existing services on 5432/6379 |
-| 2026-02-28 | UI service behind `ui` profile | Not needed for Milestone 1; won't start by default |
+| 2026-02-28 | UI service behind `ui` profile | Not needed for Milestone 1; won't start by default (removed in 2.2) |
+| 2026-02-28 | sse-starlette for SSE events | Real-time pipeline progress streaming via Redis pub/sub |
+| 2026-02-28 | Tailwind CSS v4 with @tailwindcss/vite | Simpler config, no tailwind.config.js needed |
 | 2026-02-28 | uuid7 pip package imports as uuid_extensions | Fixed import in core/utils.py |
 | 2026-02-28 | Added alembic/ volume mount to docker-compose.yml | So migrations persist on host, not just in image |
 

@@ -11,8 +11,6 @@ services:
       - VITE_API_URL=http://localhost:8000
     volumes:
       - ./services/ui/src:/app/src
-    profiles:
-      - ui
 
   api:
     build:

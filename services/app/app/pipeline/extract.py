@@ -15,6 +15,7 @@ from app.extractors import get_extractor
 from app.models.artifact import LectureArtifact
 from app.models.extraction import Extraction
 from app.models.pipeline_run import PipelineRun
+from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
 
 logger = structlog.get_logger()
@@ -172,10 +173,15 @@ def extract_artifact(self, input_value: str | dict) -> dict:
         raise ExtractionError("No artifact_id provided")
 
     logger.info("extract_task_started", artifact_id=artifact_id)
+    publish_pipeline_event_sync(artifact_id, "extract", "started")
     try:
-        return _run_async(_extract(artifact_id))
+        result = _run_async(_extract(artifact_id))
+        publish_pipeline_event_sync(artifact_id, "extract", result.get("status", "completed"))
+        return result
     except ExtractionError:
+        publish_pipeline_event_sync(artifact_id, "extract", "failed")
         raise  # Don't retry on extraction errors
     except Exception as exc:
         logger.error("extract_task_error", error=str(exc), artifact_id=artifact_id)
+        publish_pipeline_event_sync(artifact_id, "extract", "failed", str(exc))
         raise self.retry(exc=exc)

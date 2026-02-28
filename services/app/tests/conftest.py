@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from app.agents.base import (
@@ -96,6 +97,26 @@ def mock_session():
     session.refresh = AsyncMock()
     session.execute = AsyncMock()
     return session
+
+
+# ── Async HTTP test client ────────────────────────────────────────
+
+@pytest.fixture
+async def async_client(mock_session):
+    """Async HTTP client for testing FastAPI endpoints."""
+    from app.main import app
+    from app.core.database import get_session
+
+    async def override():
+        yield mock_session
+
+    app.dependency_overrides[get_session] = override
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        yield client
+    app.dependency_overrides.clear()
 
 
 # ── Programmatic fixture file creators ──────────────────────────────

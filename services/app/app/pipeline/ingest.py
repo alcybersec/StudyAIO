@@ -11,6 +11,7 @@ from app.core.exceptions import DuplicateFileError
 from app.core.utils import generate_id
 from app.models.pipeline_run import PipelineRun
 from app.services import artifact_service
+from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
 
 logger = structlog.get_logger()
@@ -93,10 +94,15 @@ def ingest_file(self, file_path: str) -> dict:
         Dict with artifact_id, status, filename, sha256.
     """
     logger.info("ingest_task_started", file_path=file_path)
+    publish_pipeline_event_sync("pending", "ingest", "started")
     try:
-        return _run_async(_ingest(file_path))
+        result = _run_async(_ingest(file_path))
+        artifact_id = result.get("artifact_id", "unknown")
+        publish_pipeline_event_sync(artifact_id, "ingest", result.get("status", "completed"))
+        return result
     except (DuplicateFileError, FileNotFoundError, ValueError):
         raise  # Don't retry on expected errors
     except Exception as exc:
         logger.error("ingest_task_error", error=str(exc))
+        publish_pipeline_event_sync("unknown", "ingest", "failed", str(exc))
         raise self.retry(exc=exc)
