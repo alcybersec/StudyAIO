@@ -14,35 +14,22 @@ class TestListCourses:
 
     async def test_list_courses_returns_courses_with_stats(self, async_client):
         """List courses returns courses with aggregate data."""
-        mock_course = AsyncMock()
-        mock_course.id = "course-001"
-        mock_course.code = "CSIT302"
-        mock_course.name = "Cybersecurity"
-        mock_course.term = "2024-S1"
-        mock_course.created_at = datetime(2024, 1, 1)
-        mock_course.updated_at = datetime(2024, 1, 2)
-
-        with (
-            patch(
-                "app.api.courses.course_service.list_courses",
-                new_callable=AsyncMock,
-                return_value=[mock_course],
-            ),
-            patch(
-                "app.api.courses.course_service.get_course_weeks",
-                new_callable=AsyncMock,
-                return_value=[
-                    {
-                        "week": 1,
-                        "titles": ["Intro"],
-                        "artifact_count": 1,
-                        "summary_status": "pending",
-                        "summary_id": None,
-                        "flashcard_count": 0,
-                        "quiz_count": 0,
-                    }
-                ],
-            ),
+        with patch(
+            "app.api.courses.course_service.list_courses_with_stats",
+            new_callable=AsyncMock,
+            return_value=[
+                {
+                    "id": "course-001",
+                    "code": "CSIT302",
+                    "name": "Cybersecurity",
+                    "term": "2024-S1",
+                    "created_at": datetime(2024, 1, 1),
+                    "updated_at": datetime(2024, 1, 2),
+                    "weeks_covered": 1,
+                    "total_artifacts": 1,
+                    "last_updated": datetime(2024, 1, 2),
+                }
+            ],
         ):
             response = await async_client.get("/api/courses")
 
@@ -56,7 +43,7 @@ class TestListCourses:
     async def test_list_courses_empty(self, async_client):
         """List courses returns empty list when no courses exist."""
         with patch(
-            "app.api.courses.course_service.list_courses",
+            "app.api.courses.course_service.list_courses_with_stats",
             new_callable=AsyncMock,
             return_value=[],
         ):

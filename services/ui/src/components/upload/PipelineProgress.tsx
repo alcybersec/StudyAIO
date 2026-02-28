@@ -1,6 +1,6 @@
 import type { PipelineEvent } from '../../types'
 
-const STAGES = ['ingest', 'classify', 'extract', 'summarize']
+const STAGES = ['ingest', 'classify', 'extract', 'summarize', 'index', 'assets']
 
 interface PipelineProgressProps {
   events: PipelineEvent[]

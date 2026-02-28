@@ -254,9 +254,9 @@ async def _classify(artifact_id: str) -> dict:
                     "review_type": review_type,
                 }
 
-        except (ClassificationError, AgentError):
+        except (ClassificationError, AgentError) as e:
             run.status = "failed"
-            run.error_message = str(artifact_id)
+            run.error_message = str(e)
             run.completed_at = datetime.utcnow()
             artifact.status = "failed"
             await session.commit()

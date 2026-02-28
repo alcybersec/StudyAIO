@@ -144,13 +144,13 @@ function ShortAnswer({
               <span className="text-sm text-gray-500">How did you do?</span>
               <button
                 onClick={() => handleSelfAssess(true)}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
               >
                 Correct
               </button>
               <button
                 onClick={() => handleSelfAssess(false)}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
               >
                 Incorrect
               </button>

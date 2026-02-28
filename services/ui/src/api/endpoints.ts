@@ -40,6 +40,7 @@ export const reviewApi = {
 export const uploadApi = {
   upload: (file: File) => api.upload<UploadResult>('/uploads', file),
   status: (artifactId: string) => api.get<PipelineRun[]>(`/uploads/${artifactId}/status`),
+  retry: (artifactId: string) => api.post<{ artifact_id: string; status: string; retrying_from_stage: string }>(`/uploads/${artifactId}/retry`),
 }
 
 export const qaApi = {

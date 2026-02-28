@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { PageHeader } from '../components/ui'
+import { PageHeader, ConnectionBanner } from '../components/ui'
 import { DropZone } from '../components/upload/DropZone'
 import { FileQueue, type QueuedFile } from '../components/upload/FileQueue'
 import { PipelineProgress } from '../components/upload/PipelineProgress'
@@ -18,7 +18,7 @@ export function UploadPage() {
     () => queue.filter((f) => f.artifactId).map((f) => f.artifactId!),
     [queue],
   )
-  const { events } = usePipelineEvents(artifactIds.length > 0 ? artifactIds : undefined)
+  const { events, connected } = usePipelineEvents(artifactIds.length > 0 ? artifactIds : undefined)
 
   const processQueue = useCallback(async (updatedQueue: QueuedFile[]) => {
     if (processingRef.current) return
@@ -81,6 +81,7 @@ export function UploadPage() {
       />
 
       <div className="space-y-6">
+        <ConnectionBanner connected={connected} />
         <DropZone onFiles={handleFiles} disabled={hasActive} />
 
         <FileQueue files={queue} onRemove={handleRemove} />

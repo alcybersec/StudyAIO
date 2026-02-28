@@ -12,14 +12,6 @@ class TestGetDashboard:
 
     async def test_dashboard_returns_aggregate_data(self, async_client):
         """Dashboard returns review count, activity, and courses."""
-        mock_course = AsyncMock()
-        mock_course.id = "course-001"
-        mock_course.code = "CSIT302"
-        mock_course.name = "Cybersecurity"
-        mock_course.term = "2024-S1"
-        mock_course.created_at = datetime(2024, 1, 1)
-        mock_course.updated_at = datetime(2024, 1, 2)
-
         with (
             patch(
                 "app.api.dashboard.review_service.count_pending_reviews",
@@ -43,22 +35,19 @@ class TestGetDashboard:
                 ],
             ),
             patch(
-                "app.api.dashboard.course_service.list_courses",
-                new_callable=AsyncMock,
-                return_value=[mock_course],
-            ),
-            patch(
-                "app.api.dashboard.course_service.get_course_weeks",
+                "app.api.dashboard.course_service.list_courses_with_stats",
                 new_callable=AsyncMock,
                 return_value=[
                     {
-                        "week": 1,
-                        "titles": ["Intro"],
-                        "artifact_count": 2,
-                        "summary_status": "generated",
-                        "summary_id": "sum-001",
-                        "flashcard_count": 5,
-                        "quiz_count": 3,
+                        "id": "course-001",
+                        "code": "CSIT302",
+                        "name": "Cybersecurity",
+                        "term": "2024-S1",
+                        "created_at": datetime(2024, 1, 1),
+                        "updated_at": datetime(2024, 1, 2),
+                        "weeks_covered": 1,
+                        "total_artifacts": 2,
+                        "last_updated": datetime(2024, 1, 2),
                     }
                 ],
             ),
@@ -89,7 +78,7 @@ class TestGetDashboard:
                 return_value=[],
             ),
             patch(
-                "app.api.dashboard.course_service.list_courses",
+                "app.api.dashboard.course_service.list_courses_with_stats",
                 new_callable=AsyncMock,
                 return_value=[],
             ),

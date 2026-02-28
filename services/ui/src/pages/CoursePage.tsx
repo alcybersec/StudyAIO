@@ -1,14 +1,14 @@
 import { Link, useParams } from 'react-router-dom'
 import { useCourseDetail } from '../hooks/useApi'
-import { LoadingSpinner, EmptyState, PageHeader, Card } from '../components/ui'
+import { LoadingSpinner, EmptyState, ErrorBanner, PageHeader, Card } from '../components/ui'
 import { WeekRow } from '../components/course/WeekRow'
 
 export function CoursePage() {
   const { courseCode } = useParams<{ courseCode: string }>()
-  const { data, isLoading, error } = useCourseDetail(courseCode ?? '')
+  const { data, isLoading, error, refetch } = useCourseDetail(courseCode ?? '')
 
   if (isLoading) return <LoadingSpinner label="Loading course..." />
-  if (error) return <EmptyState icon="!" title="Failed to load course" description="Check that the course exists." />
+  if (error) return <ErrorBanner message="Failed to load course. Check that the course exists." onRetry={refetch} />
   if (!data) return <EmptyState icon="?" title="Course not found" />
 
   return (

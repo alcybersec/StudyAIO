@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/app/requirements.txt
+
+      - name: Install dependencies
+        working-directory: services/app
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        working-directory: services/app
+        run: python -m pytest tests/unit -x -v
+
+  frontend-checks:
+    name: Frontend Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: services/ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/ui
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: services/ui
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: services/ui
+        run: npm run lint

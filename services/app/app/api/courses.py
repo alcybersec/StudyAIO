@@ -28,24 +28,8 @@ async def list_courses(
     session: AsyncSession = Depends(get_session),
 ) -> list[CourseListItem]:
     """List all courses with aggregate stats."""
-    courses = await course_service.list_courses(session)
-    items = []
-    for c in courses:
-        weeks = await course_service.get_course_weeks(session, c.id)
-        items.append(
-            CourseListItem(
-                id=c.id,
-                code=c.code,
-                name=c.name,
-                term=c.term,
-                created_at=c.created_at,
-                updated_at=c.updated_at,
-                weeks_covered=len(weeks),
-                total_artifacts=sum(w["artifact_count"] for w in weeks),
-                last_updated=c.updated_at,
-            )
-        )
-    return items
+    course_stats = await course_service.list_courses_with_stats(session)
+    return [CourseListItem(**cs) for cs in course_stats]
 
 
 @router.get(

@@ -44,6 +44,60 @@ async def get_course_by_code(session: AsyncSession, code: str) -> Course | None:
     return result.scalar_one_or_none()
 
 
+async def list_courses_with_stats(session: AsyncSession) -> list[dict]:
+    """Get all courses with aggregate stats in O(1) queries.
+
+    Avoids the N+1 query pattern by batching artifact counts in a single
+    query instead of calling get_course_weeks per course.
+
+    Args:
+        session: Database session.
+
+    Returns:
+        List of dicts with course fields + weeks_covered, total_artifacts.
+    """
+    courses = await list_courses(session)
+    if not courses:
+        return []
+
+    course_ids = [c.id for c in courses]
+
+    # Single query: per-course distinct weeks + artifact count
+    result = await session.execute(
+        select(
+            LectureArtifact.course_id,
+            func.count(func.distinct(LectureArtifact.week)).label("weeks_covered"),
+            func.count(LectureArtifact.id).label("total_artifacts"),
+        )
+        .where(
+            LectureArtifact.course_id.in_(course_ids),
+            LectureArtifact.week.isnot(None),
+        )
+        .group_by(LectureArtifact.course_id)
+    )
+    stats = {
+        row.course_id: {"weeks_covered": row.weeks_covered, "total_artifacts": row.total_artifacts}
+        for row in result
+    }
+
+    items = []
+    for c in courses:
+        s = stats.get(c.id, {"weeks_covered": 0, "total_artifacts": 0})
+        items.append({
+            "id": c.id,
+            "code": c.code,
+            "name": c.name,
+            "term": c.term,
+            "created_at": c.created_at,
+            "updated_at": c.updated_at,
+            "weeks_covered": s["weeks_covered"],
+            "total_artifacts": s["total_artifacts"],
+            "last_updated": c.updated_at,
+        })
+
+    return items
+
+
 async def get_course_weeks(session: AsyncSession, course_id: str) -> list[dict]:
     """Get per-week aggregated data for a course.
 

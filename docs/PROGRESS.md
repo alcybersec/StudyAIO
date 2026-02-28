@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 4 — Study Assets (Complete)
-> **Overall Status:** In Progress
+> **Current Milestone:** 5 — Polish & Portfolio (Complete)
+> **Overall Status:** Complete (v1)
 
 ---
 
@@ -58,13 +58,11 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 5.1 | Error handling pass | ⬜ Not Started | |
-| 5.2 | Loading/empty/error states in UI | ⬜ Not Started | |
-| 5.3 | Mobile responsiveness pass | ⬜ Not Started | |
-| 5.4 | Performance optimization | ⬜ Not Started | |
-| 5.5 | Documentation (README, architecture, guides) | ⬜ Not Started | |
-| 5.6 | CI pipeline | ⬜ Not Started | |
-| 5.7 | Demo recording / portfolio prep | ⬜ Not Started | |
+| 5.1 | Pipeline bug fixes + retry endpoint + full stage visibility | ✅ Done | Fixed error_message bug (str(artifact_id) → str(e)) in 5 pipeline stages. Added POST /api/uploads/{id}/retry endpoint. PipelineProgress now shows all 6 stages. 5 new tests. |
+| 5.2 | N+1 query elimination | ✅ Done | Added batched list_courses_with_stats() — O(2) queries instead of 4N+1. Dashboard + courses endpoints updated. 2 new tests. |
+| 5.3 | UI error recovery + SSE feedback + mobile touch | ✅ Done | ErrorBanner with retry button on Dashboard/Course/Week. ConnectionBanner for SSE status on Upload. Touch targets ≥44px on FlashcardsTab, QuizTab, SuggestionButtons, CustomResolutionForm. |
+| 5.4 | GitHub Actions CI | ✅ Done | .github/workflows/ci.yml with backend-tests (pytest) and frontend-checks (tsc + lint) jobs. Dependency caching. |
+| 5.5 | README + architecture docs | ✅ Done | README.md with CI badge, Mermaid diagrams, features, tech stack, quick start. docs/architecture.md with system/pipeline/data model diagrams and design decisions. |
 
 ---
 

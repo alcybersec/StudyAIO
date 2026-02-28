@@ -1,6 +1,8 @@
 export { Badge } from './Badge'
 export { Card } from './Card'
+export { ConnectionBanner } from './ConnectionBanner'
 export { EmptyState } from './EmptyState'
+export { ErrorBanner } from './ErrorBanner'
 export { LoadingSpinner } from './LoadingSpinner'
 export { PageHeader } from './PageHeader'
 export { StatusBadge } from './StatusBadge'
