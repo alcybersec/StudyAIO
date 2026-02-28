@@ -1,0 +1,36 @@
+{# Classification prompt template — v1.0
+   Purpose: Classify a lecture file by course code, week number, and title.
+   Variables: text_preview, filename, known_courses
+#}
+You are a university lecture classifier. Analyze the following lecture file and determine its course code, week/lecture number, and title.
+
+## File Information
+Filename: {{ filename }}
+
+## Known Courses
+{% if known_courses %}
+These courses already exist in the system: {{ known_courses | join(', ') }}
+Prefer matching to an existing course if the content clearly belongs to one.
+{% else %}
+No courses exist in the system yet. Create a new course code from the content.
+{% endif %}
+
+## Extracted Text (first pages)
+---
+{{ text_preview[:4000] }}
+---
+
+## Instructions
+
+Analyze the text and filename to determine:
+1. **course_code**: The course identifier (e.g., CSIT302, ISIT312). Look for it in the filename, headers, footers, or title slides.
+2. **week**: The week or lecture number. Look for "Week 5", "Lecture 3", "Module 7", etc. Use 0 if truly unknown.
+3. **title**: The lecture topic or title. Extract from title slide, first heading, or infer from content.
+4. **confidence**: A score from 0.0 to 1.0:
+   - 0.9-1.0: Course code AND week number explicitly stated in filename or content
+   - 0.7-0.89: Course code found but week is inferred, or vice versa
+   - 0.5-0.69: Both course and week are inferred from content
+   - Below 0.5: Significant uncertainty
+
+Respond with ONLY a valid JSON object (no markdown, no explanation, no code fences):
+{"course_code": "CSIT302", "week": 5, "title": "Network Security Fundamentals", "confidence": 0.85, "reasoning": "Course code CSIT302 found in header, week number 5 in filename"}

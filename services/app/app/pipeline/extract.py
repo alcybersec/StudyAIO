@@ -1,0 +1,161 @@
+"""Pipeline stage 2: Extract — full content extraction with images."""
+
+import asyncio
+from datetime import datetime
+from pathlib import Path
+
+import structlog
+from sqlalchemy import select
+
+from app.config import settings
+from app.core.database import async_session_factory
+from app.core.exceptions import ExtractionError
+from app.core.utils import generate_id
+from app.extractors import get_extractor
+from app.models.artifact import LectureArtifact
+from app.models.extraction import Extraction
+from app.models.pipeline_run import PipelineRun
+from app.worker import celery_app
+
+logger = structlog.get_logger()
+
+
+def _run_async(coro):
+    """Run an async coroutine from a sync Celery task."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
+async def _extract(artifact_id: str) -> dict:
+    """Async extract implementation."""
+    async with async_session_factory() as session:
+        # Load artifact
+        result = await session.execute(
+            select(LectureArtifact).where(LectureArtifact.id == artifact_id)
+        )
+        artifact = result.scalar_one_or_none()
+        if not artifact:
+            raise ExtractionError(f"Artifact {artifact_id} not found")
+
+        # Check for existing extraction (idempotency)
+        existing = await session.execute(
+            select(Extraction).where(Extraction.artifact_id == artifact_id)
+        )
+        if existing.scalar_one_or_none():
+            logger.info("extract_already_exists", artifact_id=artifact_id)
+            artifact.status = "extracted"
+            await session.commit()
+            return {
+                "artifact_id": artifact_id,
+                "status": "already_extracted",
+            }
+
+        # Update status
+        artifact.status = "extracting"
+        await session.commit()
+
+        # Create pipeline run
+        run = PipelineRun(
+            id=generate_id(),
+            artifact_id=artifact_id,
+            stage="extract",
+            status="running",
+            started_at=datetime.utcnow(),
+        )
+        session.add(run)
+        await session.flush()
+
+        try:
+            # Set up output directory
+            extraction_dir = Path(settings.extractions_dir) / artifact_id
+            extraction_dir.mkdir(parents=True, exist_ok=True)
+
+            # Run appropriate extractor
+            extractor = get_extractor(artifact.file_type)
+            extraction_result = extractor.extract(
+                file_path=Path(artifact.file_path),
+                output_dir=extraction_dir,
+            )
+
+            # Create extraction record
+            manifest = extraction_result.to_manifest()
+            extraction = Extraction(
+                id=generate_id(),
+                artifact_id=artifact_id,
+                manifest_json=manifest,
+                image_count=extraction_result.image_count,
+                page_count=extraction_result.page_count,
+                extraction_path=str(extraction_dir),
+            )
+            session.add(extraction)
+
+            # Update artifact status
+            artifact.status = "extracted"
+
+            # Update pipeline run
+            run.status = "completed"
+            run.completed_at = datetime.utcnow()
+            if run.started_at:
+                delta = run.completed_at - run.started_at
+                run.duration_ms = int(delta.total_seconds() * 1000)
+
+            await session.commit()
+
+            logger.info(
+                "extract_stage_completed",
+                artifact_id=artifact_id,
+                pages=extraction_result.page_count,
+                images=extraction_result.image_count,
+            )
+
+            return {
+                "artifact_id": artifact_id,
+                "status": "extracted",
+                "page_count": extraction_result.page_count,
+                "image_count": extraction_result.image_count,
+                "extraction_path": str(extraction_dir),
+            }
+
+        except ExtractionError:
+            run.status = "failed"
+            run.error_message = str(artifact_id)
+            run.completed_at = datetime.utcnow()
+            artifact.status = "failed"
+            await session.commit()
+            raise
+
+        except Exception as e:
+            run.status = "failed"
+            run.error_message = str(e)
+            run.completed_at = datetime.utcnow()
+            artifact.status = "failed"
+            await session.commit()
+            raise ExtractionError(f"Extraction failed: {e}") from e
+
+
+@celery_app.task(
+    name="app.pipeline.extract.extract_artifact",
+    bind=True,
+    max_retries=2,
+    default_retry_delay=10,
+)
+def extract_artifact(self, artifact_id: str) -> dict:
+    """Celery task: extract content from a classified artifact.
+
+    Args:
+        artifact_id: UUID of the artifact to extract.
+
+    Returns:
+        Dict with artifact_id, status, page_count, image_count, extraction_path.
+    """
+    logger.info("extract_task_started", artifact_id=artifact_id)
+    try:
+        return _run_async(_extract(artifact_id))
+    except ExtractionError:
+        raise  # Don't retry on extraction errors
+    except Exception as exc:
+        logger.error("extract_task_error", error=str(exc), artifact_id=artifact_id)
+        raise self.retry(exc=exc)

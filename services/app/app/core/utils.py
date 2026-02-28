@@ -3,7 +3,7 @@
 import hashlib
 from pathlib import Path
 
-from uuid7 import uuid7
+from uuid_extensions import uuid7
 
 
 def generate_id() -> str:
