@@ -1,6 +1,6 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 3 — Search & Q&A
+> **Current Milestone:** 4 — Study Assets (Complete)
 > **Overall Status:** In Progress
 
 ---
@@ -48,11 +48,11 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 4.1 | Flashcard generation | ⬜ Not Started | |
-| 4.2 | Quiz generation (MCQ + short answer) | ⬜ Not Started | |
-| 4.3 | Flashcard UI | ⬜ Not Started | |
-| 4.4 | Quiz UI | ⬜ Not Started | |
-| 4.5 | Pipeline integration (auto-generate after summarize) | ⬜ Not Started | |
+| 4.1 | Backend foundation (exception, prompts, agent, service) | ✅ Done | AssetGenerationError. Jinja2 prompt templates (generate_flashcards.txt, generate_quiz.txt). ClaudeCodeAdapter: generate_flashcards(), generate_quiz(), _parse_json_array_response(). asset_service.py: save/query functions with idempotent versioning. |
+| 4.2 | Pipeline stage + orchestrator | ✅ Done | generate_assets Celery task (stage 5, terminal). Two sequential AI calls (flashcards then quiz). Artifact status → "processed". Orchestrator updated to 6-stage chain with "assets" stage entry. |
+| 4.3 | API endpoints + schemas | ✅ Done | FlashcardResponse/QuizQuestionResponse schemas. GET /api/assets/flashcards, GET /api/assets/quiz (course_code required, week optional). Router registered in main.py with "assets" tag. |
+| 4.4 | Frontend components | ✅ Done | FlashcardsTab (flip cards, keyboard nav, shuffle, badges). QuizTab (MCQ radio+submit, short answer self-assess, progress dots, score summary). Types, endpoints, hooks. WeekViewPage tabs unlocked (no more "Coming Soon"). |
+| 4.5 | Tests | ✅ Done | 40 new tests (179 total): asset_service (11), pipeline/assets (8), agents/assets (13), api/assets (8). All tests pass. |
 
 ## Milestone 5 — Polish & Portfolio
 

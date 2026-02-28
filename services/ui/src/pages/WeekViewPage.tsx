@@ -5,14 +5,16 @@ import { LoadingSpinner, EmptyState, PageHeader, Card } from '../components/ui'
 import { SummaryTab } from '../components/week/SummaryTab'
 import { ArtifactList } from '../components/week/ArtifactList'
 import { ScopedQA } from '../components/qa/ScopedQA'
+import { FlashcardsTab } from '../components/week/FlashcardsTab'
+import { QuizTab } from '../components/week/QuizTab'
 
 type Tab = 'summary' | 'qa' | 'flashcards' | 'quiz'
 
-const tabs: { id: Tab; label: string; comingSoon?: boolean }[] = [
+const tabs: { id: Tab; label: string }[] = [
   { id: 'summary', label: 'Summary' },
   { id: 'qa', label: 'Q&A' },
-  { id: 'flashcards', label: 'Flashcards', comingSoon: true },
-  { id: 'quiz', label: 'Quiz', comingSoon: true },
+  { id: 'flashcards', label: 'Flashcards' },
+  { id: 'quiz', label: 'Quiz' },
 ]
 
 export function WeekViewPage() {
@@ -42,22 +44,14 @@ export function WeekViewPage() {
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => !tab.comingSoon && setActiveTab(tab.id)}
+            onClick={() => setActiveTab(tab.id)}
             className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
               activeTab === tab.id
                 ? 'text-primary border-b-2 border-primary -mb-px'
-                : tab.comingSoon
-                  ? 'text-gray-300 cursor-not-allowed'
-                  : 'text-gray-500 hover:text-gray-700'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
-            disabled={tab.comingSoon}
           >
             {tab.label}
-            {tab.comingSoon && (
-              <span className="ml-1.5 text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">
-                Soon
-              </span>
-            )}
           </button>
         ))}
       </div>
@@ -72,6 +66,18 @@ export function WeekViewPage() {
       {activeTab === 'qa' && courseCode && (
         <Card>
           <ScopedQA courseCode={courseCode} week={data.week} />
+        </Card>
+      )}
+
+      {activeTab === 'flashcards' && courseCode && (
+        <Card>
+          <FlashcardsTab courseCode={courseCode} week={data.week} />
+        </Card>
+      )}
+
+      {activeTab === 'quiz' && courseCode && (
+        <Card>
+          <QuizTab courseCode={courseCode} week={data.week} />
         </Card>
       )}
 

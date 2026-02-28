@@ -142,3 +142,31 @@ export interface QAExchange {
   response: QAResponse
   timestamp: string
 }
+
+export interface Flashcard {
+  id: string
+  course_id: string
+  week: number
+  front: string
+  back: string
+  tags: string[]
+  source_artifact_id: string
+  source_page_ref: number
+  generation_version: number
+  created_at: string
+}
+
+export interface QuizQuestion {
+  id: string
+  course_id: string
+  week: number
+  question_type: 'multiple_choice' | 'short_answer'
+  question: string
+  options_json: string[] | null
+  correct_answer: string
+  explanation: string
+  source_artifact_id: string
+  source_page_ref: number
+  generation_version: number
+  created_at: string
+}

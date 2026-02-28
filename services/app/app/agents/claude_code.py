@@ -81,6 +81,44 @@ class ClaudeCodeAdapter(AgentAdapter):
         logger.info("claude_code_response", response_length=len(result))
         return result
 
+    def _parse_json_array_response(self, text: str) -> list[dict]:
+        """Extract and parse a JSON array from Claude's response.
+
+        Handles responses that may contain markdown code fences.
+
+        Args:
+            text: Raw response text.
+
+        Returns:
+            Parsed list of dicts.
+
+        Raises:
+            AgentError: If JSON parsing fails or result is not a list.
+        """
+        # Try direct parse first
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        # Try extracting from code fences
+        if "```" in text:
+            parts = text.split("```")
+            for part in parts:
+                cleaned = part.strip()
+                if cleaned.startswith("json"):
+                    cleaned = cleaned[4:].strip()
+                try:
+                    parsed = json.loads(cleaned)
+                    if isinstance(parsed, list):
+                        return parsed
+                except json.JSONDecodeError:
+                    continue
+
+        raise AgentError(f"Failed to parse JSON array from Claude response: {text[:200]}...")
+
     def _parse_json_response(self, text: str) -> dict:
         """Extract and parse JSON from Claude's response.
 
@@ -345,16 +383,143 @@ After the summary, emit:
     async def generate_flashcards(
         self, summary: str, extraction: ExtractionData, count: int
     ) -> list[FlashcardData]:
-        """Generate flashcards by calling Claude Code CLI."""
-        # TODO: Implement in assets stage (Task 1.9)
-        raise NotImplementedError("Flashcard generation not yet implemented")
+        """Generate flashcards by calling Claude Code CLI.
+
+        Args:
+            summary: Summary markdown for context.
+            extraction: Full extraction data.
+            count: Number of flashcards to generate.
+
+        Returns:
+            List of FlashcardData.
+        """
+        from jinja2 import Template
+        from pathlib import Path
+
+        extraction_text = self._build_extraction_text(extraction)
+        course_code = extraction.metadata.get("course_code", "UNKNOWN")
+        week = extraction.metadata.get("week", 0)
+
+        template_path = Path("/app/prompts/generate_flashcards.txt")
+        if template_path.exists():
+            template = Template(template_path.read_text())
+            prompt = template.render(
+                course_code=course_code,
+                week=week,
+                summary=summary,
+                extraction_text=extraction_text,
+                count=count,
+            )
+        else:
+            prompt = self._build_flashcard_prompt(
+                course_code, week, summary, extraction_text, count
+            )
+
+        result_text = await self._run_claude_code(prompt, timeout=_SUMMARY_TIMEOUT)
+        items = self._parse_json_array_response(result_text)
+
+        return [
+            FlashcardData(
+                front=item.get("front", ""),
+                back=item.get("back", ""),
+                tags=item.get("tags", []),
+                source_page_ref=item.get("source_page_ref", 1),
+            )
+            for item in items
+        ]
+
+    def _build_flashcard_prompt(
+        self,
+        course_code: str,
+        week: int,
+        summary: str,
+        extraction_text: str,
+        count: int,
+    ) -> str:
+        """Build flashcard prompt as fallback when template is missing."""
+        summary_block = f"\nSummary:\n---\n{summary}\n---\n" if summary else ""
+        return f"""Generate exactly {count} flashcards for {course_code} Week {week}.
+{summary_block}
+Lecture content:
+---
+{extraction_text}
+---
+
+Respond with ONLY a JSON array:
+[{{"front": "question", "back": "answer", "tags": ["topic"], "source_page_ref": 1}}]
+"""
 
     async def generate_quiz(
         self, summary: str, extraction: ExtractionData, count: int
     ) -> list[QuizQuestionData]:
-        """Generate quiz questions by calling Claude Code CLI."""
-        # TODO: Implement in assets stage (Task 1.9)
-        raise NotImplementedError("Quiz generation not yet implemented")
+        """Generate quiz questions by calling Claude Code CLI.
+
+        Args:
+            summary: Summary markdown for context.
+            extraction: Full extraction data.
+            count: Number of questions to generate.
+
+        Returns:
+            List of QuizQuestionData.
+        """
+        from jinja2 import Template
+        from pathlib import Path
+
+        extraction_text = self._build_extraction_text(extraction)
+        course_code = extraction.metadata.get("course_code", "UNKNOWN")
+        week = extraction.metadata.get("week", 0)
+
+        template_path = Path("/app/prompts/generate_quiz.txt")
+        if template_path.exists():
+            template = Template(template_path.read_text())
+            prompt = template.render(
+                course_code=course_code,
+                week=week,
+                summary=summary,
+                extraction_text=extraction_text,
+                count=count,
+            )
+        else:
+            prompt = self._build_quiz_prompt(
+                course_code, week, summary, extraction_text, count
+            )
+
+        result_text = await self._run_claude_code(prompt, timeout=_SUMMARY_TIMEOUT)
+        items = self._parse_json_array_response(result_text)
+
+        return [
+            QuizQuestionData(
+                question_type=item.get("question_type", "short_answer"),
+                question=item.get("question", ""),
+                options=item.get("options"),
+                correct_answer=item.get("correct_answer", ""),
+                explanation=item.get("explanation", ""),
+                source_page_ref=item.get("source_page_ref", 1),
+            )
+            for item in items
+        ]
+
+    def _build_quiz_prompt(
+        self,
+        course_code: str,
+        week: int,
+        summary: str,
+        extraction_text: str,
+        count: int,
+    ) -> str:
+        """Build quiz prompt as fallback when template is missing."""
+        summary_block = f"\nSummary:\n---\n{summary}\n---\n" if summary else ""
+        return f"""Generate exactly {count} quiz questions for {course_code} Week {week}.
+Mix ~60% multiple_choice and ~40% short_answer.
+{summary_block}
+Lecture content:
+---
+{extraction_text}
+---
+
+Respond with ONLY a JSON array:
+[{{"question_type": "multiple_choice", "question": "...", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "correct_answer": "B", "explanation": "...", "source_page_ref": 1}}]
+"""
 
     async def answer_question(
         self, question: str, context_chunks: list[dict]

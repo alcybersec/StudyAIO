@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import (
+    assets_router,
     courses_router,
     dashboard_router,
     files_router,
@@ -47,6 +48,7 @@ app = FastAPI(
         {"name": "review-items", "description": "Human review inbox for low-confidence classifications"},
         {"name": "files", "description": "Serve files from data directories"},
         {"name": "qa", "description": "Question & Answer with citation support"},
+        {"name": "assets", "description": "Flashcards and quiz questions"},
     ],
 )
 
@@ -66,6 +68,7 @@ app.include_router(summaries_router, prefix="/api", tags=["summaries"])
 app.include_router(review_items_router, prefix="/api", tags=["review-items"])
 app.include_router(files_router, prefix="/api", tags=["files"])
 app.include_router(qa_router, prefix="/api", tags=["qa"])
+app.include_router(assets_router, prefix="/api", tags=["assets"])
 
 
 # Exception handlers

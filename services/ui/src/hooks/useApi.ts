@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { coursesApi, dashboardApi, qaApi, reviewApi, uploadApi } from '../api/endpoints'
+import { assetsApi, coursesApi, dashboardApi, qaApi, reviewApi, uploadApi } from '../api/endpoints'
 import type { QARequest } from '../types'
 
 export function useDashboard() {
@@ -91,5 +91,21 @@ export function useUpload() {
 export function useAskQuestion() {
   return useMutation({
     mutationFn: (request: QARequest) => qaApi.ask(request),
+  })
+}
+
+export function useFlashcards(courseCode: string, week?: number) {
+  return useQuery({
+    queryKey: ['assets', 'flashcards', courseCode, week],
+    queryFn: () => assetsApi.flashcards(courseCode, week),
+    enabled: !!courseCode,
+  })
+}
+
+export function useQuizQuestions(courseCode: string, week?: number) {
+  return useQuery({
+    queryKey: ['assets', 'quiz', courseCode, week],
+    queryFn: () => assetsApi.quiz(courseCode, week),
+    enabled: !!courseCode,
   })
 }

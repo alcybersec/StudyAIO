@@ -45,6 +45,11 @@ class IndexingError(StudyAIOError):
     pass
 
 
+class AssetGenerationError(StudyAIOError):
+    """Raised when flashcard or quiz generation fails."""
+    pass
+
+
 class ReviewRequiredError(StudyAIOError):
     """Raised when a pipeline stage needs human review to proceed."""
 

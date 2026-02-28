@@ -9,16 +9,18 @@ from app.pipeline.classify import classify_artifact
 from app.pipeline.extract import extract_artifact
 from app.pipeline.summarize import summarize_artifact
 from app.pipeline.index import index_artifact
+from app.pipeline.assets import generate_assets
 
 logger = structlog.get_logger()
 
 # Stage order for resume_pipeline
 _STAGES = {
-    "ingest": [ingest_file, classify_artifact, extract_artifact, summarize_artifact, index_artifact],
-    "classify": [classify_artifact, extract_artifact, summarize_artifact, index_artifact],
-    "extract": [extract_artifact, summarize_artifact, index_artifact],
-    "summarize": [summarize_artifact, index_artifact],
-    "index": [index_artifact],
+    "ingest": [ingest_file, classify_artifact, extract_artifact, summarize_artifact, index_artifact, generate_assets],
+    "classify": [classify_artifact, extract_artifact, summarize_artifact, index_artifact, generate_assets],
+    "extract": [extract_artifact, summarize_artifact, index_artifact, generate_assets],
+    "summarize": [summarize_artifact, index_artifact, generate_assets],
+    "index": [index_artifact, generate_assets],
+    "assets": [generate_assets],
 }
 
 
@@ -62,6 +64,7 @@ def run_pipeline(file_path: str) -> AsyncResult:
         extract_artifact.s(),
         summarize_artifact.s(),
         index_artifact.s(),
+        generate_assets.s(),
     ).apply_async()
 
 

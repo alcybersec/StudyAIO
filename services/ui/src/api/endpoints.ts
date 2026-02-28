@@ -3,9 +3,11 @@ import type {
   CourseDetail,
   CourseListItem,
   DashboardData,
+  Flashcard,
   PipelineRun,
   QARequest,
   QAResponse,
+  QuizQuestion,
   ReviewItem,
   SummaryData,
   UploadResult,
@@ -42,4 +44,17 @@ export const uploadApi = {
 
 export const qaApi = {
   ask: (request: QARequest) => api.post<QAResponse>('/qa/ask', request),
+}
+
+export const assetsApi = {
+  flashcards: (courseCode: string, week?: number) => {
+    const params = new URLSearchParams({ course_code: courseCode })
+    if (week !== undefined) params.set('week', String(week))
+    return api.get<Flashcard[]>(`/assets/flashcards?${params}`)
+  },
+  quiz: (courseCode: string, week?: number) => {
+    const params = new URLSearchParams({ course_code: courseCode })
+    if (week !== undefined) params.set('week', String(week))
+    return api.get<QuizQuestion[]>(`/assets/quiz?${params}`)
+  },
 }
