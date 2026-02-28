@@ -1,0 +1,18 @@
+# Lecture Manager — Python Dependencies
+# Install: pip install -r requirements.txt --break-system-packages
+
+# PDF text extraction
+pypdf>=4.0
+pdfplumber>=0.10
+
+# DOCX text extraction
+python-docx>=1.0
+
+# PPTX text extraction
+markitdown[pptx]>=0.1
+
+# Fallback PPTX extraction
+python-pptx>=0.6
+
+# Image handling
+Pillow>=10.0
