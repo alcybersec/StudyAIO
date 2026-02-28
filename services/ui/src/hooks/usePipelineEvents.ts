@@ -1,13 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PipelineEvent } from '../types'
 
-export function usePipelineEvents(artifactId?: string) {
+export function usePipelineEvents(artifactIds?: string[]) {
   const [events, setEvents] = useState<PipelineEvent[]>([])
   const [connected, setConnected] = useState(false)
   const sourceRef = useRef<EventSource | null>(null)
 
+  const idsKey = useMemo(() => artifactIds?.sort().join(',') ?? '', [artifactIds])
+
   useEffect(() => {
-    const params = artifactId ? `?artifact_id=${artifactId}` : ''
+    const ids = idsKey ? idsKey.split(',') : []
+    const params = ids.length === 1
+      ? `?artifact_id=${ids[0]}`
+      : ''
     const url = `/api/uploads/pipeline-events${params}`
 
     const source = new EventSource(url)
@@ -15,7 +20,9 @@ export function usePipelineEvents(artifactId?: string) {
 
     source.addEventListener('pipeline', (event) => {
       const data = JSON.parse(event.data) as PipelineEvent
-      setEvents((prev) => [...prev, data])
+      if (ids.length === 0 || ids.includes(data.artifact_id)) {
+        setEvents((prev) => [...prev, data])
+      }
     })
 
     source.onopen = () => setConnected(true)
@@ -26,7 +33,7 @@ export function usePipelineEvents(artifactId?: string) {
       sourceRef.current = null
       setConnected(false)
     }
-  }, [artifactId])
+  }, [idsKey])
 
   const clear = () => setEvents([])
 

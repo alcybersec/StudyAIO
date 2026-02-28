@@ -1,43 +1,98 @@
-import { usePendingReviews } from '../hooks/useApi'
+import { useState } from 'react'
+import { useReviewItems, useResolveReview, useDismissReview } from '../hooks/useApi'
+import { PageHeader, LoadingSpinner, EmptyState } from '../components/ui'
+import { ReviewCard } from '../components/review/ReviewCard'
+
+type FilterTab = 'pending' | 'resolved' | 'dismissed'
+
+const filterTabs: { id: FilterTab; label: string }[] = [
+  { id: 'pending', label: 'Pending' },
+  { id: 'resolved', label: 'Resolved' },
+  { id: 'dismissed', label: 'Dismissed' },
+]
 
 export function ReviewInboxPage() {
-  const { data, isLoading, error } = usePendingReviews()
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('pending')
+  const { data, isLoading, error } = useReviewItems(activeFilter)
+  const resolve = useResolveReview()
+  const dismiss = useDismissReview()
 
-  if (isLoading) return <p className="text-gray-500">Loading review items...</p>
-  if (error) return <p className="text-red-500">Failed to load review items.</p>
+  const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null)
+
+  const handleResolve = async (reviewId: string, resolution: Record<string, unknown>) => {
+    setFeedback(null)
+    try {
+      await resolve.mutateAsync({ reviewId, resolution })
+      setFeedback({ ok: true, message: 'Review item resolved successfully.' })
+    } catch (err) {
+      setFeedback({ ok: false, message: err instanceof Error ? err.message : 'Failed to resolve.' })
+    }
+  }
+
+  const handleDismiss = async (reviewId: string) => {
+    setFeedback(null)
+    try {
+      await dismiss.mutateAsync(reviewId)
+      setFeedback({ ok: true, message: 'Review item dismissed.' })
+    } catch (err) {
+      setFeedback({ ok: false, message: err instanceof Error ? err.message : 'Failed to dismiss.' })
+    }
+  }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Review Inbox</h1>
+      <PageHeader
+        title="Review Inbox"
+        subtitle={data ? `${data.length} ${activeFilter} item${data.length !== 1 ? 's' : ''}` : undefined}
+      />
+
+      {/* Feedback toast */}
+      {feedback && (
+        <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm ${feedback.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+          {feedback.message}
+        </div>
+      )}
+
+      {/* Filter tabs */}
+      <div className="flex items-center gap-1 mb-6">
+        {filterTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => { setActiveFilter(tab.id); setFeedback(null) }}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              activeFilter === tab.id
+                ? 'bg-primary/10 text-primary'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {isLoading && <LoadingSpinner label="Loading review items..." />}
+
+      {error && <EmptyState icon="!" title="Failed to load reviews" description="Check that the API is running." />}
 
       {data && data.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
-          No pending review items. All caught up!
-        </div>
+        <EmptyState
+          icon={activeFilter === 'pending' ? '\u2713' : '\u{1F4CB}'}
+          title={activeFilter === 'pending' ? 'All caught up!' : `No ${activeFilter} items`}
+          description={activeFilter === 'pending' ? 'There are no items waiting for your review.' : undefined}
+        />
       )}
 
       {data && data.length > 0 && (
         <div className="space-y-4">
           {data.map((item) => (
-            <div key={item.id} className="bg-white rounded-lg shadow p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <span className="inline-flex px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
-                    {item.review_type}
-                  </span>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Entity: {item.entity_type} / {item.entity_id}
-                  </p>
-                </div>
-                <p className="text-xs text-gray-400">{new Date(item.created_at).toLocaleDateString()}</p>
-              </div>
-              <div className="text-sm text-gray-700">
-                <p className="font-medium mb-1">Suggested values:</p>
-                <pre className="bg-gray-50 p-2 rounded text-xs overflow-auto">
-                  {JSON.stringify(item.suggested_values, null, 2)}
-                </pre>
-              </div>
-            </div>
+            <ReviewCard
+              key={item.id}
+              item={item}
+              onResolve={handleResolve}
+              onDismiss={handleDismiss}
+              isResolving={resolve.isPending}
+              isDismissing={dismiss.isPending}
+            />
           ))}
         </div>
       )}

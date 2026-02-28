@@ -38,11 +38,37 @@ export function usePendingReviews() {
   })
 }
 
+export function useReviewItems(status: string) {
+  return useQuery({
+    queryKey: ['review-items', status],
+    queryFn: () => reviewApi.list(status),
+  })
+}
+
+export function useReviewItem(reviewId: string) {
+  return useQuery({
+    queryKey: ['review-items', 'detail', reviewId],
+    queryFn: () => reviewApi.get(reviewId),
+    enabled: !!reviewId,
+  })
+}
+
 export function useResolveReview() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ reviewId, resolution }: { reviewId: string; resolution: Record<string, unknown> }) =>
       reviewApi.resolve(reviewId, resolution),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['review-items'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useDismissReview() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (reviewId: string) => reviewApi.dismiss(reviewId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['review-items'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })

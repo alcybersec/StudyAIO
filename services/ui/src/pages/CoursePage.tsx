@@ -1,60 +1,53 @@
 import { Link, useParams } from 'react-router-dom'
 import { useCourseDetail } from '../hooks/useApi'
+import { LoadingSpinner, EmptyState, PageHeader, Card } from '../components/ui'
+import { WeekRow } from '../components/course/WeekRow'
 
 export function CoursePage() {
   const { courseCode } = useParams<{ courseCode: string }>()
   const { data, isLoading, error } = useCourseDetail(courseCode ?? '')
 
-  if (isLoading) return <p className="text-gray-500">Loading course...</p>
-  if (error) return <p className="text-red-500">Failed to load course.</p>
-  if (!data) return <p className="text-gray-500">Course not found.</p>
+  if (isLoading) return <LoadingSpinner label="Loading course..." />
+  if (error) return <EmptyState icon="!" title="Failed to load course" description="Check that the course exists." />
+  if (!data) return <EmptyState icon="?" title="Course not found" />
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">{data.course.code}</h1>
-      {data.course.name && <p className="text-gray-500 mb-6">{data.course.name}</p>}
+      <PageHeader
+        title={data.course.code}
+        subtitle={data.course.name ?? undefined}
+        breadcrumbs={[
+          { label: 'Dashboard', to: '/' },
+          { label: data.course.code },
+        ]}
+        actions={
+          <Link
+            to="/upload"
+            className="inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors"
+          >
+            Upload files
+          </Link>
+        }
+      />
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Week</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Files</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Summary</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Flashcards</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quizzes</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
+      {data.weeks.length === 0 ? (
+        <EmptyState
+          title="No weeks yet"
+          description="Upload lecture files for this course to populate weeks."
+          actionLabel="Upload"
+          actionTo="/upload"
+        />
+      ) : (
+        <Card padding={false}>
+          <ul className="divide-y divide-gray-100">
             {data.weeks.map((week) => (
-              <tr key={week.week} className="hover:bg-gray-50">
-                <td className="px-6 py-4">
-                  <Link
-                    to={`/courses/${courseCode}/weeks/${week.week}`}
-                    className="text-primary font-medium hover:underline"
-                  >
-                    Week {week.week}
-                  </Link>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500">{week.artifact_count}</td>
-                <td className="px-6 py-4">
-                  <span
-                    className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                      week.summary_status === 'generated'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}
-                  >
-                    {week.summary_status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500">{week.flashcard_count}</td>
-                <td className="px-6 py-4 text-sm text-gray-500">{week.quiz_count}</td>
-              </tr>
+              <li key={week.week}>
+                <WeekRow courseCode={courseCode!} week={week} />
+              </li>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </ul>
+        </Card>
+      )}
     </div>
   )
 }
