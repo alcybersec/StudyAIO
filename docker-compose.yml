@@ -29,6 +29,8 @@ services:
       - ./services/app/app:/app/app
       - ./services/app/alembic:/app/alembic
       - ./services/app/prompts:/app/prompts
+      - ./services/app/tests:/app/tests
+      - ./services/app/pytest.ini:/app/pytest.ini
       - ./data:/app/data
     env_file:
       - .env

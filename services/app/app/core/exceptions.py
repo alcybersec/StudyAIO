@@ -35,6 +35,11 @@ class ClassificationError(StudyAIOError):
     pass
 
 
+class SummarizationError(StudyAIOError):
+    """Raised when summary generation fails."""
+    pass
+
+
 class ReviewRequiredError(StudyAIOError):
     """Raised when a pipeline stage needs human review to proceed."""
 

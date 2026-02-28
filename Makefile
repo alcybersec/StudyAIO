@@ -1,4 +1,4 @@
-.PHONY: up down logs test test-unit test-integration migrate shell db status build clean
+.PHONY: up down logs test test-unit test-integration migrate shell db status build clean ingest import-v0
 
 # === Docker ===
 up:
@@ -65,8 +65,19 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 
+# === Pipeline ===
+ingest:
+	@if [ -z "$(path)" ]; then echo "Usage: make ingest path=<file>"; exit 1; fi
+	@FNAME=$$(basename "$(path)") && \
+	cp "$(path)" data/uploads/ 2>/dev/null || true && \
+	docker compose exec worker python -c \
+	  "from app.pipeline.orchestrator import run_pipeline; \
+	   r = run_pipeline('/app/data/uploads/'+'$$FNAME'); \
+	   print('Pipeline dispatched:', r.id)"
+
 # === v0 Compatibility ===
 import-v0:
+	DATABASE_URL="postgresql+asyncpg://studyaio:studyaio@localhost:5433/studyaio" \
 	python scripts/import_v0.py
 
 seed:

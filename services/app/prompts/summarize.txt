@@ -1,0 +1,50 @@
+{# Summarize prompt template — v1.0
+   Purpose: Generate a comprehensive lecture summary in markdown format.
+   Variables: course_code, week, extraction_text, image_references
+#}
+You are an expert academic summarizer. Generate a comprehensive study summary from the following lecture content.
+
+## Course Information
+Course: {{ course_code }}
+Week: {{ week }}
+
+## Lecture Content
+---
+{{ extraction_text }}
+---
+
+{% if image_references %}
+## Referenced Images
+The following images were extracted from the lecture:
+{% for img in image_references %}
+- {{ img }}
+{% endfor %}
+Reference relevant images in the summary using markdown image syntax where appropriate.
+{% endif %}
+
+## Output Requirements
+
+Generate a complete markdown summary with EXACTLY these sections in this order:
+
+1. `# {{ course_code }} — Week {{ week }}: <Topic>` (determine the topic from the content)
+2. `## Key Concepts` — Bullet list of the most important concepts covered
+3. `## Definitions` — Markdown table with columns: Term | Definition
+4. `## Code Examples` — Include any code examples from the lecture with explanations. If none, write "No code examples in this lecture."
+5. `## Diagrams & Figures` — Reference extracted images with captions. If none, write "No diagrams in this lecture."
+6. `## Potential Exam Topics` — Bullet list of likely exam questions or topics
+7. `## Summary` — 2-3 paragraph overview of the entire lecture content
+8. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: 1.*`
+
+## Rules
+- Be thorough but concise
+- Use proper markdown formatting
+- Include ALL key definitions and concepts
+- Preserve technical accuracy
+- Do not invent information not present in the lecture content
+
+After the markdown summary, emit a metadata block on its own line:
+---JSON_META---
+{"embedded_images": []}
+---JSON_META---
+
+List any image filenames you referenced in the summary in the embedded_images array.
