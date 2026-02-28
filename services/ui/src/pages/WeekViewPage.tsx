@@ -1,61 +1,76 @@
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useWeekDetail } from '../hooks/useApi'
+import { LoadingSpinner, EmptyState, PageHeader, Card } from '../components/ui'
+import { SummaryTab } from '../components/week/SummaryTab'
+import { ArtifactList } from '../components/week/ArtifactList'
+
+type Tab = 'summary' | 'flashcards' | 'quiz'
+
+const tabs: { id: Tab; label: string; comingSoon?: boolean }[] = [
+  { id: 'summary', label: 'Summary' },
+  { id: 'flashcards', label: 'Flashcards', comingSoon: true },
+  { id: 'quiz', label: 'Quiz', comingSoon: true },
+]
 
 export function WeekViewPage() {
   const { courseCode, weekNumber } = useParams<{ courseCode: string; weekNumber: string }>()
   const week = Number(weekNumber)
   const { data, isLoading, error } = useWeekDetail(courseCode ?? '', week)
+  const [activeTab, setActiveTab] = useState<Tab>('summary')
 
-  if (isLoading) return <p className="text-gray-500">Loading week...</p>
-  if (error) return <p className="text-red-500">Failed to load week data.</p>
-  if (!data) return <p className="text-gray-500">Week not found.</p>
+  if (isLoading) return <LoadingSpinner label="Loading week..." />
+  if (error) return <EmptyState icon="!" title="Failed to load week" />
+  if (!data) return <EmptyState icon="?" title="Week not found" />
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">
-        {data.course.code} — Week {data.week}
-      </h1>
+      <PageHeader
+        title={`Week ${data.week}`}
+        subtitle={data.course.name ?? data.course.code}
+        breadcrumbs={[
+          { label: 'Dashboard', to: '/' },
+          { label: data.course.code, to: `/courses/${courseCode}` },
+          { label: `Week ${data.week}` },
+        ]}
+      />
 
-      <section className="mb-8">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Artifacts</h2>
-        {data.artifacts.length === 0 ? (
-          <p className="text-gray-500">No artifacts for this week.</p>
-        ) : (
-          <div className="bg-white rounded-lg shadow divide-y divide-gray-200">
-            {data.artifacts.map((artifact) => (
-              <div key={artifact.id} className="px-6 py-4 flex justify-between items-center">
-                <div>
-                  <p className="font-medium text-gray-900">{artifact.original_filename}</p>
-                  <p className="text-sm text-gray-500">
-                    {artifact.file_type.toUpperCase()} — {(artifact.file_size_bytes / 1024).toFixed(0)} KB
-                  </p>
-                </div>
-                <span
-                  className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                    artifact.status === 'summarized'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {artifact.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => !tab.comingSoon && setActiveTab(tab.id)}
+            className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === tab.id
+                ? 'text-primary border-b-2 border-primary -mb-px'
+                : tab.comingSoon
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-500 hover:text-gray-700'
+            }`}
+            disabled={tab.comingSoon}
+          >
+            {tab.label}
+            {tab.comingSoon && (
+              <span className="ml-1.5 text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">
+                Soon
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Summary</h2>
-        {data.summary ? (
-          <div className="bg-white rounded-lg shadow p-6 prose max-w-none">
-            <p className="text-sm text-gray-500 mb-4">Version {data.summary.version}</p>
-            <div className="whitespace-pre-wrap">{data.summary.content_md}</div>
-          </div>
-        ) : (
-          <p className="text-gray-500">No summary generated yet.</p>
-        )}
-      </section>
+      {/* Tab content */}
+      {activeTab === 'summary' && (
+        <Card>
+          <SummaryTab summary={data.summary} />
+        </Card>
+      )}
+
+      {/* Artifact list always visible below */}
+      <div className="mt-6">
+        <ArtifactList artifacts={data.artifacts} />
+      </div>
     </div>
   )
 }
