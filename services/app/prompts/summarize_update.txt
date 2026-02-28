@@ -1,0 +1,55 @@
+{# Summarize update prompt template — v1.0
+   Purpose: Update an existing summary with new lecture content.
+   Variables: course_code, week, extraction_text, image_references, existing_summary
+#}
+You are an expert academic summarizer. Update the existing lecture summary with newly added content.
+
+## Course Information
+Course: {{ course_code }}
+Week: {{ week }}
+
+## Existing Summary
+---
+{{ existing_summary }}
+---
+
+## New Lecture Content to Integrate
+---
+{{ extraction_text }}
+---
+
+{% if image_references %}
+## Referenced Images
+The following images were extracted from the lecture:
+{% for img in image_references %}
+- {{ img }}
+{% endfor %}
+Reference relevant images in the summary using markdown image syntax where appropriate.
+{% endif %}
+
+## Output Requirements
+
+Produce an UPDATED markdown summary that merges the existing summary with the new content. Keep EXACTLY these sections in this order:
+
+1. `# {{ course_code }} — Week {{ week }}: <Topic>` (keep or refine the topic)
+2. `## Key Concepts` — Merge bullet lists, add new concepts, remove duplicates
+3. `## Definitions` — Merge definition tables, add new terms
+4. `## Code Examples` — Merge code examples. If none, write "No code examples in this lecture."
+5. `## Diagrams & Figures` — Merge image references. If none, write "No diagrams in this lecture."
+6. `## Potential Exam Topics` — Merge and update exam topics
+7. `## Summary` — Rewrite the overview to cover all content
+8. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: <increment>.*`
+
+## Rules
+- Merge, do not replace — preserve information from the existing summary
+- Add new content from the new lecture material
+- Remove exact duplicates but keep complementary information
+- Increment the version number in the footer
+- Preserve technical accuracy
+
+After the markdown summary, emit a metadata block on its own line:
+---JSON_META---
+{"embedded_images": []}
+---JSON_META---
+
+List any image filenames you referenced in the updated summary in the embedded_images array.

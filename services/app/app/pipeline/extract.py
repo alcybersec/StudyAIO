@@ -142,15 +142,35 @@ async def _extract(artifact_id: str) -> dict:
     max_retries=2,
     default_retry_delay=10,
 )
-def extract_artifact(self, artifact_id: str) -> dict:
+def extract_artifact(self, input_value: str | dict) -> dict:
     """Celery task: extract content from a classified artifact.
 
+    Accepts either a plain artifact_id string or a dict from the
+    previous pipeline stage (for chain compatibility).
+
     Args:
-        artifact_id: UUID of the artifact to extract.
+        input_value: Artifact UUID string or dict with artifact_id.
 
     Returns:
         Dict with artifact_id, status, page_count, image_count, extraction_path.
     """
+    # Resolve input (chain compatibility)
+    if isinstance(input_value, dict):
+        status = input_value.get("status", "")
+        if status in ("duplicate", "waiting_review", "failed"):
+            logger.info(
+                "extract_task_skipped",
+                status=status,
+                artifact_id=input_value.get("artifact_id"),
+            )
+            return input_value
+        artifact_id = input_value.get("artifact_id", "")
+    else:
+        artifact_id = input_value
+
+    if not artifact_id:
+        raise ExtractionError("No artifact_id provided")
+
     logger.info("extract_task_started", artifact_id=artifact_id)
     try:
         return _run_async(_extract(artifact_id))
