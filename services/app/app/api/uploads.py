@@ -26,7 +26,13 @@ router = APIRouter()
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx"}
 
 
-@router.post("/uploads", response_model=UploadResponse, status_code=201)
+@router.post(
+    "/uploads",
+    response_model=UploadResponse,
+    status_code=201,
+    summary="Upload a lecture file",
+    description="Accepts PDF, DOCX, or PPTX files. Saves to storage, starts the processing pipeline, and returns immediately. Duplicate files (by SHA-256) return 409.",
+)
 async def upload_file(
     file: UploadFile,
     session: AsyncSession = Depends(get_session),
@@ -78,6 +84,8 @@ async def upload_file(
 @router.get(
     "/uploads/{artifact_id}/status",
     response_model=list[PipelineRunResponse],
+    summary="Get pipeline status for an upload",
+    description="Returns pipeline run history for an artifact showing each stage's status and timing.",
 )
 async def get_upload_status(
     artifact_id: str,
@@ -93,7 +101,11 @@ async def get_upload_status(
     return [PipelineRunResponse.model_validate(r) for r in runs]
 
 
-@router.get("/uploads/pipeline-events")
+@router.get(
+    "/uploads/pipeline-events",
+    summary="Stream pipeline events (SSE)",
+    description="Server-Sent Events stream for real-time pipeline progress. Optionally filter by artifact_id.",
+)
 async def pipeline_events(
     request: Request,
     artifact_id: str = Query(default=""),

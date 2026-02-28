@@ -12,6 +12,7 @@ from app.api import (
     courses_router,
     dashboard_router,
     files_router,
+    qa_router,
     review_items_router,
     summaries_router,
     uploads_router,
@@ -34,9 +35,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="StudyAIO",
-    description="AI-powered study workspace",
+    description="AI-powered study workspace — automates the journey from raw lecture "
+    "files (PDF, DOCX, PPTX) to organized, searchable, exam-ready study materials.",
     version="0.1.0",
     lifespan=lifespan,
+    openapi_tags=[
+        {"name": "dashboard", "description": "Aggregated dashboard data"},
+        {"name": "courses", "description": "Course listing and per-week breakdowns"},
+        {"name": "uploads", "description": "File uploads and pipeline status"},
+        {"name": "summaries", "description": "Generated weekly summaries"},
+        {"name": "review-items", "description": "Human review inbox for low-confidence classifications"},
+        {"name": "files", "description": "Serve files from data directories"},
+        {"name": "qa", "description": "Question & Answer with citation support"},
+    ],
 )
 
 app.add_middleware(
@@ -54,6 +65,7 @@ app.include_router(uploads_router, prefix="/api", tags=["uploads"])
 app.include_router(summaries_router, prefix="/api", tags=["summaries"])
 app.include_router(review_items_router, prefix="/api", tags=["review-items"])
 app.include_router(files_router, prefix="/api", tags=["files"])
+app.include_router(qa_router, prefix="/api", tags=["qa"])
 
 
 # Exception handlers

@@ -17,7 +17,12 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
-@router.get("/review-items", response_model=list[ReviewItemResponse])
+@router.get(
+    "/review-items",
+    response_model=list[ReviewItemResponse],
+    summary="List review items",
+    description="Lists review items filtered by status (default: pending). Returns payload, suggested values, and resolution details.",
+)
 async def list_review_items(
     status: str = "pending",
     session: AsyncSession = Depends(get_session),
@@ -38,7 +43,12 @@ async def list_review_items(
     return [ReviewItemResponse.model_validate(item) for item in items]
 
 
-@router.get("/review-items/{review_id}", response_model=ReviewItemResponse)
+@router.get(
+    "/review-items/{review_id}",
+    response_model=ReviewItemResponse,
+    summary="Get a review item",
+    description="Returns a single review item by ID.",
+)
 async def get_review_item(
     review_id: str,
     session: AsyncSession = Depends(get_session),
@@ -53,6 +63,8 @@ async def get_review_item(
 @router.post(
     "/review-items/{review_id}/resolve",
     response_model=ReviewItemResponse,
+    summary="Resolve a review item",
+    description="Applies the resolution to the referenced entity, marks the review as resolved, and resumes the pipeline from the extract stage.",
 )
 async def resolve_review_item(
     review_id: str,
@@ -127,6 +139,8 @@ async def resolve_review_item(
 @router.post(
     "/review-items/{review_id}/dismiss",
     response_model=ReviewItemResponse,
+    summary="Dismiss a review item",
+    description="Dismisses a review item without applying any changes to the referenced entity.",
 )
 async def dismiss_review_item(
     review_id: str,

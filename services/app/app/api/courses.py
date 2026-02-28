@@ -18,7 +18,12 @@ from app.services import artifact_service, course_service, summary_service
 router = APIRouter()
 
 
-@router.get("/courses", response_model=list[CourseListItem])
+@router.get(
+    "/courses",
+    response_model=list[CourseListItem],
+    summary="List all courses",
+    description="Returns all courses with aggregate stats: weeks covered, total artifacts, last updated.",
+)
 async def list_courses(
     session: AsyncSession = Depends(get_session),
 ) -> list[CourseListItem]:
@@ -43,7 +48,12 @@ async def list_courses(
     return items
 
 
-@router.get("/courses/{course_code}", response_model=CourseDetailResponse)
+@router.get(
+    "/courses/{course_code}",
+    response_model=CourseDetailResponse,
+    summary="Get course detail",
+    description="Returns course info with per-week breakdown including artifact counts, summary status, and asset counts.",
+)
 async def get_course_detail(
     course_code: str,
     session: AsyncSession = Depends(get_session),
@@ -65,6 +75,8 @@ async def get_course_detail(
 @router.get(
     "/courses/{course_code}/weeks/{week}",
     response_model=WeekDetailResponse,
+    summary="Get week detail",
+    description="Returns full detail for a specific course week: course info, summary (if generated), and artifact list.",
 )
 async def get_week_detail(
     course_code: str,

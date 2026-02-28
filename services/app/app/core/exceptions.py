@@ -40,6 +40,11 @@ class SummarizationError(StudyAIOError):
     pass
 
 
+class IndexingError(StudyAIOError):
+    """Raised when chunk indexing or embedding generation fails."""
+    pass
+
+
 class ReviewRequiredError(StudyAIOError):
     """Raised when a pipeline stage needs human review to proceed."""
 

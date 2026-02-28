@@ -4,6 +4,8 @@ import type {
   CourseListItem,
   DashboardData,
   PipelineRun,
+  QARequest,
+  QAResponse,
   ReviewItem,
   SummaryData,
   UploadResult,
@@ -36,4 +38,8 @@ export const reviewApi = {
 export const uploadApi = {
   upload: (file: File) => api.upload<UploadResult>('/uploads', file),
   status: (artifactId: string) => api.get<PipelineRun[]>(`/uploads/${artifactId}/status`),
+}
+
+export const qaApi = {
+  ask: (request: QARequest) => api.post<QAResponse>('/qa/ask', request),
 }

@@ -10,7 +10,12 @@ from app.services import course_service, pipeline_service, review_service
 router = APIRouter()
 
 
-@router.get("/dashboard", response_model=DashboardResponse)
+@router.get(
+    "/dashboard",
+    response_model=DashboardResponse,
+    summary="Get dashboard data",
+    description="Returns pending review count, recent pipeline activity, and course list with aggregate stats.",
+)
 async def get_dashboard(
     session: AsyncSession = Depends(get_session),
 ) -> DashboardResponse:

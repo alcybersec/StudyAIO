@@ -17,7 +17,11 @@ _TYPE_DIRS = {
 }
 
 
-@router.get("/files/{file_type}/{path:path}")
+@router.get(
+    "/files/{file_type}/{path:path}",
+    summary="Serve a file",
+    description="Serves a file from the data directory. file_type must be one of: uploads, extractions, summaries. Path traversal is blocked.",
+)
 async def serve_file(file_type: str, path: str) -> FileResponse:
     """Serve a file from the data directory.
 

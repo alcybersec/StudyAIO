@@ -10,6 +10,7 @@ interface NavTab {
 const tabs: NavTab[] = [
   { path: '/', label: 'Home', icon: '\u25A6' },
   { path: '/upload', label: 'Upload', icon: '\u2191' },
+  { path: '/qa', label: 'Q&A', icon: '?' },
   { path: '/review', label: 'Review', icon: '\u2691' },
 ]
 

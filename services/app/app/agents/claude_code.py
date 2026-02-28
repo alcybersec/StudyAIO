@@ -359,6 +359,72 @@ After the summary, emit:
     async def answer_question(
         self, question: str, context_chunks: list[dict]
     ) -> AnswerResult:
-        """Answer a question by calling Claude Code CLI."""
-        # TODO: Implement in Q&A feature (Milestone 2)
-        raise NotImplementedError("Q&A not yet implemented")
+        """Answer a question by calling Claude Code CLI.
+
+        Args:
+            question: The user's question.
+            context_chunks: Retrieved chunks with metadata (text, course_code, week, page_ref, chunk_id).
+
+        Returns:
+            AnswerResult with answer text and structured citations.
+        """
+        from jinja2 import Template
+        from pathlib import Path
+
+        template_path = Path("/app/prompts/answer_question.txt")
+        if template_path.exists():
+            template = Template(template_path.read_text())
+            prompt = template.render(
+                question=question,
+                chunks=context_chunks,
+            )
+        else:
+            prompt = self._build_qa_prompt(question, context_chunks)
+
+        result_text = await self._run_claude_code(prompt)
+        parsed = self._parse_json_response(result_text)
+
+        return AnswerResult(
+            answer=parsed.get("answer", ""),
+            citations=parsed.get("citations", []),
+        )
+
+    def _build_qa_prompt(self, question: str, chunks: list[dict]) -> str:
+        """Build Q&A prompt as fallback when template is missing.
+
+        Args:
+            question: The user's question.
+            chunks: Context chunks with metadata.
+
+        Returns:
+            Complete prompt string.
+        """
+        chunks_text = ""
+        for i, chunk in enumerate(chunks, 1):
+            course = chunk.get("course_code", "Unknown")
+            week = chunk.get("week", 0)
+            page = chunk.get("page_ref", 0)
+            text = chunk.get("text", "")
+            chunks_text += f"[{i}] ({course} Week {week}, p.{page})\n{text}\n\n"
+
+        return f"""Answer the following question using ONLY the provided context chunks.
+
+Question: {question}
+
+Context:
+{chunks_text}
+
+Respond with ONLY a JSON object:
+{{
+  "answer": "Your answer with [1] citation markers.",
+  "citations": [
+    {{
+      "ref": 1,
+      "chunk_id": "",
+      "text_snippet": "brief quote",
+      "course_code": "CSIT302",
+      "week": 5,
+      "page_ref": 1
+    }}
+  ]
+}}"""

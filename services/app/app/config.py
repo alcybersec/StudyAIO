@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     chunk_size_tokens: int = 500
     chunk_overlap_tokens: int = 50
 
+    # Embeddings
+    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_dimensions: int = 384
+    search_top_k: int = 10
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @property
