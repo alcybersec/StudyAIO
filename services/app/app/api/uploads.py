@@ -178,9 +178,14 @@ async def pipeline_events(
     """SSE stream of pipeline events, optionally filtered by artifact_id."""
 
     async def event_generator():
+        # Send initial comment so EventSource.onopen fires immediately
+        yield {"comment": "connected"}
+
         redis = Redis.from_url(settings.redis_url, decode_responses=True)
         pubsub = redis.pubsub()
         await pubsub.subscribe(PIPELINE_EVENTS_CHANNEL)
+        heartbeat_interval = 15
+        heartbeat_counter = 0
         try:
             while True:
                 if await request.is_disconnected():
@@ -190,7 +195,12 @@ async def pipeline_events(
                     data = json.loads(message["data"])
                     if not artifact_id or data.get("artifact_id") == artifact_id:
                         yield {"event": "pipeline", "data": json.dumps(data)}
+                    heartbeat_counter = 0
                 else:
+                    heartbeat_counter += 1
+                    if heartbeat_counter >= heartbeat_interval:
+                        yield {"comment": "keepalive"}
+                        heartbeat_counter = 0
                     await asyncio.sleep(0.5)
         finally:
             await pubsub.unsubscribe(PIPELINE_EVENTS_CHANNEL)
