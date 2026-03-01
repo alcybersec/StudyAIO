@@ -5,9 +5,10 @@ interface AnswerDisplayProps {
   answer: string
   citations: Citation[]
   chunksSearched: number
+  onCitationClick?: (artifactId: string, page: number) => void
 }
 
-export function AnswerDisplay({ answer, citations, chunksSearched }: AnswerDisplayProps) {
+export function AnswerDisplay({ answer, citations, chunksSearched, onCitationClick }: AnswerDisplayProps) {
   // Replace [N] markers with styled citation links
   const renderAnswer = () => {
     const parts = answer.split(/(\[\d+\])/)
@@ -33,6 +34,13 @@ export function AnswerDisplay({ answer, citations, chunksSearched }: AnswerDispl
     })
   }
 
+  const handleCitationSourceClick = (c: Citation, e: React.MouseEvent) => {
+    if (onCitationClick && c.artifact_id) {
+      e.preventDefault()
+      onCitationClick(c.artifact_id, c.page_ref)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Answer text */}
@@ -56,6 +64,7 @@ export function AnswerDisplay({ answer, citations, chunksSearched }: AnswerDispl
                   <Link
                     to={`/courses/${c.course_code}/weeks/${c.week}${c.artifact_id ? `?artifact=${c.artifact_id}` : ''}${c.page_ref ? `&page=${c.page_ref}` : ''}`}
                     className="text-primary hover:underline font-medium"
+                    onClick={(e) => handleCitationSourceClick(c, e)}
                   >
                     {c.course_code} Week {c.week}, p.{c.page_ref}
                   </Link>

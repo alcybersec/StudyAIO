@@ -19,6 +19,13 @@ _TYPE_DIRS = {
     "summaries": settings.summaries_dir,
 }
 
+# Map file extension to MIME type for inline viewing
+_MIME_TYPES = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
 
 @router.get(
     "/files/uploads/artifacts/{artifact_id}",
@@ -43,6 +50,31 @@ async def download_artifact(
         filename=artifact.original_filename,
         media_type="application/octet-stream",
     )
+
+
+@router.get(
+    "/files/uploads/artifacts/{artifact_id}/view",
+    summary="View an uploaded artifact inline",
+    description="Serves the original uploaded file with the correct MIME type for inline viewing (e.g. PDF in browser).",
+)
+async def view_artifact(
+    artifact_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> FileResponse:
+    """Serve the original uploaded file for inline viewing."""
+    artifact = await artifact_service.get_artifact(session, artifact_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    file_path = Path(artifact.file_path)
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    media_type = _MIME_TYPES.get(
+        artifact.file_type, "application/octet-stream"
+    )
+
+    return FileResponse(str(file_path), media_type=media_type)
 
 
 @router.get(
