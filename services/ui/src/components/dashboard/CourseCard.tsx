@@ -4,7 +4,8 @@ import type { CourseListItem } from '../../types'
 
 function relativeDate(dateStr: string | null): string {
   if (!dateStr) return 'No activity'
-  const diff = Date.now() - new Date(dateStr).getTime()
+  const iso = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z'
+  const diff = Date.now() - new Date(iso).getTime()
   const days = Math.floor(diff / 86_400_000)
   if (days === 0) return 'Updated today'
   if (days === 1) return 'Updated yesterday'

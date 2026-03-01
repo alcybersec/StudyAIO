@@ -3,7 +3,9 @@ import type { ActivityItem } from '../../types'
 
 function relativeTime(dateStr: string | null): string {
   if (!dateStr) return ''
-  const diff = Date.now() - new Date(dateStr).getTime()
+  // API returns UTC timestamps without Z suffix — ensure JS parses as UTC
+  const iso = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z'
+  const diff = Date.now() - new Date(iso).getTime()
   const minutes = Math.floor(diff / 60_000)
   if (minutes < 1) return 'just now'
   if (minutes < 60) return `${minutes}m ago`
