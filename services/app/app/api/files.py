@@ -2,10 +2,13 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.database import get_session
+from app.services import artifact_service
 
 router = APIRouter()
 
@@ -15,6 +18,31 @@ _TYPE_DIRS = {
     "extractions": settings.extractions_dir,
     "summaries": settings.summaries_dir,
 }
+
+
+@router.get(
+    "/files/uploads/artifacts/{artifact_id}",
+    summary="Download an uploaded artifact",
+    description="Downloads the original uploaded file for a given artifact ID with the correct filename.",
+)
+async def download_artifact(
+    artifact_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> FileResponse:
+    """Download the original uploaded file for an artifact."""
+    artifact = await artifact_service.get_artifact(session, artifact_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    file_path = Path(artifact.file_path)
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    return FileResponse(
+        str(file_path),
+        filename=artifact.original_filename,
+        media_type="application/octet-stream",
+    )
 
 
 @router.get(
