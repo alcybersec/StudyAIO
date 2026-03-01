@@ -1,6 +1,6 @@
 """Tests for search service — pgvector similarity search."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

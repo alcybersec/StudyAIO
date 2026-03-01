@@ -1,4 +1,4 @@
-.PHONY: up down logs test test-unit test-integration migrate shell db status build clean ingest import-v0
+.PHONY: up down logs test test-unit test-integration migrate shell db status build clean ingest import-v0 lint-python lint-python-fix coverage
 
 # === Docker ===
 up:
@@ -42,6 +42,16 @@ test-integration:
 
 test-golden:
 	cd services/app && pytest tests/golden -x -v
+
+coverage:
+	cd services/app && pytest tests/unit --cov=app --cov-report=term-missing
+
+# === Linting ===
+lint-python:
+	cd services/app && ruff check .
+
+lint-python-fix:
+	cd services/app && ruff check --fix . && ruff format .
 
 # === Development ===
 shell:

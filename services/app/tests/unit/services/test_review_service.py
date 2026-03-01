@@ -1,9 +1,5 @@
 """Tests for review_service."""
 
-from unittest.mock import MagicMock
-
-import pytest
-
 from app.services import review_service
 
 

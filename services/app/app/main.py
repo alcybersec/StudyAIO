@@ -1,7 +1,7 @@
 """FastAPI application factory."""
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Request
@@ -45,7 +45,10 @@ app = FastAPI(
         {"name": "courses", "description": "Course listing and per-week breakdowns"},
         {"name": "uploads", "description": "File uploads and pipeline status"},
         {"name": "summaries", "description": "Generated weekly summaries"},
-        {"name": "review-items", "description": "Human review inbox for low-confidence classifications"},
+        {
+            "name": "review-items",
+            "description": "Human review inbox for low-confidence classifications",
+        },
         {"name": "files", "description": "Serve files from data directories"},
         {"name": "qa", "description": "Question & Answer with citation support"},
         {"name": "assets", "description": "Flashcards and quiz questions"},
@@ -73,9 +76,7 @@ app.include_router(assets_router, prefix="/api", tags=["assets"])
 
 # Exception handlers
 @app.exception_handler(DuplicateFileError)
-async def duplicate_file_handler(
-    request: Request, exc: DuplicateFileError
-) -> JSONResponse:
+async def duplicate_file_handler(request: Request, exc: DuplicateFileError) -> JSONResponse:
     """Handle duplicate file uploads with 409 Conflict."""
     return JSONResponse(
         status_code=409,
@@ -87,9 +88,7 @@ async def duplicate_file_handler(
 
 
 @app.exception_handler(StudyAIOError)
-async def studyaio_error_handler(
-    request: Request, exc: StudyAIOError
-) -> JSONResponse:
+async def studyaio_error_handler(request: Request, exc: StudyAIOError) -> JSONResponse:
     """Handle application errors with 500."""
     logger.error("unhandled_studyaio_error", error=str(exc), type=type(exc).__name__)
     return JSONResponse(

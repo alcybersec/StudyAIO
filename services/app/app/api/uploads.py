@@ -15,8 +15,7 @@ from app.api.schemas import PipelineRunResponse, RetryResponse, UploadResponse
 from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import DuplicateFileError
-from app.pipeline.orchestrator import resume_pipeline
-from app.pipeline.orchestrator import run_pipeline
+from app.pipeline.orchestrator import resume_pipeline, run_pipeline
 from app.services import artifact_service, pipeline_service
 from app.services.event_service import PIPELINE_EVENTS_CHANNEL
 
@@ -61,7 +60,7 @@ async def upload_file(
             tmp_path = tmp.name
     except Exception as e:
         logger.error("upload_save_failed", error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to save uploaded file")
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file") from e
 
     logger.info("upload_received", filename=file.filename, temp_path=tmp_path)
 
@@ -72,7 +71,7 @@ async def upload_file(
         raise HTTPException(
             status_code=409,
             detail=f"File already exists as artifact {e.existing_artifact_id}",
-        )
+        ) from e
 
     return UploadResponse(
         artifact_id="pending",
@@ -186,9 +185,7 @@ async def pipeline_events(
             while True:
                 if await request.is_disconnected():
                     break
-                message = await pubsub.get_message(
-                    ignore_subscribe_messages=True, timeout=1.0
-                )
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if message and message["type"] == "message":
                     data = json.loads(message["data"])
                     if not artifact_id or data.get("artifact_id") == artifact_id:

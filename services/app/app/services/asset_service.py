@@ -1,7 +1,5 @@
 """Business logic for Flashcard and QuizQuestion management."""
 
-from datetime import datetime
-
 import structlog
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,14 +36,13 @@ async def save_flashcards(
         List of created Flashcard records.
     """
     # Delete existing flashcards for this artifact
-    await session.execute(
-        delete(Flashcard).where(Flashcard.source_artifact_id == artifact_id)
-    )
+    await session.execute(delete(Flashcard).where(Flashcard.source_artifact_id == artifact_id))
 
     # Compute next generation version for this course+week
     result = await session.execute(
-        select(func.max(Flashcard.generation_version))
-        .where(Flashcard.course_id == course_id, Flashcard.week == week)
+        select(func.max(Flashcard.generation_version)).where(
+            Flashcard.course_id == course_id, Flashcard.week == week
+        )
     )
     max_version = result.scalar() or 0
     next_version = max_version + 1
@@ -108,8 +105,9 @@ async def save_quiz_questions(
 
     # Compute next generation version for this course+week
     result = await session.execute(
-        select(func.max(QuizQuestion.generation_version))
-        .where(QuizQuestion.course_id == course_id, QuizQuestion.week == week)
+        select(func.max(QuizQuestion.generation_version)).where(
+            QuizQuestion.course_id == course_id, QuizQuestion.week == week
+        )
     )
     max_version = result.scalar() or 0
     next_version = max_version + 1
@@ -189,9 +187,7 @@ async def get_quiz_questions_for_week(
     return list(result.scalars().all())
 
 
-async def get_flashcards_for_course(
-    session: AsyncSession, course_code: str
-) -> list[Flashcard]:
+async def get_flashcards_for_course(session: AsyncSession, course_code: str) -> list[Flashcard]:
     """Get all flashcards for a course (all weeks).
 
     Args:

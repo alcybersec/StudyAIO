@@ -114,11 +114,9 @@ async def resolve_review_item(
 
     # Mark review as resolved
     try:
-        item = await review_service.resolve_review_item(
-            session, review_id, resolution
-        )
+        item = await review_service.resolve_review_item(session, review_id, resolution)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     await session.commit()
 
@@ -150,7 +148,7 @@ async def dismiss_review_item(
     try:
         item = await review_service.dismiss_review_item(session, review_id)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     await session.commit()
     return ReviewItemResponse.model_validate(item)

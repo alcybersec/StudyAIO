@@ -13,7 +13,6 @@ from app.core.database import async_session_factory
 from app.core.exceptions import AgentError, AssetGenerationError
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
-from app.models.course import Course
 from app.models.extraction import Extraction
 from app.models.pipeline_run import PipelineRun
 from app.models.summary import Summary
@@ -64,9 +63,7 @@ async def _generate_assets(artifact_id: str) -> dict:
 
         course = artifact.course
         if not course:
-            raise AssetGenerationError(
-                f"Artifact {artifact_id} has course_id but course not found"
-            )
+            raise AssetGenerationError(f"Artifact {artifact_id} has course_id but course not found")
 
         # Update status
         artifact.status = "generating_assets"
@@ -90,9 +87,7 @@ async def _generate_assets(artifact_id: str) -> dict:
             )
             extraction = ext_result.scalar_one_or_none()
             if not extraction:
-                raise AssetGenerationError(
-                    f"No extraction found for artifact {artifact_id}"
-                )
+                raise AssetGenerationError(f"No extraction found for artifact {artifact_id}")
 
             extraction_data = merge_extractions([extraction])
             extraction_data.metadata["course_code"] = course.code
@@ -231,4 +226,4 @@ def generate_assets(self, input_value: str | dict) -> dict:
     except Exception as exc:
         logger.error("assets_task_error", error=str(exc), artifact_id=artifact_id)
         publish_pipeline_event_sync(artifact_id, "assets", "failed", str(exc))
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc

@@ -6,7 +6,6 @@ from pathlib import Path
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
 from app.agents.base import ExtractionData
 from app.core.utils import generate_id
@@ -70,9 +69,7 @@ def merge_extractions(extractions: list[Extraction]) -> ExtractionData:
     )
 
 
-async def get_existing_summary(
-    session: AsyncSession, course_id: str, week: int
-) -> Summary | None:
+async def get_existing_summary(session: AsyncSession, course_id: str, week: int) -> Summary | None:
     """Get existing summary for a course+week if it exists.
 
     Args:
@@ -169,9 +166,7 @@ async def get_summary_by_id(session: AsyncSession, summary_id: str) -> Summary |
     Returns:
         Summary if found, None otherwise.
     """
-    result = await session.execute(
-        select(Summary).where(Summary.id == summary_id)
-    )
+    result = await session.execute(select(Summary).where(Summary.id == summary_id))
     return result.scalar_one_or_none()
 
 
@@ -198,9 +193,7 @@ async def get_summary_for_week(
     return result.scalar_one_or_none()
 
 
-async def list_course_summaries(
-    session: AsyncSession, course_id: str
-) -> list[Summary]:
+async def list_course_summaries(session: AsyncSession, course_id: str) -> list[Summary]:
     """Get all summaries for a course.
 
     Args:
@@ -211,9 +204,7 @@ async def list_course_summaries(
         List of Summary records ordered by week.
     """
     result = await session.execute(
-        select(Summary)
-        .where(Summary.course_id == course_id)
-        .order_by(Summary.week)
+        select(Summary).where(Summary.course_id == course_id).order_by(Summary.week)
     )
     return list(result.scalars().all())
 

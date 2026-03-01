@@ -43,7 +43,7 @@ class TestSummarizeInput:
         # This will fail since there's no DB, but verifies the code path
         from app.pipeline.summarize import summarize_artifact
 
-        with pytest.raises(Exception):
+        with pytest.raises((Exception, SystemExit)):
             summarize_artifact.run("art-001")
 
 

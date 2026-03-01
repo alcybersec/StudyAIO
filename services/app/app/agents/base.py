@@ -133,9 +133,7 @@ class AgentAdapter(ABC):
         ...
 
     @abstractmethod
-    async def answer_question(
-        self, question: str, context_chunks: list[dict]
-    ) -> AnswerResult:
+    async def answer_question(self, question: str, context_chunks: list[dict]) -> AnswerResult:
         """Answer a question using retrieved context chunks.
 
         Args:

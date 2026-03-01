@@ -26,7 +26,9 @@ def get_extractor(file_type: str) -> BaseExtractor:
     """
     extractor_cls = _EXTRACTORS.get(file_type.lower())
     if extractor_cls is None:
-        raise ValueError(f"Unsupported file type: {file_type}. Supported: {list(_EXTRACTORS.keys())}")
+        raise ValueError(
+            f"Unsupported file type: {file_type}. Supported: {list(_EXTRACTORS.keys())}"
+        )
     return extractor_cls()
 
 

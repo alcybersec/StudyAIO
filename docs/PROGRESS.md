@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 5 — Polish & Portfolio (Complete)
-> **Overall Status:** Complete (v1)
+> **Current Milestone:** 6 — Quality Hardening (Complete)
+> **Overall Status:** Complete (v1 + quality hardening)
 
 ---
 
@@ -63,6 +63,16 @@
 | 5.3 | UI error recovery + SSE feedback + mobile touch | ✅ Done | ErrorBanner with retry button on Dashboard/Course/Week. ConnectionBanner for SSE status on Upload. Touch targets ≥44px on FlashcardsTab, QuizTab, SuggestionButtons, CustomResolutionForm. |
 | 5.4 | GitHub Actions CI | ✅ Done | .github/workflows/ci.yml with backend-tests (pytest) and frontend-checks (tsc + lint) jobs. Dependency caching. |
 | 5.5 | README + architecture docs | ✅ Done | README.md with CI badge, Mermaid diagrams, features, tech stack, quick start. docs/architecture.md with system/pipeline/data model diagrams and design decisions. |
+
+## Milestone 6 — Quality Hardening
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 6.1 | Integration test infrastructure | ✅ Done | testcontainers-based conftest.py (pgvector/pgvector:pg16 + redis:7-alpine). Session-scoped containers, function-scoped SAVEPOINT rollback. CI-compatible (env var detection skips containers). |
+| 6.2 | Integration test suite | ✅ Done | 28 integration tests: DB constraints (5), services (9), API uploads (5), API courses (4), API review items (4), health smoke (1). Real SQL, no mocks. |
+| 6.3 | Python linting + coverage + CI | ✅ Done | ruff (E/W/F/I/UP/B/SIM), pyproject.toml. Auto-fixed 61+ violations (import sorting, raise-from, unused vars, zip strict). CI expanded to 4 jobs: python-lint, backend-tests (with --cov), integration-tests (GH Actions services), frontend-checks. Makefile: lint-python, lint-python-fix, coverage. |
+| 6.4 | React ErrorBoundary + 404 page | ✅ Done | ErrorBoundary (class component) wraps Outlet in AppLayout. NotFoundPage at catch-all `*` route. Dev-mode error details. 44px touch targets. Fixed FlashcardsTab lint (Math.random impurity). |
+| 6.5 | Docker health checks | ✅ Done | API: urllib health check (10s interval, 15s start_period). Worker: celery inspect ping (30s interval, 30s start_period). UI depends_on api: service_healthy. |
 
 ---
 

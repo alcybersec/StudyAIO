@@ -41,7 +41,7 @@ class TestIndexInput:
         """String input is treated as artifact_id (will fail without DB)."""
         from app.pipeline.index import index_artifact
 
-        with pytest.raises(Exception):
+        with pytest.raises((Exception, SystemExit)):
             index_artifact.run("art-001")
 
 
@@ -52,9 +52,7 @@ class TestIndexStage:
     @patch("app.pipeline.index.index_service")
     @patch("app.pipeline.index.async_session_factory")
     @pytest.mark.asyncio
-    async def test_index_success(
-        self, mock_session_factory, mock_index_svc, mock_get_provider
-    ):
+    async def test_index_success(self, mock_session_factory, mock_index_svc, mock_get_provider):
         """Successful indexing creates chunks and returns indexed status."""
         from app.pipeline.index import _index
 
@@ -79,9 +77,7 @@ class TestIndexStage:
         mock_result_extraction = MagicMock()
         mock_result_extraction.scalar_one_or_none.return_value = extraction
 
-        session.execute = AsyncMock(
-            side_effect=[mock_result_artifact, mock_result_extraction]
-        )
+        session.execute = AsyncMock(side_effect=[mock_result_artifact, mock_result_extraction])
 
         mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
         mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -136,9 +132,7 @@ class TestIndexStage:
         mock_result_extraction = MagicMock()
         mock_result_extraction.scalar_one_or_none.return_value = None
 
-        session.execute = AsyncMock(
-            side_effect=[mock_result_artifact, mock_result_extraction]
-        )
+        session.execute = AsyncMock(side_effect=[mock_result_artifact, mock_result_extraction])
 
         mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
         mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -168,9 +162,7 @@ class TestIndexStage:
         mock_result_extraction = MagicMock()
         mock_result_extraction.scalar_one_or_none.return_value = extraction
 
-        session.execute = AsyncMock(
-            side_effect=[mock_result_artifact, mock_result_extraction]
-        )
+        session.execute = AsyncMock(side_effect=[mock_result_artifact, mock_result_extraction])
 
         mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
         mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)

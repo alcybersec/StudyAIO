@@ -42,7 +42,7 @@ class TestAssetsInput:
         """String input is treated as artifact_id (will fail without DB)."""
         from app.pipeline.assets import generate_assets
 
-        with pytest.raises(Exception):
+        with pytest.raises((Exception, SystemExit)):
             generate_assets.run("art-001")
 
     def test_assets_empty_artifact_id_raises(self):

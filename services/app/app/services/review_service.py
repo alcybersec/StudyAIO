@@ -84,9 +84,7 @@ async def get_review_item(session: AsyncSession, review_id: str) -> ReviewItem |
     Returns:
         ReviewItem if found, None otherwise.
     """
-    result = await session.execute(
-        select(ReviewItem).where(ReviewItem.id == review_id)
-    )
+    result = await session.execute(select(ReviewItem).where(ReviewItem.id == review_id))
     return result.scalar_one_or_none()
 
 
@@ -128,9 +126,7 @@ async def resolve_review_item(
     return item
 
 
-async def dismiss_review_item(
-    session: AsyncSession, review_id: str
-) -> ReviewItem:
+async def dismiss_review_item(session: AsyncSession, review_id: str) -> ReviewItem:
     """Dismiss a pending review item.
 
     Args:

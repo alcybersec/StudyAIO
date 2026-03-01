@@ -13,7 +13,6 @@ from app.core.database import async_session_factory
 from app.core.exceptions import AgentError, SummarizationError
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
-from app.models.course import Course
 from app.models.pipeline_run import PipelineRun
 from app.services import summary_service
 from app.services.event_service import publish_pipeline_event_sync
@@ -62,9 +61,7 @@ async def _summarize(artifact_id: str) -> dict:
 
         course = artifact.course
         if not course:
-            raise SummarizationError(
-                f"Artifact {artifact_id} has course_id but course not found"
-            )
+            raise SummarizationError(f"Artifact {artifact_id} has course_id but course not found")
 
         # Update status
         artifact.status = "summarizing"
@@ -221,4 +218,4 @@ def summarize_artifact(self, input_value: str | dict) -> dict:
     except Exception as exc:
         logger.error("summarize_task_error", error=str(exc), artifact_id=artifact_id)
         publish_pipeline_event_sync(artifact_id, "summarize", "failed", str(exc))
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc

@@ -26,13 +26,9 @@ async def get_flashcards(
 ) -> list[FlashcardResponse]:
     """Get flashcards for a course, optionally filtered by week."""
     if week is not None:
-        flashcards = await asset_service.get_flashcards_for_week(
-            session, course_code, week
-        )
+        flashcards = await asset_service.get_flashcards_for_week(session, course_code, week)
     else:
-        flashcards = await asset_service.get_flashcards_for_course(
-            session, course_code
-        )
+        flashcards = await asset_service.get_flashcards_for_course(session, course_code)
 
     return [FlashcardResponse.model_validate(fc) for fc in flashcards]
 
@@ -50,12 +46,8 @@ async def get_quiz_questions(
 ) -> list[QuizQuestionResponse]:
     """Get quiz questions for a course, optionally filtered by week."""
     if week is not None:
-        questions = await asset_service.get_quiz_questions_for_week(
-            session, course_code, week
-        )
+        questions = await asset_service.get_quiz_questions_for_week(session, course_code, week)
     else:
-        questions = await asset_service.get_quiz_questions_for_course(
-            session, course_code
-        )
+        questions = await asset_service.get_quiz_questions_for_course(session, course_code)
 
     return [QuizQuestionResponse.model_validate(q) for q in questions]

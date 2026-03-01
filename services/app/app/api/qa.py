@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.embeddings import get_embedding_provider
 from app.agents.factory import get_agent
-from app.api.schemas import QARequest, QAResponse, Citation
+from app.api.schemas import Citation, QARequest, QAResponse
 from app.core.database import get_session
 from app.models.course import Course
 from app.services import search_service
@@ -34,9 +34,7 @@ async def ask_question(
     # Resolve course_code to course_id if provided
     course_id: str | None = None
     if body.course_code:
-        result = await session.execute(
-            select(Course).where(Course.code == body.course_code)
-        )
+        result = await session.execute(select(Course).where(Course.code == body.course_code))
         course = result.scalar_one_or_none()
         if not course:
             raise HTTPException(
@@ -77,10 +75,10 @@ async def ask_question(
         raise HTTPException(
             status_code=501,
             detail="Q&A agent not yet configured. Ensure Claude Code CLI is available.",
-        )
+        ) from None
     except Exception as e:
         logger.error("qa_agent_error", error=str(e), question=body.question[:100])
-        raise HTTPException(status_code=500, detail=f"Failed to generate answer: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate answer: {e}") from e
 
     # Build response
     citations = [

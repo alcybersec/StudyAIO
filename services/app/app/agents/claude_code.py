@@ -5,8 +5,6 @@ import json
 
 import structlog
 
-from app.config import settings
-from app.core.exceptions import AgentError
 from app.agents.base import (
     AgentAdapter,
     AnswerResult,
@@ -16,6 +14,8 @@ from app.agents.base import (
     QuizQuestionData,
     SummaryResult,
 )
+from app.config import settings
+from app.core.exceptions import AgentError
 
 logger = structlog.get_logger()
 
@@ -61,17 +61,15 @@ class ClaudeCodeAdapter(AgentAdapter):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(), timeout=timeout
-            )
-        except asyncio.TimeoutError:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        except TimeoutError:
             process.kill()
-            raise AgentError(f"Claude Code timed out after {timeout}s")
+            raise AgentError(f"Claude Code timed out after {timeout}s") from None
         except FileNotFoundError:
             raise AgentError(
                 f"Claude Code CLI not found at '{self._cli_path}'. "
                 "Ensure it is installed and accessible."
-            )
+            ) from None
 
         if process.returncode != 0:
             error_text = stderr.decode().strip() if stderr else "Unknown error"
@@ -158,8 +156,9 @@ class ClaudeCodeAdapter(AgentAdapter):
         self, text_preview: str, filename: str, known_courses: list[str]
     ) -> ClassificationResult:
         """Classify a lecture by calling Claude Code CLI."""
-        from jinja2 import Template
         from pathlib import Path
+
+        from jinja2 import Template
 
         template_path = Path("/app/prompts/classify.txt")
         if template_path.exists():
@@ -170,9 +169,7 @@ class ClaudeCodeAdapter(AgentAdapter):
                 known_courses=known_courses,
             )
         else:
-            prompt = self._build_classification_prompt(
-                text_preview, filename, known_courses
-            )
+            prompt = self._build_classification_prompt(text_preview, filename, known_courses)
 
         result_text = await self._run_claude_code(prompt)
         parsed = self._parse_json_response(result_text)
@@ -342,8 +339,9 @@ After the summary, emit:
         Returns:
             SummaryResult with markdown content and embedded images.
         """
-        from jinja2 import Template
         from pathlib import Path
+
+        from jinja2 import Template
 
         extraction_text = self._build_extraction_text(extraction)
         image_references = self._collect_image_references(extraction)
@@ -393,8 +391,9 @@ After the summary, emit:
         Returns:
             List of FlashcardData.
         """
-        from jinja2 import Template
         from pathlib import Path
+
+        from jinja2 import Template
 
         extraction_text = self._build_extraction_text(extraction)
         course_code = extraction.metadata.get("course_code", "UNKNOWN")
@@ -462,8 +461,9 @@ Respond with ONLY a JSON array:
         Returns:
             List of QuizQuestionData.
         """
-        from jinja2 import Template
         from pathlib import Path
+
+        from jinja2 import Template
 
         extraction_text = self._build_extraction_text(extraction)
         course_code = extraction.metadata.get("course_code", "UNKNOWN")
@@ -480,9 +480,7 @@ Respond with ONLY a JSON array:
                 count=count,
             )
         else:
-            prompt = self._build_quiz_prompt(
-                course_code, week, summary, extraction_text, count
-            )
+            prompt = self._build_quiz_prompt(course_code, week, summary, extraction_text, count)
 
         result_text = await self._run_claude_code(prompt, timeout=_SUMMARY_TIMEOUT)
         items = self._parse_json_array_response(result_text)
@@ -521,9 +519,7 @@ Respond with ONLY a JSON array:
 [{{"question_type": "multiple_choice", "question": "...", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "correct_answer": "B", "explanation": "...", "source_page_ref": 1}}]
 """
 
-    async def answer_question(
-        self, question: str, context_chunks: list[dict]
-    ) -> AnswerResult:
+    async def answer_question(self, question: str, context_chunks: list[dict]) -> AnswerResult:
         """Answer a question by calling Claude Code CLI.
 
         Args:
@@ -533,8 +529,9 @@ Respond with ONLY a JSON array:
         Returns:
             AnswerResult with answer text and structured citations.
         """
-        from jinja2 import Template
         from pathlib import Path
+
+        from jinja2 import Template
 
         template_path = Path("/app/prompts/answer_question.txt")
         if template_path.exists():

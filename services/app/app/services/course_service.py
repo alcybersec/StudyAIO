@@ -22,9 +22,7 @@ async def list_courses(session: AsyncSession) -> list[Course]:
     Returns:
         List of courses ordered alphabetically by code.
     """
-    result = await session.execute(
-        select(Course).order_by(Course.code)
-    )
+    result = await session.execute(select(Course).order_by(Course.code))
     return list(result.scalars().all())
 
 
@@ -38,9 +36,7 @@ async def get_course_by_code(session: AsyncSession, code: str) -> Course | None:
     Returns:
         Course if found, None otherwise.
     """
-    result = await session.execute(
-        select(Course).where(Course.code == code)
-    )
+    result = await session.execute(select(Course).where(Course.code == code))
     return result.scalar_one_or_none()
 
 
@@ -83,17 +79,19 @@ async def list_courses_with_stats(session: AsyncSession) -> list[dict]:
     items = []
     for c in courses:
         s = stats.get(c.id, {"weeks_covered": 0, "total_artifacts": 0})
-        items.append({
-            "id": c.id,
-            "code": c.code,
-            "name": c.name,
-            "term": c.term,
-            "created_at": c.created_at,
-            "updated_at": c.updated_at,
-            "weeks_covered": s["weeks_covered"],
-            "total_artifacts": s["total_artifacts"],
-            "last_updated": c.updated_at,
-        })
+        items.append(
+            {
+                "id": c.id,
+                "code": c.code,
+                "name": c.name,
+                "term": c.term,
+                "created_at": c.created_at,
+                "updated_at": c.updated_at,
+                "weeks_covered": s["weeks_covered"],
+                "total_artifacts": s["total_artifacts"],
+                "last_updated": c.updated_at,
+            }
+        )
 
     return items
 
@@ -126,8 +124,7 @@ async def get_course_weeks(session: AsyncSession, course_id: str) -> list[dict]:
         .order_by(LectureArtifact.week)
     )
     artifact_data = {
-        row.week: {"count": row.artifact_count, "titles": row.titles or []}
-        for row in artifact_rows
+        row.week: {"count": row.artifact_count, "titles": row.titles or []} for row in artifact_rows
     }
 
     # Get summaries for this course
@@ -165,14 +162,16 @@ async def get_course_weeks(session: AsyncSession, course_id: str) -> list[dict]:
     for week in all_weeks:
         art = artifact_data.get(week, {"count": 0, "titles": []})
         summary_id = summary_data.get(week)
-        result.append({
-            "week": week,
-            "titles": [t for t in art["titles"] if t],
-            "artifact_count": art["count"],
-            "summary_status": "generated" if summary_id else "pending",
-            "summary_id": summary_id,
-            "flashcard_count": flashcard_data.get(week, 0),
-            "quiz_count": quiz_data.get(week, 0),
-        })
+        result.append(
+            {
+                "week": week,
+                "titles": [t for t in art["titles"] if t],
+                "artifact_count": art["count"],
+                "summary_status": "generated" if summary_id else "pending",
+                "summary_id": summary_id,
+                "flashcard_count": flashcard_data.get(week, 0),
+                "quiz_count": quiz_data.get(week, 0),
+            }
+        )
 
     return result

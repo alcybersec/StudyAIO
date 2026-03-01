@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useFlashcards } from '../../hooks/useApi'
 import { LoadingSpinner, EmptyState, Badge } from '../ui'
 
@@ -11,14 +11,9 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
   const { data: flashcards, isLoading, error } = useFlashcards(courseCode, week)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
-  const [shuffled, setShuffled] = useState(false)
+  const [shuffledCards, setShuffledCards] = useState<typeof flashcards>()
 
-  const cards = useMemo(() => {
-    if (!flashcards) return []
-    if (!shuffled) return flashcards
-    return [...flashcards].sort(() => Math.random() - 0.5)
-  }, [flashcards, shuffled])
-
+  const cards = shuffledCards ?? flashcards ?? []
   const card = cards[currentIndex]
 
   const goNext = useCallback(() => {
@@ -38,10 +33,14 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
   const toggleFlip = useCallback(() => setFlipped((f) => !f), [])
 
   const toggleShuffle = useCallback(() => {
-    setShuffled((s) => !s)
+    if (shuffledCards) {
+      setShuffledCards(undefined)
+    } else if (flashcards) {
+      setShuffledCards([...flashcards].sort(() => Math.random() - 0.5))
+    }
     setCurrentIndex(0)
     setFlipped(false)
-  }, [])
+  }, [flashcards, shuffledCards])
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -80,12 +79,12 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
         <button
           onClick={toggleShuffle}
           className={`px-4 py-2.5 min-h-[44px] rounded-full text-xs font-medium transition-colors ${
-            shuffled
+            shuffledCards
               ? 'bg-primary/10 text-primary'
               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
           }`}
         >
-          Shuffle {shuffled ? 'On' : 'Off'}
+          Shuffle {shuffledCards ? 'On' : 'Off'}
         </button>
       </div>
 

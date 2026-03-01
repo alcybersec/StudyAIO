@@ -87,7 +87,6 @@ class TestClassifyStage:
         # We need to handle the course query too — make execute return different
         # results per call
         call_count = 0
-        original_execute = session.execute
 
         async def multi_execute(*args, **kwargs):
             nonlocal call_count

@@ -1,15 +1,13 @@
 """Index service — chunking and embedding logic for the index pipeline stage."""
 
-import hashlib
-
 import structlog
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.embeddings import EmbeddingProvider
 from app.config import settings
-from app.models.chunk import Chunk
 from app.core.utils import generate_id
+from app.models.chunk import Chunk
 
 logger = structlog.get_logger()
 
@@ -90,12 +88,14 @@ def chunk_pages(
             if _estimate_tokens(candidate) >= chunk_size:
                 # Emit current chunk
                 if current_text.strip():
-                    chunks.append({
-                        "text": current_text.strip(),
-                        "page_ref": current_page_ref,
-                        "slide_title": current_slide_title,
-                        "chunk_idx": chunk_idx,
-                    })
+                    chunks.append(
+                        {
+                            "text": current_text.strip(),
+                            "page_ref": current_page_ref,
+                            "slide_title": current_slide_title,
+                            "chunk_idx": chunk_idx,
+                        }
+                    )
                     chunk_idx += 1
 
                 # Start new chunk with overlap
@@ -113,12 +113,14 @@ def chunk_pages(
 
     # Emit final chunk
     if current_text.strip():
-        chunks.append({
-            "text": current_text.strip(),
-            "page_ref": current_page_ref,
-            "slide_title": current_slide_title,
-            "chunk_idx": chunk_idx,
-        })
+        chunks.append(
+            {
+                "text": current_text.strip(),
+                "page_ref": current_page_ref,
+                "slide_title": current_slide_title,
+                "chunk_idx": chunk_idx,
+            }
+        )
 
     return chunks
 
@@ -174,16 +176,12 @@ async def index_artifact_chunks(
     )
 
     # Delete existing chunks for this artifact (idempotent upsert)
-    await session.execute(
-        delete(Chunk).where(Chunk.artifact_id == artifact_id)
-    )
+    await session.execute(delete(Chunk).where(Chunk.artifact_id == artifact_id))
 
     # Create chunk records
     chunk_records = []
-    for raw_chunk, embedding in zip(raw_chunks, embeddings):
-        stable_id = _build_stable_id(
-            sha256_prefix, raw_chunk["page_ref"], raw_chunk["chunk_idx"]
-        )
+    for raw_chunk, embedding in zip(raw_chunks, embeddings, strict=True):
+        stable_id = _build_stable_id(sha256_prefix, raw_chunk["page_ref"], raw_chunk["chunk_idx"])
 
         chunk = Chunk(
             id=generate_id(),

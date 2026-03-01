@@ -1,6 +1,5 @@
 """Tests for ClaudeCodeAdapter."""
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -34,19 +33,23 @@ class TestRunClaudeCode:
     async def test_timeout_raises_agent_error(self, adapter):
         """Timeout raises AgentError."""
         mock_process = AsyncMock()
-        mock_process.communicate.side_effect = asyncio.TimeoutError()
+        mock_process.communicate.side_effect = TimeoutError()
         mock_process.kill = MagicMock()
 
-        with patch("asyncio.create_subprocess_exec", return_value=mock_process):
-            with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError()):
-                with pytest.raises(AgentError, match="timed out"):
-                    await adapter._run_claude_code("test prompt")
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=mock_process),
+            patch("asyncio.wait_for", side_effect=TimeoutError()),
+            pytest.raises(AgentError, match="timed out"),
+        ):
+            await adapter._run_claude_code("test prompt")
 
     async def test_cli_not_found_raises_agent_error(self, adapter):
         """FileNotFoundError raises AgentError."""
-        with patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
-            with pytest.raises(AgentError, match="not found"):
-                await adapter._run_claude_code("test prompt")
+        with (
+            patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()),
+            pytest.raises(AgentError, match="not found"),
+        ):
+            await adapter._run_claude_code("test prompt")
 
     async def test_nonzero_exit_raises_agent_error(self, adapter):
         """Non-zero exit code raises AgentError."""
@@ -54,9 +57,11 @@ class TestRunClaudeCode:
         mock_process.communicate.return_value = (b"", b"some error")
         mock_process.returncode = 1
 
-        with patch("asyncio.create_subprocess_exec", return_value=mock_process):
-            with pytest.raises(AgentError, match="failed"):
-                await adapter._run_claude_code("test prompt")
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=mock_process),
+            pytest.raises(AgentError, match="failed"),
+        ):
+            await adapter._run_claude_code("test prompt")
 
 
 class TestParseJsonResponse:
@@ -90,13 +95,15 @@ class TestClassifyLecture:
 
     async def test_classify_success(self, adapter):
         """Successful classification returns ClassificationResult."""
-        response = json.dumps({
-            "course_code": "CSIT302",
-            "week": 5,
-            "title": "Network Security",
-            "confidence": 0.92,
-            "reasoning": "Found in header",
-        })
+        response = json.dumps(
+            {
+                "course_code": "CSIT302",
+                "week": 5,
+                "title": "Network Security",
+                "confidence": 0.92,
+                "reasoning": "Found in header",
+            }
+        )
 
         with patch.object(adapter, "_run_claude_code", return_value=response):
             result = await adapter.classify_lecture(

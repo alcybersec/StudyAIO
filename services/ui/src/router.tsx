@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { CoursePage } from './pages/CoursePage'
 import { DashboardPage } from './pages/DashboardPage'
+import { NotFoundPage } from './pages/NotFoundPage'
 import { QAPage } from './pages/QAPage'
 import { ReviewInboxPage } from './pages/ReviewInboxPage'
 import { UploadPage } from './pages/UploadPage'
@@ -17,6 +18,7 @@ export const router = createBrowserRouter([
       { path: '/upload', element: <UploadPage /> },
       { path: '/review', element: <ReviewInboxPage /> },
       { path: '/qa', element: <QAPage /> },
+      { path: '*', element: <NotFoundPage /> },
     ],
   },
 ])

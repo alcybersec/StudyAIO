@@ -5,10 +5,8 @@ from datetime import datetime
 
 import structlog
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
 
 from app.agents.embeddings import get_embedding_provider
-from app.config import settings
 from app.core.database import async_session_factory
 from app.core.exceptions import IndexingError
 from app.core.utils import generate_id
@@ -46,8 +44,7 @@ async def _index(artifact_id: str) -> dict:
     async with async_session_factory() as session:
         # Load artifact
         result = await session.execute(
-            select(LectureArtifact)
-            .where(LectureArtifact.id == artifact_id)
+            select(LectureArtifact).where(LectureArtifact.id == artifact_id)
         )
         artifact = result.scalar_one_or_none()
         if not artifact:
@@ -60,15 +57,12 @@ async def _index(artifact_id: str) -> dict:
         extraction = ext_result.scalar_one_or_none()
         if not extraction:
             raise IndexingError(
-                f"No extraction found for artifact {artifact_id}. "
-                "Run extract stage first."
+                f"No extraction found for artifact {artifact_id}. Run extract stage first."
             )
 
         manifest = extraction.manifest_json
         if not manifest or "pages" not in manifest:
-            raise IndexingError(
-                f"Extraction for artifact {artifact_id} has no pages in manifest"
-            )
+            raise IndexingError(f"Extraction for artifact {artifact_id} has no pages in manifest")
 
         # Update status
         artifact.status = "indexing"
@@ -186,4 +180,4 @@ def index_artifact(self, input_value: str | dict) -> dict:
     except Exception as exc:
         logger.error("index_task_error", error=str(exc), artifact_id=artifact_id)
         publish_pipeline_event_sync(artifact_id, "index", "failed", str(exc))
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc

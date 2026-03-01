@@ -50,6 +50,7 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
     try:
         if file_type == "pdf":
             import fitz
+
             doc = fitz.open(str(path))
             texts = []
             for i in range(min(2, len(doc))):
@@ -59,6 +60,7 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
 
         elif file_type == "docx":
             import docx
+
             document = docx.Document(str(path))
             texts = []
             for para in document.paragraphs[:50]:
@@ -68,6 +70,7 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
 
         elif file_type == "pptx":
             from pptx import Presentation
+
             prs = Presentation(str(path))
             texts = []
             for slide in list(prs.slides)[:3]:
@@ -101,9 +104,7 @@ async def _get_or_create_course(session, course_code: str) -> Course:
     Returns:
         Course instance.
     """
-    result = await session.execute(
-        select(Course).where(Course.code == course_code)
-    )
+    result = await session.execute(select(Course).where(Course.code == course_code))
     course = result.scalar_one_or_none()
     if course:
         return course
@@ -175,9 +176,7 @@ async def _classify(artifact_id: str) -> dict:
 
             if classification.confidence >= threshold:
                 # High confidence — apply classification
-                course = await _get_or_create_course(
-                    session, classification.course_code
-                )
+                course = await _get_or_create_course(session, classification.course_code)
                 artifact.course_id = course.id
                 artifact.week = classification.week
                 artifact.title = classification.title
@@ -318,4 +317,4 @@ def classify_artifact(self, input_value: str | dict) -> dict:
     except Exception as exc:
         logger.error("classify_task_error", error=str(exc), artifact_id=artifact_id)
         publish_pipeline_event_sync(artifact_id, "classify", "failed", str(exc))
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
