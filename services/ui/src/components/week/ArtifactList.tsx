@@ -16,9 +16,11 @@ const typeVariant: Record<string, 'info' | 'success' | 'warning' | 'default'> = 
 
 interface ArtifactListProps {
   artifacts: Artifact[]
+  selectedArtifactId?: string | null
+  onSelectArtifact?: (artifactId: string) => void
 }
 
-export function ArtifactList({ artifacts }: ArtifactListProps) {
+export function ArtifactList({ artifacts, selectedArtifactId, onSelectArtifact }: ArtifactListProps) {
   const [expanded, setExpanded] = useState(true)
 
   if (artifacts.length === 0) {
@@ -36,33 +38,42 @@ export function ArtifactList({ artifacts }: ArtifactListProps) {
       </button>
       {expanded && (
         <ul className="divide-y divide-gray-100 bg-white rounded-xl border border-gray-200">
-          {artifacts.map((artifact) => (
-            <li key={artifact.id} className="flex items-center gap-3 px-4 py-3">
-              <span className="text-lg text-gray-400 shrink-0">
-                {artifact.file_type === 'pdf' ? '\u{1F4C4}' : artifact.file_type === 'pptx' ? '\u{1F4CA}' : '\u{1F4DD}'}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {artifact.original_filename}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {formatSize(artifact.file_size_bytes)}
-                </p>
-              </div>
-              <Badge variant={typeVariant[artifact.file_type] ?? 'default'}>
-                {artifact.file_type.toUpperCase()}
-              </Badge>
-              <StatusBadge status={artifact.status} />
-              <a
-                href={`/api/files/uploads/artifacts/${artifact.id}`}
-                download
-                className="text-xs text-primary hover:text-primary-dark transition-colors"
-                onClick={(e) => e.stopPropagation()}
+          {artifacts.map((artifact) => {
+            const isSelected = selectedArtifactId === artifact.id
+            return (
+              <li
+                key={artifact.id}
+                className={`flex items-center gap-3 px-4 py-3 transition-colors ${
+                  onSelectArtifact ? 'cursor-pointer hover:bg-gray-50' : ''
+                } ${isSelected ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
+                onClick={() => onSelectArtifact?.(artifact.id)}
               >
-                Download
-              </a>
-            </li>
-          ))}
+                <span className="text-lg text-gray-400 shrink-0">
+                  {artifact.file_type === 'pdf' ? '\u{1F4C4}' : artifact.file_type === 'pptx' ? '\u{1F4CA}' : '\u{1F4DD}'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium truncate ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
+                    {artifact.original_filename}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {formatSize(artifact.file_size_bytes)}
+                  </p>
+                </div>
+                <Badge variant={typeVariant[artifact.file_type] ?? 'default'}>
+                  {artifact.file_type.toUpperCase()}
+                </Badge>
+                <StatusBadge status={artifact.status} />
+                <a
+                  href={`/api/files/uploads/artifacts/${artifact.id}`}
+                  download
+                  className="text-xs text-primary hover:text-primary-dark transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Download
+                </a>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

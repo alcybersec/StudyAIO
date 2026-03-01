@@ -8,9 +8,10 @@ import type { QAExchange } from '../../types'
 interface ScopedQAProps {
   courseCode: string
   week: number
+  onCitationClick?: (artifactId: string, page: number) => void
 }
 
-export function ScopedQA({ courseCode, week }: ScopedQAProps) {
+export function ScopedQA({ courseCode, week, onCitationClick }: ScopedQAProps) {
   const askMutation = useAskQuestion()
   const [history, setHistory] = useState<QAExchange[]>([])
 
@@ -73,6 +74,7 @@ export function ScopedQA({ courseCode, week }: ScopedQAProps) {
                 answer={exchange.response.answer}
                 citations={exchange.response.citations}
                 chunksSearched={exchange.response.chunks_searched}
+                onCitationClick={onCitationClick}
               />
             </Card>
           ))}

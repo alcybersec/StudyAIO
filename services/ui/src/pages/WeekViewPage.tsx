@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useWeekDetail } from '../hooks/useApi'
 import { LoadingSpinner, EmptyState, ErrorBanner, PageHeader, Card } from '../components/ui'
 import { SummaryTab } from '../components/week/SummaryTab'
@@ -7,6 +7,8 @@ import { ArtifactList } from '../components/week/ArtifactList'
 import { ScopedQA } from '../components/qa/ScopedQA'
 import { FlashcardsTab } from '../components/week/FlashcardsTab'
 import { QuizTab } from '../components/week/QuizTab'
+import { FileViewer, FileViewerToolbar, ViewOriginalModal } from '../components/viewer'
+import type { Artifact } from '../types'
 
 type Tab = 'summary' | 'qa' | 'flashcards' | 'quiz'
 
@@ -21,11 +23,66 @@ export function WeekViewPage() {
   const { courseCode, weekNumber } = useParams<{ courseCode: string; weekNumber: string }>()
   const week = Number(weekNumber)
   const { data, isLoading, error, refetch } = useWeekDetail(courseCode ?? '', week)
+  const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<Tab>('summary')
+
+  // Viewer state
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null)
+  const [viewerTargetPage, setViewerTargetPage] = useState<number | undefined>()
+  const [viewerCurrentPage, setViewerCurrentPage] = useState(1)
+  const [viewerTotalPages, setViewerTotalPages] = useState(0)
+  const [mobileViewerOpen, setMobileViewerOpen] = useState(false)
+  // Counter to force re-trigger scroll even when navigating to the same page number
+  const navCounter = useRef(0)
+  const [navToken, setNavToken] = useState(0)
+
+  // Read URL params on mount for deep linking
+  useEffect(() => {
+    const artifactParam = searchParams.get('artifact')
+    const pageParam = searchParams.get('page')
+    if (artifactParam) setSelectedArtifactId(artifactParam)
+    if (pageParam) {
+      setViewerTargetPage(Number(pageParam))
+      setNavToken(++navCounter.current)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Default artifact selection: prefer first PDF, else first artifact
+  useEffect(() => {
+    if (!data?.artifacts.length || selectedArtifactId) return
+    const firstPdf = data.artifacts.find((a) => a.file_type === 'pdf')
+    setSelectedArtifactId(firstPdf?.id ?? data.artifacts[0].id)
+  }, [data?.artifacts, selectedArtifactId])
+
+  const selectedArtifact = useMemo<Artifact | null>(() => {
+    if (!data?.artifacts.length || !selectedArtifactId) return null
+    return data.artifacts.find((a) => a.id === selectedArtifactId) ?? null
+  }, [data?.artifacts, selectedArtifactId])
+
+  const handleSelectArtifact = useCallback((id: string) => {
+    setSelectedArtifactId(id)
+    setViewerTargetPage(undefined)
+    setViewerCurrentPage(1)
+    setViewerTotalPages(0)
+  }, [])
+
+  const handleGoToPage = useCallback((page: number) => {
+    setViewerTargetPage(page)
+    setViewerCurrentPage(page) // Immediately update counter so toolbar is responsive
+    setNavToken(++navCounter.current)
+  }, [])
+
+  const handleCitationClick = useCallback((artifactId: string, page: number) => {
+    setSelectedArtifactId(artifactId)
+    setViewerTargetPage(page)
+    setNavToken(++navCounter.current)
+  }, [])
 
   if (isLoading) return <LoadingSpinner label="Loading week..." />
   if (error) return <ErrorBanner message="Failed to load week data." onRetry={refetch} />
   if (!data) return <EmptyState icon="?" title="Week not found" />
+
+  const hasArtifacts = data.artifacts.length > 0
 
   return (
     <div>
@@ -39,52 +96,123 @@ export function WeekViewPage() {
         ]}
       />
 
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
-        {tabs.map((tab) => (
+      {/* Mobile: View Original button */}
+      {hasArtifacts && (
+        <div className="lg:hidden mb-4">
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
-              activeTab === tab.id
-                ? 'text-primary border-b-2 border-primary -mb-px'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
+            onClick={() => setMobileViewerOpen(true)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px]"
           >
-            {tab.label}
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            View Original
           </button>
-        ))}
+        </div>
+      )}
+
+      {/* Split-panel layout: viewer left, tabs right (desktop) */}
+      <div className={hasArtifacts ? 'lg:grid lg:grid-cols-[minmax(300px,1fr)_minmax(400px,1.2fr)] lg:gap-6' : ''}>
+        {/* Left panel: File viewer (desktop only) */}
+        {hasArtifacts && (
+          <div className="hidden lg:flex lg:flex-col lg:sticky lg:top-4 lg:self-start overflow-hidden" style={{ height: 'calc(100vh - 8rem)' }}>
+            <FileViewerToolbar
+              artifacts={data.artifacts}
+              selectedArtifact={selectedArtifact}
+              onSelectArtifact={handleSelectArtifact}
+              currentPage={viewerCurrentPage}
+              totalPages={viewerTotalPages}
+              onGoToPage={handleGoToPage}
+            />
+            <div className="flex-1 overflow-hidden rounded-b-lg border border-t-0 border-gray-200">
+              {selectedArtifact && (
+                <FileViewer
+                  artifact={selectedArtifact}
+                  targetPage={viewerTargetPage}
+                  navToken={navToken}
+                  onPageChange={setViewerCurrentPage}
+                  onTotalPages={setViewerTotalPages}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Right panel: Tabs + content */}
+        <div>
+          {/* Tab bar */}
+          <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'text-primary border-b-2 border-primary -mb-px'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          {activeTab === 'summary' && (
+            <Card>
+              <SummaryTab summary={data.summary} />
+            </Card>
+          )}
+
+          {activeTab === 'qa' && courseCode && (
+            <Card>
+              <ScopedQA
+                courseCode={courseCode}
+                week={data.week}
+                onCitationClick={handleCitationClick}
+              />
+            </Card>
+          )}
+
+          {activeTab === 'flashcards' && courseCode && (
+            <Card>
+              <FlashcardsTab courseCode={courseCode} week={data.week} />
+            </Card>
+          )}
+
+          {activeTab === 'quiz' && courseCode && (
+            <Card>
+              <QuizTab courseCode={courseCode} week={data.week} />
+            </Card>
+          )}
+
+          {/* Artifact list */}
+          <div className="mt-6">
+            <ArtifactList
+              artifacts={data.artifacts}
+              selectedArtifactId={selectedArtifactId}
+              onSelectArtifact={handleSelectArtifact}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Tab content */}
-      {activeTab === 'summary' && (
-        <Card>
-          <SummaryTab summary={data.summary} />
-        </Card>
-      )}
-
-      {activeTab === 'qa' && courseCode && (
-        <Card>
-          <ScopedQA courseCode={courseCode} week={data.week} />
-        </Card>
-      )}
-
-      {activeTab === 'flashcards' && courseCode && (
-        <Card>
-          <FlashcardsTab courseCode={courseCode} week={data.week} />
-        </Card>
-      )}
-
-      {activeTab === 'quiz' && courseCode && (
-        <Card>
-          <QuizTab courseCode={courseCode} week={data.week} />
-        </Card>
-      )}
-
-      {/* Artifact list always visible below */}
-      <div className="mt-6">
-        <ArtifactList artifacts={data.artifacts} />
-      </div>
+      {/* Mobile viewer modal */}
+      <ViewOriginalModal
+        open={mobileViewerOpen}
+        onClose={() => setMobileViewerOpen(false)}
+        artifacts={data.artifacts}
+        selectedArtifact={selectedArtifact}
+        onSelectArtifact={handleSelectArtifact}
+        targetPage={viewerTargetPage}
+        navToken={navToken}
+        currentPage={viewerCurrentPage}
+        totalPages={viewerTotalPages}
+        onPageChange={setViewerCurrentPage}
+        onTotalPages={setViewerTotalPages}
+        onGoToPage={handleGoToPage}
+      />
     </div>
   )
 }
