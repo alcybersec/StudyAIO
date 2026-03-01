@@ -13,7 +13,9 @@ export function usePipelineEvents(artifactIds?: string[]) {
     const params = ids.length === 1
       ? `?artifact_id=${ids[0]}`
       : ''
-    const url = `/api/uploads/pipeline-events${params}`
+    // Connect directly to API for SSE (Vite proxy buffers event streams)
+    const sseBase = import.meta.env.VITE_SSE_URL || ''
+    const url = `${sseBase}/api/uploads/pipeline-events${params}`
 
     const source = new EventSource(url)
     sourceRef.current = source

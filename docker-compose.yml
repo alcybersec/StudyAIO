@@ -4,14 +4,16 @@ services:
       context: ./services/ui
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "${UI_PORT:-3001}:3000"
     depends_on:
       api:
         condition: service_healthy
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=http://api:8000
+      - VITE_SSE_URL=http://localhost:8000
     volumes:
       - ./services/ui/src:/app/src
+      - ./services/ui/vite.config.ts:/app/vite.config.ts
 
   api:
     build:
