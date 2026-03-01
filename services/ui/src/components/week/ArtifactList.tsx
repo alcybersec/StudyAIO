@@ -54,7 +54,7 @@ export function ArtifactList({ artifacts }: ArtifactListProps) {
               </Badge>
               <StatusBadge status={artifact.status} />
               <a
-                href={`/api/files/uploads/${artifact.id}/${artifact.original_filename}`}
+                href={`/api/files/uploads/artifacts/${artifact.id}`}
                 download
                 className="text-xs text-primary hover:text-primary-dark transition-colors"
                 onClick={(e) => e.stopPropagation()}
