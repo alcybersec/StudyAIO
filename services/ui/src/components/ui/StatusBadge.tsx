@@ -7,6 +7,7 @@ const statusConfig: Record<string, { label: string; variant: 'success' | 'warnin
   extracted: { label: 'Extracted', variant: 'info', icon: '\u2713' },
   summarized: { label: 'Summarized', variant: 'success', icon: '\u2713' },
   generated: { label: 'Generated', variant: 'success', icon: '\u2713' },
+  processed: { label: 'Processed', variant: 'success', icon: '\u2713' },
   completed: { label: 'Completed', variant: 'success', icon: '\u2713' },
   processing: { label: 'Processing', variant: 'warning', icon: '\u25CB' },
   running: { label: 'Running', variant: 'warning', icon: '\u25CB' },
