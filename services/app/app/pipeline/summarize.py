@@ -1,6 +1,5 @@
 """Pipeline stage 3: Summarize — generate weekly markdown summaries."""
 
-import asyncio
 from datetime import datetime
 
 import structlog
@@ -9,7 +8,7 @@ from sqlalchemy.orm import joinedload
 
 from app.agents.factory import get_agent
 from app.config import settings
-from app.core.database import async_session_factory
+from app.core.database import async_session_factory, run_async
 from app.core.exceptions import AgentError, SummarizationError
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
@@ -19,15 +18,6 @@ from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
 
 logger = structlog.get_logger()
-
-
-def _run_async(coro):
-    """Run an async coroutine from a sync Celery task."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 async def _summarize(artifact_id: str) -> dict:
@@ -209,7 +199,7 @@ def summarize_artifact(self, input_value: str | dict) -> dict:
     logger.info("summarize_task_started", artifact_id=artifact_id)
     publish_pipeline_event_sync(artifact_id, "summarize", "started")
     try:
-        result = _run_async(_summarize(artifact_id))
+        result = run_async(_summarize(artifact_id))
         publish_pipeline_event_sync(artifact_id, "summarize", result.get("status", "completed"))
         return result
     except (SummarizationError, AgentError):

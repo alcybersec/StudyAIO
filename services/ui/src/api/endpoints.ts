@@ -9,6 +9,8 @@ import type {
   QAResponse,
   QuizQuestion,
   ReviewItem,
+  Settings,
+  SettingsUpdate,
   SummaryData,
   UploadResult,
   WeekDetail,
@@ -45,6 +47,11 @@ export const uploadApi = {
 
 export const qaApi = {
   ask: (request: QARequest) => api.post<QAResponse>('/qa/ask', request),
+}
+
+export const settingsApi = {
+  get: () => api.get<Settings>('/settings'),
+  update: (updates: SettingsUpdate) => api.put<Settings>('/settings', updates),
 }
 
 export const assetsApi = {

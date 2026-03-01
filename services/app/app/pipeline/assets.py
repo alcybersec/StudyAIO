@@ -1,6 +1,5 @@
 """Pipeline stage 5: Assets — generate flashcards and quiz questions."""
 
-import asyncio
 from datetime import datetime
 
 import structlog
@@ -8,8 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.agents.factory import get_agent
-from app.config import settings
-from app.core.database import async_session_factory
+from app.core.database import async_session_factory, run_async
 from app.core.exceptions import AgentError, AssetGenerationError
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
@@ -18,19 +16,11 @@ from app.models.pipeline_run import PipelineRun
 from app.models.summary import Summary
 from app.services import asset_service
 from app.services.event_service import publish_pipeline_event_sync
+from app.services.settings_service import get_effective_setting
 from app.services.summary_service import merge_extractions
 from app.worker import celery_app
 
 logger = structlog.get_logger()
-
-
-def _run_async(coro):
-    """Run an async coroutine from a sync Celery task."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 async def _generate_assets(artifact_id: str) -> dict:
@@ -108,7 +98,7 @@ async def _generate_assets(artifact_id: str) -> dict:
             flashcard_data = await agent.generate_flashcards(
                 summary=summary_md,
                 extraction=extraction_data,
-                count=settings.flashcard_count_per_week,
+                count=get_effective_setting("flashcard_count_per_week"),
             )
 
             flashcards = await asset_service.save_flashcards(
@@ -123,7 +113,7 @@ async def _generate_assets(artifact_id: str) -> dict:
             quiz_data = await agent.generate_quiz(
                 summary=summary_md,
                 extraction=extraction_data,
-                count=settings.quiz_question_count_per_week,
+                count=get_effective_setting("quiz_question_count_per_week"),
             )
 
             quiz_questions = await asset_service.save_quiz_questions(
@@ -217,7 +207,7 @@ def generate_assets(self, input_value: str | dict) -> dict:
     logger.info("assets_task_started", artifact_id=artifact_id)
     publish_pipeline_event_sync(artifact_id, "assets", "started")
     try:
-        result = _run_async(_generate_assets(artifact_id))
+        result = run_async(_generate_assets(artifact_id))
         publish_pipeline_event_sync(artifact_id, "assets", result.get("status", "completed"))
         return result
     except (AssetGenerationError, AgentError):

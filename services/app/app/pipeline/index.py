@@ -1,13 +1,12 @@
 """Pipeline stage 4: Index — chunk text and generate embeddings."""
 
-import asyncio
 from datetime import datetime
 
 import structlog
 from sqlalchemy import select
 
 from app.agents.embeddings import get_embedding_provider
-from app.core.database import async_session_factory
+from app.core.database import async_session_factory, run_async
 from app.core.exceptions import IndexingError
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
@@ -18,15 +17,6 @@ from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
 
 logger = structlog.get_logger()
-
-
-def _run_async(coro):
-    """Run an async coroutine from a sync Celery task."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 async def _index(artifact_id: str) -> dict:
@@ -171,7 +161,7 @@ def index_artifact(self, input_value: str | dict) -> dict:
     logger.info("index_task_started", artifact_id=artifact_id)
     publish_pipeline_event_sync(artifact_id, "index", "started")
     try:
-        result = _run_async(_index(artifact_id))
+        result = run_async(_index(artifact_id))
         publish_pipeline_event_sync(artifact_id, "index", result.get("status", "completed"))
         return result
     except IndexingError:
