@@ -4,19 +4,32 @@ import structlog
 from celery import chain
 from celery.result import AsyncResult
 
-from app.pipeline.ingest import ingest_file
+from app.pipeline.assets import generate_assets
 from app.pipeline.classify import classify_artifact
 from app.pipeline.extract import extract_artifact
-from app.pipeline.summarize import summarize_artifact
 from app.pipeline.index import index_artifact
-from app.pipeline.assets import generate_assets
+from app.pipeline.ingest import ingest_file
+from app.pipeline.summarize import summarize_artifact
 
 logger = structlog.get_logger()
 
 # Stage order for resume_pipeline
 _STAGES = {
-    "ingest": [ingest_file, classify_artifact, extract_artifact, summarize_artifact, index_artifact, generate_assets],
-    "classify": [classify_artifact, extract_artifact, summarize_artifact, index_artifact, generate_assets],
+    "ingest": [
+        ingest_file,
+        classify_artifact,
+        extract_artifact,
+        summarize_artifact,
+        index_artifact,
+        generate_assets,
+    ],
+    "classify": [
+        classify_artifact,
+        extract_artifact,
+        summarize_artifact,
+        index_artifact,
+        generate_assets,
+    ],
     "extract": [extract_artifact, summarize_artifact, index_artifact, generate_assets],
     "summarize": [summarize_artifact, index_artifact, generate_assets],
     "index": [index_artifact, generate_assets],
@@ -85,9 +98,7 @@ def resume_pipeline(artifact_id: str, from_stage: str) -> AsyncResult:
     """
     tasks = _STAGES.get(from_stage)
     if tasks is None:
-        raise ValueError(
-            f"Unknown stage: {from_stage}. Valid: {list(_STAGES.keys())}"
-        )
+        raise ValueError(f"Unknown stage: {from_stage}. Valid: {list(_STAGES.keys())}")
 
     logger.info(
         "pipeline_resumed",

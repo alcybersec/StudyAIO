@@ -1,8 +1,6 @@
 """Tests for summary_service."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from app.services import summary_service
 
@@ -133,9 +131,7 @@ class TestBuildSummaryFilePath:
 
     def test_builds_correct_path(self, tmp_path):
         """Path follows <dir>/<course>/<course>_Week<N>.md pattern."""
-        result = summary_service.build_summary_file_path(
-            str(tmp_path), "CSIT302", 5
-        )
+        result = summary_service.build_summary_file_path(str(tmp_path), "CSIT302", 5)
 
         assert result.name == "CSIT302_Week5.md"
         assert result.parent.name == "CSIT302"

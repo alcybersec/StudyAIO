@@ -63,19 +63,16 @@ class DocxExtractor(BaseExtractor):
                     image_path.write_bytes(image_data)
                     image_filenames.append(filename)
                 except Exception:
-                    logger.warning(
-                        "docx_image_extraction_failed", rel_type=rel.reltype
-                    )
+                    logger.warning("docx_image_extraction_failed", rel_type=rel.reltype)
 
         # Split document into sections by headings
         sections: list[tuple[str, list[str]]] = []
         current_texts: list[str] = []
 
         for para in document.paragraphs:
-            if para.style and para.style.name in _HEADING_STYLES:
-                if current_texts:
-                    sections.append(("", current_texts))
-                    current_texts = []
+            if para.style and para.style.name in _HEADING_STYLES and current_texts:
+                sections.append(("", current_texts))
+                current_texts = []
             current_texts.append(para.text)
 
         if current_texts:
@@ -92,8 +89,7 @@ class DocxExtractor(BaseExtractor):
             page_images = []
             if page_number == 1:
                 page_images = [
-                    ImageInfo(filename=fn, position="embedded")
-                    for fn in image_filenames
+                    ImageInfo(filename=fn, position="embedded") for fn in image_filenames
                 ]
 
             pages.append(

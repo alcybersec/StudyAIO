@@ -16,9 +16,7 @@ class Flashcard(Base):
     __tablename__ = "flashcards"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    course_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("courses.id"), nullable=False
-    )
+    course_id: Mapped[str] = mapped_column(String(36), ForeignKey("courses.id"), nullable=False)
     week: Mapped[int] = mapped_column(Integer, nullable=False)
     front: Mapped[str] = mapped_column(Text, nullable=False)
     back: Mapped[str] = mapped_column(Text, nullable=False)
@@ -32,10 +30,6 @@ class Flashcard(Base):
 
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="flashcards")
-    source_artifact: Mapped["LectureArtifact"] = relationship(
-        back_populates="flashcards"
-    )
+    source_artifact: Mapped["LectureArtifact"] = relationship(back_populates="flashcards")
 
-    __table_args__ = (
-        Index("ix_flashcards_course_week", "course_id", "week"),
-    )
+    __table_args__ = (Index("ix_flashcards_course_week", "course_id", "week"),)

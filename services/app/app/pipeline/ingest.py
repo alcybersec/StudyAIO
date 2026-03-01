@@ -5,7 +5,6 @@ from datetime import datetime
 
 import structlog
 
-from app.config import settings
 from app.core.database import async_session_factory
 from app.core.exceptions import DuplicateFileError
 from app.core.utils import generate_id
@@ -105,4 +104,4 @@ def ingest_file(self, file_path: str) -> dict:
     except Exception as exc:
         logger.error("ingest_task_error", error=str(exc))
         publish_pipeline_event_sync("unknown", "ingest", "failed", str(exc))
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc

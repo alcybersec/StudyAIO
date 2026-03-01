@@ -28,9 +28,7 @@ async def check_duplicate(session: AsyncSession, sha256: str) -> LectureArtifact
     Returns:
         Existing artifact if found, None otherwise.
     """
-    result = await session.execute(
-        select(LectureArtifact).where(LectureArtifact.sha256 == sha256)
-    )
+    result = await session.execute(select(LectureArtifact).where(LectureArtifact.sha256 == sha256))
     return result.scalar_one_or_none()
 
 
@@ -130,9 +128,7 @@ async def get_artifact(session: AsyncSession, artifact_id: str) -> LectureArtifa
     Returns:
         LectureArtifact if found, None otherwise.
     """
-    result = await session.execute(
-        select(LectureArtifact).where(LectureArtifact.id == artifact_id)
-    )
+    result = await session.execute(select(LectureArtifact).where(LectureArtifact.id == artifact_id))
     return result.scalar_one_or_none()
 
 

@@ -1,12 +1,12 @@
 """Search service — pgvector cosine similarity search with scope filtering."""
 
 import structlog
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.chunk import Chunk
 from app.models.artifact import LectureArtifact
+from app.models.chunk import Chunk
 from app.models.course import Course
 
 logger = structlog.get_logger()

@@ -1,4 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
+import { ErrorBoundary } from '../ErrorBoundary'
 import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 
@@ -41,7 +42,9 @@ export function AppLayout() {
         </header>
 
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 pb-20 lg:pb-6 max-w-6xl w-full mx-auto">
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
 

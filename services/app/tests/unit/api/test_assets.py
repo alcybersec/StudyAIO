@@ -46,18 +46,14 @@ def mock_quiz_question():
 class TestGetFlashcards:
     """Tests for GET /api/assets/flashcards."""
 
-    async def test_get_flashcards_with_week(
-        self, async_client, mock_session, mock_flashcard
-    ):
+    async def test_get_flashcards_with_week(self, async_client, mock_session, mock_flashcard):
         """Returns flashcards filtered by course and week."""
         with patch(
             "app.api.assets.asset_service.get_flashcards_for_week",
             new_callable=AsyncMock,
             return_value=[mock_flashcard],
         ):
-            response = await async_client.get(
-                "/api/assets/flashcards?course_code=CSIT302&week=5"
-            )
+            response = await async_client.get("/api/assets/flashcards?course_code=CSIT302&week=5")
 
         assert response.status_code == 200
         data = response.json()
@@ -65,18 +61,14 @@ class TestGetFlashcards:
         assert data[0]["front"] == "What is a firewall?"
         assert data[0]["tags"] == ["firewalls"]
 
-    async def test_get_flashcards_without_week(
-        self, async_client, mock_session, mock_flashcard
-    ):
+    async def test_get_flashcards_without_week(self, async_client, mock_session, mock_flashcard):
         """Returns all flashcards for a course when week is omitted."""
         with patch(
             "app.api.assets.asset_service.get_flashcards_for_course",
             new_callable=AsyncMock,
             return_value=[mock_flashcard],
         ):
-            response = await async_client.get(
-                "/api/assets/flashcards?course_code=CSIT302"
-            )
+            response = await async_client.get("/api/assets/flashcards?course_code=CSIT302")
 
         assert response.status_code == 200
         data = response.json()
@@ -89,16 +81,12 @@ class TestGetFlashcards:
             new_callable=AsyncMock,
             return_value=[],
         ):
-            response = await async_client.get(
-                "/api/assets/flashcards?course_code=CSIT302&week=99"
-            )
+            response = await async_client.get("/api/assets/flashcards?course_code=CSIT302&week=99")
 
         assert response.status_code == 200
         assert response.json() == []
 
-    async def test_get_flashcards_missing_course_returns_422(
-        self, async_client, mock_session
-    ):
+    async def test_get_flashcards_missing_course_returns_422(self, async_client, mock_session):
         """Missing course_code returns validation error."""
         response = await async_client.get("/api/assets/flashcards")
         assert response.status_code == 422
@@ -108,18 +96,14 @@ class TestGetFlashcards:
 class TestGetQuizQuestions:
     """Tests for GET /api/assets/quiz."""
 
-    async def test_get_quiz_with_week(
-        self, async_client, mock_session, mock_quiz_question
-    ):
+    async def test_get_quiz_with_week(self, async_client, mock_session, mock_quiz_question):
         """Returns quiz questions filtered by course and week."""
         with patch(
             "app.api.assets.asset_service.get_quiz_questions_for_week",
             new_callable=AsyncMock,
             return_value=[mock_quiz_question],
         ):
-            response = await async_client.get(
-                "/api/assets/quiz?course_code=CSIT302&week=5"
-            )
+            response = await async_client.get("/api/assets/quiz?course_code=CSIT302&week=5")
 
         assert response.status_code == 200
         data = response.json()
@@ -127,18 +111,14 @@ class TestGetQuizQuestions:
         assert data[0]["question_type"] == "multiple_choice"
         assert data[0]["correct_answer"] == "B"
 
-    async def test_get_quiz_without_week(
-        self, async_client, mock_session, mock_quiz_question
-    ):
+    async def test_get_quiz_without_week(self, async_client, mock_session, mock_quiz_question):
         """Returns all quiz questions for a course when week is omitted."""
         with patch(
             "app.api.assets.asset_service.get_quiz_questions_for_course",
             new_callable=AsyncMock,
             return_value=[mock_quiz_question],
         ):
-            response = await async_client.get(
-                "/api/assets/quiz?course_code=CSIT302"
-            )
+            response = await async_client.get("/api/assets/quiz?course_code=CSIT302")
 
         assert response.status_code == 200
         data = response.json()
@@ -151,16 +131,12 @@ class TestGetQuizQuestions:
             new_callable=AsyncMock,
             return_value=[],
         ):
-            response = await async_client.get(
-                "/api/assets/quiz?course_code=CSIT302&week=99"
-            )
+            response = await async_client.get("/api/assets/quiz?course_code=CSIT302&week=99")
 
         assert response.status_code == 200
         assert response.json() == []
 
-    async def test_get_quiz_missing_course_returns_422(
-        self, async_client, mock_session
-    ):
+    async def test_get_quiz_missing_course_returns_422(self, async_client, mock_session):
         """Missing course_code returns validation error."""
         response = await async_client.get("/api/assets/quiz")
         assert response.status_code == 422

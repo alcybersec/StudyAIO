@@ -1,6 +1,6 @@
 """Tests for pipeline_service."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -60,8 +60,6 @@ class TestGetArtifactPipelineRuns:
         mock_result.scalars.return_value.all.return_value = [mock_run]
         mock_session.execute.return_value = mock_result
 
-        result = await pipeline_service.get_artifact_pipeline_runs(
-            mock_session, "art-001"
-        )
+        result = await pipeline_service.get_artifact_pipeline_runs(mock_session, "art-001")
         assert len(result) == 1
         assert result[0].id == "run-001"

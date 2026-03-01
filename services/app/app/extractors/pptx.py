@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
+import structlog
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-import structlog
 
 from app.core.exceptions import ExtractionError
 from app.extractors.base import (
@@ -63,11 +63,7 @@ class PptxExtractor(BaseExtractor):
                 # Extract text from tables
                 if shape.has_table:
                     for row in shape.table.rows:
-                        row_texts = [
-                            cell.text.strip()
-                            for cell in row.cells
-                            if cell.text.strip()
-                        ]
+                        row_texts = [cell.text.strip() for cell in row.cells if cell.text.strip()]
                         if row_texts:
                             text_parts.append(" | ".join(row_texts))
 

@@ -5,8 +5,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.models.course import Course
-
 
 @pytest.mark.asyncio
 class TestListCourses:

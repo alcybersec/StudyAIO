@@ -1,6 +1,6 @@
 """Tests for asset_service (flashcards and quiz questions)."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -53,9 +53,7 @@ def sample_quiz_data():
 class TestSaveFlashcards:
     """Tests for save_flashcards()."""
 
-    async def test_save_flashcards_creates_records(
-        self, mock_session, sample_flashcard_data
-    ):
+    async def test_save_flashcards_creates_records(self, mock_session, sample_flashcard_data):
         """Saving flashcards creates new Flashcard records."""
         from app.services.asset_service import save_flashcards
 
@@ -63,9 +61,7 @@ class TestSaveFlashcards:
         # Mock max version query
         mock_max_result = MagicMock()
         mock_max_result.scalar.return_value = None  # No existing version
-        mock_session.execute = AsyncMock(
-            side_effect=[MagicMock(), mock_max_result]
-        )
+        mock_session.execute = AsyncMock(side_effect=[MagicMock(), mock_max_result])
 
         result = await save_flashcards(
             mock_session, "course-001", 5, "artifact-001", sample_flashcard_data
@@ -75,17 +71,13 @@ class TestSaveFlashcards:
         assert mock_session.add.call_count == 2
         mock_session.flush.assert_awaited_once()
 
-    async def test_save_flashcards_increments_version(
-        self, mock_session, sample_flashcard_data
-    ):
+    async def test_save_flashcards_increments_version(self, mock_session, sample_flashcard_data):
         """Saving flashcards uses next generation version."""
         from app.services.asset_service import save_flashcards
 
         mock_max_result = MagicMock()
         mock_max_result.scalar.return_value = 3  # Existing version is 3
-        mock_session.execute = AsyncMock(
-            side_effect=[MagicMock(), mock_max_result]
-        )
+        mock_session.execute = AsyncMock(side_effect=[MagicMock(), mock_max_result])
 
         result = await save_flashcards(
             mock_session, "course-001", 5, "artifact-001", sample_flashcard_data
@@ -94,21 +86,15 @@ class TestSaveFlashcards:
         # All records should have version 4
         assert all(fc.generation_version == 4 for fc in result)
 
-    async def test_save_flashcards_deletes_existing(
-        self, mock_session, sample_flashcard_data
-    ):
+    async def test_save_flashcards_deletes_existing(self, mock_session, sample_flashcard_data):
         """Saving flashcards deletes existing ones for the artifact."""
         from app.services.asset_service import save_flashcards
 
         mock_max_result = MagicMock()
         mock_max_result.scalar.return_value = None
-        mock_session.execute = AsyncMock(
-            side_effect=[MagicMock(), mock_max_result]
-        )
+        mock_session.execute = AsyncMock(side_effect=[MagicMock(), mock_max_result])
 
-        await save_flashcards(
-            mock_session, "course-001", 5, "artifact-001", sample_flashcard_data
-        )
+        await save_flashcards(mock_session, "course-001", 5, "artifact-001", sample_flashcard_data)
 
         # First execute call is the delete
         assert mock_session.execute.call_count == 2
@@ -119,13 +105,9 @@ class TestSaveFlashcards:
 
         mock_max_result = MagicMock()
         mock_max_result.scalar.return_value = None
-        mock_session.execute = AsyncMock(
-            side_effect=[MagicMock(), mock_max_result]
-        )
+        mock_session.execute = AsyncMock(side_effect=[MagicMock(), mock_max_result])
 
-        result = await save_flashcards(
-            mock_session, "course-001", 5, "artifact-001", []
-        )
+        result = await save_flashcards(mock_session, "course-001", 5, "artifact-001", [])
 
         assert len(result) == 0
         assert mock_session.add.call_count == 0
@@ -135,17 +117,13 @@ class TestSaveFlashcards:
 class TestSaveQuizQuestions:
     """Tests for save_quiz_questions()."""
 
-    async def test_save_quiz_questions_creates_records(
-        self, mock_session, sample_quiz_data
-    ):
+    async def test_save_quiz_questions_creates_records(self, mock_session, sample_quiz_data):
         """Saving quiz questions creates new QuizQuestion records."""
         from app.services.asset_service import save_quiz_questions
 
         mock_max_result = MagicMock()
         mock_max_result.scalar.return_value = None
-        mock_session.execute = AsyncMock(
-            side_effect=[MagicMock(), mock_max_result]
-        )
+        mock_session.execute = AsyncMock(side_effect=[MagicMock(), mock_max_result])
 
         result = await save_quiz_questions(
             mock_session, "course-001", 5, "artifact-001", sample_quiz_data
@@ -154,17 +132,13 @@ class TestSaveQuizQuestions:
         assert len(result) == 2
         assert mock_session.add.call_count == 2
 
-    async def test_save_quiz_questions_increments_version(
-        self, mock_session, sample_quiz_data
-    ):
+    async def test_save_quiz_questions_increments_version(self, mock_session, sample_quiz_data):
         """Saving quiz questions uses next generation version."""
         from app.services.asset_service import save_quiz_questions
 
         mock_max_result = MagicMock()
         mock_max_result.scalar.return_value = 2
-        mock_session.execute = AsyncMock(
-            side_effect=[MagicMock(), mock_max_result]
-        )
+        mock_session.execute = AsyncMock(side_effect=[MagicMock(), mock_max_result])
 
         result = await save_quiz_questions(
             mock_session, "course-001", 5, "artifact-001", sample_quiz_data
@@ -172,17 +146,13 @@ class TestSaveQuizQuestions:
 
         assert all(q.generation_version == 3 for q in result)
 
-    async def test_save_quiz_preserves_question_types(
-        self, mock_session, sample_quiz_data
-    ):
+    async def test_save_quiz_preserves_question_types(self, mock_session, sample_quiz_data):
         """Saved records preserve question type and options."""
         from app.services.asset_service import save_quiz_questions
 
         mock_max_result = MagicMock()
         mock_max_result.scalar.return_value = None
-        mock_session.execute = AsyncMock(
-            side_effect=[MagicMock(), mock_max_result]
-        )
+        mock_session.execute = AsyncMock(side_effect=[MagicMock(), mock_max_result])
 
         result = await save_quiz_questions(
             mock_session, "course-001", 5, "artifact-001", sample_quiz_data

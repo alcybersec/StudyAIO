@@ -16,9 +16,7 @@ class QuizQuestion(Base):
     __tablename__ = "quiz_questions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    course_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("courses.id"), nullable=False
-    )
+    course_id: Mapped[str] = mapped_column(String(36), ForeignKey("courses.id"), nullable=False)
     week: Mapped[int] = mapped_column(Integer, nullable=False)
     question_type: Mapped[str] = mapped_column(String(20), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
@@ -34,10 +32,6 @@ class QuizQuestion(Base):
 
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="quiz_questions")
-    source_artifact: Mapped["LectureArtifact"] = relationship(
-        back_populates="quiz_questions"
-    )
+    source_artifact: Mapped["LectureArtifact"] = relationship(back_populates="quiz_questions")
 
-    __table_args__ = (
-        Index("ix_quiz_questions_course_week", "course_id", "week"),
-    )
+    __table_args__ = (Index("ix_quiz_questions_course_week", "course_id", "week"),)

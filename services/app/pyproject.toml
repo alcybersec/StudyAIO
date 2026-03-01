@@ -1,0 +1,17 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# SQLAlchemy models use string-quoted forward references in relationships
+"app/models/*.py" = ["F821"]
+# Alembic migrations are auto-generated — don't touch
+"alembic/versions/*.py" = ["E", "W", "F", "I", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

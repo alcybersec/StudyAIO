@@ -42,7 +42,7 @@ async def serve_file(file_type: str, path: str) -> FileResponse:
     try:
         file_path.resolve().relative_to(Path(base_dir).resolve())
     except ValueError:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="Access denied") from None
 
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")

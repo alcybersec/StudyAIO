@@ -2,8 +2,6 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from app.core.exceptions import DuplicateFileError
 
 
@@ -38,9 +36,9 @@ class TestIngestStage:
         """Duplicate file returns existing artifact_id."""
         from app.pipeline.ingest import _ingest
 
-        mock_art_svc.ingest_file = AsyncMock(side_effect=DuplicateFileError(
-            sha256="a" * 64, existing_artifact_id="existing-001"
-        ))
+        mock_art_svc.ingest_file = AsyncMock(
+            side_effect=DuplicateFileError(sha256="a" * 64, existing_artifact_id="existing-001")
+        )
 
         session = AsyncMock()
         mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=session)

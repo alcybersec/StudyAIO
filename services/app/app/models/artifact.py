@@ -29,20 +29,14 @@ class LectureArtifact(Base):
     pipeline_started_at: Mapped[datetime | None] = mapped_column(nullable=True)
     pipeline_completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     course: Mapped["Course | None"] = relationship(back_populates="artifacts")
-    extraction: Mapped["Extraction | None"] = relationship(
-        back_populates="artifact", uselist=False
-    )
+    extraction: Mapped["Extraction | None"] = relationship(back_populates="artifact", uselist=False)
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="artifact")
     flashcards: Mapped[list["Flashcard"]] = relationship(back_populates="source_artifact")
-    quiz_questions: Mapped[list["QuizQuestion"]] = relationship(
-        back_populates="source_artifact"
-    )
+    quiz_questions: Mapped[list["QuizQuestion"]] = relationship(back_populates="source_artifact")
     pipeline_runs: Mapped[list["PipelineRun"]] = relationship(back_populates="artifact")
 
     __table_args__ = (

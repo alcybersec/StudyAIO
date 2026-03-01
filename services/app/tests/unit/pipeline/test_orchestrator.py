@@ -1,6 +1,6 @@
 """Tests for pipeline orchestrator."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -43,9 +43,7 @@ class TestResolvePipelineInput:
 
     def test_dict_with_failed_stops(self):
         """Dict with failed status returns None."""
-        result = resolve_pipeline_input(
-            {"artifact_id": "art-001", "status": "failed"}, "summarize"
-        )
+        result = resolve_pipeline_input({"artifact_id": "art-001", "status": "failed"}, "summarize")
         assert result is None
 
     def test_dict_with_classified_continues(self):
@@ -78,7 +76,7 @@ class TestRunPipeline:
         with patch("app.pipeline.orchestrator.chain") as mock_chain:
             mock_chain.return_value.apply_async.return_value = MagicMock(id="chain-001")
 
-            result = run_pipeline("/app/data/uploads/test.pdf")
+            run_pipeline("/app/data/uploads/test.pdf")
 
             mock_chain.assert_called_once()
             mock_chain.return_value.apply_async.assert_called_once()
@@ -102,6 +100,6 @@ class TestResumePipeline:
         # Must also patch _STAGES since it captured the original reference
         mock_summarize.apply_async.return_value = MagicMock(id="task-001")
         with patch.dict(orchestrator._STAGES, {"summarize": [mock_summarize]}):
-            result = orchestrator.resume_pipeline("art-001", "summarize")
+            orchestrator.resume_pipeline("art-001", "summarize")
 
         mock_summarize.apply_async.assert_called_once_with(args=["art-001"])

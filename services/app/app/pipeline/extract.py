@@ -184,4 +184,4 @@ def extract_artifact(self, input_value: str | dict) -> dict:
     except Exception as exc:
         logger.error("extract_task_error", error=str(exc), artifact_id=artifact_id)
         publish_pipeline_event_sync(artifact_id, "extract", "failed", str(exc))
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc

@@ -211,7 +211,7 @@ class TestIndexArtifactChunks:
         ]
 
         with patch("app.services.index_service.generate_id", return_value="chunk-001"):
-            result = await index_artifact_chunks(
+            await index_artifact_chunks(
                 session=session,
                 artifact_id="art-001",
                 sha256="a" * 64,

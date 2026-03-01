@@ -60,9 +60,7 @@ def publish_pipeline_event_sync(
 
     try:
         loop = asyncio.new_event_loop()
-        loop.run_until_complete(
-            publish_pipeline_event(artifact_id, stage, status, message)
-        )
+        loop.run_until_complete(publish_pipeline_event(artifact_id, stage, status, message))
         loop.close()
     except Exception as e:
         logger.warning("event_publish_sync_failed", error=str(e))

@@ -1,7 +1,5 @@
 """Shared test fixtures for StudyAIO."""
 
-from datetime import datetime
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -9,12 +7,11 @@ import pytest
 
 from app.agents.base import (
     ClassificationResult,
-    ExtractionData,
     SummaryResult,
 )
 
-
 # ── Sample data dicts ──────────────────────────────────────────────
+
 
 @pytest.fixture
 def sample_course_data():
@@ -51,9 +48,7 @@ def sample_manifest():
             {
                 "page_number": 1,
                 "text": "Introduction to Network Security\nCSIT302 Week 5",
-                "images": [
-                    {"filename": "page1_img1.png", "caption": "", "position": "page_1"}
-                ],
+                "images": [{"filename": "page1_img1.png", "caption": "", "position": "page_1"}],
             },
             {
                 "page_number": 2,
@@ -66,6 +61,7 @@ def sample_manifest():
 
 
 # ── Mock agent ──────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def mock_agent():
@@ -87,6 +83,7 @@ def mock_agent():
 
 # ── Mock DB session ─────────────────────────────────────────────────
 
+
 @pytest.fixture
 def mock_session():
     """AsyncMock of AsyncSession with basic query support."""
@@ -101,11 +98,12 @@ def mock_session():
 
 # ── Async HTTP test client ────────────────────────────────────────
 
+
 @pytest.fixture
 async def async_client(mock_session):
     """Async HTTP client for testing FastAPI endpoints."""
-    from app.main import app
     from app.core.database import get_session
+    from app.main import app
 
     async def override():
         yield mock_session
@@ -121,6 +119,7 @@ async def async_client(mock_session):
 
 # ── Programmatic fixture file creators ──────────────────────────────
 
+
 @pytest.fixture
 def simple_pdf(tmp_path):
     """Create a minimal PDF file using PyMuPDF."""
@@ -135,7 +134,9 @@ def simple_pdf(tmp_path):
 
     # Page 2
     page2 = doc.new_page(width=595, height=842)
-    page2.insert_text((72, 72), "Firewalls are network security systems\nthat monitor traffic.", fontsize=12)
+    page2.insert_text(
+        (72, 72), "Firewalls are network security systems\nthat monitor traffic.", fontsize=12
+    )
 
     doc.save(str(pdf_path))
     doc.close()
@@ -153,7 +154,9 @@ def simple_docx(tmp_path):
     document.add_heading("CSIT302 Week 5: Network Security", level=1)
     document.add_paragraph("This lecture covers network security fundamentals.")
     document.add_heading("Firewalls", level=2)
-    document.add_paragraph("A firewall monitors and controls incoming and outgoing network traffic.")
+    document.add_paragraph(
+        "A firewall monitors and controls incoming and outgoing network traffic."
+    )
 
     document.save(str(docx_path))
     return docx_path
@@ -163,7 +166,6 @@ def simple_docx(tmp_path):
 def simple_pptx(tmp_path):
     """Create a minimal PPTX file using python-pptx."""
     from pptx import Presentation
-    from pptx.util import Inches
 
     pptx_path = tmp_path / "test_lecture.pptx"
     prs = Presentation()

@@ -19,9 +19,7 @@ class Course(Base):
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     term: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     artifacts: Mapped[list["LectureArtifact"]] = relationship(back_populates="course")
