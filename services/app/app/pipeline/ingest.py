@@ -1,11 +1,10 @@
 """Pipeline stage 0: Ingest — receive file, hash, dedup, create artifact."""
 
-import asyncio
 from datetime import datetime
 
 import structlog
 
-from app.core.database import async_session_factory
+from app.core.database import async_session_factory, run_async
 from app.core.exceptions import DuplicateFileError
 from app.core.utils import generate_id
 from app.models.pipeline_run import PipelineRun
@@ -14,15 +13,6 @@ from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
 
 logger = structlog.get_logger()
-
-
-def _run_async(coro):
-    """Run an async coroutine from a sync Celery task."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 async def _ingest(file_path: str) -> dict:
@@ -95,7 +85,7 @@ def ingest_file(self, file_path: str) -> dict:
     logger.info("ingest_task_started", file_path=file_path)
     publish_pipeline_event_sync("pending", "ingest", "started")
     try:
-        result = _run_async(_ingest(file_path))
+        result = run_async(_ingest(file_path))
         artifact_id = result.get("artifact_id", "unknown")
         publish_pipeline_event_sync(artifact_id, "ingest", result.get("status", "completed"))
         return result

@@ -56,6 +56,9 @@ services:
       - ./services/app/app:/app/app
       - ./services/app/prompts:/app/prompts
       - ./data:/app/data
+      - ${CLAUDE_CLI_PATH:-~/.local/bin/claude}:/usr/local/bin/claude:ro
+      - ${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json:/root/.claude/.credentials.json:ro
+      - ${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json:/root/.claude/settings.json:ro
     env_file:
       - .env
     command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=2

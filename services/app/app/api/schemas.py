@@ -227,6 +227,33 @@ class QuizQuestionResponse(BaseModel):
 # ── Q&A ──────────────────────────────────────────────────────────
 
 
+# ── Settings ─────────────────────────────────────────────────────
+
+
+class SettingsResponse(BaseModel):
+    """Current application settings."""
+
+    claude_code_path: str
+    claude_model: str
+    classification_confidence_threshold: float
+    flashcard_count_per_week: int
+    quiz_question_count_per_week: int
+    chunk_size_tokens: int
+    chunk_overlap_tokens: int
+
+
+class SettingsUpdateRequest(BaseModel):
+    """Partial update for application settings. All fields optional."""
+
+    claude_code_path: str | None = None
+    claude_model: str | None = None
+    classification_confidence_threshold: float | None = None
+    flashcard_count_per_week: int | None = None
+    quiz_question_count_per_week: int | None = None
+    chunk_size_tokens: int | None = None
+    chunk_overlap_tokens: int | None = None
+
+
 class QARequest(BaseModel):
     """Request body for asking a question."""
 

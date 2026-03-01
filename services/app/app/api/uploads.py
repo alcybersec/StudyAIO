@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import tempfile
 from pathlib import Path
 
 import structlog
@@ -15,6 +14,7 @@ from app.api.schemas import PipelineRunResponse, RetryResponse, UploadResponse
 from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import DuplicateFileError
+from app.core.utils import sanitize_filename
 from app.pipeline.orchestrator import resume_pipeline, run_pipeline
 from app.services import artifact_service, pipeline_service
 from app.services.event_service import PIPELINE_EVENTS_CHANNEL
@@ -51,22 +51,37 @@ async def upload_file(
             detail=f"Unsupported file type: {ext}. Supported: {sorted(SUPPORTED_EXTENSIONS)}",
         )
 
-    # Save to temp file
+    # Save to shared uploads directory (accessible by both API and worker containers)
     try:
-        suffix = Path(file.filename).suffix
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            content = await file.read()
-            tmp.write(content)
-            tmp_path = tmp.name
+        uploads_dir = Path(settings.data_dir) / "uploads"
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+
+        safe_name = sanitize_filename(file.filename)
+        if not safe_name:
+            safe_name = f"upload{Path(file.filename).suffix}"
+        dest = uploads_dir / safe_name
+
+        # Handle filename collision with counter
+        if dest.exists():
+            stem = dest.stem
+            suffix = dest.suffix
+            counter = 1
+            while dest.exists():
+                dest = uploads_dir / f"{stem}_{counter}{suffix}"
+                counter += 1
+
+        content = await file.read()
+        dest.write_bytes(content)
+        file_path = str(dest)
     except Exception as e:
         logger.error("upload_save_failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to save uploaded file") from e
 
-    logger.info("upload_received", filename=file.filename, temp_path=tmp_path)
+    logger.info("upload_received", filename=file.filename, saved_path=file_path)
 
     # Dispatch pipeline
     try:
-        result = run_pipeline(tmp_path)
+        result = run_pipeline(file_path)
     except DuplicateFileError as e:
         raise HTTPException(
             status_code=409,

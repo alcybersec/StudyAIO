@@ -232,3 +232,7 @@ The existing slash commands (`/sort_lectures`, `/summarize_lectures`) must conti
 - If a design decision isn't covered by the PRD, create a `TODO` comment and flag it — don't guess
 - Prefer simple solutions over clever ones
 - When in doubt, add a test
+
+## Rules
+
+- Do not mention Claude Code in any commits, PRs, reviews and etc.

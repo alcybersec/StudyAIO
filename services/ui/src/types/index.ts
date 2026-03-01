@@ -143,6 +143,18 @@ export interface QAExchange {
   timestamp: string
 }
 
+export interface Settings {
+  claude_code_path: string
+  claude_model: string
+  classification_confidence_threshold: number
+  flashcard_count_per_week: number
+  quiz_question_count_per_week: number
+  chunk_size_tokens: number
+  chunk_overlap_tokens: number
+}
+
+export type SettingsUpdate = Partial<Settings>
+
 export interface Flashcard {
   id: string
   course_id: string

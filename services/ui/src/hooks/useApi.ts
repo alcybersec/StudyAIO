@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { assetsApi, coursesApi, dashboardApi, qaApi, reviewApi, uploadApi } from '../api/endpoints'
-import type { QARequest } from '../types'
+import { assetsApi, coursesApi, dashboardApi, qaApi, reviewApi, settingsApi, uploadApi } from '../api/endpoints'
+import type { QARequest, SettingsUpdate } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -91,6 +91,23 @@ export function useUpload() {
 export function useAskQuestion() {
   return useMutation({
     mutationFn: (request: QARequest) => qaApi.ask(request),
+  })
+}
+
+export function useSettings() {
+  return useQuery({
+    queryKey: ['settings'],
+    queryFn: settingsApi.get,
+  })
+}
+
+export function useUpdateSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (updates: SettingsUpdate) => settingsApi.update(updates),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['settings'], data)
+    },
   })
 }
 

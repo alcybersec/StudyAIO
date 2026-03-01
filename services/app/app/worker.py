@@ -8,6 +8,14 @@ celery_app = Celery(
     "studyaio",
     broker=settings.redis_url,
     backend=settings.redis_url,
+    include=[
+        "app.pipeline.ingest",
+        "app.pipeline.classify",
+        "app.pipeline.extract",
+        "app.pipeline.summarize",
+        "app.pipeline.index",
+        "app.pipeline.assets",
+    ],
 )
 
 celery_app.conf.update(
@@ -19,10 +27,4 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
-    task_routes={
-        "app.pipeline.*": {"queue": "pipeline"},
-    },
 )
-
-# Auto-discover pipeline tasks
-celery_app.autodiscover_tasks(["app.pipeline"])

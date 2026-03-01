@@ -1,6 +1,5 @@
 """Pipeline stage 2: Extract — full content extraction with images."""
 
-import asyncio
 from datetime import datetime
 from pathlib import Path
 
@@ -8,7 +7,7 @@ import structlog
 from sqlalchemy import select
 
 from app.config import settings
-from app.core.database import async_session_factory
+from app.core.database import async_session_factory, run_async
 from app.core.exceptions import ExtractionError
 from app.core.utils import generate_id
 from app.extractors import get_extractor
@@ -19,15 +18,6 @@ from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
 
 logger = structlog.get_logger()
-
-
-def _run_async(coro):
-    """Run an async coroutine from a sync Celery task."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 async def _extract(artifact_id: str) -> dict:
@@ -175,7 +165,7 @@ def extract_artifact(self, input_value: str | dict) -> dict:
     logger.info("extract_task_started", artifact_id=artifact_id)
     publish_pipeline_event_sync(artifact_id, "extract", "started")
     try:
-        result = _run_async(_extract(artifact_id))
+        result = run_async(_extract(artifact_id))
         publish_pipeline_event_sync(artifact_id, "extract", result.get("status", "completed"))
         return result
     except ExtractionError:

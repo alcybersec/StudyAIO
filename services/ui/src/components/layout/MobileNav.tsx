@@ -12,6 +12,7 @@ const tabs: NavTab[] = [
   { path: '/upload', label: 'Upload', icon: '\u2191' },
   { path: '/qa', label: 'Q&A', icon: '?' },
   { path: '/review', label: 'Review', icon: '\u2691' },
+  { path: '/settings', label: 'Settings', icon: '\u2699' },
 ]
 
 export function MobileNav() {

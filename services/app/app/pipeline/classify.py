@@ -1,6 +1,5 @@
 """Pipeline stage 1: Classify — identify course, week, and title."""
 
-import asyncio
 from datetime import datetime
 from pathlib import Path
 
@@ -8,8 +7,7 @@ import structlog
 from sqlalchemy import select
 
 from app.agents.factory import get_agent
-from app.config import settings
-from app.core.database import async_session_factory
+from app.core.database import async_session_factory, run_async
 from app.core.exceptions import AgentError, ClassificationError
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
@@ -17,18 +15,10 @@ from app.models.course import Course
 from app.models.pipeline_run import PipelineRun
 from app.services import review_service
 from app.services.event_service import publish_pipeline_event_sync
+from app.services.settings_service import get_effective_setting
 from app.worker import celery_app
 
 logger = structlog.get_logger()
-
-
-def _run_async(coro):
-    """Run an async coroutine from a sync Celery task."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 def _extract_text_preview(file_path: str, file_type: str) -> str:
@@ -172,7 +162,7 @@ async def _classify(artifact_id: str) -> dict:
                 confidence=classification.confidence,
             )
 
-            threshold = settings.classification_confidence_threshold
+            threshold = get_effective_setting("classification_confidence_threshold")
 
             if classification.confidence >= threshold:
                 # High confidence — apply classification
@@ -308,7 +298,7 @@ def classify_artifact(self, input_value: str | dict) -> dict:
     logger.info("classify_task_started", artifact_id=artifact_id)
     publish_pipeline_event_sync(artifact_id, "classify", "started")
     try:
-        result = _run_async(_classify(artifact_id))
+        result = run_async(_classify(artifact_id))
         publish_pipeline_event_sync(artifact_id, "classify", result.get("status", "completed"))
         return result
     except (ClassificationError, AgentError):

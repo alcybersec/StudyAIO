@@ -14,8 +14,8 @@ from app.agents.base import (
     QuizQuestionData,
     SummaryResult,
 )
-from app.config import settings
 from app.core.exceptions import AgentError
+from app.services.settings_service import get_effective_setting
 
 logger = structlog.get_logger()
 
@@ -32,8 +32,8 @@ class ClaudeCodeAdapter(AgentAdapter):
     """
 
     def __init__(self, cli_path: str = "", model: str = ""):
-        self._cli_path = cli_path or settings.claude_code_path
-        self._model = model or settings.claude_model
+        self._cli_path = cli_path or get_effective_setting("claude_code_path")
+        self._model = model or get_effective_setting("claude_model")
 
     async def _run_claude_code(self, prompt: str, timeout: int = _DEFAULT_TIMEOUT) -> str:
         """Execute claude CLI with the given prompt and return output.
