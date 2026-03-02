@@ -162,12 +162,31 @@ class ActivityItem(BaseModel):
     duration_ms: int | None
 
 
+class CourseDueCount(BaseModel):
+    """Due card count for a single course."""
+
+    course_code: str
+    due_count: int
+
+
+class DashboardStudyStats(BaseModel):
+    """Study stats for the dashboard."""
+
+    total: int
+    due_today: int
+    mastered: int
+    learning: int
+    new: int
+    per_course: list[CourseDueCount]
+
+
 class DashboardResponse(BaseModel):
     """Dashboard aggregate data."""
 
     pending_review_count: int
     recent_activity: list[ActivityItem]
     courses: list[CourseListItem]
+    study_stats: DashboardStudyStats | None = None
 
 
 # ── Week Detail ───────────────────────────────────────────────────

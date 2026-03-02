@@ -11,6 +11,7 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: '\u25A6' },
   { path: '/upload', label: 'Upload', icon: '\u2191' },
+  { path: '/study', label: 'Study', icon: '\u{1F4DA}' },
   { path: '/qa', label: 'Q&A', icon: '?' },
   { path: '/review', label: 'Review', icon: '\u2691' },
   { path: '/settings', label: 'Settings', icon: '\u2699' },

@@ -31,5 +31,8 @@ class Flashcard(Base):
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="flashcards")
     source_artifact: Mapped["LectureArtifact"] = relationship(back_populates="flashcards")
+    review: Mapped["FlashcardReview | None"] = relationship(
+        back_populates="flashcard", uselist=False, cascade="all, delete-orphan"
+    )
 
     __table_args__ = (Index("ix_flashcards_course_week", "course_id", "week"),)

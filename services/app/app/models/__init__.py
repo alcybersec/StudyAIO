@@ -8,6 +8,7 @@ from app.models.chunk import Chunk
 from app.models.course import Course
 from app.models.extraction import Extraction
 from app.models.flashcard import Flashcard
+from app.models.flashcard_review import FlashcardReview
 from app.models.pipeline_run import PipelineRun
 from app.models.quiz import QuizQuestion
 from app.models.review_item import ReviewItem
@@ -20,6 +21,7 @@ __all__ = [
     "Summary",
     "Chunk",
     "Flashcard",
+    "FlashcardReview",
     "QuizQuestion",
     "ReviewItem",
     "PipelineRun",

@@ -4,6 +4,7 @@ import { ReviewAlert } from '../components/dashboard/ReviewAlert'
 import { ActivityFeed } from '../components/dashboard/ActivityFeed'
 import { CourseCard } from '../components/dashboard/CourseCard'
 import { QuickUpload } from '../components/dashboard/QuickUpload'
+import { StudyProgress } from '../components/dashboard/StudyProgress'
 import { EmptyState } from '../components/ui'
 
 export function DashboardPage() {
@@ -19,6 +20,12 @@ export function DashboardPage() {
       <PageHeader title="Dashboard" subtitle={`${data.courses.length} course${data.courses.length !== 1 ? 's' : ''} tracked`} />
 
       <ReviewAlert count={data.pending_review_count} />
+
+      {data.study_stats && data.study_stats.total > 0 && (
+        <div className="mb-6">
+          <StudyProgress stats={data.study_stats} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <div className="lg:col-span-2">
