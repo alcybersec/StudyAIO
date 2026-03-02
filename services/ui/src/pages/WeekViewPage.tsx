@@ -31,6 +31,7 @@ export function WeekViewPage() {
   const [viewerTargetPage, setViewerTargetPage] = useState<number | undefined>()
   const [viewerCurrentPage, setViewerCurrentPage] = useState(1)
   const [viewerTotalPages, setViewerTotalPages] = useState(0)
+  const [viewerOpen, setViewerOpen] = useState(false)
   const [mobileViewerOpen, setMobileViewerOpen] = useState(false)
   // Counter to force re-trigger scroll even when navigating to the same page number
   const navCounter = useRef(0)
@@ -40,7 +41,10 @@ export function WeekViewPage() {
   useEffect(() => {
     const artifactParam = searchParams.get('artifact')
     const pageParam = searchParams.get('page')
-    if (artifactParam) setSelectedArtifactId(artifactParam)
+    if (artifactParam) {
+      setSelectedArtifactId(artifactParam)
+      setViewerOpen(true)
+    }
     if (pageParam) {
       setViewerTargetPage(Number(pageParam))
       setNavToken(++navCounter.current)
@@ -76,6 +80,7 @@ export function WeekViewPage() {
     setSelectedArtifactId(artifactId)
     setViewerTargetPage(page)
     setNavToken(++navCounter.current)
+    setViewerOpen(true)
   }, [])
 
   if (isLoading) return <LoadingSpinner label="Loading week..." />
@@ -112,34 +117,9 @@ export function WeekViewPage() {
         </div>
       )}
 
-      {/* Split-panel layout: viewer left, tabs right (desktop) */}
-      <div className={hasArtifacts ? 'lg:grid lg:grid-cols-[minmax(300px,1fr)_minmax(400px,1.2fr)] lg:gap-6' : ''}>
-        {/* Left panel: File viewer (desktop only) */}
-        {hasArtifacts && (
-          <div className="hidden lg:flex lg:flex-col lg:sticky lg:top-4 lg:self-start overflow-hidden" style={{ height: 'calc(100vh - 8rem)' }}>
-            <FileViewerToolbar
-              artifacts={data.artifacts}
-              selectedArtifact={selectedArtifact}
-              onSelectArtifact={handleSelectArtifact}
-              currentPage={viewerCurrentPage}
-              totalPages={viewerTotalPages}
-              onGoToPage={handleGoToPage}
-            />
-            <div className="flex-1 overflow-hidden rounded-b-lg border border-t-0 border-gray-200">
-              {selectedArtifact && (
-                <FileViewer
-                  artifact={selectedArtifact}
-                  targetPage={viewerTargetPage}
-                  navToken={navToken}
-                  onPageChange={setViewerCurrentPage}
-                  onTotalPages={setViewerTotalPages}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Right panel: Tabs + content */}
+      {/* Split-panel layout: tabs left, viewer right (desktop) */}
+      <div className={hasArtifacts && viewerOpen ? 'lg:grid lg:grid-cols-[minmax(400px,1.2fr)_minmax(300px,1fr)] lg:gap-6' : ''}>
+        {/* Left panel: Tabs + content */}
         <div>
           {/* Tab bar */}
           <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
@@ -156,6 +136,23 @@ export function WeekViewPage() {
                 {tab.label}
               </button>
             ))}
+            {/* Toggle viewer button (desktop only) */}
+            {hasArtifacts && (
+              <button
+                onClick={() => setViewerOpen(!viewerOpen)}
+                className={`hidden lg:flex items-center gap-1.5 ml-auto px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  viewerOpen
+                    ? 'text-primary bg-primary/5 hover:bg-primary/10'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+                title={viewerOpen ? 'Hide original file' : 'Show original file'}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+                {viewerOpen ? 'Hide Original' : 'View Original'}
+              </button>
+            )}
           </div>
 
           {/* Tab content */}
@@ -196,6 +193,31 @@ export function WeekViewPage() {
             />
           </div>
         </div>
+
+        {/* Right panel: File viewer (desktop only, togglable) */}
+        {hasArtifacts && viewerOpen && (
+          <div className="hidden lg:flex lg:flex-col lg:sticky lg:top-4 lg:self-start overflow-hidden" style={{ height: 'calc(100vh - 8rem)' }}>
+            <FileViewerToolbar
+              artifacts={data.artifacts}
+              selectedArtifact={selectedArtifact}
+              onSelectArtifact={handleSelectArtifact}
+              currentPage={viewerCurrentPage}
+              totalPages={viewerTotalPages}
+              onGoToPage={handleGoToPage}
+            />
+            <div className="flex-1 overflow-hidden rounded-b-lg border border-t-0 border-gray-200">
+              {selectedArtifact && (
+                <FileViewer
+                  artifact={selectedArtifact}
+                  targetPage={viewerTargetPage}
+                  navToken={navToken}
+                  onPageChange={setViewerCurrentPage}
+                  onTotalPages={setViewerTotalPages}
+                />
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Mobile viewer modal */}
