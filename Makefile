@@ -1,4 +1,4 @@
-.PHONY: up down logs test test-unit test-integration migrate shell db status build clean ingest import-v0 lint-python lint-python-fix coverage
+.PHONY: up down logs test test-unit test-integration test-golden migrate shell db status build clean ingest import-v0 seed lint-python lint-python-fix coverage up-prod down-prod build-prod
 
 # === Docker ===
 up:
@@ -9,6 +9,16 @@ down:
 
 build:
 	docker compose build
+
+# === Production ===
+up-prod:
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+down-prod:
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+
+build-prod:
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml build
 
 logs:
 	docker compose logs -f
@@ -91,6 +101,7 @@ import-v0:
 	python scripts/import_v0.py
 
 seed:
+	DATABASE_URL="postgresql+asyncpg://studyaio:studyaio@localhost:5433/studyaio" \
 	python scripts/seed_fixtures.py
 
 reset-db:

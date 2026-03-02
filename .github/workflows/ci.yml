@@ -132,3 +132,7 @@ jobs:
       - name: Lint
         working-directory: services/ui
         run: npm run lint
+
+      - name: Production build
+        working-directory: services/ui
+        run: npm run build

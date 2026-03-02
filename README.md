@@ -136,6 +136,20 @@ make db          # Open psql shell
 make logs        # Tail all service logs
 ```
 
+For frontend development with hot reload, run `npm run dev` locally in `services/ui/` instead of using the Docker container.
+
+See **[Developer Guide](docs/developer_guide.md)** for detailed setup, testing patterns, and architecture reference.
+
+### Production Deployment
+
+```bash
+make build-prod  # Build production images (nginx UI, multi-worker API)
+make up-prod     # Start with production settings
+make down-prod   # Stop production services
+```
+
+Production mode removes source bind mounts, disables hot-reload, unexposes DB/Redis ports, and runs with higher worker concurrency.
+
 ## Testing
 
 ```bash
