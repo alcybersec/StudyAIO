@@ -76,10 +76,25 @@ export interface ActivityItem {
   duration_ms: number | null
 }
 
+export interface CourseDueCount {
+  course_code: string
+  due_count: number
+}
+
+export interface DashboardStudyStats {
+  total: number
+  due_today: number
+  mastered: number
+  learning: number
+  new: number
+  per_course: CourseDueCount[]
+}
+
 export interface DashboardData {
   pending_review_count: number
   recent_activity: ActivityItem[]
   courses: CourseListItem[]
+  study_stats: DashboardStudyStats | null
 }
 
 export interface UploadResult {
@@ -181,4 +196,29 @@ export interface QuizQuestion {
   source_page_ref: number
   generation_version: number
   created_at: string
+}
+
+// ── Study / SRS ──────────────────────────────────────────────────
+
+export interface StudyStats {
+  total: number
+  due_today: number
+  mastered: number
+  learning: number
+  new: number
+}
+
+export interface ReviewRequest {
+  flashcard_id: string
+  quality: number
+}
+
+export interface ReviewResponse {
+  id: string
+  flashcard_id: string
+  ease_factor: number
+  interval_days: number
+  repetition_count: number
+  next_review_at: string
+  last_reviewed_at: string | null
 }

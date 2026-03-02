@@ -16,6 +16,7 @@ from app.api import (
     qa_router,
     review_items_router,
     settings_router,
+    study_router,
     summaries_router,
     uploads_router,
 )
@@ -53,6 +54,7 @@ app = FastAPI(
         {"name": "files", "description": "Serve files from data directories"},
         {"name": "qa", "description": "Question & Answer with citation support"},
         {"name": "assets", "description": "Flashcards and quiz questions"},
+        {"name": "study", "description": "Spaced repetition study sessions"},
         {"name": "settings", "description": "Application settings management"},
     ],
 )
@@ -74,6 +76,7 @@ app.include_router(review_items_router, prefix="/api", tags=["review-items"])
 app.include_router(files_router, prefix="/api", tags=["files"])
 app.include_router(qa_router, prefix="/api", tags=["qa"])
 app.include_router(assets_router, prefix="/api", tags=["assets"])
+app.include_router(study_router, prefix="/api", tags=["study"])
 app.include_router(settings_router, prefix="/api", tags=["settings"])
 
 

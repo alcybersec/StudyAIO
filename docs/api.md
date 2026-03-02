@@ -394,6 +394,76 @@ The `409 Conflict` response for duplicate uploads also includes:
 
 ---
 
+## Study (Spaced Repetition)
+
+### `GET /api/study/due`
+
+Get flashcards due for spaced repetition review. Returns new cards (never reviewed) and overdue cards, sorted with new cards first.
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `course_code` | string | — | Filter by course code |
+| `week` | integer | — | Filter by week number |
+| `limit` | integer | 20 | Max cards to return (1-100) |
+
+**Response** `200` — `DueCardResponse[]`
+
+---
+
+### `POST /api/study/review`
+
+Record a flashcard review with quality rating. Updates SM-2 scheduling state.
+
+**Request Body**
+```json
+{
+  "flashcard_id": "0192...",
+  "quality": 3
+}
+```
+Quality: 0 (blackout) to 5 (perfect). Ratings < 3 reset the card.
+
+**Response** `200`
+```json
+{
+  "id": "0192...",
+  "flashcard_id": "0192...",
+  "ease_factor": 2.5,
+  "interval_days": 6,
+  "repetition_count": 2,
+  "next_review_at": "2026-03-08T10:00:00",
+  "last_reviewed_at": "2026-03-02T10:00:00"
+}
+```
+
+**Errors:** `404` if flashcard not found, `422` if quality out of range.
+
+---
+
+### `GET /api/study/stats`
+
+Get study statistics for a scope.
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `course_code` | string | — | Filter by course code |
+| `week` | integer | — | Filter by week number |
+
+**Response** `200`
+```json
+{
+  "total": 50,
+  "due_today": 12,
+  "mastered": 20,
+  "learning": 15,
+  "new": 15
+}
+```
+
+---
+
 ## Schema Reference
 
 | Schema | Description |
@@ -409,5 +479,10 @@ The `409 Conflict` response for duplicate uploads also includes:
 | `ReviewItemResponse` | id, review_type, entity_type/id, payload, suggested_values, status, resolution, timestamps |
 | `PipelineRunResponse` | id, artifact_id, stage, status, error_message, timing |
 | `ActivityItem` | pipeline_run_id, artifact_id, filename, stage, status, timing |
-| `DashboardResponse` | pending_review_count, recent_activity[], courses[] |
+| `DashboardResponse` | pending_review_count, recent_activity[], courses[], study_stats? |
+| `DashboardStudyStats` | total, due_today, mastered, learning, new, per_course[] |
 | `ResolveReviewRequest` | resolution (dict) |
+| `DueCardResponse` | flashcard fields (id, front, back, tags, etc.) |
+| `ReviewRequest` | flashcard_id, quality (0-5) |
+| `ReviewResponse` | id, flashcard_id, ease_factor, interval_days, repetition_count, next_review_at |
+| `StudyStatsResponse` | total, due_today, mastered, learning, new |

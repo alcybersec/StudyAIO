@@ -9,10 +9,10 @@ interface NavTab {
 
 const tabs: NavTab[] = [
   { path: '/', label: 'Home', icon: '\u25A6' },
+  { path: '/study', label: 'Study', icon: '\u{1F4DA}' },
   { path: '/upload', label: 'Upload', icon: '\u2191' },
   { path: '/qa', label: 'Q&A', icon: '?' },
   { path: '/review', label: 'Review', icon: '\u2691' },
-  { path: '/settings', label: 'Settings', icon: '\u2699' },
 ]
 
 export function MobileNav() {

@@ -9,8 +9,11 @@ import type {
   QAResponse,
   QuizQuestion,
   ReviewItem,
+  ReviewRequest,
+  ReviewResponse,
   Settings,
   SettingsUpdate,
+  StudyStats,
   SummaryData,
   UploadResult,
   WeekDetail,
@@ -52,6 +55,24 @@ export const qaApi = {
 export const settingsApi = {
   get: () => api.get<Settings>('/settings'),
   update: (updates: SettingsUpdate) => api.put<Settings>('/settings', updates),
+}
+
+export const studyApi = {
+  due: (courseCode?: string, week?: number, limit = 20) => {
+    const params = new URLSearchParams()
+    if (courseCode) params.set('course_code', courseCode)
+    if (week !== undefined) params.set('week', String(week))
+    params.set('limit', String(limit))
+    return api.get<Flashcard[]>(`/study/due?${params}`)
+  },
+  review: (request: ReviewRequest) =>
+    api.post<ReviewResponse>('/study/review', request),
+  stats: (courseCode?: string, week?: number) => {
+    const params = new URLSearchParams()
+    if (courseCode) params.set('course_code', courseCode)
+    if (week !== undefined) params.set('week', String(week))
+    return api.get<StudyStats>(`/study/stats?${params}`)
+  },
 }
 
 export const assetsApi = {

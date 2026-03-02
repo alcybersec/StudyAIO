@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { assetsApi, coursesApi, dashboardApi, qaApi, reviewApi, settingsApi, uploadApi } from '../api/endpoints'
-import type { QARequest, SettingsUpdate } from '../types'
+import { assetsApi, coursesApi, dashboardApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
+import type { QARequest, ReviewRequest, SettingsUpdate } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -107,6 +107,31 @@ export function useUpdateSettings() {
     mutationFn: (updates: SettingsUpdate) => settingsApi.update(updates),
     onSuccess: (data) => {
       queryClient.setQueryData(['settings'], data)
+    },
+  })
+}
+
+export function useStudyDue(courseCode?: string, week?: number, limit = 20) {
+  return useQuery({
+    queryKey: ['study', 'due', courseCode, week, limit],
+    queryFn: () => studyApi.due(courseCode, week, limit),
+  })
+}
+
+export function useStudyStats(courseCode?: string, week?: number) {
+  return useQuery({
+    queryKey: ['study', 'stats', courseCode, week],
+    queryFn: () => studyApi.stats(courseCode, week),
+  })
+}
+
+export function useRecordReview() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: ReviewRequest) => studyApi.review(request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['study'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
   })
 }

@@ -6,6 +6,7 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { QAPage } from './pages/QAPage'
 import { ReviewInboxPage } from './pages/ReviewInboxPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { StudyPage } from './pages/StudyPage'
 import { UploadPage } from './pages/UploadPage'
 import { WeekViewPage } from './pages/WeekViewPage'
 
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
       { path: '/upload', element: <UploadPage /> },
       { path: '/review', element: <ReviewInboxPage /> },
       { path: '/qa', element: <QAPage /> },
+      { path: '/study', element: <StudyPage /> },
       { path: '/settings', element: <SettingsPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],

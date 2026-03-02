@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 7 — Production Readiness (Complete)
-> **Overall Status:** Complete (v1 + quality hardening + production readiness)
+> **Current Milestone:** 8 — Spaced Repetition (Complete)
+> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition)
 
 ---
 
@@ -83,6 +83,15 @@
 | 7.3 | Golden tests for pipeline output structures | ✅ Done | 55 new golden tests in tests/golden/: extraction manifest structure (20 tests across all 3 extractors), summary markdown structure (17 tests for all 8 required sections), study asset structure (18 tests for flashcard/quiz schemas). All tests pass via `make test-golden`. |
 | 7.4 | Developer guide | ✅ Done | docs/developer_guide.md with 6 sections: Prerequisites & Setup, Development Workflow, Adding Features, Testing, Architecture Quick Reference, Troubleshooting. README updated with link and production deployment section. |
 | 7.5 | Seed fixtures script + Makefile cleanup | ✅ Done | scripts/seed_fixtures.py: creates 2 courses (CSIT302, CSIT314), 7 artifacts, 7 summaries, 35 flashcards, 21 quiz questions, 2 review items. Idempotent. Makefile seed target updated with DATABASE_URL. |
+
+## Milestone 8 — Spaced Repetition (SM-2)
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 8.1 | FlashcardReview model + SM-2 service + API endpoints | Done | FlashcardReview model (ease_factor, interval_days, repetition_count, next_review_at). Alembic migration. SM-2 algorithm (calculate_sm2, get_due_cards, record_review, get_study_stats, get_global_study_stats, get_per_course_due_counts). 3 API endpoints: GET /api/study/due, POST /api/study/review, GET /api/study/stats. Dashboard endpoint updated with study_stats. 24 new backend tests. |
+| 8.2 | Study Session Page | Done | /study page with 3-phase flow: setup (course/week selector, due count) -> studying (flip card + rate 1-4) -> summary. StudyCard with CSS 3D flip animation. RatingButtons (Again/Hard/Good/Easy with keyboard 1-4). SessionSummary with rating distribution. Keyboard shortcuts (Space=flip, 1-4=rate). |
+| 8.3 | Dashboard Study Widget | Done | StudyProgress component showing due count, mastery %, new/learning/mastered breakdown, per-course due counts. "Study Now" CTA. Dashboard response extended with study_stats field. Graceful fallback on error. |
+| 8.4 | WeekView FlashcardsTab integration | Done | Study CTA header with due count badge + "Study Now" link (pre-scoped to course+week). Mastered/learning/new stats line. Sidebar + MobileNav updated with Study nav item. |
 
 ## Post-v1 — Fixes & Settings
 

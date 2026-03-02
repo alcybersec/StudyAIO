@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useFlashcards } from '../../hooks/useApi'
+import { Link } from 'react-router-dom'
+import { useFlashcards, useStudyStats } from '../../hooks/useApi'
 import { LoadingSpinner, EmptyState, Badge } from '../ui'
 
 interface FlashcardsTabProps {
@@ -9,6 +10,7 @@ interface FlashcardsTabProps {
 
 export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
   const { data: flashcards, isLoading, error } = useFlashcards(courseCode, week)
+  const { data: studyStats } = useStudyStats(courseCode, week)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [shuffledCards, setShuffledCards] = useState<typeof flashcards>()
@@ -71,6 +73,32 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
 
   return (
     <div className="flex flex-col items-center gap-6 py-4">
+      {/* Study CTA + Stats */}
+      {studyStats && (
+        <div className="w-full max-w-xl flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-gray-500">
+              <span className="font-semibold text-gray-900">{studyStats.mastered}</span> mastered
+              {' \u00B7 '}
+              <span className="font-semibold text-gray-900">{studyStats.learning}</span> learning
+              {' \u00B7 '}
+              <span className="font-semibold text-gray-900">{studyStats.new}</span> new
+            </span>
+          </div>
+          <Link
+            to={`/study?course=${courseCode}&week=${week}`}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors min-h-[36px]"
+          >
+            {studyStats.due_today > 0 && (
+              <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-[10px]">
+                {studyStats.due_today}
+              </span>
+            )}
+            Study Now
+          </Link>
+        </div>
+      )}
+
       {/* Counter + Shuffle */}
       <div className="flex items-center gap-4 text-sm text-gray-500">
         <span className="font-medium">
