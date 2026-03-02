@@ -1,0 +1,35 @@
+# Production overrides — use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Differences from base (dev) compose:
+#   - No source code bind mounts (images contain all code)
+#   - API runs multi-worker uvicorn without --reload
+#   - Worker runs with higher concurrency
+#   - DB and Redis ports not exposed to host
+#   - All services restart automatically
+
+services:
+  ui:
+    restart: unless-stopped
+
+  api:
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    volumes: !override
+      - ./data:/app/data
+
+  worker:
+    restart: unless-stopped
+    command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=4
+    volumes: !override
+      - ./data:/app/data
+      - ${CLAUDE_CLI_PATH:-~/.local/bin/claude}:/usr/local/bin/claude:ro
+      - ${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json:/root/.claude/.credentials.json:ro
+      - ${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json:/root/.claude/settings.json:ro
+
+  db:
+    restart: unless-stopped
+    ports: !override []
+
+  redis:
+    restart: unless-stopped
+    ports: !override []

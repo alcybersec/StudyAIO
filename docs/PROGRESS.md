@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 6 — Quality Hardening (Complete)
-> **Overall Status:** Complete (v1 + quality hardening)
+> **Current Milestone:** 7 — Production Readiness (Complete)
+> **Overall Status:** Complete (v1 + quality hardening + production readiness)
 
 ---
 
@@ -73,6 +73,16 @@
 | 6.3 | Python linting + coverage + CI | ✅ Done | ruff (E/W/F/I/UP/B/SIM), pyproject.toml. Auto-fixed 61+ violations (import sorting, raise-from, unused vars, zip strict). CI expanded to 4 jobs: python-lint, backend-tests (with --cov), integration-tests (GH Actions services), frontend-checks. Makefile: lint-python, lint-python-fix, coverage. |
 | 6.4 | React ErrorBoundary + 404 page | ✅ Done | ErrorBoundary (class component) wraps Outlet in AppLayout. NotFoundPage at catch-all `*` route. Dev-mode error details. 44px touch targets. Fixed FlashcardsTab lint (Math.random impurity). |
 | 6.5 | Docker health checks | ✅ Done | API: urllib health check (10s interval, 15s start_period). Worker: celery inspect ping (30s interval, 30s start_period). UI depends_on api: service_healthy. |
+
+## Milestone 7 — Production Readiness & Quality Gates
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 7.1 | UI production Dockerfile (multi-stage build) | ✅ Done | Two-stage Dockerfile: node:20-slim build → nginx:1.27-alpine serve. nginx.conf with SPA fallback, /api proxy (proxy_buffering off for SSE), gzip, immutable cache for hashed assets. .dockerignore. Removed VITE_SSE_URL/VITE_API_URL env vars from docker-compose.yml (nginx handles proxying). CI `npm run build` step added. |
+| 7.2 | Production Docker Compose override | ✅ Done | docker-compose.prod.yml: API multi-worker (--workers 2, no --reload), worker concurrency=4, DB/Redis ports unexposed (!override), source bind mounts removed (!override), restart: unless-stopped on all services. Makefile: up-prod, down-prod, build-prod targets. |
+| 7.3 | Golden tests for pipeline output structures | ✅ Done | 55 new golden tests in tests/golden/: extraction manifest structure (20 tests across all 3 extractors), summary markdown structure (17 tests for all 8 required sections), study asset structure (18 tests for flashcard/quiz schemas). All tests pass via `make test-golden`. |
+| 7.4 | Developer guide | ✅ Done | docs/developer_guide.md with 6 sections: Prerequisites & Setup, Development Workflow, Adding Features, Testing, Architecture Quick Reference, Troubleshooting. README updated with link and production deployment section. |
+| 7.5 | Seed fixtures script + Makefile cleanup | ✅ Done | scripts/seed_fixtures.py: creates 2 courses (CSIT302, CSIT314), 7 artifacts, 7 summaries, 35 flashcards, 21 quiz questions, 2 review items. Idempotent. Makefile seed target updated with DATABASE_URL. |
 
 ## Post-v1 — Fixes & Settings
 
