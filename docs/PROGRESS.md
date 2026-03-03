@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 8 — Spaced Repetition (Complete)
-> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition)
+> **Current Milestone:** 10 — Extensibility & Study UX (Complete)
+> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility)
 
 ---
 
@@ -92,6 +92,25 @@
 | 8.2 | Study Session Page | Done | /study page with 3-phase flow: setup (course/week selector, due count) -> studying (flip card + rate 1-4) -> summary. StudyCard with CSS 3D flip animation. RatingButtons (Again/Hard/Good/Easy with keyboard 1-4). SessionSummary with rating distribution. Keyboard shortcuts (Space=flip, 1-4=rate). |
 | 8.3 | Dashboard Study Widget | Done | StudyProgress component showing due count, mastery %, new/learning/mastered breakdown, per-course due counts. "Study Now" CTA. Dashboard response extended with study_stats field. Graceful fallback on error. |
 | 8.4 | WeekView FlashcardsTab integration | Done | Study CTA header with due count badge + "Study Now" link (pre-scoped to course+week). Mastered/learning/new stats line. Sidebar + MobileNav updated with Study nav item. |
+
+## Milestone 9 — Exam Mode
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 9.1 | Data models + migration | Done | 3 new tables: exams, quiz_attempts, study_sessions. Alembic migration. Models registered. Relationships added to Course and QuizQuestion. |
+| 9.2 | Service layer (exam, schedule, streak) | Done | exam_service.py (CRUD, quiz attempts, weak topics, progress), schedule_service.py (adaptive daily plans, priority scaling), streak_service.py (session recording, streak calculation, study history). 32 unit tests. |
+| 9.3 | API endpoints + schemas | Done | 12 exam endpoints (CRUD, schedule, today, weak-topics, sessions, history). 2 study endpoint additions (quiz-attempt, streak). Dashboard extended with active_exams + streak. exam_schemas.py + updates to study_schemas.py + schemas.py. 15 API tests. |
+| 9.4 | Frontend — Exam pages + dashboard | Done | ExamListPage (cards, create form), ExamDetailPage (progress, schedule, weak topics, history). ExamCreateForm, ExamCountdown, StreakDisplay dashboard widgets. QuizTab records attempts to backend. Types, endpoints, hooks, router, sidebar, mobile nav all updated. |
+| 9.5 | Exam-aware study flow + final tests | Done | StudyPage supports ?exam= param (auto-start, session recording on completion). StudySetup shows active exams. SessionSummary shows streak + exam back-link. 23 golden tests for ExamProgress/DailyPlan/WeakTopic structures. Auto-complete past exams on access. 365 total tests. |
+
+## Milestone 10 — Extensibility & Study UX
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 10.1 | Direct Anthropic API Adapter | Done | Shared parsing module (agents/parsing.py). AnthropicAPIAdapter implementing all 5 AgentAdapter methods via anthropic SDK. Factory routes by agent_backend setting. Settings page dropdown for backend selection. anthropic_api_key + agent_backend settings. ~34 new tests. |
+| 10.2 | Timed Study Sessions | Done | timed_session_service.py (budget N minutes → card/quiz mix, 60/40 split, ~2min/card ~3min/quiz). POST /api/study/timed-plan endpoint. TimedStudyPage with setup→studying→summary flow, CountdownTimer with color warnings, interleaved card/quiz items, keyboard shortcuts. 15 tests. |
+| 10.3 | Batch Upload | Done | POST /api/uploads/batch endpoint (multi-file, per-file results, succeeded/failed/duplicates counts). uploadMany() API client helper. UploadPage uses batch for 3+ files. DropZone folder selection via webkitdirectory. 8 tests. |
+| 10.4 | Obsidian Export | Done | export_service.py (generates zip vault with YAML frontmatter, wiki-links, callout blocks). GET /api/exports/obsidian/{course_code}. ExportButton component on CoursePage. Vault structure: _Index.md, WeekNN.md, Flashcards/WeekNN.md, Quizzes/WeekNN.md. 38 tests (27 unit + 11 golden). |
 
 ## Post-v1 — Fixes & Settings
 

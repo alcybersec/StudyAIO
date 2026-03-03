@@ -190,6 +190,39 @@ Upload a lecture file and start the processing pipeline. Accepts PDF, DOCX, and 
 
 ---
 
+### `POST /api/uploads/batch`
+
+Batch upload multiple lecture files in a single request. Returns per-file results with succeeded/failed/duplicate counts.
+
+**Request** — `multipart/form-data`
+| Field | Type | Description |
+|-------|------|-------------|
+| `files` | binary[] | Multiple lecture files (.pdf, .docx, .pptx) |
+
+**Response** `201`
+```json
+{
+  "total": 5,
+  "succeeded": 3,
+  "duplicates": 1,
+  "failed": 1,
+  "results": [
+    { "filename": "Week1.pdf", "status": "processing", "artifact_id": "pending" },
+    { "filename": "Week2.pdf", "status": "processing", "artifact_id": "pending" },
+    { "filename": "Week3.pdf", "status": "processing", "artifact_id": "pending" },
+    { "filename": "Week1.pdf", "status": "duplicate", "artifact_id": "0192..." },
+    { "filename": "notes.txt", "status": "error", "error": "Unsupported file type: .txt" }
+  ]
+}
+```
+
+**Errors**
+| Status | Detail |
+|--------|--------|
+| 400 | No files provided |
+
+---
+
 ### `GET /api/uploads/{artifact_id}/status`
 
 Get pipeline run history for an uploaded artifact.
@@ -464,6 +497,336 @@ Get study statistics for a scope.
 
 ---
 
+### `POST /api/study/quiz-attempt`
+
+Record a quiz question attempt. Optionally scoped to an exam.
+
+**Request Body**
+```json
+{
+  "quiz_question_id": "0192...",
+  "selected_answer": "B",
+  "is_correct": true,
+  "exam_id": null,
+  "time_spent_ms": 15000
+}
+```
+
+**Response** `201`
+```json
+{
+  "id": "0192...",
+  "quiz_question_id": "0192...",
+  "is_correct": true,
+  "created_at": "2026-03-03T10:00:00"
+}
+```
+
+**Errors:** `404` if quiz question not found.
+
+---
+
+### `GET /api/study/streak`
+
+Get global study streak data.
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `course_code` | string | — | Filter streak by course |
+
+**Response** `200`
+```json
+{
+  "current_streak": 5,
+  "longest_streak": 12,
+  "last_study_date": "2026-03-03"
+}
+```
+
+---
+
+### `POST /api/study/timed-plan`
+
+Generate a time-budgeted study plan with an optimal mix of flashcards and quiz questions for the given time budget.
+
+**Request Body**
+```json
+{
+  "minutes": 30,
+  "course_code": "CSIT302",
+  "exam_id": null
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `minutes` | integer | Yes | Available study time (5-180) |
+| `course_code` | string | No | Scope to a specific course |
+| `exam_id` | string | No | Scope to exam week range |
+
+**Response** `200`
+```json
+{
+  "total_minutes": 30,
+  "card_ids": ["0192...", "0192..."],
+  "quiz_ids": ["0192...", "0192..."],
+  "estimated_card_minutes": 18,
+  "estimated_quiz_minutes": 12,
+  "course_code": "CSIT302",
+  "exam_id": null
+}
+```
+
+Time allocation: ~60% flashcards (~2 min each), ~40% quizzes (~3 min each). Prioritizes due/weak cards first.
+
+---
+
+## Exports
+
+### `GET /api/exports/obsidian/{course_code}`
+
+Export a course as an Obsidian-compatible vault (zip archive with YAML frontmatter, wiki-links, and interconnected markdown files).
+
+**Path Parameters**
+| Param | Type | Description |
+|-------|------|-------------|
+| `course_code` | string | Course code (e.g. `CSIT302`) |
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `weeks` | string | `""` | Comma-separated week numbers to include (empty = all) |
+
+**Response** `200` — `application/zip` file download
+
+Vault structure:
+```
+CourseCode/
+├── _Index.md          # Course index with wiki-links to all weeks
+├── Week01.md          # Summary with YAML frontmatter
+├── Week02.md
+├── Flashcards/
+│   ├── Week01.md      # Flashcards as callout blocks
+│   └── Week02.md
+└── Quizzes/
+    ├── Week01.md      # Quizzes with collapsible answers
+    └── Week02.md
+```
+
+**Errors**
+| Status | Detail |
+|--------|--------|
+| 400 | Invalid weeks parameter |
+| 404 | Course not found |
+
+---
+
+## Exams
+
+### `POST /api/exams`
+
+Create a new exam with date, week scope, and mastery target.
+
+**Request Body**
+```json
+{
+  "course_code": "CSIT302",
+  "title": "Midterm Exam",
+  "exam_date": "2026-04-15T09:00:00",
+  "weeks_scope": [1, 2, 3, 4, 5],
+  "target_mastery_pct": 80
+}
+```
+
+**Response** `201` — `ExamResponse`
+
+**Errors:** `400` if course not found or exam date is in the past.
+
+---
+
+### `GET /api/exams`
+
+List exams with optional filters.
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `course_code` | string | — | Filter by course code |
+| `status` | string | — | Filter by status: `active`, `completed`, `archived` |
+
+**Response** `200` — `ExamResponse[]`
+
+---
+
+### `GET /api/exams/{exam_id}`
+
+Get exam detail with comprehensive progress metrics.
+
+**Response** `200` — `ExamProgressResponse`
+```json
+{
+  "exam_id": "0192...",
+  "title": "Midterm Exam",
+  "course_id": "0192...",
+  "exam_date": "2026-04-15T09:00:00",
+  "status": "active",
+  "days_remaining": 14,
+  "mastery_pct": 45.5,
+  "target_mastery_pct": 80,
+  "quiz_accuracy": 65.0,
+  "quiz_total": 20,
+  "quiz_correct": 13,
+  "flashcard_total": 50,
+  "flashcard_mastered": 22,
+  "weak_weeks": [2, 4],
+  "session_count": 8,
+  "weeks_scope": [1, 2, 3, 4, 5]
+}
+```
+
+**Errors:** `404` if exam not found.
+
+---
+
+### `PUT /api/exams/{exam_id}`
+
+Update exam fields (title, date, scope, target).
+
+**Request Body** — All fields optional.
+```json
+{
+  "title": "Updated Title",
+  "exam_date": "2026-04-20T09:00:00",
+  "weeks_scope": [1, 2, 3],
+  "target_mastery_pct": 90
+}
+```
+
+**Response** `200` — `ExamResponse`
+
+**Errors:** `404` if exam not found.
+
+---
+
+### `DELETE /api/exams/{exam_id}`
+
+Soft-delete (archive) an exam.
+
+**Response** `204` — No content.
+
+**Errors:** `404` if exam not found.
+
+---
+
+### `GET /api/exams/{exam_id}/schedule`
+
+Get adaptive study schedule for the next N days.
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `days` | integer | 7 | Days to plan ahead (1-30) |
+
+**Response** `200` — `DailyPlanResponse[]`
+```json
+[
+  {
+    "date": "2026-03-03",
+    "days_until_exam": 14,
+    "priority": "medium",
+    "card_target": 12,
+    "quiz_target": 6,
+    "focus_weeks": [2, 4]
+  }
+]
+```
+
+Priority scales: `critical` (<=3 days), `high` (<=7), `medium` (<=14), `low` (>14).
+
+**Errors:** `404` if exam not found.
+
+---
+
+### `GET /api/exams/{exam_id}/today`
+
+Get today's adaptive study plan.
+
+**Response** `200` — `DailyPlanResponse`
+
+**Errors:** `404` if exam not found.
+
+---
+
+### `GET /api/exams/{exam_id}/weak-topics`
+
+Identify weak topics by quiz accuracy and flashcard ease.
+
+**Response** `200` — `WeakTopicResponse[]`
+```json
+[
+  {
+    "week": 3,
+    "quiz_accuracy": null,
+    "quiz_attempts": 0,
+    "avg_ease": null,
+    "reasons": ["unstudied"],
+    "weakness_score": 100.0
+  }
+]
+```
+
+Sorted weakest-first. Reasons: `low_quiz_accuracy` (<70%), `low_flashcard_ease` (<2.0), `unstudied`.
+
+**Errors:** `404` if exam not found.
+
+---
+
+### `POST /api/exams/{exam_id}/sessions`
+
+Record a completed study session for an exam.
+
+**Request Body**
+```json
+{
+  "cards_reviewed": 15,
+  "quiz_questions_answered": 8,
+  "quiz_correct": 6,
+  "duration_seconds": 1200
+}
+```
+
+**Response** `201` — `StudySessionResponse`
+
+**Errors:** `404` if exam not found.
+
+---
+
+### `GET /api/exams/{exam_id}/history`
+
+Get daily study session aggregates.
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `days` | integer | 30 | Days of history (1-365) |
+
+**Response** `200` — `StudyHistoryDayResponse[]`
+```json
+[
+  {
+    "date": "2026-03-03",
+    "cards_reviewed": 25,
+    "quiz_answered": 10,
+    "quiz_correct": 8,
+    "duration_seconds": 1800,
+    "session_count": 2
+  }
+]
+```
+
+---
+
 ## Schema Reference
 
 | Schema | Description |
@@ -479,10 +842,28 @@ Get study statistics for a scope.
 | `ReviewItemResponse` | id, review_type, entity_type/id, payload, suggested_values, status, resolution, timestamps |
 | `PipelineRunResponse` | id, artifact_id, stage, status, error_message, timing |
 | `ActivityItem` | pipeline_run_id, artifact_id, filename, stage, status, timing |
-| `DashboardResponse` | pending_review_count, recent_activity[], courses[], study_stats? |
+| `DashboardResponse` | pending_review_count, recent_activity[], courses[], study_stats?, active_exams[], streak |
 | `DashboardStudyStats` | total, due_today, mastered, learning, new, per_course[] |
+| `DashboardExamSummary` | id, title, course_code, exam_date, days_remaining, mastery_pct |
+| `DashboardStreakInfo` | current_streak, longest_streak, last_study_date |
 | `ResolveReviewRequest` | resolution (dict) |
 | `DueCardResponse` | flashcard fields (id, front, back, tags, etc.) |
 | `ReviewRequest` | flashcard_id, quality (0-5) |
 | `ReviewResponse` | id, flashcard_id, ease_factor, interval_days, repetition_count, next_review_at |
 | `StudyStatsResponse` | total, due_today, mastered, learning, new |
+| `ExamResponse` | id, course_id, title, exam_date, weeks_scope, target_mastery_pct, status, timestamps |
+| `ExamProgressResponse` | exam_id, title, course_id, exam_date, status, days_remaining, mastery/quiz/flashcard metrics, weak_weeks, weeks_scope |
+| `ExamCreateRequest` | course_code, title, exam_date, weeks_scope, target_mastery_pct |
+| `ExamUpdateRequest` | title?, exam_date?, weeks_scope?, target_mastery_pct? |
+| `WeakTopicResponse` | week, quiz_accuracy?, quiz_attempts, avg_ease?, reasons[], weakness_score |
+| `DailyPlanResponse` | date, days_until_exam, priority, card_target, quiz_target, focus_weeks |
+| `StudySessionRequest` | cards_reviewed, quiz_questions_answered, quiz_correct, duration_seconds |
+| `StudySessionResponse` | id, exam_id?, course_id, session_date, cards_reviewed, quiz stats, duration |
+| `StudyHistoryDayResponse` | date, cards_reviewed, quiz_answered, quiz_correct, duration_seconds, session_count |
+| `QuizAttemptRequest` | quiz_question_id, selected_answer, is_correct, exam_id?, time_spent_ms? |
+| `QuizAttemptResponse` | id, quiz_question_id, is_correct, created_at |
+| `StreakResponse` | current_streak, longest_streak, last_study_date |
+| `TimedPlanRequest` | minutes (5-180), course_code?, exam_id? |
+| `TimedPlanResponse` | total_minutes, card_ids[], quiz_ids[], estimated_card/quiz_minutes, course_code?, exam_id? |
+| `BatchUploadFileResult` | filename, status (processing/duplicate/error), artifact_id?, error? |
+| `BatchUploadResponse` | total, succeeded, duplicates, failed, results[] |
