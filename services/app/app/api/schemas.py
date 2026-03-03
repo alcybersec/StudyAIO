@@ -180,6 +180,27 @@ class DashboardStudyStats(BaseModel):
     per_course: list[CourseDueCount]
 
 
+class DashboardExamSummary(BaseModel):
+    """Exam countdown summary for dashboard."""
+
+    exam_id: str
+    title: str
+    course_id: str
+    course_code: str
+    exam_date: str
+    days_remaining: int
+    mastery_pct: float
+    target_mastery_pct: int
+
+
+class DashboardStreakInfo(BaseModel):
+    """Streak info for dashboard."""
+
+    current_streak: int
+    longest_streak: int
+    last_study_date: str | None
+
+
 class DashboardResponse(BaseModel):
     """Dashboard aggregate data."""
 
@@ -187,6 +208,8 @@ class DashboardResponse(BaseModel):
     recent_activity: list[ActivityItem]
     courses: list[CourseListItem]
     study_stats: DashboardStudyStats | None = None
+    active_exams: list[DashboardExamSummary] = []
+    streak: DashboardStreakInfo | None = None
 
 
 # ── Week Detail ───────────────────────────────────────────────────
@@ -254,6 +277,8 @@ class SettingsResponse(BaseModel):
 
     claude_code_path: str
     claude_model: str
+    agent_backend: str
+    anthropic_api_key: str
     classification_confidence_threshold: float
     flashcard_count_per_week: int
     quiz_question_count_per_week: int
@@ -266,11 +291,32 @@ class SettingsUpdateRequest(BaseModel):
 
     claude_code_path: str | None = None
     claude_model: str | None = None
+    agent_backend: str | None = None
+    anthropic_api_key: str | None = None
     classification_confidence_threshold: float | None = None
     flashcard_count_per_week: int | None = None
     quiz_question_count_per_week: int | None = None
     chunk_size_tokens: int | None = None
     chunk_overlap_tokens: int | None = None
+
+
+class BatchUploadFileResult(BaseModel):
+    """Result for a single file in a batch upload."""
+
+    filename: str
+    status: str  # "processing", "duplicate", "error"
+    artifact_id: str | None = None
+    error: str | None = None
+
+
+class BatchUploadResponse(BaseModel):
+    """Response after batch uploading files."""
+
+    total: int
+    succeeded: int
+    duplicates: int
+    failed: int
+    results: list[BatchUploadFileResult]
 
 
 class QARequest(BaseModel):

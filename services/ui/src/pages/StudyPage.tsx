@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useStudyDue, useRecordReview } from '../hooks/useApi'
+import { useStudyDue, useRecordReview, useExamDetail } from '../hooks/useApi'
+import { examsApi } from '../api/endpoints'
 import { PageHeader, LoadingSpinner, EmptyState } from '../components/ui'
 import { StudySetup } from '../components/study/StudySetup'
 import { StudyCard } from '../components/study/StudyCard'
@@ -13,11 +14,16 @@ export function StudyPage() {
   const [searchParams] = useSearchParams()
   const [courseCode, setCourseCode] = useState(searchParams.get('course') ?? '')
   const [week, setWeek] = useState(searchParams.get('week') ?? '')
-  const [phase, setPhase] = useState<Phase>('setup')
+  const [examId] = useState(searchParams.get('exam') ?? '')
+  const [phase, setPhase] = useState<Phase>(examId ? 'studying' : 'setup')
   const [currentIndex, setCurrentIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [sessionRatings, setSessionRatings] = useState<Record<number, number>>({})
   const [totalReviewed, setTotalReviewed] = useState(0)
+  const startTime = useRef(Date.now())
+
+  // Pre-fetch exam detail when in exam mode (used by sub-components)
+  useExamDetail(examId || '')
 
   const weekNum = week ? Number(week) : undefined
   const { data: dueCards, isLoading, refetch } = useStudyDue(
@@ -61,6 +67,16 @@ export function StudyPage() {
             setCurrentIndex((i) => i + 1)
             setFlipped(false)
           } else {
+            // Record session to backend if in exam mode
+            if (examId) {
+              const duration = Math.round((Date.now() - startTime.current) / 1000)
+              examsApi.recordSession(examId, {
+                cards_reviewed: totalReviewed + 1,
+                quiz_questions_answered: 0,
+                quiz_correct: 0,
+                duration_seconds: duration,
+              }).catch(() => {})
+            }
             setPhase('done')
           }
         },
@@ -107,6 +123,7 @@ export function StudyPage() {
           totalReviewed={totalReviewed}
           ratings={sessionRatings}
           onRestart={handleRestart}
+          examId={examId || undefined}
         />
       </div>
     )

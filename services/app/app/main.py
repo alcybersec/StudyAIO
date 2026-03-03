@@ -12,6 +12,8 @@ from app.api import (
     assets_router,
     courses_router,
     dashboard_router,
+    exams_router,
+    exports_router,
     files_router,
     qa_router,
     review_items_router,
@@ -54,8 +56,10 @@ app = FastAPI(
         {"name": "files", "description": "Serve files from data directories"},
         {"name": "qa", "description": "Question & Answer with citation support"},
         {"name": "assets", "description": "Flashcards and quiz questions"},
+        {"name": "exams", "description": "Exam management, scheduling, and progress"},
         {"name": "study", "description": "Spaced repetition study sessions"},
         {"name": "settings", "description": "Application settings management"},
+        {"name": "exports", "description": "Data export (Obsidian vault, etc.)"},
     ],
 )
 
@@ -76,8 +80,10 @@ app.include_router(review_items_router, prefix="/api", tags=["review-items"])
 app.include_router(files_router, prefix="/api", tags=["files"])
 app.include_router(qa_router, prefix="/api", tags=["qa"])
 app.include_router(assets_router, prefix="/api", tags=["assets"])
+app.include_router(exams_router, prefix="/api", tags=["exams"])
 app.include_router(study_router, prefix="/api", tags=["study"])
 app.include_router(settings_router, prefix="/api", tags=["settings"])
+app.include_router(exports_router, prefix="/api", tags=["exports"])
 
 
 # Exception handlers

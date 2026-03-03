@@ -3,7 +3,9 @@ import { LoadingSpinner, ErrorBanner, PageHeader } from '../components/ui'
 import { ReviewAlert } from '../components/dashboard/ReviewAlert'
 import { ActivityFeed } from '../components/dashboard/ActivityFeed'
 import { CourseCard } from '../components/dashboard/CourseCard'
+import { ExamCountdown } from '../components/dashboard/ExamCountdown'
 import { QuickUpload } from '../components/dashboard/QuickUpload'
+import { StreakDisplay } from '../components/dashboard/StreakDisplay'
 import { StudyProgress } from '../components/dashboard/StudyProgress'
 import { EmptyState } from '../components/ui'
 
@@ -20,6 +22,16 @@ export function DashboardPage() {
       <PageHeader title="Dashboard" subtitle={`${data.courses.length} course${data.courses.length !== 1 ? 's' : ''} tracked`} />
 
       <ReviewAlert count={data.pending_review_count} />
+
+      {/* Streak + Exam widgets */}
+      {(data.streak || (data.active_exams && data.active_exams.length > 0)) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {data.streak && <StreakDisplay streak={data.streak} />}
+          {data.active_exams && data.active_exams.length > 0 && (
+            <ExamCountdown exams={data.active_exams} />
+          )}
+        </div>
+      )}
 
       {data.study_stats && data.study_stats.total > 0 && (
         <div className="mb-6">

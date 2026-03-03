@@ -8,11 +8,13 @@ from app.api.schemas import (
     ActivityItem,
     CourseDueCount,
     CourseListItem,
+    DashboardExamSummary,
     DashboardResponse,
+    DashboardStreakInfo,
     DashboardStudyStats,
 )
 from app.core.database import get_session
-from app.services import course_service, pipeline_service, review_service, srs_service
+from app.services import course_service, exam_service, pipeline_service, review_service, srs_service, streak_service
 
 logger = structlog.get_logger()
 
@@ -52,9 +54,41 @@ async def get_dashboard(
     except Exception:
         logger.warning("study_stats_failed", exc_info=True)
 
+    # Active exams (best-effort)
+    active_exams = []
+    try:
+        exams = await exam_service.list_exams(session, status="active")
+        # Need course codes — build a lookup from course_items
+        course_lookup = {c.id: c.code for c in course_items}
+        for exam in exams:
+            from datetime import datetime
+            days_remaining = max(0, (exam.exam_date - datetime.utcnow()).days)
+            active_exams.append(DashboardExamSummary(
+                exam_id=exam.id,
+                title=exam.title,
+                course_id=exam.course_id,
+                course_code=course_lookup.get(exam.course_id, ""),
+                exam_date=exam.exam_date.isoformat(),
+                days_remaining=days_remaining,
+                mastery_pct=0,  # lightweight — full progress via exam detail
+                target_mastery_pct=exam.target_mastery_pct,
+            ))
+    except Exception:
+        logger.warning("active_exams_failed", exc_info=True)
+
+    # Streak (best-effort)
+    streak = None
+    try:
+        streak_data = await streak_service.get_streak(session)
+        streak = DashboardStreakInfo(**streak_data)
+    except Exception:
+        logger.warning("streak_failed", exc_info=True)
+
     return DashboardResponse(
         pending_review_count=pending_count,
         recent_activity=activity,
         courses=course_items,
         study_stats=study_stats,
+        active_exams=active_exams,
+        streak=streak,
     )
