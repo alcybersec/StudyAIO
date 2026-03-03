@@ -1,10 +1,10 @@
 """Claude Code CLI adapter — calls `claude -p` via subprocess."""
 
 import asyncio
-import json
 
 import structlog
 
+from app.agents import parsing
 from app.agents.base import (
     AgentAdapter,
     AnswerResult,
@@ -79,79 +79,6 @@ class ClaudeCodeAdapter(AgentAdapter):
         logger.info("claude_code_response", response_length=len(result))
         return result
 
-    def _parse_json_array_response(self, text: str) -> list[dict]:
-        """Extract and parse a JSON array from Claude's response.
-
-        Handles responses that may contain markdown code fences.
-
-        Args:
-            text: Raw response text.
-
-        Returns:
-            Parsed list of dicts.
-
-        Raises:
-            AgentError: If JSON parsing fails or result is not a list.
-        """
-        # Try direct parse first
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, list):
-                return parsed
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code fences
-        if "```" in text:
-            parts = text.split("```")
-            for part in parts:
-                cleaned = part.strip()
-                if cleaned.startswith("json"):
-                    cleaned = cleaned[4:].strip()
-                try:
-                    parsed = json.loads(cleaned)
-                    if isinstance(parsed, list):
-                        return parsed
-                except json.JSONDecodeError:
-                    continue
-
-        raise AgentError(f"Failed to parse JSON array from Claude response: {text[:200]}...")
-
-    def _parse_json_response(self, text: str) -> dict:
-        """Extract and parse JSON from Claude's response.
-
-        Handles responses that may contain markdown code fences.
-
-        Args:
-            text: Raw response text.
-
-        Returns:
-            Parsed dict.
-
-        Raises:
-            AgentError: If JSON parsing fails.
-        """
-        # Try direct parse first
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code fences
-        if "```" in text:
-            parts = text.split("```")
-            for part in parts:
-                # Skip language identifier lines
-                cleaned = part.strip()
-                if cleaned.startswith("json"):
-                    cleaned = cleaned[4:].strip()
-                try:
-                    return json.loads(cleaned)
-                except json.JSONDecodeError:
-                    continue
-
-        raise AgentError(f"Failed to parse JSON from Claude response: {text[:200]}...")
-
     async def classify_lecture(
         self, text_preview: str, filename: str, known_courses: list[str]
     ) -> ClassificationResult:
@@ -172,7 +99,7 @@ class ClaudeCodeAdapter(AgentAdapter):
             prompt = self._build_classification_prompt(text_preview, filename, known_courses)
 
         result_text = await self._run_claude_code(prompt)
-        parsed = self._parse_json_response(result_text)
+        parsed = parsing.parse_json_response(result_text)
 
         return ClassificationResult(
             course_code=parsed.get("course_code", "UNKNOWN"),
@@ -213,67 +140,6 @@ Rules:
 - title: Extract or infer the lecture topic title.
 - confidence: 0.0 to 1.0. High if course+week clearly stated, low if guessing.
 """
-
-    def _build_extraction_text(self, extraction: ExtractionData) -> str:
-        """Format extraction pages into a text block for prompts.
-
-        Args:
-            extraction: Extraction data with pages.
-
-        Returns:
-            Formatted text string.
-        """
-        parts: list[str] = []
-        for page in extraction.pages:
-            text = page.get("text", "") if isinstance(page, dict) else page.text
-            page_num = page.get("page_number", 0) if isinstance(page, dict) else page.page_number
-            if text.strip():
-                parts.append(f"--- Page {page_num} ---\n{text}")
-        return "\n\n".join(parts)
-
-    def _collect_image_references(self, extraction: ExtractionData) -> list[str]:
-        """Gather image filenames from extraction pages.
-
-        Args:
-            extraction: Extraction data with pages.
-
-        Returns:
-            List of image filenames.
-        """
-        images: list[str] = []
-        for page in extraction.pages:
-            page_images = page.get("images", []) if isinstance(page, dict) else page.images
-            for img in page_images:
-                filename = img.get("filename", "") if isinstance(img, dict) else img.filename
-                if filename:
-                    images.append(filename)
-        return images
-
-    def _parse_summary_response(self, text: str) -> tuple[str, list[str]]:
-        """Split summary markdown from JSON_META block.
-
-        Args:
-            text: Raw response from Claude.
-
-        Returns:
-            Tuple of (markdown_content, embedded_images list).
-        """
-        embedded_images: list[str] = []
-
-        if "---JSON_META---" in text:
-            parts = text.split("---JSON_META---")
-            markdown = parts[0].strip()
-            if len(parts) >= 2:
-                meta_text = parts[1].strip()
-                try:
-                    meta = json.loads(meta_text)
-                    embedded_images = meta.get("embedded_images", [])
-                except json.JSONDecodeError:
-                    logger.warning("failed_to_parse_summary_meta", meta_text=meta_text[:100])
-        else:
-            markdown = text.strip()
-
-        return markdown, embedded_images
 
     def _build_summary_prompt(
         self,
@@ -343,8 +209,8 @@ After the summary, emit:
 
         from jinja2 import Template
 
-        extraction_text = self._build_extraction_text(extraction)
-        image_references = self._collect_image_references(extraction)
+        extraction_text = parsing.build_extraction_text(extraction)
+        image_references = parsing.collect_image_references(extraction)
         course_code = extraction.metadata.get("course_code", "UNKNOWN")
         week = extraction.metadata.get("week", 0)
 
@@ -371,7 +237,7 @@ After the summary, emit:
             )
 
         result_text = await self._run_claude_code(prompt, timeout=_SUMMARY_TIMEOUT)
-        markdown, embedded_images = self._parse_summary_response(result_text)
+        markdown, embedded_images = parsing.parse_summary_response(result_text)
 
         return SummaryResult(
             content_md=markdown,
@@ -395,7 +261,7 @@ After the summary, emit:
 
         from jinja2 import Template
 
-        extraction_text = self._build_extraction_text(extraction)
+        extraction_text = parsing.build_extraction_text(extraction)
         course_code = extraction.metadata.get("course_code", "UNKNOWN")
         week = extraction.metadata.get("week", 0)
 
@@ -415,7 +281,7 @@ After the summary, emit:
             )
 
         result_text = await self._run_claude_code(prompt, timeout=_SUMMARY_TIMEOUT)
-        items = self._parse_json_array_response(result_text)
+        items = parsing.parse_json_array_response(result_text)
 
         return [
             FlashcardData(
@@ -465,7 +331,7 @@ Respond with ONLY a JSON array:
 
         from jinja2 import Template
 
-        extraction_text = self._build_extraction_text(extraction)
+        extraction_text = parsing.build_extraction_text(extraction)
         course_code = extraction.metadata.get("course_code", "UNKNOWN")
         week = extraction.metadata.get("week", 0)
 
@@ -483,7 +349,7 @@ Respond with ONLY a JSON array:
             prompt = self._build_quiz_prompt(course_code, week, summary, extraction_text, count)
 
         result_text = await self._run_claude_code(prompt, timeout=_SUMMARY_TIMEOUT)
-        items = self._parse_json_array_response(result_text)
+        items = parsing.parse_json_array_response(result_text)
 
         return [
             QuizQuestionData(
@@ -544,7 +410,7 @@ Respond with ONLY a JSON array:
             prompt = self._build_qa_prompt(question, context_chunks)
 
         result_text = await self._run_claude_code(prompt)
-        parsed = self._parse_json_response(result_text)
+        parsed = parsing.parse_json_response(result_text)
 
         return AnswerResult(
             answer=parsed.get("answer", ""),

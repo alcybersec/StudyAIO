@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useCourseDetail } from '../hooks/useApi'
 import { LoadingSpinner, EmptyState, ErrorBanner, PageHeader, Card } from '../components/ui'
 import { WeekRow } from '../components/course/WeekRow'
+import { ExportButton } from '../components/course/ExportButton'
 
 export function CoursePage() {
   const { courseCode } = useParams<{ courseCode: string }>()
@@ -21,12 +22,15 @@ export function CoursePage() {
           { label: data.course.code },
         ]}
         actions={
-          <Link
-            to="/upload"
-            className="inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors"
-          >
-            Upload files
-          </Link>
+          <div className="flex items-center gap-2">
+            <ExportButton courseCode={courseCode!} />
+            <Link
+              to="/upload"
+              className="inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors"
+            >
+              Upload files
+            </Link>
+          </div>
         }
       />
 

@@ -10,7 +10,13 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.schemas import PipelineRunResponse, RetryResponse, UploadResponse
+from app.api.schemas import (
+    BatchUploadFileResult,
+    BatchUploadResponse,
+    PipelineRunResponse,
+    RetryResponse,
+    UploadResponse,
+)
 from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import DuplicateFileError
@@ -93,6 +99,113 @@ async def upload_file(
         filename=file.filename,
         status="processing",
         pipeline_task_id=result.id if result else None,
+    )
+
+
+@router.post(
+    "/uploads/batch",
+    response_model=BatchUploadResponse,
+    status_code=201,
+    summary="Batch upload lecture files",
+    description="Upload multiple lecture files in a single request. Returns per-file results with succeeded/failed/duplicate counts.",
+)
+async def batch_upload(
+    files: list[UploadFile],
+    session: AsyncSession = Depends(get_session),
+) -> BatchUploadResponse:
+    """Upload multiple lecture files and start processing pipelines."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    results: list[BatchUploadFileResult] = []
+    succeeded = 0
+    duplicates = 0
+    failed = 0
+
+    uploads_dir = Path(settings.data_dir) / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    for file in files:
+        filename = file.filename or "unknown"
+
+        # Validate extension
+        ext = Path(filename).suffix.lower()
+        if ext not in SUPPORTED_EXTENSIONS:
+            results.append(BatchUploadFileResult(
+                filename=filename,
+                status="error",
+                error=f"Unsupported file type: {ext}",
+            ))
+            failed += 1
+            continue
+
+        # Save file
+        try:
+            safe_name = sanitize_filename(filename)
+            if not safe_name:
+                safe_name = f"upload{ext}"
+            dest = uploads_dir / safe_name
+
+            if dest.exists():
+                stem = dest.stem
+                suffix = dest.suffix
+                counter = 1
+                while dest.exists():
+                    dest = uploads_dir / f"{stem}_{counter}{suffix}"
+                    counter += 1
+
+            content = await file.read()
+            dest.write_bytes(content)
+            file_path = str(dest)
+        except Exception as e:
+            logger.error("batch_upload_save_failed", filename=filename, error=str(e))
+            results.append(BatchUploadFileResult(
+                filename=filename,
+                status="error",
+                error="Failed to save file",
+            ))
+            failed += 1
+            continue
+
+        # Dispatch pipeline
+        try:
+            pipeline_result = run_pipeline(file_path)
+            results.append(BatchUploadFileResult(
+                filename=filename,
+                status="processing",
+                artifact_id="pending",
+            ))
+            succeeded += 1
+        except DuplicateFileError as e:
+            results.append(BatchUploadFileResult(
+                filename=filename,
+                status="duplicate",
+                artifact_id=e.existing_artifact_id,
+            ))
+            duplicates += 1
+        except Exception as e:
+            logger.error("batch_upload_pipeline_failed", filename=filename, error=str(e))
+            results.append(BatchUploadFileResult(
+                filename=filename,
+                status="error",
+                error="Pipeline dispatch failed",
+            ))
+            failed += 1
+
+    logger.info(
+        "batch_upload_complete",
+        total=len(files),
+        succeeded=succeeded,
+        duplicates=duplicates,
+        failed=failed,
+    )
+
+    return BatchUploadResponse(
+        total=len(files),
+        succeeded=succeeded,
+        duplicates=duplicates,
+        failed=failed,
+        results=results,
     )
 
 

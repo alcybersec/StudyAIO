@@ -7,6 +7,12 @@ import pytest
 
 from app.agents.base import ExtractionData, SummaryResult
 from app.agents.claude_code import ClaudeCodeAdapter
+from app.agents.parsing import (
+    build_extraction_text,
+    collect_image_references,
+    parse_json_response,
+    parse_summary_response,
+)
 from app.core.exceptions import AgentError
 
 
@@ -65,29 +71,29 @@ class TestRunClaudeCode:
 
 
 class TestParseJsonResponse:
-    """Tests for _parse_json_response()."""
+    """Tests for parse_json_response() — now in parsing module."""
 
-    def test_direct_json(self, adapter):
+    def test_direct_json(self):
         """Direct JSON string is parsed."""
-        result = adapter._parse_json_response('{"key": "value"}')
+        result = parse_json_response('{"key": "value"}')
         assert result == {"key": "value"}
 
-    def test_json_in_code_fence(self, adapter):
+    def test_json_in_code_fence(self):
         """JSON in code fences is extracted."""
         text = 'Here is the result:\n```json\n{"key": "value"}\n```'
-        result = adapter._parse_json_response(text)
+        result = parse_json_response(text)
         assert result == {"key": "value"}
 
-    def test_code_fence_without_language(self, adapter):
+    def test_code_fence_without_language(self):
         """Code fences without language identifier work."""
         text = '```\n{"key": "value"}\n```'
-        result = adapter._parse_json_response(text)
+        result = parse_json_response(text)
         assert result == {"key": "value"}
 
-    def test_invalid_json_raises(self, adapter):
+    def test_invalid_json_raises(self):
         """Non-JSON text raises AgentError."""
         with pytest.raises(AgentError, match="Failed to parse JSON"):
-            adapter._parse_json_response("This is not JSON at all")
+            parse_json_response("This is not JSON at all")
 
 
 class TestClassifyLecture:
@@ -116,9 +122,9 @@ class TestClassifyLecture:
 
 
 class TestParseSummaryResponse:
-    """Tests for _parse_summary_response()."""
+    """Tests for parse_summary_response() — now in parsing module."""
 
-    def test_with_meta_block(self, adapter):
+    def test_with_meta_block(self):
         """Response with JSON_META block is parsed correctly."""
         text = """# Summary content here
 
@@ -128,28 +134,28 @@ class TestParseSummaryResponse:
 {"embedded_images": ["img1.png", "img2.png"]}
 ---JSON_META---"""
 
-        markdown, images = adapter._parse_summary_response(text)
+        markdown, images = parse_summary_response(text)
 
         assert "# Summary content here" in markdown
         assert images == ["img1.png", "img2.png"]
 
-    def test_without_meta_block(self, adapter):
+    def test_without_meta_block(self):
         """Response without JSON_META returns full text."""
         text = "# Summary content here\n\n## Key Concepts\n- Item 1"
 
-        markdown, images = adapter._parse_summary_response(text)
+        markdown, images = parse_summary_response(text)
 
         assert markdown == text
         assert images == []
 
-    def test_with_invalid_meta_json(self, adapter):
+    def test_with_invalid_meta_json(self):
         """Invalid JSON in meta block returns empty images."""
         text = """# Summary
 ---JSON_META---
 not json
 ---JSON_META---"""
 
-        markdown, images = adapter._parse_summary_response(text)
+        markdown, images = parse_summary_response(text)
 
         assert "# Summary" in markdown
         assert images == []
@@ -207,9 +213,9 @@ class TestGenerateSummary:
 
 
 class TestBuildExtractionText:
-    """Tests for _build_extraction_text()."""
+    """Tests for build_extraction_text() — now in parsing module."""
 
-    def test_dict_pages(self, adapter):
+    def test_dict_pages(self):
         """Works with dict pages (from manifest)."""
         extraction = ExtractionData(
             pages=[
@@ -219,13 +225,13 @@ class TestBuildExtractionText:
             metadata={},
         )
 
-        result = adapter._build_extraction_text(extraction)
+        result = build_extraction_text(extraction)
 
         assert "Page 1" in result
         assert "First page" in result
         assert "Page 2" in result
 
-    def test_empty_pages_skipped(self, adapter):
+    def test_empty_pages_skipped(self):
         """Pages with empty text are skipped."""
         extraction = ExtractionData(
             pages=[
@@ -235,16 +241,16 @@ class TestBuildExtractionText:
             metadata={},
         )
 
-        result = adapter._build_extraction_text(extraction)
+        result = build_extraction_text(extraction)
 
         assert "Page 1" in result
         assert "Page 2" not in result
 
 
 class TestCollectImageReferences:
-    """Tests for _collect_image_references()."""
+    """Tests for collect_image_references() — now in parsing module."""
 
-    def test_collects_from_dict_pages(self, adapter):
+    def test_collects_from_dict_pages(self):
         """Collects image filenames from dict pages."""
         extraction = ExtractionData(
             pages=[
@@ -260,17 +266,17 @@ class TestCollectImageReferences:
             metadata={},
         )
 
-        result = adapter._collect_image_references(extraction)
+        result = collect_image_references(extraction)
 
         assert result == ["img1.png", "img2.jpg"]
 
-    def test_empty_images(self, adapter):
+    def test_empty_images(self):
         """No images returns empty list."""
         extraction = ExtractionData(
             pages=[{"page_number": 1, "text": "Content", "images": []}],
             metadata={},
         )
 
-        result = adapter._collect_image_references(extraction)
+        result = collect_image_references(extraction)
 
         assert result == []
