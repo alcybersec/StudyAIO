@@ -60,6 +60,12 @@ class AssetGenerationError(StudyAIOError):
     pass
 
 
+class CourseOpsError(StudyAIOError):
+    """Raised when a CourseOps operation fails."""
+
+    pass
+
+
 class ReviewRequiredError(StudyAIOError):
     """Raised when a pipeline stage needs human review to proceed."""
 

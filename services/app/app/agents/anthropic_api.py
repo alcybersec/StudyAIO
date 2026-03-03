@@ -8,6 +8,7 @@ from app.agents.base import (
     AgentAdapter,
     AnswerResult,
     ClassificationResult,
+    CourseOpsResult,
     ExtractionData,
     FlashcardData,
     QuizQuestionData,
@@ -337,3 +338,45 @@ Respond with ONLY a JSON object:
             answer=parsed.get("answer", ""),
             citations=parsed.get("citations", []),
         )
+
+    async def extract_course_ops(
+        self, document_text: str, course_code: str, document_type: str
+    ) -> CourseOpsResult:
+        """Extract course logistics by calling the Anthropic API."""
+        from pathlib import Path
+
+        from jinja2 import Template
+
+        template_path = Path("/app/prompts/extract_course_ops.txt")
+        if template_path.exists():
+            template = Template(template_path.read_text())
+            prompt = template.render(
+                document_text=document_text,
+                course_code=course_code,
+                document_type=document_type,
+            )
+        else:
+            prompt = f"""Extract assessments, deadlines, and course information from this {document_type} for {course_code}.
+
+Document content:
+---
+{document_text[:8000]}
+---
+
+Respond with ONLY a JSON object:
+{{
+  "assessments": [{{"title": "Final Exam", "assessment_type": "exam", "weight_pct": 40.0, "description": "Covers weeks 1-13", "weeks_relevant": [1, 2, 3]}}],
+  "deadlines": [{{"title": "Assignment 1 Due", "due_date": "2026-04-15", "deadline_type": "assignment", "description": "Submit via Moodle"}}],
+  "course_info": {{"course_name": "Software Engineering", "term": "Spring 2026", "instructor": "Dr. Smith"}},
+  "confidence": 0.85
+}}
+
+Rules:
+- assessment_type/deadline_type: one of "exam", "assignment", "quiz", "project", "lab", "presentation", "other"
+- due_date: ISO format YYYY-MM-DD
+- weight_pct: percentage as a float (e.g., 40.0 for 40%). null if not specified.
+- confidence: 0.0 to 1.0
+"""
+
+        result_text = await self._call_api(prompt, max_tokens=_SUMMARY_MAX_TOKENS)
+        return parsing.parse_course_ops_response(result_text)

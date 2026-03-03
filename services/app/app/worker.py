@@ -15,6 +15,7 @@ celery_app = Celery(
         "app.pipeline.summarize",
         "app.pipeline.index",
         "app.pipeline.assets",
+        "app.pipeline.courseops_task",
     ],
 )
 

@@ -39,6 +39,35 @@ export function DashboardPage() {
         </div>
       )}
 
+      {data.upcoming_deadlines && data.upcoming_deadlines.length > 0 && (
+        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+          <h3 className="mb-3 text-sm font-semibold text-gray-900">Upcoming Deadlines</h3>
+          <div className="space-y-2">
+            {data.upcoming_deadlines.map((d) => {
+              const days = Math.ceil(
+                (new Date(d.due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+              )
+              return (
+                <div key={d.id} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                      {d.course_code}
+                    </span>
+                    <span className="text-gray-900">{d.title}</span>
+                    {!d.is_confirmed && (
+                      <span className="text-xs text-yellow-600">(unconfirmed)</span>
+                    )}
+                  </div>
+                  <span className={`text-xs ${days <= 3 ? 'font-medium text-red-600' : days <= 7 ? 'text-yellow-600' : 'text-gray-500'}`}>
+                    {d.due_date} ({days <= 0 ? 'Today' : `${days}d`})
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <div className="lg:col-span-2">
           <ActivityFeed items={data.recent_activity} />

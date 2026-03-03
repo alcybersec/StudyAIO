@@ -1,6 +1,7 @@
 """FastAPI API routers."""
 
 from app.api.assets import router as assets_router
+from app.api.courseops import router as courseops_router
 from app.api.courses import router as courses_router
 from app.api.dashboard import router as dashboard_router
 from app.api.exams import router as exams_router
@@ -15,6 +16,7 @@ from app.api.uploads import router as uploads_router
 
 __all__ = [
     "assets_router",
+    "courseops_router",
     "courses_router",
     "dashboard_router",
     "exams_router",

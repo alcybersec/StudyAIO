@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 10 — Extensibility & Study UX (Complete)
-> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility)
+> **Current Milestone:** 11 — CourseOps (Complete)
+> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility + courseops)
 
 ---
 
@@ -111,6 +111,17 @@
 | 10.2 | Timed Study Sessions | Done | timed_session_service.py (budget N minutes → card/quiz mix, 60/40 split, ~2min/card ~3min/quiz). POST /api/study/timed-plan endpoint. TimedStudyPage with setup→studying→summary flow, CountdownTimer with color warnings, interleaved card/quiz items, keyboard shortcuts. 15 tests. |
 | 10.3 | Batch Upload | Done | POST /api/uploads/batch endpoint (multi-file, per-file results, succeeded/failed/duplicates counts). uploadMany() API client helper. UploadPage uses batch for 3+ files. DropZone folder selection via webkitdirectory. 8 tests. |
 | 10.4 | Obsidian Export | Done | export_service.py (generates zip vault with YAML frontmatter, wiki-links, callout blocks). GET /api/exports/obsidian/{course_code}. ExportButton component on CoursePage. Vault structure: _Index.md, WeekNN.md, Flashcards/WeekNN.md, Quizzes/WeekNN.md. 38 tests (27 unit + 11 golden). |
+
+## Milestone 11 — CourseOps
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 11.0 | Commit existing work | Done | Committed Milestones 8-10 (3 commits, clean git status). |
+| 11.1 | Data models + migration | Done | 3 new models (CourseDocument, Assessment, Deadline). Alembic migration d5e6f7g8h9i0. Relationships added to Course. CourseOpsError exception. icalendar dependency. |
+| 11.2 | AI extraction + services + Celery task | Done | CourseOpsResult/Assessment/Deadline dataclasses in base.py. extract_course_ops() in ClaudeCode + AnthropicAPI adapters. parse_course_ops_response() in parsing.py. Jinja2 prompt template. courseops_service.py (upload, process, CRUD, dashboard query). calendar_service.py (ICS + task plan MD). Standalone Celery task courseops_task.py. |
+| 11.3 | API endpoints | Done | 10 endpoints in courseops router: POST/GET/GET documents, GET assessments, GET/PUT/DELETE deadlines, POST create-exam, GET calendar export, GET task-plan export. Dashboard updated with upcoming_deadlines. |
+| 11.4 | Frontend | Done | CourseOpsPage with 4 tabs (Documents, Assessments, Deadlines, Exports). 4 components (DocumentUpload, AssessmentTable, DeadlineTimeline, DeadlineEditModal). Types, endpoints, hooks. Router, CoursePage link, dashboard widget. |
+| 11.5 | Tests | Done | 62 new tests: courseops_service (15), calendar_service (5), courseops_extraction (8), api/courseops (15), golden/courseops_structure (19). 506 total tests. |
 
 ## Post-v1 — Fixes & Settings
 

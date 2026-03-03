@@ -827,6 +827,162 @@ Get daily study session aggregates.
 
 ---
 
+## CourseOps
+
+### `POST /api/courseops/documents`
+
+Upload a course document (outline, rubric, handbook) for AI extraction of assessments and deadlines.
+
+**Request** — `multipart/form-data`
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | binary | Course document (.pdf, .docx, .pptx) |
+
+**Query Parameters**
+| Param | Type | Description |
+|-------|------|-------------|
+| `course_code` | string | Course code (e.g. `CSIT302`) |
+| `document_type` | string | One of: `outline`, `rubric`, `handbook`, `other` |
+
+**Response** `201`
+```json
+{
+  "id": "0192...",
+  "course_id": "0192...",
+  "document_type": "outline",
+  "title": "Outline.pdf",
+  "status": "pending",
+  "created_at": "2026-03-03T10:00:00"
+}
+```
+
+**Errors**
+| Status | Detail |
+|--------|--------|
+| 400 | Missing file, unsupported type, or course not found |
+| 409 | Duplicate document (SHA-256 match) |
+
+---
+
+### `GET /api/courseops/documents`
+
+List course documents.
+
+**Query Parameters**
+| Param | Type | Description |
+|-------|------|-------------|
+| `course_code` | string | Course code |
+
+**Response** `200` — `CourseDocumentResponse[]`
+
+---
+
+### `GET /api/courseops/documents/{id}`
+
+Get a course document with its extracted assessments and deadlines.
+
+**Response** `200` — `CourseDocumentDetailResponse`
+
+**Errors:** `404` if document not found.
+
+---
+
+### `GET /api/courseops/assessments`
+
+List extracted assessments for a course.
+
+**Query Parameters**
+| Param | Type | Description |
+|-------|------|-------------|
+| `course_code` | string | Course code |
+
+**Response** `200` — `AssessmentResponse[]`
+
+---
+
+### `GET /api/courseops/deadlines`
+
+List extracted deadlines for a course.
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `course_code` | string | — | Course code |
+| `upcoming` | bool | `false` | Only show future deadlines |
+
+**Response** `200` — `DeadlineResponse[]`
+
+---
+
+### `PUT /api/courseops/deadlines/{id}`
+
+Update or confirm a deadline.
+
+**Request Body** — All fields optional.
+```json
+{
+  "title": "Updated Title",
+  "due_date": "2026-04-20",
+  "deadline_type": "assignment",
+  "description": "Updated description",
+  "is_confirmed": true
+}
+```
+
+**Response** `200` — `DeadlineResponse`
+
+**Errors:** `404` if deadline not found.
+
+---
+
+### `DELETE /api/courseops/deadlines/{id}`
+
+Delete an AI-extracted deadline.
+
+**Response** `204` — No content.
+
+**Errors:** `404` if deadline not found.
+
+---
+
+### `POST /api/courseops/deadlines/{id}/create-exam`
+
+Create an Exam entity from a deadline. Marks the deadline as confirmed.
+
+**Response** `201`
+```json
+{
+  "exam_id": "0192...",
+  "title": "Final Exam",
+  "exam_date": "2026-06-15T00:00:00",
+  "status": "active"
+}
+```
+
+**Errors:** `404` if deadline not found.
+
+---
+
+### `GET /api/courseops/export/calendar/{course_code}`
+
+Download an .ics calendar file with all deadlines for a course.
+
+**Response** `200` — `text/calendar` file download.
+
+**Errors:** `404` if course not found.
+
+---
+
+### `GET /api/courseops/export/task-plan/{course_code}`
+
+Download a markdown task plan with assessments and deadline checklist.
+
+**Response** `200` — `text/markdown` file download.
+
+**Errors:** `404` if course not found.
+
+---
+
 ## Schema Reference
 
 | Schema | Description |
@@ -867,3 +1023,9 @@ Get daily study session aggregates.
 | `TimedPlanResponse` | total_minutes, card_ids[], quiz_ids[], estimated_card/quiz_minutes, course_code?, exam_id? |
 | `BatchUploadFileResult` | filename, status (processing/duplicate/error), artifact_id?, error? |
 | `BatchUploadResponse` | total, succeeded, duplicates, failed, results[] |
+| `CourseDocumentResponse` | id, course_id, document_type, title, original_filename, file_type, status, timestamps |
+| `CourseDocumentDetailResponse` | CourseDocumentResponse + assessments[], deadlines[] |
+| `AssessmentResponse` | id, course_id, source_document_id, title, assessment_type, weight_pct, description, weeks_relevant |
+| `DeadlineResponse` | id, course_id, assessment_id, source_document_id, title, due_date, deadline_type, description, is_confirmed |
+| `DeadlineUpdateRequest` | title?, due_date?, deadline_type?, description?, is_confirmed? |
+| `UpcomingDeadlineItem` | course_code, deadline (DeadlineResponse) |
