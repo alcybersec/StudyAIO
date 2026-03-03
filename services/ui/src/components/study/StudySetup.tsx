@@ -1,4 +1,5 @@
-import { useCourses, useStudyStats } from '../../hooks/useApi'
+import { Link } from 'react-router-dom'
+import { useCourses, useStudyStats, useExams } from '../../hooks/useApi'
 import { LoadingSpinner } from '../ui'
 
 interface StudySetupProps {
@@ -11,6 +12,7 @@ interface StudySetupProps {
 
 export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onStart }: StudySetupProps) {
   const { data: courses, isLoading: loadingCourses } = useCourses()
+  const { data: activeExams } = useExams(courseCode || undefined, 'active')
   const weekNum = week ? Number(week) : undefined
   const { data: stats, isLoading: loadingStats } = useStudyStats(
     courseCode || undefined,
@@ -84,6 +86,24 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
         >
           Start Session
         </button>
+
+        {activeExams && activeExams.length > 0 && (
+          <div className="pt-2 border-t border-gray-100">
+            <p className="text-xs font-medium text-gray-500 mb-2">Study for an exam:</p>
+            <div className="space-y-1.5">
+              {activeExams.map((exam) => (
+                <Link
+                  key={exam.id}
+                  to={`/study?exam=${exam.id}`}
+                  className="flex items-center justify-between w-full p-2.5 rounded-lg text-sm text-left bg-primary/5 hover:bg-primary/10 text-primary transition-colors min-h-[44px]"
+                >
+                  <span className="font-medium">{exam.title}</span>
+                  <span className="text-xs opacity-70">{'\u{1F3AF}'}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

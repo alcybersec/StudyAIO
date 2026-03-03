@@ -7,13 +7,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.study_schemas import (
     DueCardResponse,
+    QuizAttemptRequest,
+    QuizAttemptResponse,
     ReviewRequest,
     ReviewResponse,
+    StreakResponse,
     StudyStatsResponse,
+    TimedPlanRequest,
+    TimedPlanResponse,
 )
 from app.core.database import get_session
 from app.models.flashcard import Flashcard
-from app.services import srs_service
+from app.models.quiz import QuizQuestion
+from app.services import exam_service, srs_service, streak_service, timed_session_service
 
 logger = structlog.get_logger()
 
@@ -79,4 +85,78 @@ async def get_stats(
         mastered=stats.mastered,
         learning=stats.learning,
         new=stats.new,
+    )
+
+
+@router.post(
+    "/study/quiz-attempt",
+    response_model=QuizAttemptResponse,
+    status_code=201,
+    summary="Record a quiz attempt",
+    description="Records an answer to a quiz question with correctness tracking.",
+)
+async def post_quiz_attempt(
+    body: QuizAttemptRequest,
+    session: AsyncSession = Depends(get_session),
+) -> QuizAttemptResponse:
+    """Record a quiz attempt."""
+    # Verify quiz question exists
+    result = await session.execute(
+        select(QuizQuestion).where(QuizQuestion.id == body.quiz_question_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Quiz question not found")
+
+    attempt = await exam_service.record_quiz_attempt(
+        session,
+        quiz_question_id=body.quiz_question_id,
+        selected_answer=body.selected_answer,
+        is_correct=body.is_correct,
+        exam_id=body.exam_id,
+        time_spent_ms=body.time_spent_ms,
+    )
+    await session.commit()
+    return QuizAttemptResponse.model_validate(attempt)
+
+
+@router.get(
+    "/study/streak",
+    response_model=StreakResponse,
+    summary="Get study streak",
+    description="Returns current and longest study streak data.",
+)
+async def get_streak(
+    course_id: str | None = Query(None, description="Optional course ID filter"),
+    session: AsyncSession = Depends(get_session),
+) -> StreakResponse:
+    """Get study streak data."""
+    data = await streak_service.get_streak(session, course_id)
+    return StreakResponse(**data)
+
+
+@router.post(
+    "/study/timed-plan",
+    response_model=TimedPlanResponse,
+    summary="Generate a timed study plan",
+    description="Given N minutes, generates an optimal mix of flashcards and quiz questions.",
+)
+async def generate_timed_plan(
+    body: TimedPlanRequest,
+    session: AsyncSession = Depends(get_session),
+) -> TimedPlanResponse:
+    """Generate a time-budgeted study plan."""
+    plan = await timed_session_service.generate_timed_plan(
+        session,
+        total_minutes=body.minutes,
+        course_code=body.course_code,
+        exam_id=body.exam_id,
+    )
+    return TimedPlanResponse(
+        total_minutes=plan.total_minutes,
+        card_ids=plan.card_ids,
+        quiz_ids=plan.quiz_ids,
+        estimated_card_minutes=plan.estimated_card_minutes,
+        estimated_quiz_minutes=plan.estimated_quiz_minutes,
+        course_code=plan.course_code,
+        exam_id=plan.exam_id,
     )

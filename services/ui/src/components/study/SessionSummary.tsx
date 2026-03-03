@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
+import { useStreak } from '../../hooks/useApi'
 
 interface SessionSummaryProps {
   totalReviewed: number
   ratings: Record<number, number>
   onRestart: () => void
+  examId?: string
 }
 
 const ratingLabels: Record<number, { label: string; color: string }> = {
@@ -13,7 +15,9 @@ const ratingLabels: Record<number, { label: string; color: string }> = {
   5: { label: 'Easy', color: 'text-blue-600' },
 }
 
-export function SessionSummary({ totalReviewed, ratings, onRestart }: SessionSummaryProps) {
+export function SessionSummary({ totalReviewed, ratings, onRestart, examId }: SessionSummaryProps) {
+  const { data: streak } = useStreak()
+
   return (
     <div className="max-w-md mx-auto text-center">
       <div className="bg-white rounded-xl border border-gray-200 p-8 space-y-6">
@@ -23,6 +27,13 @@ export function SessionSummary({ totalReviewed, ratings, onRestart }: SessionSum
           You reviewed <span className="font-semibold text-gray-900">{totalReviewed}</span>{' '}
           {totalReviewed === 1 ? 'card' : 'cards'}
         </p>
+
+        {streak && streak.current_streak > 0 && (
+          <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+            <span className="text-lg">{'\u{1F525}'}</span>
+            <span>{streak.current_streak} day streak</span>
+          </div>
+        )}
 
         <div className="space-y-2">
           {Object.entries(ratingLabels).map(([q, { label, color }]) => {
@@ -44,12 +55,21 @@ export function SessionSummary({ totalReviewed, ratings, onRestart }: SessionSum
           >
             Study More
           </button>
-          <Link
-            to="/"
-            className="w-full py-3 px-4 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors text-center min-h-[48px] flex items-center justify-center"
-          >
-            Back to Dashboard
-          </Link>
+          {examId ? (
+            <Link
+              to={`/exams/${examId}`}
+              className="w-full py-3 px-4 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors text-center min-h-[48px] flex items-center justify-center"
+            >
+              Back to Exam
+            </Link>
+          ) : (
+            <Link
+              to="/"
+              className="w-full py-3 px-4 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors text-center min-h-[48px] flex items-center justify-center"
+            >
+              Back to Dashboard
+            </Link>
+          )}
         </div>
       </div>
     </div>

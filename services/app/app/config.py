@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     claude_code_path: str = "claude"
     claude_model: str = "opus"
 
+    # Agent backend
+    agent_backend: str = "claude_code"
+    anthropic_api_key: str = ""
+
     # Pipeline tuning
     classification_confidence_threshold: float = 0.7
     flashcard_count_per_week: int = 15

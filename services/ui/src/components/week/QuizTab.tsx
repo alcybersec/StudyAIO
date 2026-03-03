@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react'
-import { useQuizQuestions } from '../../hooks/useApi'
+import { useQuizQuestions, useRecordQuizAttempt } from '../../hooks/useApi'
 import { LoadingSpinner, EmptyState } from '../ui'
 import type { QuizQuestion } from '../../types'
 
 interface QuizTabProps {
   courseCode: string
   week: number
+  examId?: string
 }
 
 function MCQOptions({
@@ -170,8 +171,9 @@ function ShortAnswer({
   )
 }
 
-export function QuizTab({ courseCode, week }: QuizTabProps) {
+export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
   const { data: questions, isLoading, error } = useQuizQuestions(courseCode, week)
+  const recordAttempt = useRecordQuizAttempt()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<number, boolean>>({})
   const [finished, setFinished] = useState(false)
@@ -186,6 +188,16 @@ export function QuizTab({ courseCode, week }: QuizTabProps) {
 
   function handleAnswer(correct: boolean) {
     setAnswers((prev) => ({ ...prev, [currentIndex]: correct }))
+    // Record attempt to backend
+    const q = questions?.[currentIndex]
+    if (q) {
+      recordAttempt.mutate({
+        quiz_question_id: q.id,
+        selected_answer: correct ? q.correct_answer : 'incorrect',
+        is_correct: correct,
+        exam_id: examId,
+      })
+    }
   }
 
   function goToNext() {

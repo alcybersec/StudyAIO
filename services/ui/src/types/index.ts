@@ -95,6 +95,8 @@ export interface DashboardData {
   recent_activity: ActivityItem[]
   courses: CourseListItem[]
   study_stats: DashboardStudyStats | null
+  active_exams: DashboardExamSummary[]
+  streak: StreakInfo | null
 }
 
 export interface UploadResult {
@@ -161,6 +163,8 @@ export interface QAExchange {
 export interface Settings {
   claude_code_path: string
   claude_model: string
+  agent_backend: string
+  anthropic_api_key: string
   classification_confidence_threshold: number
   flashcard_count_per_week: number
   quiz_question_count_per_week: number
@@ -196,6 +200,126 @@ export interface QuizQuestion {
   source_page_ref: number
   generation_version: number
   created_at: string
+}
+
+// ── Exams ───────────────────────────────────────────────────────
+
+export interface Exam {
+  id: string
+  course_id: string
+  title: string
+  exam_date: string
+  weeks_scope: number[]
+  target_mastery_pct: number
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ExamProgress {
+  exam_id: string
+  title: string
+  course_id: string
+  exam_date: string
+  status: string
+  days_remaining: number
+  mastery_pct: number
+  target_mastery_pct: number
+  quiz_accuracy: number
+  quiz_total: number
+  quiz_correct: number
+  flashcard_total: number
+  flashcard_mastered: number
+  weak_weeks: number[]
+  session_count: number
+  weeks_scope: number[]
+}
+
+export interface WeakTopic {
+  week: number
+  quiz_accuracy: number | null
+  quiz_attempts: number
+  avg_ease: number | null
+  reasons: string[]
+  weakness_score: number
+}
+
+export interface DailyPlan {
+  date: string
+  days_until_exam: number
+  priority: string
+  card_target: number
+  quiz_target: number
+  focus_weeks: number[]
+}
+
+export interface StreakInfo {
+  current_streak: number
+  longest_streak: number
+  last_study_date: string | null
+}
+
+export interface QuizAttemptRequest {
+  quiz_question_id: string
+  selected_answer: string
+  is_correct: boolean
+  exam_id?: string
+  time_spent_ms?: number
+}
+
+export interface DashboardExamSummary {
+  exam_id: string
+  title: string
+  course_id: string
+  course_code: string
+  exam_date: string
+  days_remaining: number
+  mastery_pct: number
+  target_mastery_pct: number
+}
+
+export interface StudyHistoryDay {
+  date: string
+  cards_reviewed: number
+  quiz_answered: number
+  quiz_correct: number
+  duration_seconds: number
+  session_count: number
+}
+
+// ── Timed Study ─────────────────────────────────────────────────
+
+export interface TimedPlanRequest {
+  minutes: number
+  course_code?: string
+  exam_id?: string
+}
+
+export interface TimedSessionPlan {
+  total_minutes: number
+  card_ids: string[]
+  quiz_ids: string[]
+  estimated_card_minutes: number
+  estimated_quiz_minutes: number
+  course_code: string | null
+  exam_id: string | null
+}
+
+// ── Batch Upload ────────────────────────────────────────────────
+
+export interface BatchUploadFileResult {
+  filename: string
+  status: 'processing' | 'duplicate' | 'error'
+  artifact_id: string | null
+  error: string | null
+}
+
+export interface BatchUploadResponse {
+  total: number
+  succeeded: number
+  duplicates: number
+  failed: number
+  results: BatchUploadFileResult[]
 }
 
 // ── Study / SRS ──────────────────────────────────────────────────

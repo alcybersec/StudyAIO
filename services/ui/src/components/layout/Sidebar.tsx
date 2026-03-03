@@ -12,6 +12,8 @@ const mainNavItems: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: '\u25A6' },
   { path: '/upload', label: 'Upload', icon: '\u2191' },
   { path: '/study', label: 'Study', icon: '\u{1F4DA}' },
+  { path: '/timed-study', label: 'Timed Study', icon: '\u23F1' },
+  { path: '/exams', label: 'Exams', icon: '\u{1F3AF}' },
   { path: '/qa', label: 'Q&A', icon: '?' },
   { path: '/review', label: 'Review', icon: '\u2691' },
   { path: '/settings', label: 'Settings', icon: '\u2699' },

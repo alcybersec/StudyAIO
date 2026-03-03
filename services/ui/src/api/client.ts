@@ -44,6 +44,16 @@ export const api = {
     return handleResponse<T>(response)
   },
 
+  async delete(path: string): Promise<void> {
+    const response = await fetch(`${BASE_URL}${path}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ detail: response.statusText }))
+      throw new ApiError(response.status, body.detail || response.statusText)
+    }
+  },
+
   async upload<T>(path: string, file: File): Promise<T> {
     const formData = new FormData()
     formData.append('file', file)
@@ -52,6 +62,22 @@ export const api = {
       body: formData,
     })
     return handleResponse<T>(response)
+  },
+
+  async uploadMany<T>(path: string, files: File[]): Promise<T> {
+    const formData = new FormData()
+    for (const file of files) {
+      formData.append('files', file)
+    }
+    const response = await fetch(`${BASE_URL}${path}`, {
+      method: 'POST',
+      body: formData,
+    })
+    return handleResponse<T>(response)
+  },
+
+  downloadUrl(path: string): string {
+    return `${BASE_URL}${path}`
   },
 }
 

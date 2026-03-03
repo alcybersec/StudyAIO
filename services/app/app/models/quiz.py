@@ -33,5 +33,6 @@ class QuizQuestion(Base):
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="quiz_questions")
     source_artifact: Mapped["LectureArtifact"] = relationship(back_populates="quiz_questions")
+    attempts: Mapped[list["QuizAttempt"]] = relationship(back_populates="quiz_question")
 
     __table_args__ = (Index("ix_quiz_questions_course_week", "course_id", "week"),)
