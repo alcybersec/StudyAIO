@@ -14,6 +14,8 @@ logger = structlog.get_logger()
 ALLOWED_KEYS = {
     "claude_code_path",
     "claude_model",
+    "agent_backend",
+    "anthropic_api_key",
     "classification_confidence_threshold",
     "flashcard_count_per_week",
     "quiz_question_count_per_week",
@@ -22,11 +24,14 @@ ALLOWED_KEYS = {
 }
 
 VALID_MODELS = {"opus", "sonnet", "haiku"}
+VALID_BACKENDS = {"claude_code", "anthropic_api"}
 
 # Validation rules: (type, min, max)
 _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
     "claude_code_path": (str, None, None),
     "claude_model": (str, None, None),
+    "agent_backend": (str, None, None),
+    "anthropic_api_key": (str, None, None),
     "classification_confidence_threshold": (float, 0.0, 1.0),
     "flashcard_count_per_week": (int, 1, 100),
     "quiz_question_count_per_week": (int, 1, 100),
@@ -57,6 +62,8 @@ def _defaults() -> dict[str, Any]:
     return {
         "claude_code_path": settings.claude_code_path,
         "claude_model": settings.claude_model,
+        "agent_backend": settings.agent_backend,
+        "anthropic_api_key": settings.anthropic_api_key,
         "classification_confidence_threshold": settings.classification_confidence_threshold,
         "flashcard_count_per_week": settings.flashcard_count_per_week,
         "quiz_question_count_per_week": settings.quiz_question_count_per_week,
@@ -101,6 +108,18 @@ def validate_setting(key: str, value: Any) -> Any:
         if value not in VALID_MODELS:
             raise ValueError(f"claude_model must be one of {sorted(VALID_MODELS)}, got '{value}'")
         return value
+
+    if key == "agent_backend":
+        if value not in VALID_BACKENDS:
+            raise ValueError(
+                f"agent_backend must be one of {sorted(VALID_BACKENDS)}, got '{value}'"
+            )
+        return value
+
+    if key == "anthropic_api_key":
+        if not isinstance(value, str):
+            raise ValueError("anthropic_api_key must be a string")
+        return value.strip()
 
     if key == "claude_code_path":
         if not isinstance(value, str) or not value.strip():

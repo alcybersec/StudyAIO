@@ -65,18 +65,53 @@ export function SettingsPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">AI Configuration</h2>
           <div className="space-y-4">
             <div>
-              <label htmlFor="claude_code_path" className="block text-sm font-medium text-gray-700 mb-1">
-                Claude CLI Path
+              <label htmlFor="agent_backend" className="block text-sm font-medium text-gray-700 mb-1">
+                Agent Backend
               </label>
-              <input
-                id="claude_code_path"
-                type="text"
-                value={form.claude_code_path}
-                onChange={(e) => setForm({ ...form, claude_code_path: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-              />
-              <p className="mt-1 text-xs text-gray-500">Path to the Claude Code CLI binary</p>
+              <select
+                id="agent_backend"
+                value={form.agent_backend}
+                onChange={(e) => setForm({ ...form, agent_backend: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
+              >
+                <option value="claude_code">Claude Code CLI</option>
+                <option value="anthropic_api">Anthropic API (Direct)</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">How to connect to Claude: via CLI subprocess or direct API calls</p>
             </div>
+
+            {form.agent_backend === 'claude_code' && (
+              <div>
+                <label htmlFor="claude_code_path" className="block text-sm font-medium text-gray-700 mb-1">
+                  Claude CLI Path
+                </label>
+                <input
+                  id="claude_code_path"
+                  type="text"
+                  value={form.claude_code_path}
+                  onChange={(e) => setForm({ ...form, claude_code_path: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                />
+                <p className="mt-1 text-xs text-gray-500">Path to the Claude Code CLI binary</p>
+              </div>
+            )}
+
+            {form.agent_backend === 'anthropic_api' && (
+              <div>
+                <label htmlFor="anthropic_api_key" className="block text-sm font-medium text-gray-700 mb-1">
+                  Anthropic API Key
+                </label>
+                <input
+                  id="anthropic_api_key"
+                  type="password"
+                  value={form.anthropic_api_key}
+                  onChange={(e) => setForm({ ...form, anthropic_api_key: e.target.value })}
+                  placeholder="sk-ant-..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none font-mono"
+                />
+                <p className="mt-1 text-xs text-gray-500">Your Anthropic API key for direct API access</p>
+              </div>
+            )}
 
             <div>
               <label htmlFor="claude_model" className="block text-sm font-medium text-gray-700 mb-1">

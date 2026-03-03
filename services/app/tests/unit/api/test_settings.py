@@ -14,6 +14,8 @@ class TestGetSettings:
         mock_settings = {
             "claude_code_path": "claude",
             "claude_model": "opus",
+            "agent_backend": "claude_code",
+            "anthropic_api_key": "",
             "classification_confidence_threshold": 0.7,
             "flashcard_count_per_week": 15,
             "quiz_question_count_per_week": 8,
@@ -31,7 +33,8 @@ class TestGetSettings:
         data = response.json()
         assert data["claude_model"] == "opus"
         assert data["flashcard_count_per_week"] == 15
-        assert len(data) == 7
+        assert data["agent_backend"] == "claude_code"
+        assert len(data) == 9
 
 
 @pytest.mark.asyncio
@@ -43,6 +46,8 @@ class TestUpdateSettings:
         merged = {
             "claude_code_path": "claude",
             "claude_model": "sonnet",
+            "agent_backend": "claude_code",
+            "anthropic_api_key": "",
             "classification_confidence_threshold": 0.7,
             "flashcard_count_per_week": 15,
             "quiz_question_count_per_week": 8,
@@ -87,6 +92,8 @@ class TestUpdateSettings:
         merged = {
             "claude_code_path": "claude",
             "claude_model": "opus",
+            "agent_backend": "claude_code",
+            "anthropic_api_key": "",
             "classification_confidence_threshold": 0.7,
             "flashcard_count_per_week": 25,
             "quiz_question_count_per_week": 8,

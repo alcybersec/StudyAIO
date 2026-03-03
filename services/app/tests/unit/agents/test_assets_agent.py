@@ -7,6 +7,7 @@ import pytest
 
 from app.agents.base import ExtractionData, FlashcardData, QuizQuestionData
 from app.agents.claude_code import ClaudeCodeAdapter
+from app.agents.parsing import parse_json_array_response
 from app.core.exceptions import AgentError
 
 
@@ -29,45 +30,45 @@ def sample_extraction():
 
 
 class TestParseJsonArrayResponse:
-    """Tests for _parse_json_array_response()."""
+    """Tests for parse_json_array_response() — now in parsing module."""
 
-    def test_direct_json_array(self, adapter):
+    def test_direct_json_array(self):
         """Direct JSON array is parsed."""
         text = '[{"front": "Q", "back": "A"}]'
-        result = adapter._parse_json_array_response(text)
+        result = parse_json_array_response(text)
         assert result == [{"front": "Q", "back": "A"}]
 
-    def test_json_array_in_code_fence(self, adapter):
+    def test_json_array_in_code_fence(self):
         """JSON array in code fences is extracted."""
         text = 'Here are the flashcards:\n```json\n[{"front": "Q", "back": "A"}]\n```'
-        result = adapter._parse_json_array_response(text)
+        result = parse_json_array_response(text)
         assert result == [{"front": "Q", "back": "A"}]
 
-    def test_code_fence_without_language(self, adapter):
+    def test_code_fence_without_language(self):
         """Code fences without language identifier work."""
         text = '```\n[{"key": "value"}]\n```'
-        result = adapter._parse_json_array_response(text)
+        result = parse_json_array_response(text)
         assert result == [{"key": "value"}]
 
-    def test_invalid_json_raises(self, adapter):
+    def test_invalid_json_raises(self):
         """Non-JSON text raises AgentError."""
         with pytest.raises(AgentError, match="Failed to parse JSON array"):
-            adapter._parse_json_array_response("This is not JSON")
+            parse_json_array_response("This is not JSON")
 
-    def test_json_object_not_array_raises(self, adapter):
+    def test_json_object_not_array_raises(self):
         """JSON object (not array) raises AgentError."""
         with pytest.raises(AgentError, match="Failed to parse JSON array"):
-            adapter._parse_json_array_response('{"key": "value"}')
+            parse_json_array_response('{"key": "value"}')
 
-    def test_empty_array(self, adapter):
+    def test_empty_array(self):
         """Empty JSON array is valid."""
-        result = adapter._parse_json_array_response("[]")
+        result = parse_json_array_response("[]")
         assert result == []
 
-    def test_multiple_code_fences_picks_array(self, adapter):
+    def test_multiple_code_fences_picks_array(self):
         """When multiple code fences exist, picks the one with a JSON array."""
         text = '```\nnot json\n```\n\n```json\n[{"a": 1}]\n```'
-        result = adapter._parse_json_array_response(text)
+        result = parse_json_array_response(text)
         assert result == [{"a": 1}]
 
 
