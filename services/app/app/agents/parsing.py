@@ -8,7 +8,12 @@ import json
 
 import structlog
 
-from app.agents.base import ExtractionData
+from app.agents.base import (
+    CourseOpsAssessment,
+    CourseOpsDeadline,
+    CourseOpsResult,
+    ExtractionData,
+)
 from app.core.exceptions import AgentError
 
 logger = structlog.get_logger()
@@ -151,3 +156,46 @@ def collect_image_references(extraction: ExtractionData) -> list[str]:
             if filename:
                 images.append(filename)
     return images
+
+
+def parse_course_ops_response(text: str) -> CourseOpsResult:
+    """Parse a CourseOps extraction response from the AI.
+
+    Args:
+        text: Raw AI response text.
+
+    Returns:
+        CourseOpsResult with assessments, deadlines, and metadata.
+
+    Raises:
+        AgentError: If JSON parsing fails.
+    """
+    parsed = parse_json_response(text)
+
+    assessments = [
+        CourseOpsAssessment(
+            title=a.get("title", ""),
+            assessment_type=a.get("assessment_type", "other"),
+            weight_pct=a.get("weight_pct"),
+            description=a.get("description", ""),
+            weeks_relevant=a.get("weeks_relevant", []),
+        )
+        for a in parsed.get("assessments", [])
+    ]
+
+    deadlines = [
+        CourseOpsDeadline(
+            title=d.get("title", ""),
+            due_date=d.get("due_date", ""),
+            deadline_type=d.get("deadline_type", "other"),
+            description=d.get("description", ""),
+        )
+        for d in parsed.get("deadlines", [])
+    ]
+
+    return CourseOpsResult(
+        assessments=assessments,
+        deadlines=deadlines,
+        course_info=parsed.get("course_info", {}),
+        confidence=parsed.get("confidence", 0.0),
+    )

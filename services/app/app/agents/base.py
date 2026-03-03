@@ -61,6 +61,37 @@ class ExtractionData:
     metadata: dict
 
 
+@dataclass
+class CourseOpsAssessment:
+    """An assessment extracted from a course document."""
+
+    title: str
+    assessment_type: str  # "exam", "assignment", "quiz", "project", "lab", "presentation", "other"
+    weight_pct: float | None = None
+    description: str = ""
+    weeks_relevant: list[int] = field(default_factory=list)
+
+
+@dataclass
+class CourseOpsDeadline:
+    """A deadline extracted from a course document."""
+
+    title: str
+    due_date: str  # ISO format date string "YYYY-MM-DD"
+    deadline_type: str
+    description: str = ""
+
+
+@dataclass
+class CourseOpsResult:
+    """Result of extracting course logistics from a document."""
+
+    assessments: list[CourseOpsAssessment] = field(default_factory=list)
+    deadlines: list[CourseOpsDeadline] = field(default_factory=list)
+    course_info: dict = field(default_factory=dict)
+    confidence: float = 0.0
+
+
 class AgentAdapter(ABC):
     """Abstract interface for AI operations.
 
@@ -142,5 +173,21 @@ class AgentAdapter(ABC):
 
         Returns:
             AnswerResult with answer text and citations.
+        """
+        ...
+
+    @abstractmethod
+    async def extract_course_ops(
+        self, document_text: str, course_code: str, document_type: str
+    ) -> CourseOpsResult:
+        """Extract assessments, deadlines, and course info from a course document.
+
+        Args:
+            document_text: Extracted text from the course document.
+            course_code: Course code for context.
+            document_type: Type of document (outline, rubric, handbook).
+
+        Returns:
+            CourseOpsResult with assessments, deadlines, and metadata.
         """
         ...

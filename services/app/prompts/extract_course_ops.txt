@@ -1,0 +1,49 @@
+{# CourseOps extraction prompt — extracts assessments, deadlines, and course info from course documents #}
+{# Variables: document_text, course_code, document_type #}
+
+Extract all assessments, deadlines, and course information from this {{ document_type }} for {{ course_code }}.
+
+Document content:
+---
+{{ document_text[:8000] }}
+---
+
+Respond with ONLY a JSON object containing:
+
+{
+  "assessments": [
+    {
+      "title": "Final Exam",
+      "assessment_type": "exam",
+      "weight_pct": 40.0,
+      "description": "Comprehensive exam covering weeks 1-13",
+      "weeks_relevant": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+    }
+  ],
+  "deadlines": [
+    {
+      "title": "Assignment 1 Due",
+      "due_date": "2026-04-15",
+      "deadline_type": "assignment",
+      "description": "Submit via Moodle by 11:59 PM"
+    }
+  ],
+  "course_info": {
+    "course_name": "Software Engineering Practices",
+    "term": "Spring 2026",
+    "instructor": "Dr. Smith"
+  },
+  "confidence": 0.85
+}
+
+Rules:
+- Extract ALL assessments mentioned (exams, assignments, quizzes, projects, labs, presentations)
+- Extract ALL deadlines with specific dates
+- assessment_type and deadline_type must be one of: "exam", "assignment", "quiz", "project", "lab", "presentation", "other"
+- due_date must be in ISO format: YYYY-MM-DD
+- If only a week number or month is mentioned for a date, estimate a reasonable specific date
+- weight_pct is a float percentage (e.g., 40.0 for 40%). Use null if weight is not specified
+- weeks_relevant is a list of week numbers that the assessment covers. Empty list if not specified
+- confidence: 0.0 to 1.0 — higher if dates and weights are explicitly stated, lower if inferred
+- Include course_info with course_name, term, and instructor if available
+- Do NOT invent assessments or deadlines that aren't mentioned in the document

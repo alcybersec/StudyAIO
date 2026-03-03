@@ -1,10 +1,14 @@
 import { api } from './client'
 import type {
+  Assessment,
   BatchUploadResponse,
   CourseDetail,
+  CourseDocument,
   CourseListItem,
   DailyPlan,
   DashboardData,
+  Deadline,
+  DeadlineUpdate,
   Exam,
   ExamProgress,
   Flashcard,
@@ -146,4 +150,41 @@ export const assetsApi = {
     if (week !== undefined) params.set('week', String(week))
     return api.get<QuizQuestion[]>(`/assets/quiz?${params}`)
   },
+}
+
+export const courseopsApi = {
+  uploadDocument: async (file: File, courseCode: string, documentType: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const params = new URLSearchParams({ course_code: courseCode, document_type: documentType })
+    const response = await fetch(`/api/courseops/documents?${params}`, {
+      method: 'POST',
+      body: formData,
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ detail: response.statusText }))
+      throw new Error(body.detail || response.statusText)
+    }
+    return response.json() as Promise<CourseDocument>
+  },
+  listDocuments: (courseCode: string) =>
+    api.get<CourseDocument[]>(`/courseops/documents?course_code=${courseCode}`),
+  getDocument: (documentId: string) =>
+    api.get<CourseDocument>(`/courseops/documents/${documentId}`),
+  listAssessments: (courseCode: string) =>
+    api.get<Assessment[]>(`/courseops/assessments?course_code=${courseCode}`),
+  listDeadlines: (courseCode: string, upcoming = false) =>
+    api.get<Deadline[]>(`/courseops/deadlines?course_code=${courseCode}&upcoming=${upcoming}`),
+  updateDeadline: (deadlineId: string, data: DeadlineUpdate) =>
+    api.put<Deadline>(`/courseops/deadlines/${deadlineId}`, data),
+  deleteDeadline: (deadlineId: string) =>
+    api.delete(`/courseops/deadlines/${deadlineId}`),
+  createExamFromDeadline: (deadlineId: string) =>
+    api.post<{ exam_id: string; title: string; exam_date: string; status: string }>(
+      `/courseops/deadlines/${deadlineId}/create-exam`
+    ),
+  calendarUrl: (courseCode: string) =>
+    api.downloadUrl(`/courseops/export/calendar/${courseCode}`),
+  taskPlanUrl: (courseCode: string) =>
+    api.downloadUrl(`/courseops/export/task-plan/${courseCode}`),
 }

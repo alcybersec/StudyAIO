@@ -12,9 +12,10 @@ from app.api.schemas import (
     DashboardResponse,
     DashboardStreakInfo,
     DashboardStudyStats,
+    UpcomingDeadlineItem,
 )
 from app.core.database import get_session
-from app.services import course_service, exam_service, pipeline_service, review_service, srs_service, streak_service
+from app.services import course_service, courseops_service, exam_service, pipeline_service, review_service, srs_service, streak_service
 
 logger = structlog.get_logger()
 
@@ -84,6 +85,14 @@ async def get_dashboard(
     except Exception:
         logger.warning("streak_failed", exc_info=True)
 
+    # Upcoming deadlines (best-effort)
+    upcoming_deadlines = []
+    try:
+        raw_deadlines = await courseops_service.get_upcoming_deadlines_all_courses(session, limit=5)
+        upcoming_deadlines = [UpcomingDeadlineItem(**d) for d in raw_deadlines]
+    except Exception:
+        logger.warning("upcoming_deadlines_failed", exc_info=True)
+
     return DashboardResponse(
         pending_review_count=pending_count,
         recent_activity=activity,
@@ -91,4 +100,5 @@ async def get_dashboard(
         study_stats=study_stats,
         active_exams=active_exams,
         streak=streak,
+        upcoming_deadlines=upcoming_deadlines,
     )

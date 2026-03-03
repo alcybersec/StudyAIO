@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { assetsApi, coursesApi, dashboardApi, examsApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
-import type { QARequest, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
+import { assetsApi, courseopsApi, coursesApi, dashboardApi, examsApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
+import type { DeadlineUpdate, QARequest, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -249,6 +249,75 @@ export function useBatchUpload() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['courses'] })
+    },
+  })
+}
+
+// ── CourseOps ──────────────────────────────────────────────────
+
+export function useCourseDocuments(courseCode: string) {
+  return useQuery({
+    queryKey: ['courseops', 'documents', courseCode],
+    queryFn: () => courseopsApi.listDocuments(courseCode),
+    enabled: !!courseCode,
+  })
+}
+
+export function useAssessments(courseCode: string) {
+  return useQuery({
+    queryKey: ['courseops', 'assessments', courseCode],
+    queryFn: () => courseopsApi.listAssessments(courseCode),
+    enabled: !!courseCode,
+  })
+}
+
+export function useDeadlines(courseCode: string, upcoming = false) {
+  return useQuery({
+    queryKey: ['courseops', 'deadlines', courseCode, upcoming],
+    queryFn: () => courseopsApi.listDeadlines(courseCode, upcoming),
+    enabled: !!courseCode,
+  })
+}
+
+export function useUploadCourseDocument() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ file, courseCode, documentType }: { file: File; courseCode: string; documentType: string }) =>
+      courseopsApi.uploadDocument(file, courseCode, documentType),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'documents', variables.courseCode] })
+    },
+  })
+}
+
+export function useUpdateDeadline() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ deadlineId, data }: { deadlineId: string; data: DeadlineUpdate }) =>
+      courseopsApi.updateDeadline(deadlineId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops'] })
+    },
+  })
+}
+
+export function useDeleteDeadline() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (deadlineId: string) => courseopsApi.deleteDeadline(deadlineId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops'] })
+    },
+  })
+}
+
+export function useCreateExamFromDeadline() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (deadlineId: string) => courseopsApi.createExamFromDeadline(deadlineId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops'] })
+      queryClient.invalidateQueries({ queryKey: ['exams'] })
     },
   })
 }

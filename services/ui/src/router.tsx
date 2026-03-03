@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { CoursePage } from './pages/CoursePage'
+import { CourseOpsPage } from './pages/CourseOpsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ExamDetailPage } from './pages/ExamDetailPage'
 import { ExamListPage } from './pages/ExamListPage'
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { path: '/', element: <DashboardPage /> },
       { path: '/courses/:courseCode', element: <CoursePage /> },
       { path: '/courses/:courseCode/weeks/:weekNumber', element: <WeekViewPage /> },
+      { path: '/courses/:courseCode/ops', element: <CourseOpsPage /> },
       { path: '/upload', element: <UploadPage /> },
       { path: '/review', element: <ReviewInboxPage /> },
       { path: '/qa', element: <QAPage /> },

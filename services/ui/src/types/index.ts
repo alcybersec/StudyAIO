@@ -97,6 +97,7 @@ export interface DashboardData {
   study_stats: DashboardStudyStats | null
   active_exams: DashboardExamSummary[]
   streak: StreakInfo | null
+  upcoming_deadlines: UpcomingDeadline[]
 }
 
 export interface UploadResult {
@@ -330,6 +331,66 @@ export interface StudyStats {
   mastered: number
   learning: number
   new: number
+}
+
+// ── CourseOps ──────────────────────────────────────────────────
+
+export interface CourseDocument {
+  id: string
+  course_id: string
+  document_type: string
+  title: string | null
+  original_filename: string
+  file_type: string
+  sha256: string
+  file_size_bytes: number
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Assessment {
+  id: string
+  course_id: string
+  source_document_id: string | null
+  title: string
+  assessment_type: string
+  weight_pct: number | null
+  description: string | null
+  weeks_relevant: number[] | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Deadline {
+  id: string
+  course_id: string
+  assessment_id: string | null
+  source_document_id: string | null
+  title: string
+  due_date: string
+  deadline_type: string
+  description: string | null
+  is_confirmed: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface DeadlineUpdate {
+  title?: string
+  due_date?: string
+  deadline_type?: string
+  description?: string
+  is_confirmed?: boolean
+}
+
+export interface UpcomingDeadline {
+  id: string
+  title: string
+  due_date: string
+  deadline_type: string
+  course_code: string
+  is_confirmed: boolean
 }
 
 export interface ReviewRequest {

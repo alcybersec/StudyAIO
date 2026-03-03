@@ -28,3 +28,6 @@ class Course(Base):
     quiz_questions: Mapped[list["QuizQuestion"]] = relationship(back_populates="course")
     exams: Mapped[list["Exam"]] = relationship(back_populates="course")
     study_sessions: Mapped[list["StudySession"]] = relationship(back_populates="course")
+    course_documents: Mapped[list["CourseDocument"]] = relationship(back_populates="course")
+    assessments: Mapped[list["Assessment"]] = relationship(back_populates="course")
+    deadlines: Mapped[list["Deadline"]] = relationship(back_populates="course")

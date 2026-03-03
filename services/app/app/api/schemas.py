@@ -201,6 +201,17 @@ class DashboardStreakInfo(BaseModel):
     last_study_date: str | None
 
 
+class UpcomingDeadlineItem(BaseModel):
+    """Upcoming deadline for dashboard display."""
+
+    id: str
+    title: str
+    due_date: str
+    deadline_type: str
+    course_code: str
+    is_confirmed: bool
+
+
 class DashboardResponse(BaseModel):
     """Dashboard aggregate data."""
 
@@ -210,6 +221,7 @@ class DashboardResponse(BaseModel):
     study_stats: DashboardStudyStats | None = None
     active_exams: list[DashboardExamSummary] = []
     streak: DashboardStreakInfo | None = None
+    upcoming_deadlines: list[UpcomingDeadlineItem] = []
 
 
 # ── Week Detail ───────────────────────────────────────────────────

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.api import (
     assets_router,
+    courseops_router,
     courses_router,
     dashboard_router,
     exams_router,
@@ -60,6 +61,7 @@ app = FastAPI(
         {"name": "study", "description": "Spaced repetition study sessions"},
         {"name": "settings", "description": "Application settings management"},
         {"name": "exports", "description": "Data export (Obsidian vault, etc.)"},
+        {"name": "courseops", "description": "Course documents, assessments, deadlines, and calendar exports"},
     ],
 )
 
@@ -84,6 +86,7 @@ app.include_router(exams_router, prefix="/api", tags=["exams"])
 app.include_router(study_router, prefix="/api", tags=["study"])
 app.include_router(settings_router, prefix="/api", tags=["settings"])
 app.include_router(exports_router, prefix="/api", tags=["exports"])
+app.include_router(courseops_router, prefix="/api", tags=["courseops"])
 
 
 # Exception handlers
