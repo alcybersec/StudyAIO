@@ -13,28 +13,34 @@ from app.models.exam import Exam
 from app.models.extraction import Extraction
 from app.models.flashcard import Flashcard
 from app.models.flashcard_review import FlashcardReview
+from app.models.magic_link import MagicLink
+from app.models.oauth_account import OAuthAccount
 from app.models.pipeline_run import PipelineRun
 from app.models.quiz import QuizQuestion
 from app.models.quiz_attempt import QuizAttempt
 from app.models.review_item import ReviewItem
 from app.models.study_session import StudySession
 from app.models.summary import Summary
+from app.models.user import User
 
 __all__ = [
     "Assessment",
+    "Chunk",
     "Course",
     "CourseDocument",
     "Deadline",
     "Exam",
-    "LectureArtifact",
     "Extraction",
-    "Summary",
-    "Chunk",
     "Flashcard",
     "FlashcardReview",
-    "QuizQuestion",
+    "LectureArtifact",
+    "MagicLink",
+    "OAuthAccount",
+    "PipelineRun",
     "QuizAttempt",
+    "QuizQuestion",
     "ReviewItem",
     "StudySession",
-    "PipelineRun",
+    "Summary",
+    "User",
 ]

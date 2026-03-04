@@ -66,6 +66,26 @@ class CourseOpsError(StudyAIOError):
     pass
 
 
+class AuthenticationError(StudyAIOError):
+    """Raised when authentication fails (invalid credentials, expired token, etc.)."""
+
+    pass
+
+
+class AuthorizationError(StudyAIOError):
+    """Raised when a user lacks permission for an action."""
+
+    pass
+
+
+class UserExistsError(StudyAIOError):
+    """Raised when registration fails because email or username already exists."""
+
+    def __init__(self, field: str):
+        self.field = field
+        super().__init__(f"A user with this {field} already exists")
+
+
 class ReviewRequiredError(StudyAIOError):
     """Raised when a pipeline stage needs human review to proceed."""
 

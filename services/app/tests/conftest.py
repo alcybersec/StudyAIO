@@ -122,6 +122,65 @@ async def async_client(mock_session):
     app.dependency_overrides.clear()
 
 
+# ── Auth helpers ──────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def make_user():
+    """Factory fixture to create mock User objects for testing auth."""
+    from app.core.auth import hash_password
+    from app.models.user import User
+
+    def _make(
+        id: str = "user-001",
+        email: str = "test@example.com",
+        username: str = "testuser",
+        password: str = "TestPass1!",
+        role: str = "user",
+        tier: str = "free",
+        is_active: bool = True,
+        mfa_enabled: bool = False,
+        mfa_secret: str | None = None,
+        **kwargs,
+    ) -> User:
+        user = MagicMock(spec=User)
+        user.id = id
+        user.email = email
+        user.username = username
+        user.hashed_password = hash_password(password)
+        user.role = role
+        user.tier = tier
+        user.is_active = is_active
+        user.email_verified = False
+        user.mfa_enabled = mfa_enabled
+        user.mfa_secret = mfa_secret
+        user.avatar_url = None
+        user.backup_codes = None
+        user.last_login_at = None
+        user.created_at = MagicMock()
+        user.updated_at = MagicMock()
+        for k, v in kwargs.items():
+            setattr(user, k, v)
+        return user
+
+    return _make
+
+
+@pytest.fixture
+def auth_cookies(make_user):
+    """Helper to generate auth cookies for a user."""
+    from app.core.auth import create_access_token, create_refresh_token
+
+    def _cookies(user=None, **user_kwargs):
+        if user is None:
+            user = make_user(**user_kwargs)
+        access = create_access_token(user.id, user.role, user.tier)
+        refresh = create_refresh_token(user.id)
+        return {"access_token": access, "refresh_token": refresh}, user
+
+    return _cookies
+
+
 # ── Programmatic fixture file creators ──────────────────────────────
 
 

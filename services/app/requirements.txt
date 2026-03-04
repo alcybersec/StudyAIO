@@ -13,7 +13,7 @@ alembic==1.14.1
 pgvector==0.3.6
 
 # Settings & validation
-pydantic==2.10.4
+pydantic[email]==2.10.4
 pydantic-settings==2.7.1
 
 # Logging
@@ -32,6 +32,13 @@ sentence-transformers>=3.0,<4.0
 
 # Rate limiting
 slowapi>=0.1,<1.0
+
+# Authentication
+PyJWT[crypto]>=2.11,<3.0
+argon2-cffi>=25.0,<26.0
+authlib>=1.6,<2.0
+pyotp>=2.9,<3.0
+qrcode[pil]>=8.0,<9.0
 
 # Utilities
 uuid7==0.1.0
