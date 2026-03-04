@@ -15,8 +15,10 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from app.api import (
     admin_router,
+    analytics_router,
     assets_router,
     auth_router,
+    chat_router,
     courseops_router,
     courses_router,
     dashboard_router,
@@ -104,6 +106,8 @@ app = FastAPI(
         {"name": "courseops", "description": "Course documents, assessments, deadlines, and calendar exports"},
         {"name": "auth", "description": "Authentication, registration, MFA, and session management"},
         {"name": "admin", "description": "User management and system metrics (admin only)"},
+        {"name": "analytics", "description": "Learning analytics, heatmaps, retention, and exam readiness"},
+        {"name": "chat", "description": "Persistent AI study companion chat sessions"},
     ],
 )
 
@@ -143,6 +147,8 @@ app.include_router(exports_router, prefix="/api", tags=["exports"])
 app.include_router(courseops_router, prefix="/api", tags=["courseops"])
 app.include_router(auth_router, prefix="/api", tags=["auth"])
 app.include_router(admin_router, prefix="/api", tags=["admin"])
+app.include_router(analytics_router, prefix="/api", tags=["analytics"])
+app.include_router(chat_router, prefix="/api", tags=["chat"])
 
 
 # Exception handlers

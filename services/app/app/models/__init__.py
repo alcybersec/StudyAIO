@@ -3,8 +3,11 @@
 Import all models here so Alembic's autogenerate can discover them.
 """
 
+from app.models.analytics_snapshot import AnalyticsSnapshot
 from app.models.artifact import LectureArtifact
 from app.models.assessment import Assessment
+from app.models.chat_message import ChatMessage
+from app.models.chat_session import ChatSession
 from app.models.chunk import Chunk
 from app.models.course import Course
 from app.models.course_document import CourseDocument
@@ -25,7 +28,10 @@ from app.models.user import User
 from app.models.user_settings import UserSettings
 
 __all__ = [
+    "AnalyticsSnapshot",
     "Assessment",
+    "ChatMessage",
+    "ChatSession",
     "Chunk",
     "Course",
     "CourseDocument",

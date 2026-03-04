@@ -4,6 +4,8 @@ import { AppLayout } from './components/layout/AppLayout'
 import { AuthLayout } from './components/layout/AuthLayout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { PublicOnlyRoute } from './components/auth/PublicOnlyRoute'
+import { AnalyticsPage } from './pages/AnalyticsPage'
+import { ChatPage } from './pages/ChatPage'
 import { CoursePage } from './pages/CoursePage'
 import { CourseOpsPage } from './pages/CourseOpsPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -62,7 +64,9 @@ export const router = createBrowserRouter([
               { path: '/upload', element: <UploadPage /> },
               { path: '/review', element: <ReviewInboxPage /> },
               { path: '/qa', element: <QAPage /> },
+              { path: '/analytics', element: <AnalyticsPage /> },
               { path: '/study', element: <StudyHubPage /> },
+              { path: '/chat', element: <ChatPage /> },
               // Redirects from old routes
               { path: '/timed-study', element: <Navigate to="/study?tab=timed" replace /> },
               { path: '/exams', element: <Navigate to="/study?tab=exams" replace /> },
