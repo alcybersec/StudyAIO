@@ -20,16 +20,16 @@ export function SessionSummary({ totalReviewed, ratings, onRestart, examId }: Se
 
   return (
     <div className="max-w-md mx-auto text-center">
-      <div className="bg-white rounded-xl border border-gray-200 p-8 space-y-6">
+      <div className="bg-surface rounded-xl border border-border p-8 space-y-6">
         <div className="text-4xl mb-2">&#10003;</div>
-        <h2 className="text-xl font-bold text-gray-900">Session Complete</h2>
-        <p className="text-gray-500">
-          You reviewed <span className="font-semibold text-gray-900">{totalReviewed}</span>{' '}
+        <h2 className="text-xl font-bold text-text">Session Complete</h2>
+        <p className="text-text-muted">
+          You reviewed <span className="font-semibold text-text">{totalReviewed}</span>{' '}
           {totalReviewed === 1 ? 'card' : 'cards'}
         </p>
 
         {streak && streak.current_streak > 0 && (
-          <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+          <div className="flex items-center justify-center gap-2 text-sm text-text-muted">
             <span className="text-lg">{'\u{1F525}'}</span>
             <span>{streak.current_streak} day streak</span>
           </div>
@@ -42,7 +42,7 @@ export function SessionSummary({ totalReviewed, ratings, onRestart, examId }: Se
             return (
               <div key={q} className="flex items-center justify-between px-4">
                 <span className={`text-sm font-medium ${color}`}>{label}</span>
-                <span className="text-sm text-gray-600">{count}</span>
+                <span className="text-sm text-text-muted">{count}</span>
               </div>
             )
           })}
@@ -57,15 +57,15 @@ export function SessionSummary({ totalReviewed, ratings, onRestart, examId }: Se
           </button>
           {examId ? (
             <Link
-              to={`/exams/${examId}`}
-              className="w-full py-3 px-4 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors text-center min-h-[48px] flex items-center justify-center"
+              to={`/study?tab=exams&exam=${examId}`}
+              className="w-full py-3 px-4 rounded-lg text-sm font-medium text-text bg-surface-alt hover:bg-border transition-colors text-center min-h-[48px] flex items-center justify-center"
             >
               Back to Exam
             </Link>
           ) : (
             <Link
               to="/"
-              className="w-full py-3 px-4 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors text-center min-h-[48px] flex items-center justify-center"
+              className="w-full py-3 px-4 rounded-lg text-sm font-medium text-text bg-surface-alt hover:bg-border transition-colors text-center min-h-[48px] flex items-center justify-center"
             >
               Back to Dashboard
             </Link>

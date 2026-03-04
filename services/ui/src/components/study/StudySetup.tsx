@@ -23,9 +23,9 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
 
   return (
     <div className="max-w-md mx-auto">
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+      <div className="bg-surface rounded-xl border border-border p-6 space-y-5">
         <div>
-          <label htmlFor="study-course" className="block text-sm font-medium text-gray-700 mb-1.5">
+          <label htmlFor="study-course" className="block text-sm font-medium text-text mb-1.5">
             Course
           </label>
           {loadingCourses ? (
@@ -38,7 +38,7 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
                 onCourseChange(e.target.value)
                 onWeekChange('')
               }}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
             >
               <option value="">All courses</option>
               {courses?.map((c) => (
@@ -51,7 +51,7 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
         </div>
 
         <div>
-          <label htmlFor="study-week" className="block text-sm font-medium text-gray-700 mb-1.5">
+          <label htmlFor="study-week" className="block text-sm font-medium text-text mb-1.5">
             Week (optional)
           </label>
           <input
@@ -62,7 +62,7 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
             placeholder="All weeks"
             value={week}
             onChange={(e) => onWeekChange(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
           />
         </div>
 
@@ -71,8 +71,8 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
             <LoadingSpinner label="Checking due cards..." />
           ) : (
             <>
-              <p className="text-3xl font-bold text-gray-900 mb-1">{dueCount}</p>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-3xl font-bold text-text mb-1">{dueCount}</p>
+              <p className="text-sm text-text-muted mb-4">
                 {dueCount === 1 ? 'card' : 'cards'} due for review
               </p>
             </>
@@ -88,8 +88,8 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
         </button>
 
         {activeExams && activeExams.length > 0 && (
-          <div className="pt-2 border-t border-gray-100">
-            <p className="text-xs font-medium text-gray-500 mb-2">Study for an exam:</p>
+          <div className="pt-2 border-t border-border">
+            <p className="text-xs font-medium text-text-muted mb-2">Study for an exam:</p>
             <div className="space-y-1.5">
               {activeExams.map((exam) => (
                 <Link

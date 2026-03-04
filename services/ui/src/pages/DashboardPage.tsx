@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useDashboard } from '../hooks/useApi'
 import { LoadingSpinner, ErrorBanner, PageHeader } from '../components/ui'
 import { ReviewAlert } from '../components/dashboard/ReviewAlert'
@@ -11,6 +12,7 @@ import { EmptyState } from '../components/ui'
 
 export function DashboardPage() {
   const { data, isLoading, error, refetch } = useDashboard()
+  const now = useMemo(() => Date.now(), []) // eslint-disable-line react-hooks/purity
 
   if (isLoading) return <LoadingSpinner label="Loading dashboard..." />
   if (error) return <ErrorBanner message="Failed to load dashboard. Check that the API server is running." onRetry={refetch} />
@@ -40,25 +42,25 @@ export function DashboardPage() {
       )}
 
       {data.upcoming_deadlines && data.upcoming_deadlines.length > 0 && (
-        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">Upcoming Deadlines</h3>
+        <div className="mb-6 rounded-lg border border-border bg-surface p-4">
+          <h3 className="mb-3 text-sm font-semibold text-text">Upcoming Deadlines</h3>
           <div className="space-y-2">
             {data.upcoming_deadlines.map((d) => {
               const days = Math.ceil(
-                (new Date(d.due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+                (new Date(d.due_date).getTime() - now) / (1000 * 60 * 60 * 24)
               )
               return (
                 <div key={d.id} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                    <span className="inline-flex rounded bg-surface-alt px-1.5 py-0.5 text-xs font-medium text-text-muted">
                       {d.course_code}
                     </span>
-                    <span className="text-gray-900">{d.title}</span>
+                    <span className="text-text">{d.title}</span>
                     {!d.is_confirmed && (
                       <span className="text-xs text-yellow-600">(unconfirmed)</span>
                     )}
                   </div>
-                  <span className={`text-xs ${days <= 3 ? 'font-medium text-red-600' : days <= 7 ? 'text-yellow-600' : 'text-gray-500'}`}>
+                  <span className={`text-xs ${days <= 3 ? 'font-medium text-red-600' : days <= 7 ? 'text-yellow-600' : 'text-text-muted'}`}>
                     {d.due_date} ({days <= 0 ? 'Today' : `${days}d`})
                   </span>
                 </div>
@@ -79,7 +81,7 @@ export function DashboardPage() {
 
       {data.courses.length > 0 ? (
         <section>
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Your Courses</h2>
+          <h2 className="text-sm font-semibold text-text mb-4">Your Courses</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {data.courses.map((course) => (
               <CourseCard key={course.id} course={course} />

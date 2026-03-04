@@ -13,9 +13,9 @@ export function LoadingSpinner({ size = 'md', label }: LoadingSpinnerProps) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-8">
       <div
-        className={`animate-spin rounded-full border-gray-200 border-t-primary ${sizeClasses[size]}`}
+        className={`animate-spin rounded-full border-border border-t-primary ${sizeClasses[size]}`}
       />
-      {label && <p className="text-sm text-gray-500">{label}</p>}
+      {label && <p className="text-sm text-text-muted">{label}</p>}
     </div>
   )
 }

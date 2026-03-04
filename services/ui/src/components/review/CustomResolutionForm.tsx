@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { customResolutionSchema, type CustomResolutionFormData } from '../../lib/schemas'
 
 interface CustomResolutionFormProps {
   onSubmit: (resolution: Record<string, unknown>) => void
@@ -6,64 +8,65 @@ interface CustomResolutionFormProps {
 }
 
 export function CustomResolutionForm({ onSubmit, isLoading }: CustomResolutionFormProps) {
-  const [courseCode, setCourseCode] = useState('')
-  const [weekNumber, setWeekNumber] = useState('')
-  const [title, setTitle] = useState('')
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+  } = useForm<CustomResolutionFormData>({
+    resolver: zodResolver(customResolutionSchema),
+    defaultValues: { courseCode: '', weekNumber: '', title: '' },
+    mode: 'onChange',
+  })
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  function onFormSubmit(data: CustomResolutionFormData) {
     const resolution: Record<string, unknown> = {}
-    if (courseCode.trim()) resolution.course_code = courseCode.trim()
-    if (weekNumber.trim()) resolution.week = Number(weekNumber)
-    if (title.trim()) resolution.title = title.trim()
-    if (Object.keys(resolution).length > 0) {
-      onSubmit(resolution)
-    }
+    if (data.courseCode?.trim()) resolution.course_code = data.courseCode.trim()
+    if (data.weekNumber?.trim()) resolution.week = Number(data.weekNumber)
+    if (data.title?.trim()) resolution.title = data.title.trim()
+    onSubmit(resolution)
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Manual Override</p>
+    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-3">
+      <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Manual Override</p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
-          <label htmlFor="course-code" className="block text-xs text-gray-500 mb-1">Course Code</label>
+          <label htmlFor="course-code" className="block text-xs text-text-muted mb-1">Course Code</label>
           <input
             id="course-code"
             type="text"
-            value={courseCode}
-            onChange={(e) => setCourseCode(e.target.value)}
+            {...register('courseCode')}
             placeholder="e.g. CSIT302"
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            className="w-full px-3 py-2.5 text-sm border border-border bg-surface text-text rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           />
         </div>
         <div>
-          <label htmlFor="week-num" className="block text-xs text-gray-500 mb-1">Week Number</label>
+          <label htmlFor="week-num" className="block text-xs text-text-muted mb-1">Week Number</label>
           <input
             id="week-num"
             type="number"
             min={1}
             max={52}
-            value={weekNumber}
-            onChange={(e) => setWeekNumber(e.target.value)}
+            {...register('weekNumber')}
             placeholder="e.g. 3"
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            className="w-full px-3 py-2.5 text-sm border border-border bg-surface text-text rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           />
         </div>
         <div>
-          <label htmlFor="title" className="block text-xs text-gray-500 mb-1">Title</label>
+          <label htmlFor="title" className="block text-xs text-text-muted mb-1">Title</label>
           <input
             id="title"
             type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            {...register('title')}
             placeholder="e.g. Data Structures"
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            className="w-full px-3 py-2.5 text-sm border border-border bg-surface text-text rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           />
         </div>
       </div>
+      {errors.root && <p className="text-xs text-danger">{errors.root.message}</p>}
       <button
         type="submit"
-        disabled={isLoading || (!courseCode.trim() && !weekNumber.trim() && !title.trim())}
+        disabled={isLoading || !isValid}
         className="px-4 py-2.5 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {isLoading ? 'Resolving...' : 'Resolve with these values'}

@@ -11,10 +11,10 @@ const TABS = ['Documents', 'Assessments', 'Deadlines', 'Exports'] as const
 type Tab = (typeof TABS)[number]
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-700',
-  processing: 'bg-blue-100 text-blue-700',
-  processed: 'bg-green-100 text-green-700',
-  failed: 'bg-red-100 text-red-700',
+  pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400',
+  processing: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
+  processed: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
+  failed: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
 }
 
 function formatBytes(bytes: number): string {
@@ -25,7 +25,7 @@ function formatBytes(bytes: number): string {
 
 function DocumentList({ documents, isLoading }: { documents: CourseDocument[]; isLoading: boolean }) {
   if (isLoading) {
-    return <div className="py-4 text-center text-sm text-gray-500">Loading documents...</div>
+    return <div className="py-4 text-center text-sm text-text-muted">Loading documents...</div>
   }
 
   if (documents.length === 0) {
@@ -33,12 +33,12 @@ function DocumentList({ documents, isLoading }: { documents: CourseDocument[]; i
   }
 
   return (
-    <div className="mt-4 divide-y divide-gray-200 rounded-lg border border-gray-200">
+    <div className="mt-4 divide-y divide-border rounded-lg border border-border">
       {documents.map((doc) => (
         <div key={doc.id} className="flex items-center justify-between px-4 py-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-gray-900">{doc.original_filename}</p>
-            <p className="text-xs text-gray-500">
+            <p className="truncate text-sm font-medium text-text">{doc.original_filename}</p>
+            <p className="text-xs text-text-muted">
               {doc.document_type} &middot; {formatBytes(doc.file_size_bytes)} &middot;{' '}
               {new Date(doc.created_at).toLocaleDateString()}
             </p>
@@ -71,7 +71,7 @@ export function CourseOpsPage() {
   return (
     <div className="mx-auto max-w-5xl p-6">
       {/* Breadcrumb */}
-      <nav className="mb-4 text-sm text-gray-500">
+      <nav className="mb-4 text-sm text-text-muted">
         <Link to="/" className="hover:text-blue-600">
           Dashboard
         </Link>
@@ -80,13 +80,13 @@ export function CourseOpsPage() {
           {courseCode}
         </Link>
         {' / '}
-        <span className="text-gray-900">Course Docs</span>
+        <span className="text-text">Course Docs</span>
       </nav>
 
-      <h1 className="mb-6 text-2xl font-bold text-gray-900">{courseCode} — Course Documents</h1>
+      <h1 className="mb-6 text-2xl font-bold text-text">{courseCode} — Course Documents</h1>
 
       {/* Tab bar */}
-      <div className="mb-6 border-b border-gray-200">
+      <div className="mb-6 border-b border-border">
         <nav className="-mb-px flex gap-6">
           {TABS.map((tab) => (
             <button
@@ -95,7 +95,7 @@ export function CourseOpsPage() {
               className={`border-b-2 pb-3 text-sm font-medium transition-colors ${
                 activeTab === tab
                   ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  : 'border-transparent text-text-muted hover:border-border hover:text-text'
               }`}
             >
               {tab}
@@ -128,7 +128,7 @@ export function CourseOpsPage() {
 
       {activeTab === 'Exports' && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-text-muted">
             Export deadlines and assessments for {courseCode}.
           </p>
           <div className="flex flex-wrap gap-3">

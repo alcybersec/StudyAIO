@@ -29,12 +29,12 @@ export function PipelineProgress({ events, artifactId }: PipelineProgressProps) 
             <div
               className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${
                 isCompleted
-                  ? 'bg-emerald-50 text-emerald-700'
+                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
                   : isFailed
-                    ? 'bg-red-50 text-red-700'
+                    ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400'
                     : isRunning
-                      ? 'bg-amber-50 text-amber-700'
-                      : 'bg-gray-50 text-gray-400'
+                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400'
+                      : 'bg-surface-alt text-text-muted'
               }`}
               title={status ?? 'pending'}
             >
@@ -44,7 +44,7 @@ export function PipelineProgress({ events, artifactId }: PipelineProgressProps) 
               <span className="hidden sm:inline">{stage}</span>
             </div>
             {i < STAGES.length - 1 && (
-              <span className={`text-xs ${isCompleted ? 'text-emerald-300' : 'text-gray-200'}`}>{'\u2192'}</span>
+              <span className={`text-xs ${isCompleted ? 'text-emerald-300 dark:text-emerald-600' : 'text-border'}`}>{'\u2192'}</span>
             )}
           </div>
         )

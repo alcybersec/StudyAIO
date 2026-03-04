@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 17 — Multi-AI Provider System (In Progress)
-> **Overall Status:** v1 Complete through M15 + M16.1-16.2 + M17.1-17.3 in progress
+> **Current Milestone:** 18 — Dark Mode & Enhanced Settings (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M20 ✅
 
 ---
 
@@ -171,6 +171,9 @@
 |---|------|--------|-------|
 | 16.1 | Frontend deps + CSS theme variables | ✅ Done | Installed motion, @radix-ui (dialog, dropdown-menu, tabs, tooltip, switch), sonner, react-hook-form, zod, @hookform/resolvers. CSS custom properties for 11 theme tokens (light + dark). @custom-variant dark for Tailwind v4. No-flash script in index.html. |
 | 16.2 | Shared foundation components | ✅ Done | Skeleton (pulsing placeholder, SkeletonText, SkeletonCard). Toast (Sonner wrapper, mounted in AppLayout). AnimatedCard (motion.div fade-in + slide-up). Sheet (Radix Dialog, bottom/right, AnimatePresence). Barrel exports. Dark mode classes on AppLayout. |
+| 16.3 | Sidebar + MobileNav redesign | ✅ Done | Sidebar: grouped sections (Main/Tools), SVG icons replacing unicode, ThemeToggle in footer, theme-aware classes. MobileNav: 5-tab bar (Home, Study, Upload, Q&A, More) with Sheet for overflow items (Review, Settings, Profile). Pending review badge on More button. |
+| 16.4 | Page consolidation — StudyHubPage | ✅ Done | Single /study route with 4 Radix Tabs (Flashcards, Timed, Exams, History). Extracted FlashcardsStudyTab, TimedStudyTab, ExamsTab, ExamDetailInline, HistoryTab. URL param sync (?tab=&exam=). Old routes redirect (/timed-study, /exams, /exams/:id). 4 old pages deleted. |
+| 16.5 | Form + modal migration | ✅ Done | ExamCreateForm, CustomResolutionForm → react-hook-form + zodResolver. Zod schemas in lib/schemas.ts. DeadlineEditModal, ViewOriginalModal → Radix Dialog. Inline validation errors. Focus trap + escape-to-close. |
 
 ## Milestone 17 — Multi-AI Provider System (v2)
 
@@ -179,6 +182,20 @@
 | 17.1 | OpenAI adapter + backend deps | ✅ Done | Added openai, tiktoken, ollama to requirements.txt. OpenAIAdapter (AsyncOpenAI, all 6 AgentAdapter methods). Config: openai_api_key (SecretStr), openai_model. Settings service updated with new keys + backends. 17 tests. |
 | 17.2 | Ollama adapter + factory update | ✅ Done | OllamaAdapter (ollama.AsyncClient, all 6 methods). Factory routes to 4 backends (claude_code, anthropic_api, openai, ollama). Config: ollama_base_url, ollama_model. 16 Ollama tests + 5 factory tests. |
 | 17.3 | Embedding providers + parsing resilience | ✅ Done | OpenAIEmbeddingProvider (text-embedding-3-small, 1536d). OllamaEmbeddingProvider (nomic-embed-text, 768d). get_embedding_provider() factory with embedding_backend setting. Resilient parsing: prose preamble stripping, trailing comma removal, single-quote conversion, fallback { to } extraction. 12 embedding tests + 14 enhanced parsing tests. |
+
+## Milestone 18 — Dark Mode & Enhanced Settings (v2)
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 18.1 | useTheme hook + ThemeToggle + core UI migration | ✅ Done | useTheme hook (light/dark/system, localStorage, prefers-color-scheme, useSyncExternalStore). ThemeToggle (3-way toggle with SVG icons). Migrated 8 shared UI components (Card, Badge, StatusBadge, EmptyState, LoadingSpinner, PageHeader, ErrorBanner, ConnectionBanner) from hardcoded colors to CSS custom properties. |
+| 18.2 | Full dark mode migration (~30 files) | ✅ Done | All dashboard widgets (CourseCard, ReviewAlert, ActivityFeed, QuickUpload, StudyProgress, StreakDisplay, ExamCountdown), upload components (DropZone, FileQueue, PipelineProgress), all pages (DashboardPage, UploadPage, CoursePage, ReviewInboxPage, QAPage, CourseOpsPage, WeekViewPage), auth pages (LoginPage, RegisterPage, ProfilePage, AuthLayout), study components (StudySetup, SessionSummary, StudyCard, RatingButtons, CountdownTimer). |
+| 18.3 | Settings page enhancement | ✅ Done | Appearance section (theme selector: light/dark/system buttons). AI Provider section (4 backends: Claude Code, Anthropic API, OpenAI, Ollama with conditional config fields). Embedding backend selector. Classification confidence threshold. Pipeline tuning (flashcard/quiz counts, chunk size/overlap). |
+
+## Milestone 20 — Study Hub Merge (v2)
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 20.1 | Completed as part of M16.4 | ✅ Done | StudyHubPage merges StudyPage + TimedStudyPage + ExamListPage + ExamDetailPage into single tabbed view. See M16.4. |
 
 ## Post-v1 — Fixes & Settings
 

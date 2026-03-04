@@ -51,14 +51,14 @@ export function CountdownTimer({ totalSeconds, onTimeUp, paused = false }: Count
       <div className={`text-2xl font-mono font-bold tabular-nums ${colorClass}`}>
         {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
       </div>
-      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+      <div className="flex-1 h-2 bg-border rounded-full overflow-hidden">
         <div
           className={`h-full ${barColor} transition-all duration-1000 ease-linear rounded-full`}
           style={{ width: `${pct}%` }}
         />
       </div>
       {paused && (
-        <span className="text-xs text-gray-500 font-medium">PAUSED</span>
+        <span className="text-xs text-text-muted font-medium">PAUSED</span>
       )}
     </div>
   )

@@ -62,7 +62,7 @@ export function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="text-center py-12 text-gray-500">
+      <div className="text-center py-12 text-text-muted">
         Not available in self-hosted mode
       </div>
     )
@@ -70,14 +70,14 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className="text-2xl font-bold text-gray-900">Profile</h1>
+      <h1 className="text-2xl font-bold text-text">Profile</h1>
 
       {/* Profile Info */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile Info</h2>
+      <div className="bg-surface rounded-lg border border-border p-6">
+        <h2 className="text-lg font-semibold text-text mb-4">Profile Info</h2>
         <form onSubmit={handleProfileSubmit} className="space-y-4">
           <div>
-            <label htmlFor="prof-email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="prof-email" className="block text-sm font-medium text-text mb-1">
               Email
             </label>
             <input
@@ -85,11 +85,11 @@ export function ProfilePage() {
               type="email"
               value={user.email}
               disabled
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-500"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface-alt text-text-muted"
             />
           </div>
           <div>
-            <label htmlFor="prof-username" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="prof-username" className="block text-sm font-medium text-text mb-1">
               Username
             </label>
             <input
@@ -97,11 +97,11 @@ export function ProfilePage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
           <div>
-            <label htmlFor="prof-avatar" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="prof-avatar" className="block text-sm font-medium text-text mb-1">
               Avatar URL
             </label>
             <input
@@ -109,7 +109,7 @@ export function ProfilePage() {
               type="url"
               value={avatarUrl}
               onChange={(e) => setAvatarUrl(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
               placeholder="https://..."
             />
           </div>
@@ -129,11 +129,11 @@ export function ProfilePage() {
       </div>
 
       {/* Change Password */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h2>
+      <div className="bg-surface rounded-lg border border-border p-6">
+        <h2 className="text-lg font-semibold text-text mb-4">Change Password</h2>
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
           <div>
-            <label htmlFor="pw-old" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="pw-old" className="block text-sm font-medium text-text mb-1">
               Current password
             </label>
             <input
@@ -142,11 +142,11 @@ export function ProfilePage() {
               required
               value={oldPassword}
               onChange={(e) => setOldPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
           <div>
-            <label htmlFor="pw-new" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="pw-new" className="block text-sm font-medium text-text mb-1">
               New password
             </label>
             <input
@@ -156,12 +156,12 @@ export function ProfilePage() {
               minLength={8}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
               placeholder="At least 8 characters"
             />
           </div>
           <div>
-            <label htmlFor="pw-confirm" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="pw-confirm" className="block text-sm font-medium text-text mb-1">
               Confirm new password
             </label>
             <input
@@ -170,7 +170,7 @@ export function ProfilePage() {
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
           {passwordError && <p className="text-sm text-danger">{passwordError}</p>}
@@ -186,8 +186,8 @@ export function ProfilePage() {
       </div>
 
       {/* MFA */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Two-Factor Authentication</h2>
+      <div className="bg-surface rounded-lg border border-border p-6">
+        <h2 className="text-lg font-semibold text-text mb-4">Two-Factor Authentication</h2>
         <MFASetup mfaEnabled={user.mfa_enabled} />
       </div>
     </div>

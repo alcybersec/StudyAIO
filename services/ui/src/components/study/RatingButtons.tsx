@@ -13,7 +13,7 @@ const ratings = [
 export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
   return (
     <div className="space-y-3">
-      <p className="text-center text-sm text-gray-500">How well did you know this?</p>
+      <p className="text-center text-sm text-text-muted">How well did you know this?</p>
       <div className="flex items-center justify-center gap-3 flex-wrap">
         {ratings.map((r) => (
           <button
@@ -27,7 +27,7 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
           </button>
         ))}
       </div>
-      <p className="text-center text-xs text-gray-400">
+      <p className="text-center text-xs text-text-muted">
         Keyboard: 1 = Again, 2 = Hard, 3 = Good, 4 = Easy
       </p>
     </div>

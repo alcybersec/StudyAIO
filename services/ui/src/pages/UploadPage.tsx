@@ -132,10 +132,10 @@ export function UploadPage() {
 
         {/* Batch result summary */}
         {batchResult && (
-          <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-            <p className="text-sm font-medium text-gray-900">
+          <div className="bg-surface rounded-xl border border-border px-4 py-3">
+            <p className="text-sm font-medium text-text">
               Batch upload: {batchResult.succeeded} succeeded, {batchResult.duplicates} duplicates, {batchResult.failed} failed
-              <span className="text-gray-400"> ({batchResult.total} total)</span>
+              <span className="text-text-muted"> ({batchResult.total} total)</span>
             </p>
           </div>
         )}
@@ -144,8 +144,8 @@ export function UploadPage() {
 
         {/* Pipeline progress per uploaded artifact */}
         {queue.filter((f) => f.artifactId).map((f) => (
-          <div key={f.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-            <p className="text-sm font-medium text-gray-900 truncate">{f.file.name}</p>
+          <div key={f.id} className="bg-surface rounded-xl border border-border px-4 py-3">
+            <p className="text-sm font-medium text-text truncate">{f.file.name}</p>
             <PipelineProgress events={events} artifactId={f.artifactId!} />
           </div>
         ))}
