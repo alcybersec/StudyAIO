@@ -481,3 +481,88 @@ export interface ReviewResponse {
   next_review_at: string
   last_reviewed_at: string | null
 }
+
+// ── Chat ──────────────────────────────────────────────────────
+
+export interface ChatSession {
+  id: string
+  title: string
+  course_id: string | null
+  message_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatMessage {
+  id: string
+  session_id: string
+  role: 'user' | 'assistant'
+  content: string
+  citations_json: Record<string, unknown>[] | null
+  created_at: string
+}
+
+export interface CreateSessionRequest {
+  title?: string
+  course_code?: string
+}
+
+export interface SendMessageRequest {
+  content: string
+}
+
+export interface SendMessageResponse {
+  user_message: ChatMessage
+  assistant_message: ChatMessage
+}
+
+// ── Analytics ──────────────────────────────────────────────────
+
+export interface AnalyticsOverview {
+  total_study_hours: number
+  total_cards_reviewed: number
+  total_sessions: number
+  mastery_pct: number
+  total_flashcards: number
+  mastered_flashcards: number
+  active_courses: number
+}
+
+export interface HeatmapDay {
+  date: string
+  minutes: number
+  cards: number
+  sessions: number
+}
+
+export interface RetentionPoint {
+  interval_bucket: number
+  retention_pct: number
+  card_count: number
+}
+
+export interface MasteryWeek {
+  course_code: string
+  week: number
+  total: number
+  mastered: number
+  learning: number
+  new: number
+  mastery_pct: number
+}
+
+export interface ExamReadinessData {
+  exam_id: string
+  title: string
+  readiness_score: number
+  mastery_score: number
+  quiz_score: number
+  consistency_score: number
+  days_remaining: number
+  weak_weeks: number[]
+  flashcard_total: number
+  flashcard_mastered: number
+  quiz_total: number
+  quiz_correct: number
+  study_days_last_week: number
+}

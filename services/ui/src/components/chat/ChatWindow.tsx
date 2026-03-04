@@ -1,0 +1,78 @@
+import { useEffect, useRef } from 'react'
+import { useChatMessages, useSendChatMessage } from '../../hooks/useApi'
+import { ChatMessage } from './ChatMessage'
+import { ChatInput } from './ChatInput'
+
+interface ChatWindowProps {
+  sessionId: string
+}
+
+function TypingIndicator() {
+  return (
+    <div className="flex justify-start">
+      <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-surface-alt">
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-text-muted animate-bounce [animation-delay:0ms]" />
+          <div className="w-2 h-2 rounded-full bg-text-muted animate-bounce [animation-delay:150ms]" />
+          <div className="w-2 h-2 rounded-full bg-text-muted animate-bounce [animation-delay:300ms]" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function ChatWindow({ sessionId }: ChatWindowProps) {
+  const { data: messagesData, isLoading } = useChatMessages(sessionId)
+  const messages = messagesData?.messages ?? []
+  const sendMessage = useSendChatMessage()
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages.length, sendMessage.isPending])
+
+  const handleSend = (content: string) => {
+    sendMessage.mutate({ sessionId, content })
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Messages area */}
+      <div ref={containerRef} className="flex-1 overflow-y-auto px-3 sm:px-6 py-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-text-muted">
+            <svg className="w-12 h-12 mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+            </svg>
+            <p className="text-sm font-medium">Start the conversation</p>
+            <p className="text-xs mt-1">Ask about your study materials, get explanations, or quiz yourself</p>
+          </div>
+        ) : (
+          <div className="space-y-4 max-w-3xl mx-auto">
+            {messages.map((msg) => (
+              <ChatMessage key={msg.id} message={msg} />
+            ))}
+            {sendMessage.isPending && <TypingIndicator />}
+            <div ref={bottomRef} />
+          </div>
+        )}
+      </div>
+
+      {/* Error display */}
+      {sendMessage.isError && (
+        <div className="mx-3 sm:mx-6 mb-2 px-3 py-2 rounded-lg bg-danger/10 text-danger text-sm">
+          Failed to send: {(sendMessage.error as Error).message}
+        </div>
+      )}
+
+      {/* Input */}
+      <ChatInput onSend={handleSend} disabled={sendMessage.isPending} />
+    </div>
+  )
+}

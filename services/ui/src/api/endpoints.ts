@@ -1,25 +1,34 @@
 import { api } from './client'
 import type {
+  AnalyticsOverview,
   Assessment,
   BatchUploadResponse,
+  ChatMessage,
+  ChatSession,
   CourseDetail,
   CourseDocument,
   CourseListItem,
+  CreateSessionRequest,
   DailyPlan,
   DashboardData,
   Deadline,
   DeadlineUpdate,
   Exam,
   ExamProgress,
+  ExamReadinessData,
   Flashcard,
+  HeatmapDay,
+  MasteryWeek,
   PipelineRun,
   QARequest,
   QAResponse,
   QuizAttemptRequest,
   QuizQuestion,
+  RetentionPoint,
   ReviewItem,
   ReviewRequest,
   ReviewResponse,
+  SendMessageResponse,
   Settings,
   SettingsUpdate,
   StreakInfo,
@@ -150,6 +159,35 @@ export const assetsApi = {
     if (week !== undefined) params.set('week', String(week))
     return api.get<QuizQuestion[]>(`/assets/quiz?${params}`)
   },
+}
+
+export const analyticsApi = {
+  overview: () => api.get<AnalyticsOverview>('/analytics/overview'),
+  heatmap: (days = 90) => api.get<{ days: HeatmapDay[] }>(`/analytics/heatmap?days=${days}`),
+  retention: (courseCode?: string) => {
+    const params = new URLSearchParams()
+    if (courseCode) params.set('course_code', courseCode)
+    return api.get<{ points: RetentionPoint[] }>(`/analytics/retention?${params}`)
+  },
+  mastery: (courseCode?: string) => {
+    const params = new URLSearchParams()
+    if (courseCode) params.set('course_code', courseCode)
+    return api.get<{ weeks: MasteryWeek[] }>(`/analytics/mastery?${params}`)
+  },
+  readiness: (examId: string) => api.get<ExamReadinessData>(`/analytics/readiness/${examId}`),
+}
+
+export const chatApi = {
+  createSession: (data: CreateSessionRequest = {}) =>
+    api.post<ChatSession>('/chat/sessions', data),
+  listSessions: (limit = 50) =>
+    api.get<{ sessions: ChatSession[] }>(`/chat/sessions?limit=${limit}`),
+  getMessages: (sessionId: string, limit = 100, offset = 0) =>
+    api.get<{ messages: ChatMessage[] }>(`/chat/sessions/${sessionId}/messages?limit=${limit}&offset=${offset}`),
+  sendMessage: (sessionId: string, content: string) =>
+    api.post<SendMessageResponse>(`/chat/sessions/${sessionId}/messages`, { content }),
+  deleteSession: (sessionId: string) =>
+    api.delete(`/chat/sessions/${sessionId}`),
 }
 
 export const courseopsApi = {

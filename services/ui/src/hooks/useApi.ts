@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { assetsApi, courseopsApi, coursesApi, dashboardApi, examsApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
-import type { DeadlineUpdate, QARequest, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
+import { analyticsApi, assetsApi, chatApi, courseopsApi, coursesApi, dashboardApi, examsApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
+import type { CreateSessionRequest, DeadlineUpdate, QARequest, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -318,6 +318,93 @@ export function useCreateExamFromDeadline() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['courseops'] })
       queryClient.invalidateQueries({ queryKey: ['exams'] })
+    },
+  })
+}
+
+// ── Analytics ──────────────────────────────────────────────────
+
+export function useAnalyticsOverview() {
+  return useQuery({
+    queryKey: ['analytics', 'overview'],
+    queryFn: analyticsApi.overview,
+  })
+}
+
+export function useAnalyticsHeatmap(days = 90) {
+  return useQuery({
+    queryKey: ['analytics', 'heatmap', days],
+    queryFn: () => analyticsApi.heatmap(days),
+  })
+}
+
+export function useAnalyticsRetention(courseCode?: string) {
+  return useQuery({
+    queryKey: ['analytics', 'retention', courseCode],
+    queryFn: () => analyticsApi.retention(courseCode),
+  })
+}
+
+export function useAnalyticsMastery(courseCode?: string) {
+  return useQuery({
+    queryKey: ['analytics', 'mastery', courseCode],
+    queryFn: () => analyticsApi.mastery(courseCode),
+  })
+}
+
+export function useAnalyticsReadiness(examId: string) {
+  return useQuery({
+    queryKey: ['analytics', 'readiness', examId],
+    queryFn: () => analyticsApi.readiness(examId),
+    enabled: !!examId,
+  })
+}
+
+// ── Chat ──────────────────────────────────────────────────────
+
+export function useChatSessions() {
+  return useQuery({
+    queryKey: ['chat', 'sessions'],
+    queryFn: () => chatApi.listSessions(),
+  })
+}
+
+export function useChatMessages(sessionId: string) {
+  return useQuery({
+    queryKey: ['chat', 'messages', sessionId],
+    queryFn: () => chatApi.getMessages(sessionId),
+    enabled: !!sessionId,
+  })
+}
+
+export function useCreateChatSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateSessionRequest = {}) => chatApi.createSession(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chat', 'sessions'] })
+    },
+  })
+}
+
+export function useSendChatMessage() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ sessionId, content }: { sessionId: string; content: string }) =>
+      chatApi.sendMessage(sessionId, content),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['chat', 'messages', variables.sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['chat', 'sessions'] })
+    },
+  })
+}
+
+export function useDeleteChatSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sessionId: string) => chatApi.deleteSession(sessionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chat', 'sessions'] })
     },
   })
 }

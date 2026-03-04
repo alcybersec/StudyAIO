@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 18 — Dark Mode & Enhanced Settings (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M20 ✅
+> **Current Milestone:** 28 — AI Study Companion Chat (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M20 ✅, M23 ✅, M28 ✅
 
 ---
 
@@ -196,6 +196,26 @@
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 20.1 | Completed as part of M16.4 | ✅ Done | StudyHubPage merges StudyPage + TimedStudyPage + ExamListPage + ExamDetailPage into single tabbed view. See M16.4. |
+
+## Milestone 23 — Learning Analytics
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 23.1 | AnalyticsSnapshot model + migration | ✅ Done | AnalyticsSnapshot (id, user_id FK, snapshot_date, metrics_json JSONB). UniqueConstraint(user_id, snapshot_date). Alembic migration g8h9i0j1k2l3 (revises f7g8h9i0j1k2). |
+| 23.2 | Analytics service (6 functions) | ✅ Done | analytics_service.py: get_overview (study hours, mastery %, cards, sessions), get_study_heatmap (daily totals with gap-fill), get_retention_data (interval buckets, ease-based retention), get_mastery_breakdown (per-week mastered/learning/new via CASE), get_exam_readiness (40% mastery + 30% quiz + 30% consistency), compute_and_store_snapshot (daily upsert). |
+| 23.3 | API endpoints + schemas | ✅ Done | 5 GET endpoints: overview, heatmap, retention, mastery, readiness/{exam_id}. Pydantic response models in analytics_schemas.py. Rate-limited (30/min). |
+| 23.4 | Frontend — AnalyticsPage + 5 chart components | ✅ Done | AnalyticsPage with Radix Tabs (Overview, Heatmap, Retention, Mastery). OverviewCards (stat cards + exam readiness). StudyHeatmap (GitHub-style SVG grid). RetentionCurve (Recharts LineChart). MasteryBreakdown (Recharts stacked BarChart). ExamReadiness (Recharts RadialBarChart). recharts dependency added. |
+| 23.5 | Tests | ✅ Done | 42 new tests: analytics_service (12), api/analytics (8), golden/analytics_structure (22). |
+
+## Milestone 28 — AI Study Companion Chat
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 28.1 | ChatSession + ChatMessage models + migration | ✅ Done | ChatSession (user_id FK, course_id nullable FK, title, message_count). ChatMessage (session_id FK CASCADE, role, content, citations_json JSONB, token_count). Alembic migration h9i0j1k2l3m4 (revises g8h9i0j1k2l3). |
+| 28.2 | Chat service (5 functions + RAG orchestration) | ✅ Done | chat_service.py: create_session, list_sessions, get_messages, send_message (save user msg → embed + search chunks → build contextual question with history → call agent → save assistant msg), delete_session. Graceful RAG failures, auto-title from first message. |
+| 28.3 | API endpoints + schemas | ✅ Done | 5 endpoints: POST/GET /chat/sessions, GET messages, POST message, DELETE session. Rate-limited send_message. chat_schemas.py with SendMessageResponse (user_message + assistant_message). |
+| 28.4 | Frontend — ChatPage + 4 components | ✅ Done | ChatPage (session sidebar + message area, mobile Sheet). SessionList (new/delete, relative dates). ChatWindow (auto-scroll, typing indicator). ChatMessage (user/assistant bubbles, react-markdown, citation links). ChatInput (auto-resize textarea, Enter=send, Shift+Enter=newline). |
+| 28.5 | Tests | ✅ Done | 43 new tests: chat_service (15), api/chat (11), golden/chat_structure (17). |
 
 ## Post-v1 — Fixes & Settings
 
