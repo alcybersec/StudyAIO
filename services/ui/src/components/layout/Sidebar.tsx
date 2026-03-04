@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useDashboard, useCourses } from '../../hooks/useApi'
+import { useAuth } from '../../hooks/useAuth'
 
 interface NavItem {
   path: string
@@ -25,6 +26,7 @@ export function Sidebar() {
   const [coursesExpanded, setCoursesExpanded] = useState(true)
   const { data: dashboard } = useDashboard()
   const { data: courses } = useCourses()
+  const { user, isSelfHosted, logout } = useAuth()
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/'
@@ -138,6 +140,61 @@ export function Sidebar() {
           </div>
         )}
       </nav>
+
+      {/* User section — shown only when auth is active */}
+      {!isSelfHosted && user && (
+        <div className="border-t border-gray-100 p-2">
+          {collapsed ? (
+            <Link
+              to="/profile"
+              className="flex items-center justify-center p-2 rounded-lg hover:bg-gray-50 transition-colors"
+              title={user.username}
+            >
+              {user.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt=""
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-bold flex items-center justify-center">
+                  {user.username.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </Link>
+          ) : (
+            <div className="flex items-center gap-3 px-3 py-2">
+              <Link to="/profile" className="shrink-0">
+                {user.avatar_url ? (
+                  <img
+                    src={user.avatar_url}
+                    alt=""
+                    className="w-8 h-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-bold flex items-center justify-center">
+                    {user.username.charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </Link>
+              <div className="flex-1 min-w-0">
+                <Link
+                  to="/profile"
+                  className="block text-sm font-medium text-gray-900 truncate hover:text-primary transition-colors"
+                >
+                  {user.username}
+                </Link>
+                <button
+                  onClick={() => logout()}
+                  className="text-xs text-gray-400 hover:text-danger transition-colors"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </aside>
   )
 }

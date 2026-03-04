@@ -81,6 +81,14 @@ class UpdateProfileRequest(BaseModel):
     avatar_url: str | None = None
 
 
+class AuthConfigResponse(BaseModel):
+    """Public auth configuration response."""
+
+    self_hosted: bool
+    registration_enabled: bool
+    oauth_providers: list[str]
+
+
 class UserProfileResponse(BaseModel):
     """User profile response."""
 

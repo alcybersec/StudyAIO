@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_schemas import (
+    AuthConfigResponse,
     ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
@@ -73,6 +74,22 @@ def _clear_auth_cookies(response: Response) -> None:
     """Clear auth cookies."""
     response.delete_cookie(ACCESS_TOKEN_COOKIE, path="/")
     response.delete_cookie(REFRESH_TOKEN_COOKIE, path="/")
+
+
+@router.get("/config")
+async def get_auth_config() -> AuthConfigResponse:
+    """Return public auth configuration (no auth required)."""
+    providers: list[str] = []
+    if settings.google_client_id:
+        providers.append("google")
+    if settings.github_client_id:
+        providers.append("github")
+
+    return AuthConfigResponse(
+        self_hosted=settings.self_hosted,
+        registration_enabled=not settings.self_hosted,
+        oauth_providers=providers,
+    )
 
 
 @router.post("/register", status_code=201)
