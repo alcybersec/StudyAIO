@@ -87,7 +87,7 @@ class TestValidateSetting:
     def test_agent_backend_invalid(self):
         """Invalid agent backend is rejected."""
         with pytest.raises(ValueError, match="agent_backend must be one of"):
-            settings_service.validate_setting("agent_backend", "openai")
+            settings_service.validate_setting("agent_backend", "not_a_backend")
 
     def test_anthropic_api_key_strips_whitespace(self):
         """API key is stripped of whitespace."""

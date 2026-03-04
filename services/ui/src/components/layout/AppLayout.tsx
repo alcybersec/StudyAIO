@@ -1,18 +1,19 @@
 import { Link, Outlet } from 'react-router-dom'
 import { ErrorBoundary } from '../ErrorBoundary'
+import { Toaster } from '../ui/Toast'
 import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 
 export function AppLayout() {
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
       {/* Desktop sidebar */}
       <Sidebar />
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile top header — logo only */}
-        <header className="lg:hidden flex items-center h-14 px-4 bg-white border-b border-gray-200 sticky top-0 z-40">
+        <header className="lg:hidden flex items-center h-14 px-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
           <Link to="/" className="text-lg font-bold text-primary">
             StudyAIO
           </Link>
@@ -27,6 +28,9 @@ export function AppLayout() {
 
       {/* Mobile bottom tabs */}
       <MobileNav />
+
+      {/* Global toast notifications */}
+      <Toaster />
     </div>
   )
 }
