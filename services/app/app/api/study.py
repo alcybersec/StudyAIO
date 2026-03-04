@@ -16,9 +16,11 @@ from app.api.study_schemas import (
     TimedPlanRequest,
     TimedPlanResponse,
 )
+from app.api.deps import get_current_user_or_default
 from app.core.database import get_session
 from app.models.flashcard import Flashcard
 from app.models.quiz import QuizQuestion
+from app.models.user import User
 from app.services import exam_service, srs_service, streak_service, timed_session_service
 
 logger = structlog.get_logger()
@@ -36,10 +38,11 @@ async def get_due_cards(
     course_code: str | None = Query(None, description="Course code filter"),
     week: int | None = Query(None, description="Week number filter"),
     limit: int = Query(20, ge=1, le=100, description="Max cards to return"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[DueCardResponse]:
     """Get flashcards due for review."""
-    cards = await srs_service.get_due_cards(session, course_code, week, limit)
+    cards = await srs_service.get_due_cards(session, course_code, week, limit, user_id=user.id)
     return [DueCardResponse.model_validate(c) for c in cards]
 
 
@@ -51,6 +54,7 @@ async def get_due_cards(
 )
 async def post_review(
     body: ReviewRequest,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> ReviewResponse:
     """Record a flashcard review."""
@@ -61,7 +65,7 @@ async def post_review(
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Flashcard not found")
 
-    review = await srs_service.record_review(session, body.flashcard_id, body.quality)
+    review = await srs_service.record_review(session, body.flashcard_id, body.quality, user_id=user.id)
     await session.commit()
     return ReviewResponse.model_validate(review)
 
@@ -75,10 +79,11 @@ async def post_review(
 async def get_stats(
     course_code: str | None = Query(None, description="Course code filter"),
     week: int | None = Query(None, description="Week number filter"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> StudyStatsResponse:
     """Get study statistics for a scope."""
-    stats = await srs_service.get_study_stats(session, course_code, week)
+    stats = await srs_service.get_study_stats(session, course_code, week, user_id=user.id)
     return StudyStatsResponse(
         total=stats.total,
         due_today=stats.due_today,
@@ -97,6 +102,7 @@ async def get_stats(
 )
 async def post_quiz_attempt(
     body: QuizAttemptRequest,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> QuizAttemptResponse:
     """Record a quiz attempt."""
@@ -127,10 +133,11 @@ async def post_quiz_attempt(
 )
 async def get_streak(
     course_id: str | None = Query(None, description="Optional course ID filter"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> StreakResponse:
     """Get study streak data."""
-    data = await streak_service.get_streak(session, course_id)
+    data = await streak_service.get_streak(session, course_id, user_id=user.id)
     return StreakResponse(**data)
 
 
@@ -142,6 +149,7 @@ async def get_streak(
 )
 async def generate_timed_plan(
     body: TimedPlanRequest,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> TimedPlanResponse:
     """Generate a time-budgeted study plan."""

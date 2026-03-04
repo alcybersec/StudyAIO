@@ -10,7 +10,9 @@ from app.models.pipeline_run import PipelineRun
 logger = structlog.get_logger()
 
 
-async def get_recent_activity(session: AsyncSession, limit: int = 10) -> list[dict]:
+async def get_recent_activity(
+    session: AsyncSession, limit: int = 10, user_id: str | None = None
+) -> list[dict]:
     """Get recent pipeline completions for the dashboard.
 
     Args:
@@ -20,12 +22,18 @@ async def get_recent_activity(session: AsyncSession, limit: int = 10) -> list[di
     Returns:
         List of dicts with artifact info and latest pipeline stage status.
     """
-    result = await session.execute(
+    from app.models.artifact import LectureArtifact
+
+    query = (
         select(PipelineRun)
         .options(joinedload(PipelineRun.artifact))
-        .order_by(PipelineRun.started_at.desc())
-        .limit(limit)
+        .join(LectureArtifact, PipelineRun.artifact_id == LectureArtifact.id)
     )
+    if user_id:
+        query = query.where(LectureArtifact.user_id == user_id)
+    query = query.order_by(PipelineRun.started_at.desc()).limit(limit)
+
+    result = await session.execute(query)
     runs = result.unique().scalars().all()
 
     activity = []

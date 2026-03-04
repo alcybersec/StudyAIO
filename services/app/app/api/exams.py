@@ -15,7 +15,9 @@ from app.api.exam_schemas import (
     StudySessionResponse,
     WeakTopicResponse,
 )
+from app.api.deps import get_current_user_or_default
 from app.core.database import get_session
+from app.models.user import User
 from app.services import exam_service, schedule_service, streak_service
 
 logger = structlog.get_logger()
@@ -32,6 +34,7 @@ router = APIRouter()
 )
 async def create_exam(
     body: ExamCreateRequest,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> ExamResponse:
     """Create a new exam."""
@@ -43,6 +46,7 @@ async def create_exam(
             exam_date=body.exam_date,
             weeks_scope=body.weeks_scope,
             target_mastery_pct=body.target_mastery_pct,
+            user_id=user.id,
         )
         await session.commit()
         return ExamResponse.model_validate(exam)
@@ -59,10 +63,11 @@ async def create_exam(
 async def list_exams(
     course_code: str | None = Query(None, description="Course code filter"),
     status: str | None = Query(None, description="Status filter (active/completed/archived)"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[ExamResponse]:
     """List exams."""
-    exams = await exam_service.list_exams(session, course_code, status)
+    exams = await exam_service.list_exams(session, course_code, status, user_id=user.id)
     await session.commit()  # persist auto-completions
     return [ExamResponse.model_validate(e) for e in exams]
 
@@ -75,6 +80,7 @@ async def list_exams(
 )
 async def get_exam(
     exam_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> ExamProgressResponse:
     """Get exam detail with progress."""
@@ -94,6 +100,7 @@ async def get_exam(
 async def update_exam(
     exam_id: str,
     body: ExamUpdateRequest,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> ExamResponse:
     """Update an exam."""
@@ -113,6 +120,7 @@ async def update_exam(
 )
 async def delete_exam(
     exam_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Archive an exam."""
@@ -131,6 +139,7 @@ async def delete_exam(
 async def get_schedule(
     exam_id: str,
     days: int = Query(7, ge=1, le=30, description="Days to plan ahead"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[DailyPlanResponse]:
     """Get study schedule."""
@@ -148,6 +157,7 @@ async def get_schedule(
 )
 async def get_today(
     exam_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> DailyPlanResponse:
     """Get today's study plan."""
@@ -165,6 +175,7 @@ async def get_today(
 )
 async def get_weak_topics(
     exam_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[WeakTopicResponse]:
     """Get weak topics for an exam."""
@@ -185,10 +196,11 @@ async def get_weak_topics(
 async def record_session(
     exam_id: str,
     body: StudySessionRequest,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> StudySessionResponse:
     """Record a study session."""
-    exam = await exam_service.get_exam(session, exam_id)
+    exam = await exam_service.get_exam(session, exam_id, user_id=user.id)
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
 
@@ -200,6 +212,7 @@ async def record_session(
         quiz_questions_answered=body.quiz_questions_answered,
         quiz_correct=body.quiz_correct,
         duration_seconds=body.duration_seconds,
+        user_id=user.id,
     )
     await session.commit()
     return StudySessionResponse(
@@ -223,8 +236,9 @@ async def record_session(
 async def get_history(
     exam_id: str,
     days: int = Query(30, ge=1, le=365, description="Days of history"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[StudyHistoryDayResponse]:
     """Get study history for an exam."""
-    history = await streak_service.get_study_history(session, exam_id=exam_id, days=days)
+    history = await streak_service.get_study_history(session, exam_id=exam_id, days=days, user_id=user.id)
     return [StudyHistoryDayResponse(**h) for h in history]

@@ -190,6 +190,7 @@ async def generate_obsidian_vault(
     session: AsyncSession,
     course_code: str,
     weeks: list[int] | None = None,
+    user_id: str | None = None,
 ) -> tuple[io.BytesIO, str] | None:
     """Generate an Obsidian-compatible vault as a zip archive.
 
@@ -202,9 +203,10 @@ async def generate_obsidian_vault(
         Tuple of (zip_bytes_io, filename) or None if course not found.
     """
     # Look up course
-    result = await session.execute(
-        select(Course).where(Course.code == course_code)
-    )
+    query = select(Course).where(Course.code == course_code)
+    if user_id:
+        query = query.where(Course.user_id == user_id)
+    result = await session.execute(query)
     course = result.scalar_one_or_none()
     if not course:
         return None

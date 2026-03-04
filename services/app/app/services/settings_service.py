@@ -1,12 +1,23 @@
-"""Settings service — JSON file-backed runtime configuration."""
+"""Settings service — DB-backed per-user configuration with env defaults.
 
-import json
-from pathlib import Path
+Settings are stored per-user in the `user_settings` table (JSONB).
+When a user has no stored setting for a key, the environment-based
+default from `app.config.settings` is used.
+
+For pipeline tasks (synchronous context without a DB session),
+`get_effective_setting()` falls back to env defaults only.
+"""
+
+from datetime import datetime
 from typing import Any
 
 import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.utils import generate_id
+from app.models.user_settings import UserSettings
 
 logger = structlog.get_logger()
 
@@ -42,23 +53,6 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
 }
 
 
-def _settings_path() -> Path:
-    """Return path to the settings JSON file."""
-    return Path(settings.data_dir) / "settings.json"
-
-
-def _read_overrides() -> dict[str, Any]:
-    """Read saved overrides from JSON file."""
-    path = _settings_path()
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError) as e:
-        logger.warning("settings_read_failed", error=str(e))
-        return {}
-
-
 def _defaults() -> dict[str, Any]:
     """Return default values from env-based config."""
     return {
@@ -73,20 +67,6 @@ def _defaults() -> dict[str, Any]:
         "chunk_overlap_tokens": settings.chunk_overlap_tokens,
         "max_upload_size_mb": settings.max_upload_size_mb,
     }
-
-
-def get_all_settings() -> dict[str, Any]:
-    """Get merged settings (defaults + JSON overrides).
-
-    Returns:
-        Dict of all configurable settings with effective values.
-    """
-    merged = _defaults()
-    overrides = _read_overrides()
-    for key in ALLOWED_KEYS:
-        if key in overrides:
-            merged[key] = overrides[key]
-    return merged
 
 
 def validate_setting(key: str, value: Any) -> Any:
@@ -157,10 +137,65 @@ def validate_setting(key: str, value: Any) -> Any:
     return value
 
 
-def update_settings(updates: dict[str, Any]) -> dict[str, Any]:
-    """Validate and persist setting updates.
+async def _get_or_create_user_settings(session: AsyncSession, user_id: str) -> UserSettings:
+    """Get existing UserSettings or create with defaults.
 
     Args:
+        session: Database session.
+        user_id: User UUID.
+
+    Returns:
+        UserSettings instance.
+    """
+    result = await session.execute(
+        select(UserSettings).where(UserSettings.user_id == user_id)
+    )
+    user_settings = result.scalar_one_or_none()
+    if user_settings:
+        return user_settings
+
+    user_settings = UserSettings(
+        id=generate_id(),
+        user_id=user_id,
+        settings_json={},
+        theme="system",
+    )
+    session.add(user_settings)
+    await session.flush()
+    logger.info("user_settings_created", user_id=user_id)
+    return user_settings
+
+
+async def get_user_settings(session: AsyncSession, user_id: str) -> dict[str, Any]:
+    """Get merged settings for a user (env defaults + per-user overrides).
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
+
+    Returns:
+        Dict of all settings with effective values.
+    """
+    merged = _defaults()
+    user_settings = await _get_or_create_user_settings(session, user_id)
+    overrides = user_settings.settings_json or {}
+    for key in ALLOWED_KEYS:
+        if key in overrides:
+            merged[key] = overrides[key]
+    # Include theme and dashboard_layout
+    merged["theme"] = user_settings.theme
+    merged["dashboard_layout"] = user_settings.dashboard_layout
+    return merged
+
+
+async def update_user_settings(
+    session: AsyncSession, user_id: str, updates: dict[str, Any]
+) -> dict[str, Any]:
+    """Validate and persist per-user setting updates.
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
         updates: Dict of key/value pairs to update.
 
     Returns:
@@ -169,32 +204,102 @@ def update_settings(updates: dict[str, Any]) -> dict[str, Any]:
     Raises:
         ValueError: If any key or value is invalid.
     """
-    # Validate all updates first
+    # Handle special non-settings-json keys
+    theme = updates.pop("theme", None)
+    dashboard_layout = updates.pop("dashboard_layout", None)
+
+    # Validate remaining settings
     validated: dict[str, Any] = {}
     for key, value in updates.items():
         validated[key] = validate_setting(key, value)
 
-    # Merge with existing overrides
-    overrides = _read_overrides()
-    overrides.update(validated)
+    user_settings = await _get_or_create_user_settings(session, user_id)
 
-    # Write to disk
-    path = _settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(overrides, indent=2))
-    logger.info("settings_updated", keys=list(validated.keys()))
+    # Update settings_json
+    if validated:
+        current = dict(user_settings.settings_json or {})
+        current.update(validated)
+        user_settings.settings_json = current
 
-    return get_all_settings()
+    # Update theme
+    if theme is not None:
+        if theme not in ("light", "dark", "system"):
+            raise ValueError("theme must be one of: light, dark, system")
+        user_settings.theme = theme
 
+    # Update dashboard layout
+    if dashboard_layout is not None:
+        user_settings.dashboard_layout = dashboard_layout
+
+    user_settings.updated_at = datetime.utcnow()
+    await session.commit()
+    logger.info("user_settings_updated", user_id=user_id, keys=list(updates.keys()))
+
+    return await get_user_settings(session, user_id)
+
+
+async def get_effective_setting_async(
+    session: AsyncSession, user_id: str, key: str
+) -> Any:
+    """Get the effective value of a single setting for a user.
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
+        key: Setting key name.
+
+    Returns:
+        The effective value (user override > env default).
+    """
+    all_settings = await get_user_settings(session, user_id)
+    return all_settings.get(key, getattr(settings, key, None))
+
+
+# ── Sync fallback for pipeline consumers ──────────────────────────────
 
 def get_effective_setting(key: str) -> Any:
-    """Get the effective value of a single setting.
+    """Get the effective value of a setting using env defaults only.
+
+    This is the sync fallback used by pipeline tasks that don't have
+    a DB session or user_id readily available. Returns env defaults.
 
     Args:
         key: Setting key name.
 
     Returns:
-        The effective value (override if set, else default).
+        The default value from environment config.
     """
-    all_settings = get_all_settings()
-    return all_settings.get(key, getattr(settings, key, None))
+    defaults = _defaults()
+    return defaults.get(key, getattr(settings, key, None))
+
+
+# ── Backward compatibility ────────────────────────────────────────────
+# These sync functions are kept for existing code that hasn't been
+# migrated to async per-user settings yet.
+
+def get_all_settings() -> dict[str, Any]:
+    """Get merged settings using env defaults only (sync, no user context).
+
+    Returns:
+        Dict of all configurable settings with default values.
+    """
+    return _defaults()
+
+
+def update_settings(updates: dict[str, Any]) -> dict[str, Any]:
+    """Validate settings (sync, no persistence — backward compat).
+
+    Args:
+        updates: Dict of key/value pairs to validate.
+
+    Returns:
+        Full defaults (updates are validated but not persisted in sync mode).
+
+    Raises:
+        ValueError: If any key or value is invalid.
+    """
+    for key, value in updates.items():
+        validate_setting(key, value)
+    # In sync mode without DB, just return defaults
+    # The API layer should use the async version
+    return _defaults()

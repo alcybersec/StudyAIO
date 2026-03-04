@@ -7,6 +7,8 @@ import pytest
 from app.core.exceptions import DuplicateFileError
 from app.services import artifact_service
 
+TEST_USER_ID = "user-001"
+
 
 class TestCheckDuplicate:
     """Tests for check_duplicate()."""
@@ -17,7 +19,7 @@ class TestCheckDuplicate:
         mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        result = await artifact_service.check_duplicate(mock_session, "abc123")
+        result = await artifact_service.check_duplicate(mock_session, "abc123", TEST_USER_ID)
         assert result is None
 
     async def test_returns_artifact_when_match(self, mock_session):
@@ -28,7 +30,7 @@ class TestCheckDuplicate:
         mock_result.scalar_one_or_none.return_value = existing
         mock_session.execute.return_value = mock_result
 
-        result = await artifact_service.check_duplicate(mock_session, "abc123")
+        result = await artifact_service.check_duplicate(mock_session, "abc123", TEST_USER_ID)
         assert result is not None
         assert result.id == "artifact-existing"
 
@@ -39,7 +41,7 @@ class TestIngestFile:
     async def test_file_not_found_raises(self, mock_session):
         """Non-existent file raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
-            await artifact_service.ingest_file(mock_session, "/nonexistent/file.pdf")
+            await artifact_service.ingest_file(mock_session, "/nonexistent/file.pdf", TEST_USER_ID)
 
     async def test_unsupported_extension_raises(self, mock_session, tmp_path):
         """Unsupported file type raises ValueError."""
@@ -47,7 +49,7 @@ class TestIngestFile:
         bad_file.write_text("hello")
 
         with pytest.raises(ValueError, match="Unsupported file type"):
-            await artifact_service.ingest_file(mock_session, str(bad_file))
+            await artifact_service.ingest_file(mock_session, str(bad_file), TEST_USER_ID)
 
     async def test_duplicate_raises(self, mock_session, simple_pdf):
         """Duplicate file raises DuplicateFileError."""
@@ -58,7 +60,7 @@ class TestIngestFile:
         mock_session.execute.return_value = mock_result
 
         with pytest.raises(DuplicateFileError):
-            await artifact_service.ingest_file(mock_session, str(simple_pdf))
+            await artifact_service.ingest_file(mock_session, str(simple_pdf), TEST_USER_ID)
 
     @patch("app.services.artifact_service.settings")
     async def test_ingest_success(self, mock_settings, mock_session, simple_pdf, tmp_path):
@@ -70,11 +72,12 @@ class TestIngestFile:
         mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        result = await artifact_service.ingest_file(mock_session, str(simple_pdf))
+        result = await artifact_service.ingest_file(mock_session, str(simple_pdf), TEST_USER_ID)
 
         assert result.original_filename == simple_pdf.name
         assert result.file_type == "pdf"
         assert result.status == "ingested"
         assert len(result.sha256) == 64
+        assert result.user_id == TEST_USER_ID
         mock_session.add.assert_called_once()
         mock_session.commit.assert_called_once()

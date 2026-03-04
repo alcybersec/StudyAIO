@@ -19,11 +19,12 @@ from app.worker import celery_app
 logger = structlog.get_logger()
 
 
-async def _index(artifact_id: str) -> dict:
+async def _index(artifact_id: str, user_id: str | None = None) -> dict:
     """Async index implementation.
 
     Args:
         artifact_id: UUID of the artifact to index.
+        user_id: Owner user UUID.
 
     Returns:
         Dict with artifact_id, status, chunk_count.
@@ -102,6 +103,7 @@ async def _index(artifact_id: str) -> dict:
 
             return {
                 "artifact_id": artifact_id,
+                "user_id": user_id or artifact.user_id,
                 "status": "indexed",
                 "chunk_count": len(chunks),
             }
@@ -142,6 +144,7 @@ def index_artifact(self, input_value: str | dict) -> dict:
         Dict with artifact_id, status, chunk_count.
     """
     # Resolve input (chain compatibility)
+    user_id = None
     if isinstance(input_value, dict):
         status = input_value.get("status", "")
         if status in ("duplicate", "waiting_review", "failed"):
@@ -152,16 +155,17 @@ def index_artifact(self, input_value: str | dict) -> dict:
             )
             return input_value
         artifact_id = input_value.get("artifact_id", "")
+        user_id = input_value.get("user_id")
     else:
         artifact_id = input_value
 
     if not artifact_id:
         raise IndexingError("No artifact_id provided")
 
-    logger.info("index_task_started", artifact_id=artifact_id)
+    logger.info("index_task_started", artifact_id=artifact_id, user_id=user_id)
     publish_pipeline_event_sync(artifact_id, "index", "started")
     try:
-        result = run_async(_index(artifact_id))
+        result = run_async(_index(artifact_id, user_id=user_id))
         publish_pipeline_event_sync(artifact_id, "index", result.get("status", "completed"))
         return result
     except IndexingError:

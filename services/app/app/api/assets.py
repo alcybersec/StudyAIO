@@ -4,8 +4,10 @@ import structlog
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_or_default
 from app.api.schemas import FlashcardResponse, QuizQuestionResponse
 from app.core.database import get_session
+from app.models.user import User
 from app.services import asset_service
 
 logger = structlog.get_logger()
@@ -22,6 +24,7 @@ router = APIRouter()
 async def get_flashcards(
     course_code: str = Query(..., description="Course code (e.g. CSIT302)"),
     week: int | None = Query(None, description="Week number (omit for all weeks)"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[FlashcardResponse]:
     """Get flashcards for a course, optionally filtered by week."""
@@ -42,6 +45,7 @@ async def get_flashcards(
 async def get_quiz_questions(
     course_code: str = Query(..., description="Course code (e.g. CSIT302)"),
     week: int | None = Query(None, description="Week number (omit for all weeks)"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[QuizQuestionResponse]:
     """Get quiz questions for a course, optionally filtered by week."""

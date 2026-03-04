@@ -11,47 +11,47 @@ class TestResolvePipelineInput:
     """Tests for resolve_pipeline_input()."""
 
     def test_string_input_returns_artifact_id(self):
-        """Plain string is returned as artifact_id."""
+        """Plain string is returned as (artifact_id, None)."""
         result = resolve_pipeline_input("art-001", "classify")
-        assert result == "art-001"
+        assert result == ("art-001", None)
 
     def test_empty_string_returns_none(self):
-        """Empty string returns None."""
+        """Empty string returns (None, None)."""
         result = resolve_pipeline_input("", "classify")
-        assert result is None
+        assert result == (None, None)
 
     def test_dict_with_artifact_id(self):
-        """Dict with good status returns artifact_id."""
+        """Dict with good status returns (artifact_id, user_id)."""
         result = resolve_pipeline_input(
-            {"artifact_id": "art-001", "status": "ingested"}, "classify"
+            {"artifact_id": "art-001", "user_id": "user-001", "status": "ingested"}, "classify"
         )
-        assert result == "art-001"
+        assert result == ("art-001", "user-001")
 
     def test_dict_with_duplicate_stops(self):
-        """Dict with duplicate status returns None."""
+        """Dict with duplicate status returns (None, None)."""
         result = resolve_pipeline_input(
             {"artifact_id": "art-001", "status": "duplicate"}, "classify"
         )
-        assert result is None
+        assert result == (None, None)
 
     def test_dict_with_waiting_review_stops(self):
-        """Dict with waiting_review status returns None."""
+        """Dict with waiting_review status returns (None, None)."""
         result = resolve_pipeline_input(
             {"artifact_id": "art-001", "status": "waiting_review"}, "extract"
         )
-        assert result is None
+        assert result == (None, None)
 
     def test_dict_with_failed_stops(self):
-        """Dict with failed status returns None."""
+        """Dict with failed status returns (None, None)."""
         result = resolve_pipeline_input({"artifact_id": "art-001", "status": "failed"}, "summarize")
-        assert result is None
+        assert result == (None, None)
 
     def test_dict_with_classified_continues(self):
-        """Dict with classified status returns artifact_id."""
+        """Dict with classified status returns (artifact_id, user_id)."""
         result = resolve_pipeline_input(
-            {"artifact_id": "art-001", "status": "classified"}, "extract"
+            {"artifact_id": "art-001", "user_id": "user-001", "status": "classified"}, "extract"
         )
-        assert result == "art-001"
+        assert result == ("art-001", "user-001")
 
 
 class TestRunPipeline:
@@ -102,4 +102,6 @@ class TestResumePipeline:
         with patch.dict(orchestrator._STAGES, {"summarize": [mock_summarize]}):
             orchestrator.resume_pipeline("art-001", "summarize")
 
-        mock_summarize.apply_async.assert_called_once_with(args=["art-001"])
+        mock_summarize.apply_async.assert_called_once_with(
+            args=[{"artifact_id": "art-001", "user_id": None}]
+        )

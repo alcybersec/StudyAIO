@@ -296,6 +296,9 @@ class SettingsResponse(BaseModel):
     quiz_question_count_per_week: int
     chunk_size_tokens: int
     chunk_overlap_tokens: int
+    max_upload_size_mb: int = 50
+    theme: str = "system"
+    dashboard_layout: dict | None = None
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -310,6 +313,9 @@ class SettingsUpdateRequest(BaseModel):
     quiz_question_count_per_week: int | None = None
     chunk_size_tokens: int | None = None
     chunk_overlap_tokens: int | None = None
+    max_upload_size_mb: int | None = None
+    theme: str | None = None
+    dashboard_layout: dict | None = None
 
 
 class BatchUploadFileResult(BaseModel):

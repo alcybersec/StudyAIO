@@ -1,27 +1,15 @@
 """Tests for the settings service."""
 
-import json
-from pathlib import Path
-from unittest.mock import patch
-
 import pytest
 
 from app.services import settings_service
 
 
-@pytest.fixture(autouse=True)
-def settings_file(tmp_path):
-    """Override the settings JSON path to use a temp dir."""
-    settings_path = tmp_path / "settings.json"
-    with patch.object(settings_service, "_settings_path", return_value=settings_path):
-        yield settings_path
-
-
 class TestGetAllSettings:
-    """Tests for get_all_settings()."""
+    """Tests for get_all_settings() sync fallback."""
 
-    def test_returns_defaults_when_no_file(self, settings_file):
-        """Returns env-based defaults when no JSON file exists."""
+    def test_returns_defaults(self):
+        """Returns env-based defaults."""
         result = settings_service.get_all_settings()
         assert "claude_code_path" in result
         assert "claude_model" in result
@@ -30,26 +18,6 @@ class TestGetAllSettings:
         assert "quiz_question_count_per_week" in result
         assert "chunk_size_tokens" in result
         assert "chunk_overlap_tokens" in result
-
-    def test_merges_overrides_with_defaults(self, settings_file):
-        """JSON overrides are merged on top of defaults."""
-        settings_file.write_text(json.dumps({"claude_model": "haiku"}))
-        result = settings_service.get_all_settings()
-        assert result["claude_model"] == "haiku"
-
-    def test_ignores_unknown_keys_in_file(self, settings_file):
-        """Keys not in ALLOWED_KEYS are ignored."""
-        settings_file.write_text(json.dumps({"unknown_key": "value", "claude_model": "sonnet"}))
-        result = settings_service.get_all_settings()
-        assert "unknown_key" not in result
-        assert result["claude_model"] == "sonnet"
-
-    def test_handles_corrupted_json(self, settings_file):
-        """Handles malformed JSON gracefully."""
-        settings_file.write_text("not valid json{")
-        result = settings_service.get_all_settings()
-        # Should still return defaults
-        assert "claude_model" in result
 
 
 class TestValidateSetting:
@@ -111,55 +79,51 @@ class TestValidateSetting:
         with pytest.raises(ValueError):
             settings_service.validate_setting("chunk_size_tokens", 10)
 
+    def test_agent_backend_valid(self):
+        """Valid agent backends are accepted."""
+        assert settings_service.validate_setting("agent_backend", "claude_code") == "claude_code"
+        assert settings_service.validate_setting("agent_backend", "anthropic_api") == "anthropic_api"
 
-class TestUpdateSettings:
-    """Tests for update_settings()."""
+    def test_agent_backend_invalid(self):
+        """Invalid agent backend is rejected."""
+        with pytest.raises(ValueError, match="agent_backend must be one of"):
+            settings_service.validate_setting("agent_backend", "openai")
 
-    def test_update_persists_to_file(self, settings_file):
-        """Updates are written to the JSON file."""
-        settings_service.update_settings({"claude_model": "sonnet"})
-        saved = json.loads(settings_file.read_text())
-        assert saved["claude_model"] == "sonnet"
+    def test_anthropic_api_key_strips_whitespace(self):
+        """API key is stripped of whitespace."""
+        assert settings_service.validate_setting("anthropic_api_key", "  sk-ant-xxx  ") == "sk-ant-xxx"
 
-    def test_update_returns_merged_settings(self, settings_file):
-        """Returns complete merged settings after update."""
-        result = settings_service.update_settings({"flashcard_count_per_week": 25})
-        assert result["flashcard_count_per_week"] == 25
-        # Other keys should still be present
+    def test_max_upload_size_mb_bounds(self):
+        """Max upload size respects bounds."""
+        assert settings_service.validate_setting("max_upload_size_mb", 1) == 1
+        assert settings_service.validate_setting("max_upload_size_mb", 1000) == 1000
+        with pytest.raises(ValueError):
+            settings_service.validate_setting("max_upload_size_mb", 0)
+
+
+class TestUpdateSettingsSync:
+    """Tests for update_settings() sync backward-compat."""
+
+    def test_validates_then_returns_defaults(self):
+        """Sync update validates but returns defaults (no DB persistence)."""
+        result = settings_service.update_settings({"claude_model": "sonnet"})
         assert "claude_model" in result
 
-    def test_update_merges_with_existing_overrides(self, settings_file):
-        """New updates merge with existing overrides in file."""
-        settings_file.write_text(json.dumps({"claude_model": "haiku"}))
-        settings_service.update_settings({"flashcard_count_per_week": 30})
-        saved = json.loads(settings_file.read_text())
-        assert saved["claude_model"] == "haiku"
-        assert saved["flashcard_count_per_week"] == 30
-
-    def test_update_invalid_value_raises(self, settings_file):
-        """Invalid values raise ValueError without writing."""
+    def test_update_invalid_value_raises(self):
+        """Invalid values raise ValueError."""
         with pytest.raises(ValueError):
             settings_service.update_settings({"claude_model": "invalid"})
-        # File should not have been created/modified
-        assert not settings_file.exists()
-
-    def test_update_creates_parent_dir(self, tmp_path):
-        """Creates the parent directory if it doesn't exist."""
-        nested = tmp_path / "sub" / "settings.json"
-        with patch.object(settings_service, "_settings_path", return_value=nested):
-            settings_service.update_settings({"claude_model": "sonnet"})
-        assert nested.exists()
 
 
 class TestGetEffectiveSetting:
-    """Tests for get_effective_setting()."""
+    """Tests for get_effective_setting() sync fallback."""
 
-    def test_returns_default_when_no_override(self, settings_file):
-        """Returns env-based default when no override exists."""
+    def test_returns_default_when_no_override(self):
+        """Returns env-based default."""
         result = settings_service.get_effective_setting("claude_model")
         assert result is not None
 
-    def test_returns_override_when_set(self, settings_file):
-        """Returns override value when it exists in JSON file."""
-        settings_file.write_text(json.dumps({"claude_model": "haiku"}))
-        assert settings_service.get_effective_setting("claude_model") == "haiku"
+    def test_returns_none_for_unknown_key(self):
+        """Returns None for unknown keys."""
+        result = settings_service.get_effective_setting("nonexistent_key_xyz")
+        assert result is None

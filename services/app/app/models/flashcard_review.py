@@ -15,6 +15,9 @@ class FlashcardReview(Base):
     __tablename__ = "flashcard_reviews"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
     flashcard_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("flashcards.id", ondelete="CASCADE"), nullable=False, unique=True
     )
@@ -27,6 +30,10 @@ class FlashcardReview(Base):
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
+    user: Mapped["User"] = relationship(back_populates="flashcard_reviews")
     flashcard: Mapped["Flashcard"] = relationship(back_populates="review")
 
-    __table_args__ = (Index("ix_flashcard_reviews_next_review", "next_review_at"),)
+    __table_args__ = (
+        Index("ix_flashcard_reviews_user_id", "user_id"),
+        Index("ix_flashcard_reviews_next_review", "next_review_at"),
+    )

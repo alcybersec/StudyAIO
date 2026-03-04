@@ -139,7 +139,7 @@ class TestBatchUpload:
         with patch("app.api.uploads.run_pipeline") as mock_pipeline:
             call_count = 0
 
-            def side_effect(file_path):
+            def side_effect(file_path, user_id=None):
                 nonlocal call_count
                 call_count += 1
                 if call_count == 1:

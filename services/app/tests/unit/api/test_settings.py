@@ -1,8 +1,24 @@
 """Tests for the settings API endpoints."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+
+
+MOCK_SETTINGS = {
+    "claude_code_path": "claude",
+    "claude_model": "opus",
+    "agent_backend": "claude_code",
+    "anthropic_api_key": "",
+    "classification_confidence_threshold": 0.7,
+    "flashcard_count_per_week": 15,
+    "quiz_question_count_per_week": 8,
+    "chunk_size_tokens": 500,
+    "chunk_overlap_tokens": 50,
+    "max_upload_size_mb": 50,
+    "theme": "system",
+    "dashboard_layout": None,
+}
 
 
 @pytest.mark.asyncio
@@ -11,21 +27,10 @@ class TestGetSettings:
 
     async def test_get_settings_returns_defaults(self, async_client):
         """GET /api/settings returns all setting keys."""
-        mock_settings = {
-            "claude_code_path": "claude",
-            "claude_model": "opus",
-            "agent_backend": "claude_code",
-            "anthropic_api_key": "",
-            "classification_confidence_threshold": 0.7,
-            "flashcard_count_per_week": 15,
-            "quiz_question_count_per_week": 8,
-            "chunk_size_tokens": 500,
-            "chunk_overlap_tokens": 50,
-        }
-
         with patch(
-            "app.api.settings.settings_service.get_all_settings",
-            return_value=mock_settings,
+            "app.api.settings.settings_service.get_user_settings",
+            new_callable=AsyncMock,
+            return_value=MOCK_SETTINGS,
         ):
             response = await async_client.get("/api/settings")
 
@@ -34,7 +39,8 @@ class TestGetSettings:
         assert data["claude_model"] == "opus"
         assert data["flashcard_count_per_week"] == 15
         assert data["agent_backend"] == "claude_code"
-        assert len(data) == 9
+        assert data["theme"] == "system"
+        assert data["max_upload_size_mb"] == 50
 
 
 @pytest.mark.asyncio
@@ -43,20 +49,11 @@ class TestUpdateSettings:
 
     async def test_update_settings_success(self, async_client):
         """PUT /api/settings updates and returns merged settings."""
-        merged = {
-            "claude_code_path": "claude",
-            "claude_model": "sonnet",
-            "agent_backend": "claude_code",
-            "anthropic_api_key": "",
-            "classification_confidence_threshold": 0.7,
-            "flashcard_count_per_week": 15,
-            "quiz_question_count_per_week": 8,
-            "chunk_size_tokens": 500,
-            "chunk_overlap_tokens": 50,
-        }
+        merged = {**MOCK_SETTINGS, "claude_model": "sonnet"}
 
         with patch(
-            "app.api.settings.settings_service.update_settings",
+            "app.api.settings.settings_service.update_user_settings",
+            new_callable=AsyncMock,
             return_value=merged,
         ):
             response = await async_client.put(
@@ -76,7 +73,8 @@ class TestUpdateSettings:
     async def test_update_settings_invalid_value_returns_422(self, async_client):
         """PUT /api/settings with invalid value returns 422."""
         with patch(
-            "app.api.settings.settings_service.update_settings",
+            "app.api.settings.settings_service.update_user_settings",
+            new_callable=AsyncMock,
             side_effect=ValueError("claude_model must be one of ['haiku', 'opus', 'sonnet']"),
         ):
             response = await async_client.put(
@@ -89,20 +87,11 @@ class TestUpdateSettings:
 
     async def test_update_partial_settings(self, async_client):
         """PUT /api/settings only sends provided fields."""
-        merged = {
-            "claude_code_path": "claude",
-            "claude_model": "opus",
-            "agent_backend": "claude_code",
-            "anthropic_api_key": "",
-            "classification_confidence_threshold": 0.7,
-            "flashcard_count_per_week": 25,
-            "quiz_question_count_per_week": 8,
-            "chunk_size_tokens": 500,
-            "chunk_overlap_tokens": 50,
-        }
+        merged = {**MOCK_SETTINGS, "flashcard_count_per_week": 25}
 
         with patch(
-            "app.api.settings.settings_service.update_settings",
+            "app.api.settings.settings_service.update_user_settings",
+            new_callable=AsyncMock,
             return_value=merged,
         ) as mock_update:
             response = await async_client.put(
@@ -111,5 +100,7 @@ class TestUpdateSettings:
             )
 
         assert response.status_code == 200
-        # Verify only the provided key was passed to update_settings
-        mock_update.assert_called_once_with({"flashcard_count_per_week": 25})
+        # Verify the user_id and updates were passed correctly
+        call_args = mock_update.call_args
+        assert call_args[0][1] == "00000000-0000-0000-0000-000000000001"  # user.id
+        assert call_args[0][2] == {"flashcard_count_per_week": 25}

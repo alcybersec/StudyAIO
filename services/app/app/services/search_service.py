@@ -18,6 +18,7 @@ async def search_chunks(
     top_k: int | None = None,
     course_id: str | None = None,
     week: int | None = None,
+    user_id: str | None = None,
 ) -> list[dict]:
     """Search for similar chunks using pgvector cosine distance.
 
@@ -57,6 +58,8 @@ async def search_chunks(
     )
 
     # Apply scope filters
+    if user_id:
+        stmt = stmt.where(LectureArtifact.user_id == user_id)
     if course_id:
         stmt = stmt.where(LectureArtifact.course_id == course_id)
     if week is not None:

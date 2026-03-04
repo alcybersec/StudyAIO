@@ -5,10 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_or_default
 from app.api.schemas import ResolveReviewRequest, ReviewItemResponse
 from app.core.database import get_session
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
+from app.models.user import User
 from app.pipeline.orchestrator import resume_pipeline
 from app.services import review_service
 
@@ -25,11 +27,12 @@ router = APIRouter()
 )
 async def list_review_items(
     status: str = "pending",
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[ReviewItemResponse]:
     """List review items, default to pending."""
     if status == "pending":
-        items = await review_service.list_pending_reviews(session)
+        items = await review_service.list_pending_reviews(session, user_id=user.id)
     else:
         # For other statuses, do a simple query
         from app.models.review_item import ReviewItem
@@ -51,6 +54,7 @@ async def list_review_items(
 )
 async def get_review_item(
     review_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> ReviewItemResponse:
     """Get a single review item."""
@@ -69,6 +73,7 @@ async def get_review_item(
 async def resolve_review_item(
     review_id: str,
     body: ResolveReviewRequest,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> ReviewItemResponse:
     """Resolve a review item and resume the pipeline.
@@ -123,7 +128,7 @@ async def resolve_review_item(
     # Resume pipeline from classify stage (next stage after classification)
     if item.entity_type == "lecture_artifact":
         try:
-            resume_pipeline(item.entity_id, from_stage="extract")
+            resume_pipeline(item.entity_id, from_stage="extract", user_id=user.id)
         except Exception as e:
             logger.error(
                 "pipeline_resume_failed",
@@ -142,6 +147,7 @@ async def resolve_review_item(
 )
 async def dismiss_review_item(
     review_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> ReviewItemResponse:
     """Dismiss a review item without resolving it."""

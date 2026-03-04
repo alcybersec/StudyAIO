@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import String
+from sqlalchemy import ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -15,13 +15,17 @@ class Course(Base):
     __tablename__ = "courses"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(String(20), nullable=False)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     term: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
+    user: Mapped["User"] = relationship(back_populates="courses")
     artifacts: Mapped[list["LectureArtifact"]] = relationship(back_populates="course")
     summaries: Mapped[list["Summary"]] = relationship(back_populates="course")
     flashcards: Mapped[list["Flashcard"]] = relationship(back_populates="course")
@@ -31,3 +35,8 @@ class Course(Base):
     course_documents: Mapped[list["CourseDocument"]] = relationship(back_populates="course")
     assessments: Mapped[list["Assessment"]] = relationship(back_populates="course")
     deadlines: Mapped[list["Deadline"]] = relationship(back_populates="course")
+
+    __table_args__ = (
+        UniqueConstraint("code", "user_id", name="uq_courses_code_user"),
+        Index("ix_courses_user_id", "user_id"),
+    )

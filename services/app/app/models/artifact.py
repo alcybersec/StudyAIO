@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, ForeignKey, Index, String
+from sqlalchemy import BigInteger, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -15,6 +15,9 @@ class LectureArtifact(Base):
     __tablename__ = "lecture_artifacts"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
     course_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("courses.id"), nullable=True
     )
@@ -23,7 +26,7 @@ class LectureArtifact(Base):
     original_filename: Mapped[str] = mapped_column(String(500), nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     file_type: Mapped[str] = mapped_column(String(10), nullable=False)
-    sha256: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ingested")
     pipeline_started_at: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -32,6 +35,7 @@ class LectureArtifact(Base):
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
+    user: Mapped["User"] = relationship(back_populates="artifacts")
     course: Mapped["Course | None"] = relationship(back_populates="artifacts")
     extraction: Mapped["Extraction | None"] = relationship(back_populates="artifact", uselist=False)
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="artifact")
@@ -40,7 +44,9 @@ class LectureArtifact(Base):
     pipeline_runs: Mapped[list["PipelineRun"]] = relationship(back_populates="artifact")
 
     __table_args__ = (
-        Index("ix_lecture_artifacts_sha256", "sha256", unique=True),
+        UniqueConstraint("sha256", "user_id", name="uq_artifacts_sha256_user"),
+        Index("ix_lecture_artifacts_sha256", "sha256"),
+        Index("ix_lecture_artifacts_user_id", "user_id"),
         Index("ix_lecture_artifacts_course_id", "course_id"),
         Index("ix_lecture_artifacts_status", "status"),
     )
