@@ -15,6 +15,7 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from app.api import (
     assets_router,
+    auth_router,
     courseops_router,
     courses_router,
     dashboard_router,
@@ -29,7 +30,13 @@ from app.api import (
     uploads_router,
 )
 from app.config import settings
-from app.core.exceptions import DuplicateFileError, StudyAIOError
+from app.core.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    DuplicateFileError,
+    StudyAIOError,
+    UserExistsError,
+)
 from app.core.logging import configure_logging
 from app.core.rate_limit import limiter
 
@@ -94,6 +101,7 @@ app = FastAPI(
         {"name": "settings", "description": "Application settings management"},
         {"name": "exports", "description": "Data export (Obsidian vault, etc.)"},
         {"name": "courseops", "description": "Course documents, assessments, deadlines, and calendar exports"},
+        {"name": "auth", "description": "Authentication, registration, MFA, and session management"},
     ],
 )
 
@@ -131,9 +139,28 @@ app.include_router(study_router, prefix="/api", tags=["study"])
 app.include_router(settings_router, prefix="/api", tags=["settings"])
 app.include_router(exports_router, prefix="/api", tags=["exports"])
 app.include_router(courseops_router, prefix="/api", tags=["courseops"])
+app.include_router(auth_router, prefix="/api", tags=["auth"])
 
 
 # Exception handlers
+@app.exception_handler(AuthenticationError)
+async def authentication_error_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
+    """Handle authentication errors with 401."""
+    return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+
+@app.exception_handler(AuthorizationError)
+async def authorization_error_handler(request: Request, exc: AuthorizationError) -> JSONResponse:
+    """Handle authorization errors with 403."""
+    return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+
+@app.exception_handler(UserExistsError)
+async def user_exists_handler(request: Request, exc: UserExistsError) -> JSONResponse:
+    """Handle duplicate user registration with 409."""
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
 @app.exception_handler(DuplicateFileError)
 async def duplicate_file_handler(request: Request, exc: DuplicateFileError) -> JSONResponse:
     """Handle duplicate file uploads with 409 Conflict."""

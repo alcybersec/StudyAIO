@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 12 — Hardening & Security (Complete)
-> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility + courseops + security hardening)
+> **Current Milestone:** 13 — Authentication Backend (Complete)
+> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility + courseops + security hardening + auth backend)
 
 ---
 
@@ -131,6 +131,17 @@
 | 12.2 | Upload size limits + security headers + CORS config | ✅ Done | read_upload_with_limit() in core/utils.py (1MB chunked reads, 413 on excess). SecurityHeadersMiddleware (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy). CORS from CORS_ORIGINS env var. anthropic_api_key → SecretStr. nginx.conf security headers. max_upload_size_mb setting. 12 new tests. |
 | 12.3 | Multi-stage Dockerfile + non-root user + request ID | ✅ Done | Two-stage Dockerfile (builder with build-essential → runtime with libpq5 only). Non-root studyaio user. Worker runs as root (Claude CLI mount). RequestIDMiddleware (X-Request-ID header, structlog contextvars). 4 new tests. |
 | 12.4 | Rate limiting + hardening tests + progress | ✅ Done | slowapi with shared limiter instance. Rate limits on uploads (10/min), batch (5/min), Q&A (20/min), courseops (10/min). Lambda-based limit values (configurable at runtime). Comprehensive hardening test suite (12 tests). 551 total tests. |
+
+## Milestone 13 — Authentication Backend
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 13.0 | Commit Milestone 12 work | ✅ Done | Clean baseline before M13. 24 files committed. |
+| 13.1 | User model + migration + config + deps | ✅ Done | 3 new models (User, OAuthAccount, MagicLink). Alembic migration e6f7g8h9i0j1. Config: JWT settings, OAuth secrets, self_hosted flag. New deps: PyJWT, argon2-cffi, authlib, pyotp, qrcode, email-validator. |
+| 13.2 | Core auth module (hashing + JWT + security) | ✅ Done | core/auth.py (Argon2id hashing, JWT create/decode, magic link tokens). core/security.py (TOTP setup/verify, backup codes, QR code generation). 3 new exception classes (AuthenticationError, AuthorizationError, UserExistsError). 28 tests. |
+| 13.3 | User service | ✅ Done | user_service.py: register, authenticate, profile CRUD, password change/reset, email verification, MFA enable/disable, OAuth create/link. Stateless functions, domain exceptions. 25 tests. |
+| 13.4 | Auth API endpoints + dependencies | ✅ Done | 17 endpoints in auth router. deps.py (get_current_user, get_optional_user, require_role, require_plan). auth_schemas.py (12 Pydantic models). HttpOnly cookie auth. Exception handlers (401/403/409). Rate limits on login (5/min) and register (10/min). conftest.py: make_user + auth_cookies fixtures. 25 tests. |
+| 13.5 | Edge cases + docs | ✅ Done | 11 edge-case tests (MFA login flows, token tampering, password validation, rate limiting, existing endpoints unaffected). Ruff clean. PROGRESS.md + api.md updated. 89 total new tests. 522 passing (+ 8 pre-existing fs-permission failures). |
 
 ## Post-v1 — Fixes & Settings
 

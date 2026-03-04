@@ -1,0 +1,199 @@
+"""Tests for auth API endpoints."""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from app.core.auth import hash_password
+from app.models.user import User
+
+
+def _make_db_user(**overrides) -> User:
+    """Create a mock User that looks like it came from the DB."""
+    from datetime import datetime
+
+    defaults = {
+        "id": "user-001",
+        "email": "test@example.com",
+        "username": "testuser",
+        "hashed_password": hash_password("TestPass1!"),
+        "role": "user",
+        "tier": "free",
+        "is_active": True,
+        "email_verified": False,
+        "mfa_enabled": False,
+        "mfa_secret": None,
+        "avatar_url": None,
+        "backup_codes": None,
+        "last_login_at": None,
+        "created_at": datetime(2026, 1, 1),
+        "updated_at": datetime(2026, 1, 1),
+    }
+    defaults.update(overrides)
+    user = MagicMock(spec=User)
+    for k, v in defaults.items():
+        setattr(user, k, v)
+    return user
+
+
+class TestRegister:
+    """POST /api/auth/register"""
+
+    @pytest.mark.asyncio
+    async def test_register_success(self, async_client, mock_session):
+        result_none = MagicMock()
+        result_none.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = result_none
+
+        # Patch register_user to return a fully-populated user mock
+        user = _make_db_user(email="new@example.com", username="newuser")
+        with patch("app.api.auth.user_service.register_user", new_callable=AsyncMock, return_value=user):
+            response = await async_client.post(
+                "/api/auth/register",
+                json={"email": "new@example.com", "username": "newuser", "password": "StrongPass1!"},
+            )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["email"] == "new@example.com"
+        assert data["username"] == "newuser"
+        # Check cookies set
+        assert "access_token" in response.cookies
+        assert "refresh_token" in response.cookies
+
+    @pytest.mark.asyncio
+    async def test_register_duplicate_email(self, async_client, mock_session):
+        existing = _make_db_user()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = existing
+        mock_session.execute.return_value = result
+
+        response = await async_client.post(
+            "/api/auth/register",
+            json={"email": "test@example.com", "username": "other", "password": "StrongPass1!"},
+        )
+        assert response.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_register_short_password(self, async_client):
+        response = await async_client.post(
+            "/api/auth/register",
+            json={"email": "new@example.com", "username": "newuser", "password": "short"},
+        )
+        assert response.status_code == 422  # Pydantic validation
+
+
+class TestLogin:
+    """POST /api/auth/login"""
+
+    @pytest.mark.asyncio
+    async def test_login_success(self, async_client, mock_session):
+        user = _make_db_user()
+
+        with patch("app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user):
+            response = await async_client.post(
+                "/api/auth/login",
+                json={"email": "test@example.com", "password": "TestPass1!"},
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email"] == "test@example.com"
+        assert "access_token" in response.cookies
+
+    @pytest.mark.asyncio
+    async def test_login_wrong_password(self, async_client, mock_session):
+        user = _make_db_user()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = user
+        mock_session.execute.return_value = result
+
+        response = await async_client.post(
+            "/api/auth/login",
+            json={"email": "test@example.com", "password": "WrongPass!"},
+        )
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_login_unknown_email(self, async_client, mock_session):
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = result
+
+        response = await async_client.post(
+            "/api/auth/login",
+            json={"email": "nobody@example.com", "password": "AnyPass1!"},
+        )
+        assert response.status_code == 401
+
+
+class TestLogout:
+    """POST /api/auth/logout"""
+
+    @pytest.mark.asyncio
+    async def test_logout_clears_cookies(self, async_client):
+        response = await async_client.post("/api/auth/logout")
+        assert response.status_code == 200
+        # Cookies should be cleared (set-cookie with max-age=0)
+        assert response.json()["detail"] == "Logged out"
+
+
+class TestRefresh:
+    """POST /api/auth/refresh"""
+
+    @pytest.mark.asyncio
+    async def test_refresh_success(self, async_client, mock_session, auth_cookies, make_user):
+        user = make_user()
+        cookies, _ = auth_cookies(user=user)
+        # Mock the user lookup
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = user
+        mock_session.execute.return_value = result
+
+        response = await async_client.post(
+            "/api/auth/refresh",
+            cookies=cookies,
+        )
+        assert response.status_code == 200
+        assert "access_token" in response.cookies
+
+    @pytest.mark.asyncio
+    async def test_refresh_no_token(self, async_client):
+        response = await async_client.post("/api/auth/refresh")
+        assert response.status_code == 401
+
+
+class TestGetMe:
+    """GET /api/auth/me"""
+
+    @pytest.mark.asyncio
+    async def test_get_me_authenticated(self, async_client, mock_session, auth_cookies, make_user):
+        user = make_user()
+        cookies, _ = auth_cookies(user=user)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = user
+        mock_session.execute.return_value = result
+
+        response = await async_client.get("/api/auth/me", cookies=cookies)
+        assert response.status_code == 200
+        assert response.json()["email"] == "test@example.com"
+
+    @pytest.mark.asyncio
+    async def test_get_me_unauthenticated(self, async_client):
+        response = await async_client.get("/api/auth/me")
+        assert response.status_code == 401
+
+
+class TestForgotPassword:
+    """POST /api/auth/forgot-password"""
+
+    @pytest.mark.asyncio
+    async def test_forgot_password_always_202(self, async_client, mock_session):
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = result
+
+        response = await async_client.post(
+            "/api/auth/forgot-password",
+            json={"email": "nobody@example.com"},
+        )
+        # Always 202 regardless of whether user exists (no email leak)
+        assert response.status_code == 202

@@ -48,6 +48,19 @@ class Settings(BaseSettings):
     rate_limit_uploads: str = "10/minute"
     rate_limit_qa: str = "20/minute"
 
+    # Authentication
+    jwt_secret_key: SecretStr = SecretStr("changeme-in-production-use-a-real-secret")
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 15
+    jwt_refresh_token_expire_days: int = 7
+    self_hosted: bool = True
+
+    # OAuth providers
+    google_client_id: str = ""
+    google_client_secret: SecretStr = SecretStr("")
+    github_client_id: str = ""
+    github_client_secret: SecretStr = SecretStr("")
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @property

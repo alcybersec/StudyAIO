@@ -18,6 +18,118 @@ Check API server status.
 
 ---
 
+## Authentication
+
+All auth endpoints use HttpOnly cookies for session management. Access tokens expire in 15 minutes, refresh tokens in 7 days.
+
+### `POST /api/auth/register`
+
+Register a new user. Rate limited: 10/minute.
+
+**Body** `RegisterRequest`
+**Response** `201` `UserProfileResponse` + Set-Cookie (access_token, refresh_token)
+
+### `POST /api/auth/login`
+
+Authenticate with email and password. Rate limited: 5/minute. If MFA is enabled, `totp_code` is required.
+
+**Body** `LoginRequest`
+**Response** `200` `UserProfileResponse` + Set-Cookie | `401` invalid credentials | `403` MFA code required/invalid
+
+### `POST /api/auth/logout`
+
+Clear auth cookies.
+
+**Response** `200` `{ "detail": "Logged out" }`
+
+### `POST /api/auth/refresh`
+
+Rotate access and refresh tokens using the refresh token cookie.
+
+**Response** `200` `{ "detail": "Tokens refreshed" }` + Set-Cookie | `401` invalid/missing refresh token
+
+### `GET /api/auth/me`
+
+Get current user profile. Requires authentication.
+
+**Response** `200` `UserProfileResponse` | `401` not authenticated
+
+### `PUT /api/auth/me`
+
+Update current user profile. Requires authentication.
+
+**Body** `UpdateProfileRequest`
+**Response** `200` `UserProfileResponse`
+
+### `POST /api/auth/change-password`
+
+Change password. Requires authentication.
+
+**Body** `ChangePasswordRequest`
+**Response** `200` `{ "detail": "Password changed" }` | `401` wrong current password
+
+### `POST /api/auth/forgot-password`
+
+Request password reset. Always returns 202 (no email leak). Rate limited: 5/minute.
+
+**Body** `ForgotPasswordRequest`
+**Response** `202`
+
+### `POST /api/auth/reset-password`
+
+Reset password with magic link token.
+
+**Body** `ResetPasswordRequest`
+**Response** `200` | `401` invalid/expired/used token
+
+### `POST /api/auth/verify-email`
+
+Verify email with magic link token.
+
+**Body** `VerifyEmailRequest`
+**Response** `200`
+
+### `POST /api/auth/mfa/setup`
+
+Generate TOTP secret and QR code. Requires authentication.
+
+**Response** `200` `MFASetupResponse`
+
+### `POST /api/auth/mfa/verify`
+
+Verify TOTP code and enable MFA. Returns backup codes. Requires authentication.
+
+**Body** `MFAVerifyRequest`
+**Response** `200` `{ "detail": "MFA enabled", "backup_codes": [...] }`
+
+### `POST /api/auth/mfa/disable`
+
+Disable MFA. Requires authentication.
+
+**Body** `MFADisableRequest`
+**Response** `200`
+
+### `GET /api/auth/oauth/{provider}`
+
+OAuth redirect (placeholder — M21).
+
+### `GET /api/auth/oauth/{provider}/callback`
+
+OAuth callback (placeholder — M21).
+
+### `POST /api/auth/magic-link`
+
+Request a magic link. Rate limited: 5/minute. Always returns 202.
+
+**Body** `MagicLinkRequest`
+**Response** `202`
+
+### `GET /api/auth/magic/{token}`
+
+Login via magic link (placeholder — M21).
+
+---
+
 ## Dashboard
 
 ### `GET /api/dashboard`
@@ -1029,3 +1141,15 @@ Download a markdown task plan with assessments and deadline checklist.
 | `DeadlineResponse` | id, course_id, assessment_id, source_document_id, title, due_date, deadline_type, description, is_confirmed |
 | `DeadlineUpdateRequest` | title?, due_date?, deadline_type?, description?, is_confirmed? |
 | `UpcomingDeadlineItem` | course_code, deadline (DeadlineResponse) |
+| `RegisterRequest` | email (EmailStr), username (3-100), password (8-128) |
+| `LoginRequest` | email (EmailStr), password, totp_code? |
+| `ChangePasswordRequest` | old_password, new_password (8-128) |
+| `ForgotPasswordRequest` | email (EmailStr) |
+| `ResetPasswordRequest` | token, new_password (8-128) |
+| `VerifyEmailRequest` | token |
+| `MFASetupResponse` | secret, qr_code_base64, provisioning_uri |
+| `MFAVerifyRequest` | totp_code (6 chars), secret |
+| `MFADisableRequest` | totp_code (6 chars) |
+| `MagicLinkRequest` | email (EmailStr) |
+| `UpdateProfileRequest` | username? (3-100), avatar_url? |
+| `UserProfileResponse` | id, email, username, role, tier, is_active, email_verified, mfa_enabled, avatar_url, last_login_at, created_at |
