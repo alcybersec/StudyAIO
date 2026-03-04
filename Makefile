@@ -54,7 +54,7 @@ test-golden:
 	cd services/app && pytest tests/golden -x -v
 
 coverage:
-	cd services/app && pytest tests/unit --cov=app --cov-report=term-missing
+	cd services/app && pytest tests/unit --cov=app --cov-report=term-missing --cov-fail-under=70
 
 # === Linting ===
 lint-python:

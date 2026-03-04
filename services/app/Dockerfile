@@ -1,17 +1,39 @@
-FROM python:3.12-slim AS base
+# === Stage 1: Builder — install Python dependencies ===
+FROM python:3.12-slim AS builder
 
-WORKDIR /app
+WORKDIR /build
 
-# Install system dependencies for PDF/DOCX/PPTX extraction
+# System deps needed to compile Python packages (psycopg2, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev \
     build-essential \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# === Stage 2: Runtime — lean image, no build tools ===
+FROM python:3.12-slim AS runtime
+
+WORKDIR /app
+
+# Only runtime C libs (no compiler, no headers)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed packages from builder
+COPY --from=builder /install /usr/local
+
+# Create non-root user
+RUN groupadd -r studyaio && useradd -r -g studyaio -d /app -s /sbin/nologin studyaio
 
 COPY . .
+
+# Ensure data dir is writable by studyaio
+RUN mkdir -p /app/data && chown -R studyaio:studyaio /app/data
+
+USER studyaio
 
 EXPOSE 8000
 

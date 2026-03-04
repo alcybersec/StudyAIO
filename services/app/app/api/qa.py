@@ -1,14 +1,16 @@
 """Q&A API endpoint — ask questions about lecture content."""
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.embeddings import get_embedding_provider
 from app.agents.factory import get_agent
 from app.api.schemas import Citation, QARequest, QAResponse
+from app.config import settings
 from app.core.database import get_session
+from app.core.rate_limit import limiter
 from app.models.course import Course
 from app.services import search_service
 
@@ -23,7 +25,9 @@ router = APIRouter()
     summary="Ask a question",
     description="Ask a question about lecture content. Returns an AI-generated answer with citations to source chunks.",
 )
+@limiter.limit(lambda: settings.rate_limit_qa)
 async def ask_question(
+    request: Request,
     body: QARequest,
     session: AsyncSession = Depends(get_session),
 ) -> QAResponse:

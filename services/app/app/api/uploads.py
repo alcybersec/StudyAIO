@@ -20,7 +20,8 @@ from app.api.schemas import (
 from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import DuplicateFileError
-from app.core.utils import sanitize_filename
+from app.core.rate_limit import limiter
+from app.core.utils import read_upload_with_limit, sanitize_filename
 from app.pipeline.orchestrator import resume_pipeline, run_pipeline
 from app.services import artifact_service, pipeline_service
 from app.services.event_service import PIPELINE_EVENTS_CHANNEL
@@ -39,7 +40,9 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx"}
     summary="Upload a lecture file",
     description="Accepts PDF, DOCX, or PPTX files. Saves to storage, starts the processing pipeline, and returns immediately. Duplicate files (by SHA-256) return 409.",
 )
+@limiter.limit(lambda: settings.rate_limit_uploads)
 async def upload_file(
+    request: Request,
     file: UploadFile,
     session: AsyncSession = Depends(get_session),
 ) -> UploadResponse:
@@ -76,9 +79,12 @@ async def upload_file(
                 dest = uploads_dir / f"{stem}_{counter}{suffix}"
                 counter += 1
 
-        content = await file.read()
+        max_bytes = settings.max_upload_size_mb * 1024 * 1024
+        content = await read_upload_with_limit(file, max_bytes)
         dest.write_bytes(content)
         file_path = str(dest)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("upload_save_failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to save uploaded file") from e
@@ -109,7 +115,9 @@ async def upload_file(
     summary="Batch upload lecture files",
     description="Upload multiple lecture files in a single request. Returns per-file results with succeeded/failed/duplicate counts.",
 )
+@limiter.limit("5/minute")
 async def batch_upload(
+    request: Request,
     files: list[UploadFile],
     session: AsyncSession = Depends(get_session),
 ) -> BatchUploadResponse:
@@ -154,9 +162,18 @@ async def batch_upload(
                     dest = uploads_dir / f"{stem}_{counter}{suffix}"
                     counter += 1
 
-            content = await file.read()
+            max_bytes = settings.max_upload_size_mb * 1024 * 1024
+            content = await read_upload_with_limit(file, max_bytes)
             dest.write_bytes(content)
             file_path = str(dest)
+        except HTTPException as e:
+            results.append(BatchUploadFileResult(
+                filename=filename,
+                status="error",
+                error=e.detail,
+            ))
+            failed += 1
+            continue
         except Exception as e:
             logger.error("batch_upload_save_failed", filename=filename, error=str(e))
             results.append(BatchUploadFileResult(

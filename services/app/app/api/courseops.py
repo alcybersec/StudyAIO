@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +17,8 @@ from app.api.courseops_schemas import (
 from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import CourseOpsError
-from app.core.utils import compute_sha256, sanitize_filename
+from app.core.rate_limit import limiter
+from app.core.utils import read_upload_with_limit, sanitize_filename
 from app.services import courseops_service
 from app.services.calendar_service import generate_ics, generate_task_plan_md
 
@@ -35,7 +36,9 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx"}
     summary="Upload a course document",
     description="Upload a course outline, rubric, or handbook. Triggers AI extraction of assessments and deadlines.",
 )
+@limiter.limit(lambda: settings.rate_limit_uploads)
 async def upload_course_document(
+    request: Request,
     file: UploadFile,
     course_code: str = Query(..., description="Course code to associate with"),
     document_type: str = Query(
@@ -65,7 +68,8 @@ async def upload_course_document(
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     safe_name = sanitize_filename(file.filename)
-    content = await file.read()
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    content = await read_upload_with_limit(file, max_bytes)
     file_size = len(content)
 
     # Write temp then compute hash
