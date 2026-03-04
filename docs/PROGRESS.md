@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 13 — Authentication Backend (Complete)
-> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility + courseops + security hardening + auth backend)
+> **Current Milestone:** 14 — Authentication Frontend + Protected Routes (Complete)
+> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility + courseops + security hardening + auth backend + auth frontend)
 
 ---
 
@@ -142,6 +142,18 @@
 | 13.3 | User service | ✅ Done | user_service.py: register, authenticate, profile CRUD, password change/reset, email verification, MFA enable/disable, OAuth create/link. Stateless functions, domain exceptions. 25 tests. |
 | 13.4 | Auth API endpoints + dependencies | ✅ Done | 17 endpoints in auth router. deps.py (get_current_user, get_optional_user, require_role, require_plan). auth_schemas.py (12 Pydantic models). HttpOnly cookie auth. Exception handlers (401/403/409). Rate limits on login (5/min) and register (10/min). conftest.py: make_user + auth_cookies fixtures. 25 tests. |
 | 13.5 | Edge cases + docs | ✅ Done | 11 edge-case tests (MFA login flows, token tampering, password validation, rate limiting, existing endpoints unaffected). Ruff clean. PROGRESS.md + api.md updated. 89 total new tests. 522 passing (+ 8 pre-existing fs-permission failures). |
+
+## Milestone 14 — Authentication Frontend + Protected Routes
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 14.0 | Commit Milestone 13 work | ✅ Done | Clean baseline. 27 files committed. |
+| 14.1 | Backend — GET /api/auth/config endpoint | ✅ Done | AuthConfigResponse schema. Public endpoint returning self_hosted, registration_enabled, oauth_providers. 3 tests. |
+| 14.2 | Frontend — Auth types, API client, token refresh | ✅ Done | 12 auth types in types/index.ts. authApi object with 13 methods in api/auth.ts. 401 auto-refresh with dedup in client.ts (fetchWithRefresh). |
+| 14.3 | Frontend — AuthContext + useAuth hook | ✅ Done | AuthProvider (config query, user query, login/register/logout mutations). useAuth() hook + 5 mutation hooks (useChangePassword, useUpdateProfile, useMFASetup, useMFAVerify, useMFADisable). isSelfHosted defaults true. |
+| 14.4 | Frontend — Auth pages | ✅ Done | 5 pages (Login, Register, ForgotPassword, ResetPassword, Profile). AuthLayout (centered card). OAuthButtons (provider-aware). MFASetup (QR flow, backup codes, disable). |
+| 14.5 | Frontend — Protected routes + router + nav | ✅ Done | ProtectedRoute (self-hosted passthrough, loading spinner, redirect). PublicOnlyRoute (redirect authenticated users). Router restructured (RootLayout→AuthProvider→public/protected). Sidebar user section (avatar, username, sign out). |
+| 14.6 | Tests + documentation | ✅ Done | 3 backend tests for auth config. Frontend build passes. PROGRESS.md + api.md updated. 525 total passing tests. |
 
 ## Post-v1 — Fixes & Settings
 

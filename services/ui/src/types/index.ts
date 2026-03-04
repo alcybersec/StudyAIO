@@ -393,6 +393,75 @@ export interface UpcomingDeadline {
   is_confirmed: boolean
 }
 
+// ── Auth ──────────────────────────────────────────────────────────
+
+export interface AuthConfig {
+  self_hosted: boolean
+  registration_enabled: boolean
+  oauth_providers: string[]
+}
+
+export interface AuthUser {
+  id: string
+  email: string
+  username: string
+  role: string
+  tier: string
+  is_active: boolean
+  email_verified: boolean
+  mfa_enabled: boolean
+  avatar_url: string | null
+  last_login_at: string | null
+  created_at: string
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+  totp_code?: string
+}
+
+export interface RegisterRequest {
+  email: string
+  username: string
+  password: string
+}
+
+export interface ChangePasswordRequest {
+  old_password: string
+  new_password: string
+}
+
+export interface ForgotPasswordRequest {
+  email: string
+}
+
+export interface ResetPasswordRequest {
+  token: string
+  new_password: string
+}
+
+export interface UpdateProfileRequest {
+  username?: string
+  avatar_url?: string
+}
+
+export interface MFASetupResponse {
+  secret: string
+  qr_code_base64: string
+  provisioning_uri: string
+}
+
+export interface MFAVerifyRequest {
+  totp_code: string
+  secret: string
+}
+
+export interface MFAVerifyResponse {
+  detail: string
+  backup_codes: string[]
+}
+
 export interface ReviewRequest {
   flashcard_id: string
   quality: number

@@ -22,6 +22,19 @@ Check API server status.
 
 All auth endpoints use HttpOnly cookies for session management. Access tokens expire in 15 minutes, refresh tokens in 7 days.
 
+### `GET /api/auth/config`
+
+Public endpoint (no auth required). Returns auth configuration for the frontend.
+
+**Response** `200`
+```json
+{
+  "self_hosted": true,
+  "registration_enabled": false,
+  "oauth_providers": []
+}
+```
+
 ### `POST /api/auth/register`
 
 Register a new user. Rate limited: 10/minute.
