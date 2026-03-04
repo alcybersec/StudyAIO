@@ -48,7 +48,7 @@ export function QAPage() {
       {/* Loading state */}
       {askMutation.isPending && (
         <Card className="mb-4">
-          <div className="flex items-center gap-3 text-gray-500">
+          <div className="flex items-center gap-3 text-text-muted">
             <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
             <span className="text-sm">Searching lectures and generating answer...</span>
           </div>
@@ -57,8 +57,8 @@ export function QAPage() {
 
       {/* Error state */}
       {askMutation.isError && (
-        <Card className="mb-4 border-red-200 bg-red-50">
-          <p className="text-sm text-red-700">
+        <Card className="mb-4 border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950">
+          <p className="text-sm text-red-700 dark:text-red-400">
             Failed to get answer: {(askMutation.error as Error).message}
           </p>
         </Card>
@@ -70,8 +70,8 @@ export function QAPage() {
           {history.map((exchange, i) => (
             <Card key={i}>
               <div className="mb-3">
-                <p className="text-sm font-medium text-gray-900">{exchange.question}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-sm font-medium text-text">{exchange.question}</p>
+                <p className="text-xs text-text-muted mt-0.5">
                   {new Date(exchange.timestamp).toLocaleTimeString()}
                 </p>
               </div>

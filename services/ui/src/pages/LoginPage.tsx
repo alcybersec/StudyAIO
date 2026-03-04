@@ -38,10 +38,10 @@ export function LoginPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign in</h2>
+      <h2 className="text-xl font-semibold text-text mb-6">Sign in</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="email" className="block text-sm font-medium text-text mb-1">
             Email
           </label>
           <input
@@ -50,12 +50,12 @@ export function LoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
             placeholder="you@example.com"
           />
         </div>
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="password" className="block text-sm font-medium text-text mb-1">
             Password
           </label>
           <input
@@ -64,12 +64,12 @@ export function LoginPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
         </div>
         {showMFA && (
           <div>
-            <label htmlFor="totp" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="totp" className="block text-sm font-medium text-text mb-1">
               MFA Code
             </label>
             <input
@@ -77,7 +77,7 @@ export function LoginPage() {
               type="text"
               value={totpCode}
               onChange={(e) => setTotpCode(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
               placeholder="6-digit code"
               maxLength={6}
               autoFocus
@@ -94,7 +94,7 @@ export function LoginPage() {
         </button>
       </form>
       <OAuthButtons providers={authConfig?.oauth_providers ?? []} />
-      <div className="mt-4 text-center text-sm text-gray-500 space-y-1">
+      <div className="mt-4 text-center text-sm text-text-muted space-y-1">
         <p>
           <Link to="/forgot-password" className="text-primary hover:underline">
             Forgot password?

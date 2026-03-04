@@ -166,6 +166,11 @@ export interface Settings {
   claude_model: string
   agent_backend: string
   anthropic_api_key: string
+  openai_api_key: string
+  openai_model: string
+  ollama_base_url: string
+  ollama_model: string
+  embedding_backend: string
   classification_confidence_threshold: number
   flashcard_count_per_week: number
   quiz_question_count_per_week: number

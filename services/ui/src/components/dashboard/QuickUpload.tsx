@@ -35,7 +35,7 @@ export function QuickUpload() {
 
   return (
     <Card>
-      <h2 className="text-sm font-semibold text-gray-900 mb-3">Quick Upload</h2>
+      <h2 className="text-sm font-semibold text-text mb-3">Quick Upload</h2>
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
@@ -44,14 +44,14 @@ export function QuickUpload() {
         className={`flex flex-col items-center justify-center gap-2 py-6 px-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
           dragOver
             ? 'border-primary bg-primary/5'
-            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+            : 'border-border hover:border-text-muted hover:bg-surface-alt'
         }`}
       >
-        <span className="text-2xl text-gray-400">{'\u2191'}</span>
-        <p className="text-sm text-gray-500">
+        <span className="text-2xl text-text-muted">{'\u2191'}</span>
+        <p className="text-sm text-text-muted">
           {upload.isPending ? 'Uploading...' : 'Drop a file or click to browse'}
         </p>
-        <p className="text-xs text-gray-400">PDF, DOCX, or PPTX</p>
+        <p className="text-xs text-text-muted">PDF, DOCX, or PPTX</p>
         <input
           ref={inputRef}
           type="file"

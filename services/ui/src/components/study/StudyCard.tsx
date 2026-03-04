@@ -23,22 +23,22 @@ export function StudyCard({ card, onFlip, flipped }: StudyCardProps) {
         >
           {/* Front */}
           <div
-            className="absolute inset-0 rounded-xl border border-gray-200 bg-white shadow-sm p-8 flex flex-col items-center justify-center text-center"
+            className="absolute inset-0 rounded-xl border border-border bg-surface shadow-sm p-8 flex flex-col items-center justify-center text-center"
             style={{ backfaceVisibility: 'hidden' }}
           >
-            <div className="text-xs uppercase tracking-wider text-gray-400 mb-4">Question</div>
-            <div className="text-lg leading-relaxed text-gray-800 whitespace-pre-wrap">
+            <div className="text-xs uppercase tracking-wider text-text-muted mb-4">Question</div>
+            <div className="text-lg leading-relaxed text-text whitespace-pre-wrap">
               {card.front}
             </div>
           </div>
 
           {/* Back */}
           <div
-            className="absolute inset-0 rounded-xl border border-gray-200 bg-gradient-to-br from-white to-gray-50 shadow-sm p-8 flex flex-col items-center justify-center text-center"
+            className="absolute inset-0 rounded-xl border border-border bg-gradient-to-br from-surface to-surface-alt shadow-sm p-8 flex flex-col items-center justify-center text-center"
             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
           >
-            <div className="text-xs uppercase tracking-wider text-gray-400 mb-4">Answer</div>
-            <div className="text-lg leading-relaxed text-gray-800 whitespace-pre-wrap">
+            <div className="text-xs uppercase tracking-wider text-text-muted mb-4">Answer</div>
+            <div className="text-lg leading-relaxed text-text whitespace-pre-wrap">
               {card.back}
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-center mt-4">
@@ -53,7 +53,7 @@ export function StudyCard({ card, onFlip, flipped }: StudyCardProps) {
       </button>
 
       {!flipped && (
-        <p className="text-center text-xs text-gray-400 mt-3">
+        <p className="text-center text-xs text-text-muted mt-3">
           Press Space or click to reveal answer
         </p>
       )}

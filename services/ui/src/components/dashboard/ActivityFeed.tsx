@@ -23,8 +23,8 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
   if (items.length === 0) {
     return (
       <Card>
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">Recent Activity</h2>
-        <p className="text-sm text-gray-500">No recent pipeline activity.</p>
+        <h2 className="text-sm font-semibold text-text mb-3">Recent Activity</h2>
+        <p className="text-sm text-text-muted">No recent pipeline activity.</p>
       </Card>
     )
   }
@@ -32,21 +32,21 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
   return (
     <Card padding={false}>
       <div className="px-6 pt-5 pb-2">
-        <h2 className="text-sm font-semibold text-gray-900">Recent Activity</h2>
+        <h2 className="text-sm font-semibold text-text">Recent Activity</h2>
       </div>
-      <ul className="divide-y divide-gray-100">
+      <ul className="divide-y divide-border">
         {items.slice(0, 5).map((item) => (
           <li key={item.pipeline_run_id} className="px-6 py-3 flex items-center gap-3">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
+              <p className="text-sm font-medium text-text truncate">
                 {item.filename ?? 'Unknown file'}
               </p>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <p className="text-xs text-text-muted mt-0.5">
                 Stage: {item.stage}
               </p>
             </div>
             <StatusBadge status={item.status} />
-            <span className="text-xs text-gray-400 shrink-0 w-14 text-right">
+            <span className="text-xs text-text-muted shrink-0 w-14 text-right">
               {relativeTime(item.completed_at ?? item.started_at)}
             </span>
           </li>

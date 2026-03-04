@@ -42,7 +42,7 @@ export function WeekViewPage() {
     const artifactParam = searchParams.get('artifact')
     const pageParam = searchParams.get('page')
     if (artifactParam) {
-      setSelectedArtifactId(artifactParam)
+      setSelectedArtifactId(artifactParam) // eslint-disable-line react-hooks/set-state-in-effect
       setViewerOpen(true)
     }
     if (pageParam) {
@@ -55,10 +55,10 @@ export function WeekViewPage() {
   useEffect(() => {
     if (!data?.artifacts.length || selectedArtifactId) return
     const firstPdf = data.artifacts.find((a) => a.file_type === 'pdf')
-    setSelectedArtifactId(firstPdf?.id ?? data.artifacts[0].id)
+    setSelectedArtifactId(firstPdf?.id ?? data.artifacts[0].id) // eslint-disable-line react-hooks/set-state-in-effect
   }, [data?.artifacts, selectedArtifactId])
 
-  const selectedArtifact = useMemo<Artifact | null>(() => {
+  const selectedArtifact = useMemo<Artifact | null>(() => { // eslint-disable-line react-hooks/preserve-manual-memoization
     if (!data?.artifacts.length || !selectedArtifactId) return null
     return data.artifacts.find((a) => a.id === selectedArtifactId) ?? null
   }, [data?.artifacts, selectedArtifactId])
@@ -106,7 +106,7 @@ export function WeekViewPage() {
         <div className="lg:hidden mb-4">
           <button
             onClick={() => setMobileViewerOpen(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px]"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-surface-alt border border-border rounded-lg text-sm font-medium text-text hover:bg-surface-alt transition-colors min-h-[44px]"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -122,7 +122,7 @@ export function WeekViewPage() {
         {/* Left panel: Tabs + content */}
         <div>
           {/* Tab bar */}
-          <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
+          <div className="flex items-center gap-1 border-b border-border mb-6">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -130,7 +130,7 @@ export function WeekViewPage() {
                 className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
                   activeTab === tab.id
                     ? 'text-primary border-b-2 border-primary -mb-px'
-                    : 'text-gray-500 hover:text-gray-700'
+                    : 'text-text-muted hover:text-text'
                 }`}
               >
                 {tab.label}
@@ -143,7 +143,7 @@ export function WeekViewPage() {
                 className={`hidden lg:flex items-center gap-1.5 ml-auto px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   viewerOpen
                     ? 'text-primary bg-primary/5 hover:bg-primary/10'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    : 'text-text-muted hover:text-text hover:bg-surface-alt'
                 }`}
                 title={viewerOpen ? 'Hide original file' : 'Show original file'}
               >
@@ -205,7 +205,7 @@ export function WeekViewPage() {
               totalPages={viewerTotalPages}
               onGoToPage={handleGoToPage}
             />
-            <div className="flex-1 overflow-hidden rounded-b-lg border border-t-0 border-gray-200">
+            <div className="flex-1 overflow-hidden rounded-b-lg border border-t-0 border-border">
               {selectedArtifact && (
                 <FileViewer
                   artifact={selectedArtifact}

@@ -48,7 +48,7 @@ export function ReviewInboxPage() {
 
       {/* Feedback toast */}
       {feedback && (
-        <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm ${feedback.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+        <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm ${feedback.ok ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400'}`}>
           {feedback.message}
         </div>
       )}
@@ -62,7 +62,7 @@ export function ReviewInboxPage() {
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
               activeFilter === tab.id
                 ? 'bg-primary/10 text-primary'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                : 'text-text-muted hover:text-text hover:bg-surface-alt'
             }`}
           >
             {tab.label}

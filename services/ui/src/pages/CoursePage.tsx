@@ -25,7 +25,7 @@ export function CoursePage() {
           <div className="flex items-center gap-2">
             <Link
               to={`/courses/${courseCode}/ops`}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center px-4 py-2 border border-border text-text text-sm font-medium rounded-lg hover:bg-surface-alt transition-colors"
             >
               Course Docs
             </Link>
@@ -49,7 +49,7 @@ export function CoursePage() {
         />
       ) : (
         <Card padding={false}>
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-border">
             {data.weeks.map((week) => (
               <li key={week.week}>
                 <WeekRow courseCode={courseCode!} week={week} />

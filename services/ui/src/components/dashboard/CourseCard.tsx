@@ -23,21 +23,21 @@ export function CourseCard({ course }: CourseCardProps) {
       <Card className="group-hover:border-primary/30 group-hover:shadow-md transition-all">
         <div className="flex items-start justify-between mb-3">
           <div>
-            <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary transition-colors">
+            <h3 className="text-lg font-bold text-text group-hover:text-primary transition-colors">
               {course.code}
             </h3>
             {course.name && (
-              <p className="text-sm text-gray-500 mt-0.5">{course.name}</p>
+              <p className="text-sm text-text-muted mt-0.5">{course.name}</p>
             )}
           </div>
           <span className="text-2xl opacity-60">{'\u{1F4D6}'}</span>
         </div>
-        <div className="flex items-center gap-4 text-sm text-gray-500">
+        <div className="flex items-center gap-4 text-sm text-text-muted">
           <span>{course.weeks_covered} week{course.weeks_covered !== 1 ? 's' : ''}</span>
-          <span className="text-gray-300">|</span>
+          <span className="text-border">|</span>
           <span>{course.total_artifacts} file{course.total_artifacts !== 1 ? 's' : ''}</span>
         </div>
-        <p className="text-xs text-gray-400 mt-3">{relativeDate(course.last_updated)}</p>
+        <p className="text-xs text-text-muted mt-3">{relativeDate(course.last_updated)}</p>
       </Card>
     </Link>
   )

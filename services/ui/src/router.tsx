@@ -1,4 +1,4 @@
-import { Outlet, createBrowserRouter } from 'react-router-dom'
+import { Navigate, Outlet, createBrowserRouter, useParams } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthLayout } from './components/layout/AuthLayout'
@@ -7,8 +7,6 @@ import { PublicOnlyRoute } from './components/auth/PublicOnlyRoute'
 import { CoursePage } from './pages/CoursePage'
 import { CourseOpsPage } from './pages/CourseOpsPage'
 import { DashboardPage } from './pages/DashboardPage'
-import { ExamDetailPage } from './pages/ExamDetailPage'
-import { ExamListPage } from './pages/ExamListPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
@@ -18,11 +16,11 @@ import { RegisterPage } from './pages/RegisterPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { ReviewInboxPage } from './pages/ReviewInboxPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { StudyPage } from './pages/StudyPage'
-import { TimedStudyPage } from './pages/TimedStudyPage'
+import { StudyHubPage } from './pages/StudyHubPage'
 import { UploadPage } from './pages/UploadPage'
 import { WeekViewPage } from './pages/WeekViewPage'
 
+// eslint-disable-next-line react-refresh/only-export-components
 function RootLayout() {
   return (
     <AuthProvider>
@@ -64,10 +62,11 @@ export const router = createBrowserRouter([
               { path: '/upload', element: <UploadPage /> },
               { path: '/review', element: <ReviewInboxPage /> },
               { path: '/qa', element: <QAPage /> },
-              { path: '/study', element: <StudyPage /> },
-              { path: '/timed-study', element: <TimedStudyPage /> },
-              { path: '/exams', element: <ExamListPage /> },
-              { path: '/exams/:examId', element: <ExamDetailPage /> },
+              { path: '/study', element: <StudyHubPage /> },
+              // Redirects from old routes
+              { path: '/timed-study', element: <Navigate to="/study?tab=timed" replace /> },
+              { path: '/exams', element: <Navigate to="/study?tab=exams" replace /> },
+              { path: '/exams/:examId', element: <ExamRedirect /> },
               { path: '/settings', element: <SettingsPage /> },
               { path: '/profile', element: <ProfilePage /> },
               { path: '*', element: <NotFoundPage /> },
@@ -78,3 +77,9 @@ export const router = createBrowserRouter([
     ],
   },
 ])
+
+// eslint-disable-next-line react-refresh/only-export-components
+function ExamRedirect() {
+  const { examId } = useParams<{ examId: string }>()
+  return <Navigate to={`/study?tab=exams&exam=${examId}`} replace />
+}

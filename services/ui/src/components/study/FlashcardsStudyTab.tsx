@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useStudyDue, useRecordReview, useExamDetail } from '../hooks/useApi'
-import { examsApi } from '../api/endpoints'
-import { PageHeader, LoadingSpinner, EmptyState } from '../components/ui'
-import { StudySetup } from '../components/study/StudySetup'
-import { StudyCard } from '../components/study/StudyCard'
-import { RatingButtons } from '../components/study/RatingButtons'
-import { SessionSummary } from '../components/study/SessionSummary'
+import { useStudyDue, useRecordReview, useExamDetail } from '../../hooks/useApi'
+import { examsApi } from '../../api/endpoints'
+import { LoadingSpinner, EmptyState } from '../ui'
+import { StudySetup } from './StudySetup'
+import { StudyCard } from './StudyCard'
+import { RatingButtons } from './RatingButtons'
+import { SessionSummary } from './SessionSummary'
 
 type Phase = 'setup' | 'studying' | 'done'
 
-export function StudyPage() {
+export function FlashcardsStudyTab() {
   const [searchParams] = useSearchParams()
   const [courseCode, setCourseCode] = useState(searchParams.get('course') ?? '')
   const [week, setWeek] = useState(searchParams.get('week') ?? '')
@@ -20,9 +20,9 @@ export function StudyPage() {
   const [flipped, setFlipped] = useState(false)
   const [sessionRatings, setSessionRatings] = useState<Record<number, number>>({})
   const [totalReviewed, setTotalReviewed] = useState(0)
-  const startTime = useRef(Date.now())
+  const [startTimeVal] = useState(() => Date.now())
+  const startTime = useRef(startTimeVal)
 
-  // Pre-fetch exam detail when in exam mode (used by sub-components)
   useExamDetail(examId || '')
 
   const weekNum = week ? Number(week) : undefined
@@ -67,7 +67,6 @@ export function StudyPage() {
             setCurrentIndex((i) => i + 1)
             setFlipped(false)
           } else {
-            // Record session to backend if in exam mode
             if (examId) {
               const duration = Math.round((Date.now() - startTime.current) / 1000)
               examsApi.recordSession(examId, {
@@ -82,7 +81,7 @@ export function StudyPage() {
         },
       },
     )
-  }, [currentCard, currentIndex, cards.length, reviewMutation])
+  }, [currentCard, currentIndex, cards.length, reviewMutation, examId, totalReviewed])
 
   const handleRestart = useCallback(() => {
     refetch()
@@ -117,63 +116,48 @@ export function StudyPage() {
 
   if (phase === 'done') {
     return (
-      <div>
-        <PageHeader title="Study Session" />
-        <SessionSummary
-          totalReviewed={totalReviewed}
-          ratings={sessionRatings}
-          onRestart={handleRestart}
-          examId={examId || undefined}
-        />
-      </div>
+      <SessionSummary
+        totalReviewed={totalReviewed}
+        ratings={sessionRatings}
+        onRestart={handleRestart}
+        examId={examId || undefined}
+      />
     )
   }
 
   if (phase === 'setup') {
     return (
-      <div>
-        <PageHeader title="Study" subtitle="Spaced repetition flashcard review" />
-        <StudySetup
-          courseCode={courseCode}
-          week={week}
-          onCourseChange={setCourseCode}
-          onWeekChange={setWeek}
-          onStart={handleStart}
-        />
-      </div>
+      <StudySetup
+        courseCode={courseCode}
+        week={week}
+        onCourseChange={setCourseCode}
+        onWeekChange={setWeek}
+        onStart={handleStart}
+      />
     )
   }
 
-  // Studying phase
   if (isLoading) return <LoadingSpinner label="Loading cards..." />
 
   if (!currentCard) {
     return (
-      <div>
-        <PageHeader title="Study Session" />
-        <EmptyState
-          icon="&#10003;"
-          title="All caught up!"
-          description="No more cards due right now. Check back later."
-        />
-      </div>
+      <EmptyState
+        icon="&#10003;"
+        title="All caught up!"
+        description="No more cards due right now. Check back later."
+      />
     )
   }
 
   return (
-    <div>
-      <PageHeader
-        title="Study Session"
-        subtitle={`Card ${currentIndex + 1} of ${cards.length}`}
-      />
-
-      <div className="space-y-6">
-        <StudyCard card={currentCard} onFlip={handleFlip} flipped={flipped} />
-
-        {flipped && (
-          <RatingButtons onRate={handleRate} disabled={reviewMutation.isPending} />
-        )}
-      </div>
+    <div className="space-y-6">
+      <p className="text-sm text-text-muted text-center">
+        Card {currentIndex + 1} of {cards.length}
+      </p>
+      <StudyCard card={currentCard} onFlip={handleFlip} flipped={flipped} />
+      {flipped && (
+        <RatingButtons onRate={handleRate} disabled={reviewMutation.isPending} />
+      )}
     </div>
   )
 }

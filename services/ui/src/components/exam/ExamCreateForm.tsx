@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useCourses, useCreateExam } from '../../hooks/useApi'
+import { examCreateSchema, type ExamCreateFormData } from '../../lib/schemas'
 
 interface ExamCreateFormProps {
   onClose: () => void
@@ -10,27 +12,37 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
   const { data: courses } = useCourses()
   const createExam = useCreateExam()
 
-  const [courseCode, setCourseCode] = useState('')
-  const [title, setTitle] = useState('')
-  const [examDate, setExamDate] = useState('')
-  const [weeksInput, setWeeksInput] = useState('')
-  const [targetMastery, setTargetMastery] = useState(80)
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isValid },
+  } = useForm<ExamCreateFormData>({
+    resolver: zodResolver(examCreateSchema),
+    defaultValues: { courseCode: '', title: '', examDate: '', weeksInput: '', targetMastery: 80 },
+    mode: 'onChange',
+  })
 
-  const parsedWeeks = weeksInput
+  const weeksInput = watch('weeksInput') // eslint-disable-line react-hooks/incompatible-library
+  const targetMastery = watch('targetMastery')
+
+  const parsedWeeks = (weeksInput || '')
     .split(',')
     .map((s) => parseInt(s.trim(), 10))
     .filter((n) => !isNaN(n) && n > 0)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!courseCode || !title || !examDate || parsedWeeks.length === 0) return
+  async function onSubmit(data: ExamCreateFormData) {
+    const weeks = data.weeksInput
+      .split(',')
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n) && n > 0)
 
     await createExam.mutateAsync({
-      course_code: courseCode,
-      title,
-      exam_date: new Date(examDate).toISOString(),
-      weeks_scope: parsedWeeks,
-      target_mastery_pct: targetMastery,
+      course_code: data.courseCode,
+      title: data.title,
+      exam_date: new Date(data.examDate).toISOString(),
+      weeks_scope: weeks,
+      target_mastery_pct: data.targetMastery,
     })
 
     onCreated?.()
@@ -38,25 +50,23 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6">
+    <div className="bg-surface border border-border rounded-xl p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">Create Exam</h3>
+        <h3 className="text-lg font-semibold text-text">Create Exam</h3>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
         >
           {'\u2715'}
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
+          <label className="block text-sm font-medium text-text mb-1">Course</label>
           <select
-            value={courseCode}
-            onChange={(e) => setCourseCode(e.target.value)}
-            className="w-full p-2.5 min-h-[44px] rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            required
+            {...register('courseCode')}
+            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="">Select a course</option>
             {courses?.map((c) => (
@@ -65,43 +75,41 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
               </option>
             ))}
           </select>
+          {errors.courseCode && <p className="mt-1 text-xs text-danger">{errors.courseCode.message}</p>}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Exam Title</label>
+          <label className="block text-sm font-medium text-text mb-1">Exam Title</label>
           <input
             type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            {...register('title')}
             placeholder="e.g., Midterm Exam"
-            className="w-full p-2.5 min-h-[44px] rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            required
+            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
+          {errors.title && <p className="mt-1 text-xs text-danger">{errors.title.message}</p>}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Exam Date</label>
+          <label className="block text-sm font-medium text-text mb-1">Exam Date</label>
           <input
             type="datetime-local"
-            value={examDate}
-            onChange={(e) => setExamDate(e.target.value)}
-            className="w-full p-2.5 min-h-[44px] rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            required
+            {...register('examDate')}
+            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
+          {errors.examDate && <p className="mt-1 text-xs text-danger">{errors.examDate.message}</p>}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Weeks Covered <span className="text-gray-400 font-normal">(comma-separated)</span>
+          <label className="block text-sm font-medium text-text mb-1">
+            Weeks Covered <span className="text-text-muted font-normal">(comma-separated)</span>
           </label>
           <input
             type="text"
-            value={weeksInput}
-            onChange={(e) => setWeeksInput(e.target.value)}
+            {...register('weeksInput')}
             placeholder="e.g., 1, 2, 3, 4, 5"
-            className="w-full p-2.5 min-h-[44px] rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            required
+            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
+          {errors.weeksInput && <p className="mt-1 text-xs text-danger">{errors.weeksInput.message}</p>}
           {parsedWeeks.length > 0 && (
             <div className="flex gap-1.5 mt-2 flex-wrap">
               {parsedWeeks.map((w) => (
@@ -114,7 +122,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-text mb-1">
             Target Mastery: {targetMastery}%
           </label>
           <input
@@ -122,8 +130,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
             min={50}
             max={100}
             step={5}
-            value={targetMastery}
-            onChange={(e) => setTargetMastery(Number(e.target.value))}
+            {...register('targetMastery', { valueAsNumber: true })}
             className="w-full"
           />
         </div>
@@ -131,7 +138,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
         <div className="flex gap-3 pt-2">
           <button
             type="submit"
-            disabled={createExam.isPending || !courseCode || !title || !examDate || parsedWeeks.length === 0}
+            disabled={createExam.isPending || !isValid}
             className="flex-1 px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {createExam.isPending ? 'Creating...' : 'Create Exam'}
@@ -139,14 +146,14 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-surface-alt text-text hover:bg-border transition-colors"
           >
             Cancel
           </button>
         </div>
 
         {createExam.isError && (
-          <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">
+          <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950 text-sm text-red-700 dark:text-red-400">
             {(createExam.error as Error).message || 'Failed to create exam'}
           </div>
         )}

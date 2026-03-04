@@ -14,6 +14,7 @@ export interface AuthContextValue {
   logout: () => Promise<void>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {

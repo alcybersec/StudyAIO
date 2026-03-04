@@ -5,11 +5,11 @@ interface BadgeProps {
 }
 
 const variantClasses: Record<string, string> = {
-  default: 'bg-gray-100 text-gray-700',
-  success: 'bg-emerald-50 text-emerald-700',
-  warning: 'bg-amber-50 text-amber-700',
-  danger: 'bg-red-50 text-red-700',
-  info: 'bg-indigo-50 text-indigo-700',
+  default: 'bg-surface-alt text-text-muted',
+  success: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
+  warning: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
+  danger: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400',
+  info: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
   count: 'bg-primary text-white',
 }
 
