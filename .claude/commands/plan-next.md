@@ -5,7 +5,7 @@ Analyze the current project state and plan the next chunk of work.
 ## Process
 
 1. **Read `docs/PROGRESS.md`** to understand what's done.
-2. **Read `docs/PRD.md`** milestones section to understand what's next.
+2. **Read `docs/PRD.md` and `docs/PRD_v2.md`** milestones sections to understand what's next.
 3. **Examine the codebase** — what exists, what's missing, what's incomplete.
 4. **Identify the next 3-5 concrete tasks** in implementation order.
 

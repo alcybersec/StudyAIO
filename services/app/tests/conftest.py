@@ -109,6 +109,11 @@ async def async_client(mock_session):
         yield mock_session
 
     app.dependency_overrides[get_session] = override
+
+    # Reset rate limiter state between tests to prevent cross-test 429s
+    from app.core.rate_limit import limiter
+    limiter.reset()
+
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",

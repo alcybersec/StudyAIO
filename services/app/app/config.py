@@ -1,5 +1,6 @@
 """Application configuration loaded from environment variables."""
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -25,7 +26,7 @@ class Settings(BaseSettings):
 
     # Agent backend
     agent_backend: str = "claude_code"
-    anthropic_api_key: str = ""
+    anthropic_api_key: SecretStr = SecretStr("")
 
     # Pipeline tuning
     classification_confidence_threshold: float = 0.7
@@ -38,6 +39,14 @@ class Settings(BaseSettings):
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dimensions: int = 384
     search_top_k: int = 10
+
+    # Security
+    max_upload_size_mb: int = 100
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
+
+    # Rate limiting
+    rate_limit_uploads: str = "10/minute"
+    rate_limit_qa: str = "20/minute"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

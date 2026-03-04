@@ -21,6 +21,7 @@ ALLOWED_KEYS = {
     "quiz_question_count_per_week",
     "chunk_size_tokens",
     "chunk_overlap_tokens",
+    "max_upload_size_mb",
 }
 
 VALID_MODELS = {"opus", "sonnet", "haiku"}
@@ -37,6 +38,7 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
     "quiz_question_count_per_week": (int, 1, 100),
     "chunk_size_tokens": (int, 50, 5000),
     "chunk_overlap_tokens": (int, 0, 500),
+    "max_upload_size_mb": (int, 1, 1000),
 }
 
 
@@ -63,12 +65,13 @@ def _defaults() -> dict[str, Any]:
         "claude_code_path": settings.claude_code_path,
         "claude_model": settings.claude_model,
         "agent_backend": settings.agent_backend,
-        "anthropic_api_key": settings.anthropic_api_key,
+        "anthropic_api_key": settings.anthropic_api_key.get_secret_value(),
         "classification_confidence_threshold": settings.classification_confidence_threshold,
         "flashcard_count_per_week": settings.flashcard_count_per_week,
         "quiz_question_count_per_week": settings.quiz_question_count_per_week,
         "chunk_size_tokens": settings.chunk_size_tokens,
         "chunk_overlap_tokens": settings.chunk_overlap_tokens,
+        "max_upload_size_mb": settings.max_upload_size_mb,
     }
 
 

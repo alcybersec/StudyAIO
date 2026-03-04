@@ -50,7 +50,11 @@ jobs:
 
       - name: Run unit tests with coverage
         working-directory: services/app
-        run: python -m pytest tests/unit -x -v --cov=app --cov-report=term-missing
+        run: python -m pytest tests/unit -x -v --cov=app --cov-report=term-missing --cov-fail-under=70
+
+      - name: Run golden tests
+        working-directory: services/app
+        run: python -m pytest tests/golden -x -v
 
   integration-tests:
     name: Integration Tests

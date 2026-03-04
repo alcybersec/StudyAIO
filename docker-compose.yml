@@ -41,6 +41,7 @@ services:
     build:
       context: ./services/app
       dockerfile: Dockerfile
+    user: "0:0"  # Root required for Claude CLI mount
     depends_on:
       db:
         condition: service_healthy

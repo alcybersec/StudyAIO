@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 11 — CourseOps (Complete)
-> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility + courseops)
+> **Current Milestone:** 12 — Hardening & Security (Complete)
+> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility + courseops + security hardening)
 
 ---
 
@@ -122,6 +122,15 @@
 | 11.3 | API endpoints | Done | 10 endpoints in courseops router: POST/GET/GET documents, GET assessments, GET/PUT/DELETE deadlines, POST create-exam, GET calendar export, GET task-plan export. Dashboard updated with upcoming_deadlines. |
 | 11.4 | Frontend | Done | CourseOpsPage with 4 tabs (Documents, Assessments, Deadlines, Exports). 4 components (DocumentUpload, AssessmentTable, DeadlineTimeline, DeadlineEditModal). Types, endpoints, hooks. Router, CoursePage link, dashboard widget. |
 | 11.5 | Tests | Done | 62 new tests: courseops_service (15), calendar_service (5), courseops_extraction (8), api/courseops (15), golden/courseops_structure (19). 506 total tests. |
+
+## Milestone 12 — Hardening & Security
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 12.1 | Fix failing test + CI quality gates | ✅ Done | Fixed test_batch_embedding_called_once (mocked chunk_pages to control chunk count). CI: --cov-fail-under=70, golden tests added to pipeline. |
+| 12.2 | Upload size limits + security headers + CORS config | ✅ Done | read_upload_with_limit() in core/utils.py (1MB chunked reads, 413 on excess). SecurityHeadersMiddleware (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy). CORS from CORS_ORIGINS env var. anthropic_api_key → SecretStr. nginx.conf security headers. max_upload_size_mb setting. 12 new tests. |
+| 12.3 | Multi-stage Dockerfile + non-root user + request ID | ✅ Done | Two-stage Dockerfile (builder with build-essential → runtime with libpq5 only). Non-root studyaio user. Worker runs as root (Claude CLI mount). RequestIDMiddleware (X-Request-ID header, structlog contextvars). 4 new tests. |
+| 12.4 | Rate limiting + hardening tests + progress | ✅ Done | slowapi with shared limiter instance. Rate limits on uploads (10/min), batch (5/min), Q&A (20/min), courseops (10/min). Lambda-based limit values (configurable at runtime). Comprehensive hardening test suite (12 tests). 551 total tests. |
 
 ## Post-v1 — Fixes & Settings
 

@@ -210,14 +210,21 @@ class TestIndexArtifactChunks:
             {"page_number": 2, "text": "Second chunk content here"},
         ]
 
-        with patch("app.services.index_service.generate_id", return_value="chunk-001"):
+        mock_chunks = [
+            {"text": "First chunk content here", "page_ref": 1, "chunk_idx": 0},
+            {"text": "Second chunk content here", "page_ref": 2, "chunk_idx": 1},
+        ]
+
+        with (
+            patch("app.services.index_service.generate_id", return_value="chunk-001"),
+            patch("app.services.index_service.chunk_pages", return_value=mock_chunks),
+        ):
             await index_artifact_chunks(
                 session=session,
                 artifact_id="art-001",
                 sha256="a" * 64,
                 pages=pages,
                 embedding_provider=mock_provider,
-                chunk_size_tokens=100,
             )
 
         # embed_texts called exactly once (batched)
