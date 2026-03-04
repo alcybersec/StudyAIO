@@ -101,15 +101,32 @@ def mock_session():
 
 
 @pytest.fixture
-async def async_client(mock_session):
+def default_test_user(make_user):
+    """Default user for API tests (simulates get_current_user_or_default)."""
+    return make_user(
+        id="00000000-0000-0000-0000-000000000001",
+        email="admin@studyaio.local",
+        username="admin",
+        role="admin",
+        tier="pro",
+    )
+
+
+@pytest.fixture
+async def async_client(mock_session, default_test_user):
     """Async HTTP client for testing FastAPI endpoints."""
+    from app.api.deps import get_current_user_or_default
     from app.core.database import get_session
     from app.main import app
 
-    async def override():
+    async def override_session():
         yield mock_session
 
-    app.dependency_overrides[get_session] = override
+    async def override_user():
+        return default_test_user
+
+    app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[get_current_user_or_default] = override_user
 
     # Reset rate limiter state between tests to prevent cross-test 429s
     from app.core.rate_limit import limiter

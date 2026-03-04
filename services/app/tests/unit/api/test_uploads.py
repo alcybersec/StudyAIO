@@ -148,7 +148,7 @@ class TestRetryPipeline:
         data = response.json()
         assert data["retrying_from_stage"] == "summarize"
         assert data["status"] == "extracted"
-        mock_resume.assert_called_once_with("art-001", from_stage="summarize")
+        mock_resume.assert_called_once_with("art-001", from_stage="summarize", user_id="00000000-0000-0000-0000-000000000001")
 
     async def test_retry_no_failed_runs_returns_400(self, async_client):
         """Retry returns 400 when no failed runs exist."""

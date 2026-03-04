@@ -84,6 +84,7 @@ async def get_due_cards(
     course_code: str | None = None,
     week: int | None = None,
     limit: int = 20,
+    user_id: str | None = None,
 ) -> list[Flashcard]:
     """Get flashcards due for review.
 
@@ -115,6 +116,8 @@ async def get_due_cards(
         .limit(limit)
     )
 
+    if user_id:
+        query = query.where(Course.user_id == user_id)
     if course_code:
         query = query.where(Course.code == course_code)
     if week is not None:
@@ -128,6 +131,7 @@ async def record_review(
     session: AsyncSession,
     flashcard_id: str,
     quality: int,
+    user_id: str | None = None,
 ) -> FlashcardReview:
     """Record a flashcard review and update scheduling via SM-2.
 
@@ -161,6 +165,7 @@ async def record_review(
         sm2 = calculate_sm2(quality)
         review = FlashcardReview(
             id=generate_id(),
+            user_id=user_id or "",
             flashcard_id=flashcard_id,
             ease_factor=sm2.ease_factor,
             interval_days=sm2.interval_days,
@@ -189,6 +194,7 @@ async def get_study_stats(
     session: AsyncSession,
     course_code: str | None = None,
     week: int | None = None,
+    user_id: str | None = None,
 ) -> StudyStats:
     """Get study statistics for a scope.
 
@@ -204,6 +210,8 @@ async def get_study_stats(
 
     # Base query for total flashcards in scope
     base = select(Flashcard).join(Course, Flashcard.course_id == Course.id)
+    if user_id:
+        base = base.where(Course.user_id == user_id)
     if course_code:
         base = base.where(Course.code == course_code)
     if week is not None:
@@ -219,6 +227,8 @@ async def get_study_stats(
         .join(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
         .join(Course, Flashcard.course_id == Course.id)
     )
+    if user_id:
+        reviewed_base = reviewed_base.where(Course.user_id == user_id)
     if course_code:
         reviewed_base = reviewed_base.where(Course.code == course_code)
     if week is not None:
@@ -252,17 +262,20 @@ async def get_study_stats(
     )
 
 
-async def get_global_study_stats(session: AsyncSession) -> StudyStats:
+async def get_global_study_stats(
+    session: AsyncSession, user_id: str | None = None
+) -> StudyStats:
     """Get study statistics across all courses.
 
     Returns:
         StudyStats aggregated across the entire flashcard pool.
     """
-    return await get_study_stats(session)
+    return await get_study_stats(session, user_id=user_id)
 
 
 async def get_per_course_due_counts(
     session: AsyncSession,
+    user_id: str | None = None,
 ) -> list[dict]:
     """Get due card counts grouped by course.
 
@@ -277,8 +290,10 @@ async def get_per_course_due_counts(
         .join(Flashcard, Course.id == Flashcard.course_id)
         .outerjoin(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
         .where(FlashcardReview.id.is_(None))
-        .group_by(Course.code)
     )
+    if user_id:
+        new_query = new_query.where(Course.user_id == user_id)
+    new_query = new_query.group_by(Course.code)
     new_result = await session.execute(new_query)
     new_counts = {code: count for code, count in new_result.all()}
 
@@ -288,8 +303,10 @@ async def get_per_course_due_counts(
         .join(Flashcard, Course.id == Flashcard.course_id)
         .join(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
         .where(FlashcardReview.next_review_at <= now)
-        .group_by(Course.code)
     )
+    if user_id:
+        overdue_query = overdue_query.where(Course.user_id == user_id)
+    overdue_query = overdue_query.group_by(Course.code)
     overdue_result = await session.execute(overdue_query)
     overdue_counts = {code: count for code, count in overdue_result.all()}
 

@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 14 — Authentication Frontend + Protected Routes (Complete)
-> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility + courseops + security hardening + auth backend + auth frontend)
+> **Current Milestone:** 15 — Multi-Tenant Data Isolation (Complete)
+> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility + courseops + security hardening + auth backend + auth frontend + multi-tenant)
 
 ---
 
@@ -154,6 +154,16 @@
 | 14.4 | Frontend — Auth pages | ✅ Done | 5 pages (Login, Register, ForgotPassword, ResetPassword, Profile). AuthLayout (centered card). OAuthButtons (provider-aware). MFASetup (QR flow, backup codes, disable). |
 | 14.5 | Frontend — Protected routes + router + nav | ✅ Done | ProtectedRoute (self-hosted passthrough, loading spinner, redirect). PublicOnlyRoute (redirect authenticated users). Router restructured (RootLayout→AuthProvider→public/protected). Sidebar user section (avatar, username, sign out). |
 | 14.6 | Tests + documentation | ✅ Done | 3 backend tests for auth config. Frontend build passes. PROGRESS.md + api.md updated. 525 total passing tests. |
+
+## Milestone 15 — Multi-Tenant Data Isolation
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 15.1 | Schema migration — user_id FKs + UserSettings model | ✅ Done | Added nullable user_id FK to 6 models (Course, LectureArtifact, Exam, StudySession, FlashcardReview, CourseDocument). Created UserSettings model (id, user_id unique FK, settings_json JSONB, theme, dashboard_layout, timestamps). Alembic migration with backfill to default admin + SET NOT NULL. Updated unique constraints: UNIQUE(code, user_id), UNIQUE(sha256, user_id). |
+| 15.2 | Service layer user scoping + get_current_user_or_default | ✅ Done | Created get_current_user_or_default dependency (self-hosted returns default admin, SaaS requires JWT). Added user_id parameter to all 14 service modules. Scoped queries with .where(Model.user_id == user_id). Per-user SHA-256 dedup. |
+| 15.3 | API routes + pipeline user threading | ✅ Done | Injected user context into all 12 data routers via Depends(get_current_user_or_default). Pipeline carries user_id through all 6 Celery stages via dict payload. resolve_pipeline_input returns (artifact_id, user_id) tuple. SSE events scoped per user. 16 test fixes for new signatures. |
+| 15.4 | Settings migration to DB + admin endpoints | ✅ Done | Rewrote settings_service.py from file-based to DB-backed per-user (get_user_settings, update_user_settings, get_effective_setting_async). Sync fallbacks for pipeline. Admin router (GET /api/admin/users, PATCH /api/admin/users/{id}, GET /api/admin/metrics) with require_role("admin"). admin_service.py. |
+| 15.5 | Multi-tenant tests + docs | ✅ Done | 64 new tests: user scoping (8), settings DB (8), admin service (8), admin API (8), pipeline threading (10), scoped API (4), deps default user (2), golden structures (6), settings API (5), settings validation (5). 695 total tests (585 unit + 110 golden). PROGRESS.md updated. |
 
 ## Post-v1 — Fixes & Settings
 

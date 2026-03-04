@@ -15,6 +15,9 @@ class StudySession(Base):
     __tablename__ = "study_sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
     exam_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("exams.id", ondelete="SET NULL"),
@@ -31,10 +34,12 @@ class StudySession(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
     # Relationships
+    user: Mapped["User"] = relationship(back_populates="study_sessions")
     exam: Mapped["Exam | None"] = relationship(back_populates="study_sessions")
     course: Mapped["Course"] = relationship(back_populates="study_sessions")
 
     __table_args__ = (
+        Index("ix_study_sessions_user_id", "user_id"),
         Index("ix_study_sessions_date", "session_date"),
         Index("ix_study_sessions_exam", "exam_id"),
     )

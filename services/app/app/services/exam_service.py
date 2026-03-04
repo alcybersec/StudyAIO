@@ -25,6 +25,7 @@ async def create_exam(
     exam_date: datetime,
     weeks_scope: list[int],
     target_mastery_pct: int = 80,
+    user_id: str | None = None,
 ) -> Exam:
     """Create an exam for a course.
 
@@ -42,7 +43,10 @@ async def create_exam(
     Raises:
         ValueError: If course not found or date is in the past.
     """
-    result = await session.execute(select(Course).where(Course.code == course_code))
+    query = select(Course).where(Course.code == course_code)
+    if user_id:
+        query = query.where(Course.user_id == user_id)
+    result = await session.execute(query)
     course = result.scalar_one_or_none()
     if not course:
         raise ValueError(f"Course '{course_code}' not found")
@@ -54,6 +58,7 @@ async def create_exam(
 
     exam = Exam(
         id=generate_id(),
+        user_id=user_id or course.user_id,
         course_id=course.id,
         title=title,
         exam_date=naive_exam_date,
@@ -68,17 +73,23 @@ async def create_exam(
     return exam
 
 
-async def get_exam(session: AsyncSession, exam_id: str) -> Exam | None:
+async def get_exam(
+    session: AsyncSession, exam_id: str, user_id: str | None = None
+) -> Exam | None:
     """Get an exam by ID. Auto-completes if exam_date has passed.
 
     Args:
         session: Database session.
         exam_id: Exam UUID.
+        user_id: If provided, only return exam owned by this user.
 
     Returns:
         Exam if found, None otherwise.
     """
-    result = await session.execute(select(Exam).where(Exam.id == exam_id))
+    query = select(Exam).where(Exam.id == exam_id)
+    if user_id is not None:
+        query = query.where(Exam.user_id == user_id)
+    result = await session.execute(query)
     exam = result.scalar_one_or_none()
     if exam and exam.status == "active" and exam.exam_date < datetime.utcnow():
         exam.status = "completed"
@@ -91,6 +102,7 @@ async def list_exams(
     session: AsyncSession,
     course_code: str | None = None,
     status: str | None = None,
+    user_id: str | None = None,
 ) -> list[Exam]:
     """List exams with optional filters.
 
@@ -103,6 +115,8 @@ async def list_exams(
         List of Exam objects ordered by exam_date.
     """
     query = select(Exam).join(Course, Exam.course_id == Course.id)
+    if user_id:
+        query = query.where(Exam.user_id == user_id)
     if course_code:
         query = query.where(Course.code == course_code)
     if status:

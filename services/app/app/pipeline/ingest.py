@@ -15,7 +15,7 @@ from app.worker import celery_app
 logger = structlog.get_logger()
 
 
-async def _ingest(file_path: str) -> dict:
+async def _ingest(file_path: str, user_id: str | None = None) -> dict:
     """Async ingest implementation."""
     async with async_session_factory() as session:
         # Create pipeline run record
@@ -28,7 +28,9 @@ async def _ingest(file_path: str) -> dict:
         )
 
         try:
-            artifact = await artifact_service.ingest_file(session, file_path)
+            artifact = await artifact_service.ingest_file(
+                session, file_path, user_id=user_id or ""
+            )
 
             # Update pipeline run with real artifact_id
             run.artifact_id = artifact.id
@@ -49,6 +51,7 @@ async def _ingest(file_path: str) -> dict:
 
             return {
                 "artifact_id": artifact.id,
+                "user_id": user_id,
                 "status": "ingested",
                 "filename": artifact.original_filename,
                 "sha256": artifact.sha256,
@@ -58,6 +61,7 @@ async def _ingest(file_path: str) -> dict:
             logger.info("ingest_stage_duplicate", sha256=e.sha256)
             return {
                 "artifact_id": e.existing_artifact_id,
+                "user_id": user_id,
                 "status": "duplicate",
                 "sha256": e.sha256,
             }
@@ -73,19 +77,27 @@ async def _ingest(file_path: str) -> dict:
     max_retries=2,
     default_retry_delay=10,
 )
-def ingest_file(self, file_path: str) -> dict:
+def ingest_file(self, input_value: str | dict) -> dict:
     """Celery task: ingest a file into the pipeline.
 
     Args:
-        file_path: Absolute path to the file to ingest.
+        input_value: Either a file_path string or dict with file_path and user_id.
 
     Returns:
-        Dict with artifact_id, status, filename, sha256.
+        Dict with artifact_id, user_id, status, filename, sha256.
     """
-    logger.info("ingest_task_started", file_path=file_path)
+    # Parse input — supports both legacy string and new dict format
+    if isinstance(input_value, dict):
+        file_path = input_value.get("file_path", "")
+        user_id = input_value.get("user_id")
+    else:
+        file_path = input_value
+        user_id = None
+
+    logger.info("ingest_task_started", file_path=file_path, user_id=user_id)
     publish_pipeline_event_sync("pending", "ingest", "started")
     try:
-        result = run_async(_ingest(file_path))
+        result = run_async(_ingest(file_path, user_id=user_id))
         artifact_id = result.get("artifact_id", "unknown")
         publish_pipeline_event_sync(artifact_id, "ingest", result.get("status", "completed"))
         return result

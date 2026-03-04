@@ -14,11 +14,13 @@ from app.api.courseops_schemas import (
     DeadlineResponse,
     DeadlineUpdateRequest,
 )
+from app.api.deps import get_current_user_or_default
 from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import CourseOpsError
 from app.core.rate_limit import limiter
 from app.core.utils import read_upload_with_limit, sanitize_filename
+from app.models.user import User
 from app.services import courseops_service
 from app.services.calendar_service import generate_ics, generate_task_plan_md
 
@@ -44,6 +46,7 @@ async def upload_course_document(
     document_type: str = Query(
         ..., description="Document type: outline, rubric, handbook, other"
     ),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> CourseDocumentResponse:
     """Upload a course document and trigger processing."""
@@ -90,6 +93,7 @@ async def upload_course_document(
             file_type=ext.lstrip("."),
             sha256=sha256,
             file_size_bytes=file_size,
+            user_id=user.id,
         )
     except CourseOpsError as e:
         # Clean up file on error
@@ -111,10 +115,11 @@ async def upload_course_document(
 )
 async def list_documents(
     course_code: str = Query(..., description="Course code"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[CourseDocumentResponse]:
     """List all course documents for a course."""
-    docs = await courseops_service.list_course_documents(session, course_code)
+    docs = await courseops_service.list_course_documents(session, course_code, user_id=user.id)
     return [CourseDocumentResponse.model_validate(d) for d in docs]
 
 
@@ -125,6 +130,7 @@ async def list_documents(
 )
 async def get_document(
     document_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> CourseDocumentDetailResponse:
     """Get a course document with its extracted assessments and deadlines."""
@@ -141,6 +147,7 @@ async def get_document(
 )
 async def list_assessments(
     course_code: str = Query(..., description="Course code"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[AssessmentResponse]:
     """List all assessments for a course."""
@@ -156,6 +163,7 @@ async def list_assessments(
 async def list_deadlines(
     course_code: str = Query(..., description="Course code"),
     upcoming: bool = Query(False, description="Only show future deadlines"),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[DeadlineResponse]:
     """List deadlines for a course."""
@@ -173,6 +181,7 @@ async def list_deadlines(
 async def update_deadline(
     deadline_id: str,
     body: DeadlineUpdateRequest,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> DeadlineResponse:
     """Update or confirm a deadline."""
@@ -197,6 +206,7 @@ async def update_deadline(
 )
 async def delete_deadline(
     deadline_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Delete an AI-extracted deadline."""
@@ -213,11 +223,12 @@ async def delete_deadline(
 )
 async def create_exam_from_deadline(
     deadline_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Create an Exam entity from a deadline."""
     try:
-        exam = await courseops_service.create_exam_from_deadline(session, deadline_id)
+        exam = await courseops_service.create_exam_from_deadline(session, deadline_id, user_id=user.id)
     except CourseOpsError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -238,6 +249,7 @@ async def create_exam_from_deadline(
 )
 async def export_calendar(
     course_code: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """Download an .ics calendar file with all deadlines for a course."""
@@ -259,6 +271,7 @@ async def export_calendar(
 )
 async def export_task_plan(
     course_code: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """Download a markdown task plan with deadlines and study recommendations."""

@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_or_default
 from app.api.schemas import (
     ArtifactResponse,
     CourseDetailResponse,
@@ -13,6 +14,7 @@ from app.api.schemas import (
     WeekSummaryRow,
 )
 from app.core.database import get_session
+from app.models.user import User
 from app.services import artifact_service, course_service, summary_service
 
 router = APIRouter()
@@ -25,10 +27,11 @@ router = APIRouter()
     description="Returns all courses with aggregate stats: weeks covered, total artifacts, last updated.",
 )
 async def list_courses(
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[CourseListItem]:
     """List all courses with aggregate stats."""
-    course_stats = await course_service.list_courses_with_stats(session)
+    course_stats = await course_service.list_courses_with_stats(session, user_id=user.id)
     return [CourseListItem(**cs) for cs in course_stats]
 
 
@@ -40,10 +43,11 @@ async def list_courses(
 )
 async def get_course_detail(
     course_code: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> CourseDetailResponse:
     """Get course detail with per-week breakdown."""
-    course = await course_service.get_course_by_code(session, course_code)
+    course = await course_service.get_course_by_code(session, course_code, user_id=user.id)
     if not course:
         raise HTTPException(status_code=404, detail=f"Course {course_code} not found")
 
@@ -65,10 +69,11 @@ async def get_course_detail(
 async def get_week_detail(
     course_code: str,
     week: int,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> WeekDetailResponse:
     """Get full detail for a specific course week."""
-    course = await course_service.get_course_by_code(session, course_code)
+    course = await course_service.get_course_by_code(session, course_code, user_id=user.id)
     if not course:
         raise HTTPException(status_code=404, detail=f"Course {course_code} not found")
 

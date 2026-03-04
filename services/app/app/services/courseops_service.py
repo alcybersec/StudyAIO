@@ -28,6 +28,7 @@ async def upload_course_document(
     file_type: str,
     sha256: str,
     file_size_bytes: int,
+    user_id: str | None = None,
 ) -> CourseDocument:
     """Upload a course document with SHA-256 dedup.
 
@@ -48,9 +49,10 @@ async def upload_course_document(
         CourseOpsError: If course not found or document is a duplicate.
     """
     # Look up course
-    result = await session.execute(
-        select(Course).where(Course.code == course_code)
-    )
+    query = select(Course).where(Course.code == course_code)
+    if user_id:
+        query = query.where(Course.user_id == user_id)
+    result = await session.execute(query)
     course = result.scalar_one_or_none()
     if not course:
         raise CourseOpsError(f"Course {course_code} not found")
@@ -67,6 +69,7 @@ async def upload_course_document(
 
     doc = CourseDocument(
         id=generate_id(),
+        user_id=user_id or course.user_id,
         course_id=course.id,
         document_type=document_type,
         title=original_filename,
@@ -197,6 +200,7 @@ async def process_course_document(
 async def list_course_documents(
     session: AsyncSession,
     course_code: str,
+    user_id: str | None = None,
 ) -> list[CourseDocument]:
     """List all course documents for a course.
 
@@ -207,9 +211,10 @@ async def list_course_documents(
     Returns:
         List of CourseDocument objects.
     """
-    result = await session.execute(
-        select(Course).where(Course.code == course_code)
-    )
+    query = select(Course).where(Course.code == course_code)
+    if user_id:
+        query = query.where(Course.user_id == user_id)
+    result = await session.execute(query)
     course = result.scalar_one_or_none()
     if not course:
         return []
@@ -374,6 +379,7 @@ async def delete_deadline(
 async def create_exam_from_deadline(
     session: AsyncSession,
     deadline_id: str,
+    user_id: str | None = None,
 ) -> Exam | None:
     """Create an Exam from a deadline.
 
@@ -400,8 +406,14 @@ async def create_exam_from_deadline(
 
     due_datetime = datetime.combine(deadline.due_date, datetime.min.time())
 
+    # Resolve user_id from deadline's course if not provided
+    if not user_id:
+        course = await session.get(Course, deadline.course_id)
+        user_id = course.user_id if course else ""
+
     exam = Exam(
         id=generate_id(),
+        user_id=user_id,
         course_id=deadline.course_id,
         title=deadline.title,
         exam_date=due_datetime,
@@ -429,6 +441,7 @@ async def create_exam_from_deadline(
 async def get_upcoming_deadlines_all_courses(
     session: AsyncSession,
     limit: int = 5,
+    user_id: str | None = None,
 ) -> list[dict]:
     """Get upcoming deadlines across all courses for the dashboard.
 
@@ -439,13 +452,15 @@ async def get_upcoming_deadlines_all_courses(
     Returns:
         List of deadline dicts with course_code.
     """
-    result = await session.execute(
+    query = (
         select(Deadline, Course.code)
         .join(Course, Deadline.course_id == Course.id)
         .where(Deadline.due_date >= date.today())
-        .order_by(Deadline.due_date)
-        .limit(limit)
     )
+    if user_id:
+        query = query.where(Course.user_id == user_id)
+    query = query.order_by(Deadline.due_date).limit(limit)
+    result = await session.execute(query)
 
     deadlines = []
     for deadline, course_code in result.all():

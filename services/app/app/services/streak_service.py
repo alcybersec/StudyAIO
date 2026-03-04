@@ -20,6 +20,7 @@ async def record_study_session(
     quiz_correct: int,
     duration_seconds: int,
     exam_id: str | None = None,
+    user_id: str | None = None,
 ) -> StudySession:
     """Record or update a study session for today.
 
@@ -45,6 +46,8 @@ async def record_study_session(
         StudySession.course_id == course_id,
         StudySession.session_date == today,
     )
+    if user_id:
+        query = query.where(StudySession.user_id == user_id)
     if exam_id:
         query = query.where(StudySession.exam_id == exam_id)
     else:
@@ -64,6 +67,7 @@ async def record_study_session(
 
     study = StudySession(
         id=generate_id(),
+        user_id=user_id or "",
         exam_id=exam_id,
         course_id=course_id,
         session_date=today,
@@ -81,6 +85,7 @@ async def record_study_session(
 async def get_streak(
     session: AsyncSession,
     course_id: str | None = None,
+    user_id: str | None = None,
 ) -> dict:
     """Calculate current and longest study streak.
 
@@ -97,6 +102,8 @@ async def get_streak(
         select(func.distinct(StudySession.session_date))
         .order_by(StudySession.session_date.desc())
     )
+    if user_id:
+        query = query.where(StudySession.user_id == user_id)
     if course_id:
         query = query.where(StudySession.course_id == course_id)
 
@@ -152,6 +159,7 @@ async def get_study_history(
     session: AsyncSession,
     exam_id: str | None = None,
     days: int = 30,
+    user_id: str | None = None,
 ) -> list[dict]:
     """Get daily study session aggregates.
 
@@ -178,6 +186,8 @@ async def get_study_history(
         .group_by(StudySession.session_date)
         .order_by(StudySession.session_date.desc())
     )
+    if user_id:
+        query = query.where(StudySession.user_id == user_id)
     if exam_id:
         query = query.where(StudySession.exam_id == exam_id)
 

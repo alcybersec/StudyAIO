@@ -13,46 +13,59 @@ from app.models.summary import Summary
 logger = structlog.get_logger()
 
 
-async def list_courses(session: AsyncSession) -> list[Course]:
-    """Get all courses ordered by code.
+async def list_courses(
+    session: AsyncSession, user_id: str | None = None
+) -> list[Course]:
+    """Get all courses, optionally filtered by user, ordered by code.
 
     Args:
         session: Database session.
+        user_id: Filter by owner user UUID.
 
     Returns:
         List of courses ordered alphabetically by code.
     """
-    result = await session.execute(select(Course).order_by(Course.code))
+    query = select(Course)
+    if user_id is not None:
+        query = query.where(Course.user_id == user_id)
+    query = query.order_by(Course.code)
+    result = await session.execute(query)
     return list(result.scalars().all())
 
 
-async def get_course_by_code(session: AsyncSession, code: str) -> Course | None:
-    """Get a course by its code.
+async def get_course_by_code(
+    session: AsyncSession, code: str, user_id: str | None = None
+) -> Course | None:
+    """Get a course by its code, optionally scoped by user.
 
     Args:
         session: Database session.
         code: Course code (e.g., "CSIT302").
+        user_id: If provided, only return course owned by this user.
 
     Returns:
         Course if found, None otherwise.
     """
-    result = await session.execute(select(Course).where(Course.code == code))
+    query = select(Course).where(Course.code == code)
+    if user_id is not None:
+        query = query.where(Course.user_id == user_id)
+    result = await session.execute(query)
     return result.scalar_one_or_none()
 
 
-async def list_courses_with_stats(session: AsyncSession) -> list[dict]:
+async def list_courses_with_stats(
+    session: AsyncSession, user_id: str | None = None
+) -> list[dict]:
     """Get all courses with aggregate stats in O(1) queries.
-
-    Avoids the N+1 query pattern by batching artifact counts in a single
-    query instead of calling get_course_weeks per course.
 
     Args:
         session: Database session.
+        user_id: Filter by owner user UUID.
 
     Returns:
         List of dicts with course fields + weeks_covered, total_artifacts.
     """
-    courses = await list_courses(session)
+    courses = await list_courses(session, user_id=user_id)
     if not courses:
         return []
 

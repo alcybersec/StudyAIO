@@ -15,6 +15,9 @@ class CourseDocument(Base):
     __tablename__ = "course_documents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
     course_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("courses.id"), nullable=False
     )
@@ -37,6 +40,7 @@ class CourseDocument(Base):
     )
 
     # Relationships
+    user: Mapped["User"] = relationship(back_populates="course_documents")
     course: Mapped["Course"] = relationship(back_populates="course_documents")
     assessments: Mapped[list["Assessment"]] = relationship(
         back_populates="source_document"
@@ -44,6 +48,7 @@ class CourseDocument(Base):
     deadlines: Mapped[list["Deadline"]] = relationship(back_populates="source_document")
 
     __table_args__ = (
+        Index("ix_course_documents_user_id", "user_id"),
         Index("ix_course_documents_course", "course_id"),
         Index("ix_course_documents_sha256", "sha256"),
     )

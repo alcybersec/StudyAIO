@@ -4,6 +4,7 @@ import structlog
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_or_default
 from app.api.schemas import (
     ActivityItem,
     CourseDueCount,
@@ -15,6 +16,7 @@ from app.api.schemas import (
     UpcomingDeadlineItem,
 )
 from app.core.database import get_session
+from app.models.user import User
 from app.services import course_service, courseops_service, exam_service, pipeline_service, review_service, srs_service, streak_service
 
 logger = structlog.get_logger()
@@ -29,12 +31,13 @@ router = APIRouter()
     description="Returns pending review count, recent pipeline activity, course list with aggregate stats, and study statistics.",
 )
 async def get_dashboard(
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> DashboardResponse:
     """Get dashboard data: pending reviews, recent activity, courses, study stats."""
-    pending_count = await review_service.count_pending_reviews(session)
-    activity_raw = await pipeline_service.get_recent_activity(session, limit=10)
-    course_stats = await course_service.list_courses_with_stats(session)
+    pending_count = await review_service.count_pending_reviews(session, user_id=user.id)
+    activity_raw = await pipeline_service.get_recent_activity(session, limit=10, user_id=user.id)
+    course_stats = await course_service.list_courses_with_stats(session, user_id=user.id)
 
     course_items = [CourseListItem(**cs) for cs in course_stats]
     activity = [ActivityItem(**item) for item in activity_raw]
@@ -42,8 +45,8 @@ async def get_dashboard(
     # Study stats (best-effort, don't break dashboard on failure)
     study_stats = None
     try:
-        global_stats = await srs_service.get_global_study_stats(session)
-        per_course = await srs_service.get_per_course_due_counts(session)
+        global_stats = await srs_service.get_global_study_stats(session, user_id=user.id)
+        per_course = await srs_service.get_per_course_due_counts(session, user_id=user.id)
         study_stats = DashboardStudyStats(
             total=global_stats.total,
             due_today=global_stats.due_today,
@@ -58,7 +61,7 @@ async def get_dashboard(
     # Active exams (best-effort)
     active_exams = []
     try:
-        exams = await exam_service.list_exams(session, status="active")
+        exams = await exam_service.list_exams(session, status="active", user_id=user.id)
         # Need course codes — build a lookup from course_items
         course_lookup = {c.id: c.code for c in course_items}
         for exam in exams:
@@ -80,7 +83,7 @@ async def get_dashboard(
     # Streak (best-effort)
     streak = None
     try:
-        streak_data = await streak_service.get_streak(session)
+        streak_data = await streak_service.get_streak(session, user_id=user.id)
         streak = DashboardStreakInfo(**streak_data)
     except Exception:
         logger.warning("streak_failed", exc_info=True)
@@ -88,7 +91,7 @@ async def get_dashboard(
     # Upcoming deadlines (best-effort)
     upcoming_deadlines = []
     try:
-        raw_deadlines = await courseops_service.get_upcoming_deadlines_all_courses(session, limit=5)
+        raw_deadlines = await courseops_service.get_upcoming_deadlines_all_courses(session, limit=5, user_id=user.id)
         upcoming_deadlines = [UpcomingDeadlineItem(**d) for d in raw_deadlines]
     except Exception:
         logger.warning("upcoming_deadlines_failed", exc_info=True)

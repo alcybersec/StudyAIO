@@ -6,8 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_or_default
 from app.config import settings
 from app.core.database import get_session
+from app.models.user import User
 from app.services import artifact_service
 
 router = APIRouter()
@@ -34,10 +36,11 @@ _MIME_TYPES = {
 )
 async def download_artifact(
     artifact_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> FileResponse:
     """Download the original uploaded file for an artifact."""
-    artifact = await artifact_service.get_artifact(session, artifact_id)
+    artifact = await artifact_service.get_artifact(session, artifact_id, user_id=user.id)
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
@@ -59,10 +62,11 @@ async def download_artifact(
 )
 async def view_artifact(
     artifact_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> FileResponse:
     """Serve the original uploaded file for inline viewing."""
-    artifact = await artifact_service.get_artifact(session, artifact_id)
+    artifact = await artifact_service.get_artifact(session, artifact_id, user_id=user.id)
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact not found")
 

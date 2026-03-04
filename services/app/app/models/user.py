@@ -32,12 +32,23 @@ class User(Base):
         default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    # Relationships
+    # Relationships — auth
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     magic_links: Mapped[list["MagicLink"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+
+    # Relationships — data ownership
+    courses: Mapped[list["Course"]] = relationship(back_populates="user")
+    artifacts: Mapped[list["LectureArtifact"]] = relationship(back_populates="user")
+    exams: Mapped[list["Exam"]] = relationship(back_populates="user")
+    study_sessions: Mapped[list["StudySession"]] = relationship(back_populates="user")
+    flashcard_reviews: Mapped[list["FlashcardReview"]] = relationship(back_populates="user")
+    course_documents: Mapped[list["CourseDocument"]] = relationship(back_populates="user")
+    settings: Mapped["UserSettings | None"] = relationship(
+        back_populates="user", uselist=False
     )
 
     __table_args__ = (

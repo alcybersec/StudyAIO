@@ -4,16 +4,26 @@ from collections.abc import Callable
 
 import structlog
 from fastapi import Depends, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.auth import ACCESS_TOKEN_COOKIE, decode_token
 from app.core.database import get_session
 from app.core.exceptions import AuthenticationError, AuthorizationError
+from app.core.utils import generate_id
 from app.models.user import User
 from app.services import user_service
 
 logger = structlog.get_logger()
+
+# Default admin user for self-hosted mode (matches migration backfill)
+DEFAULT_ADMIN_ID = "00000000-0000-0000-0000-000000000001"
+DEFAULT_ADMIN_EMAIL = "admin@studyaio.local"
+DEFAULT_ADMIN_USERNAME = "admin"
+
+# In-memory cache for the default user (avoids DB hit per request in self-hosted)
+_default_user_cache: User | None = None
 
 
 async def get_current_user(
@@ -57,6 +67,70 @@ async def get_optional_user(
         return await get_current_user(request, session)
     except AuthenticationError:
         return None
+
+
+async def _get_or_create_default_user(session: AsyncSession) -> User:
+    """Fetch or create the default admin user for self-hosted mode.
+
+    Returns:
+        The default admin User instance.
+    """
+    global _default_user_cache
+    if _default_user_cache is not None:
+        # Merge cached user into current session to avoid DetachedInstanceError
+        return await session.merge(_default_user_cache, load=False)
+
+    result = await session.execute(
+        select(User).where(User.id == DEFAULT_ADMIN_ID)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        # First admin user — find any existing admin, or create one
+        result = await session.execute(
+            select(User).where(User.role == "admin").limit(1)
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            user = User(
+                id=DEFAULT_ADMIN_ID,
+                email=DEFAULT_ADMIN_EMAIL,
+                username=DEFAULT_ADMIN_USERNAME,
+                role="admin",
+                tier="pro",
+                is_active=True,
+                email_verified=True,
+            )
+            session.add(user)
+            await session.flush()
+            logger.info("default_admin_created", user_id=user.id)
+
+    _default_user_cache = user
+    return user
+
+
+async def get_current_user_or_default(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> User:
+    """Get the current authenticated user, or the default admin in self-hosted mode.
+
+    In self-hosted mode (settings.self_hosted=True), returns the default admin
+    user without requiring authentication. In SaaS mode, delegates to
+    get_current_user which requires a valid JWT cookie.
+
+    Returns:
+        A User instance (always real, never None).
+    """
+    if settings.self_hosted:
+        # Try JWT auth first (user may have logged in even in self-hosted)
+        try:
+            return await get_current_user(request, session)
+        except AuthenticationError:
+            return await _get_or_create_default_user(session)
+    else:
+        return await get_current_user(request, session)
 
 
 def require_role(*allowed_roles: str) -> Callable:

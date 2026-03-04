@@ -22,6 +22,7 @@ from app.models.review_item import ReviewItem
 from app.models.study_session import StudySession
 from app.models.summary import Summary
 from app.models.user import User
+from app.models.user_settings import UserSettings
 
 __all__ = [
     "Assessment",
@@ -43,4 +44,5 @@ __all__ = [
     "StudySession",
     "Summary",
     "User",
+    "UserSettings",
 ]

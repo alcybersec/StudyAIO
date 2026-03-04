@@ -16,6 +16,9 @@ class Exam(Base):
     __tablename__ = "exams"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
     course_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("courses.id"), nullable=False
     )
@@ -32,11 +35,13 @@ class Exam(Base):
     )
 
     # Relationships
+    user: Mapped["User"] = relationship(back_populates="exams")
     course: Mapped["Course"] = relationship(back_populates="exams")
     quiz_attempts: Mapped[list["QuizAttempt"]] = relationship(back_populates="exam")
     study_sessions: Mapped[list["StudySession"]] = relationship(back_populates="exam")
 
     __table_args__ = (
+        Index("ix_exams_user_id", "user_id"),
         Index("ix_exams_course_status", "course_id", "status"),
         Index("ix_exams_exam_date", "exam_date"),
     )

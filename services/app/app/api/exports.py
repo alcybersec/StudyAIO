@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_or_default
 from app.core.database import get_session
+from app.models.user import User
 from app.services import export_service
 
 logger = structlog.get_logger()
@@ -31,6 +33,7 @@ async def export_obsidian_vault(
         "",
         description="Comma-separated week numbers to include (empty = all)",
     ),
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """Export a course as an Obsidian vault."""
@@ -46,7 +49,7 @@ async def export_obsidian_vault(
             )
 
     result = await export_service.generate_obsidian_vault(
-        session, course_code, week_list
+        session, course_code, week_list, user_id=user.id
     )
     if not result:
         raise HTTPException(

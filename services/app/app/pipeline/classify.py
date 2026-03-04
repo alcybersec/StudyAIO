@@ -84,17 +84,21 @@ async def _get_known_courses(session) -> list[str]:
     return [row[0] for row in result.all()]
 
 
-async def _get_or_create_course(session, course_code: str) -> Course:
+async def _get_or_create_course(session, course_code: str, user_id: str = "") -> Course:
     """Get existing course or create a new one.
 
     Args:
         session: Database session.
         course_code: Course code to find or create.
+        user_id: Owner user UUID.
 
     Returns:
         Course instance.
     """
-    result = await session.execute(select(Course).where(Course.code == course_code))
+    query = select(Course).where(Course.code == course_code)
+    if user_id:
+        query = query.where(Course.user_id == user_id)
+    result = await session.execute(query)
     course = result.scalar_one_or_none()
     if course:
         return course
@@ -102,14 +106,15 @@ async def _get_or_create_course(session, course_code: str) -> Course:
     course = Course(
         id=generate_id(),
         code=course_code,
+        user_id=user_id,
     )
     session.add(course)
     await session.flush()
-    logger.info("course_created", course_id=course.id, code=course.code)
+    logger.info("course_created", course_id=course.id, code=course.code, user_id=user_id)
     return course
 
 
-async def _classify(artifact_id: str) -> dict:
+async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
     """Async classify implementation."""
     async with async_session_factory() as session:
         # Load artifact
@@ -166,7 +171,9 @@ async def _classify(artifact_id: str) -> dict:
 
             if classification.confidence >= threshold:
                 # High confidence — apply classification
-                course = await _get_or_create_course(session, classification.course_code)
+                course = await _get_or_create_course(
+                    session, classification.course_code, user_id=user_id or artifact.user_id
+                )
                 artifact.course_id = course.id
                 artifact.week = classification.week
                 artifact.title = classification.title
@@ -182,6 +189,7 @@ async def _classify(artifact_id: str) -> dict:
 
                 return {
                     "artifact_id": artifact_id,
+                    "user_id": user_id or artifact.user_id,
                     "status": "classified",
                     "course_code": classification.course_code,
                     "week": classification.week,
@@ -238,6 +246,7 @@ async def _classify(artifact_id: str) -> dict:
 
                 return {
                     "artifact_id": artifact_id,
+                    "user_id": user_id or artifact.user_id,
                     "status": "waiting_review",
                     "confidence": classification.confidence,
                     "review_type": review_type,
@@ -279,6 +288,7 @@ def classify_artifact(self, input_value: str | dict) -> dict:
         Dict with artifact_id, status, course_code, week, title, confidence.
     """
     # Resolve input (chain compatibility)
+    user_id = None
     if isinstance(input_value, dict):
         status = input_value.get("status", "")
         if status in ("duplicate", "waiting_review", "failed"):
@@ -289,16 +299,17 @@ def classify_artifact(self, input_value: str | dict) -> dict:
             )
             return input_value
         artifact_id = input_value.get("artifact_id", "")
+        user_id = input_value.get("user_id")
     else:
         artifact_id = input_value
 
     if not artifact_id:
         raise ClassificationError("No artifact_id provided")
 
-    logger.info("classify_task_started", artifact_id=artifact_id)
+    logger.info("classify_task_started", artifact_id=artifact_id, user_id=user_id)
     publish_pipeline_event_sync(artifact_id, "classify", "started")
     try:
-        result = run_async(_classify(artifact_id))
+        result = run_async(_classify(artifact_id, user_id=user_id))
         publish_pipeline_event_sync(artifact_id, "classify", result.get("status", "completed"))
         return result
     except (ClassificationError, AgentError):

@@ -10,6 +10,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from app.api.deps import get_current_user_or_default
 from app.api.schemas import (
     BatchUploadFileResult,
     BatchUploadResponse,
@@ -19,6 +20,7 @@ from app.api.schemas import (
 )
 from app.config import settings
 from app.core.database import get_session
+from app.models.user import User
 from app.core.exceptions import DuplicateFileError
 from app.core.rate_limit import limiter
 from app.core.utils import read_upload_with_limit, sanitize_filename
@@ -44,6 +46,7 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx"}
 async def upload_file(
     request: Request,
     file: UploadFile,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> UploadResponse:
     """Upload a lecture file and start the processing pipeline.
@@ -93,7 +96,7 @@ async def upload_file(
 
     # Dispatch pipeline
     try:
-        result = run_pipeline(file_path)
+        result = run_pipeline(file_path, user_id=user.id)
     except DuplicateFileError as e:
         raise HTTPException(
             status_code=409,
@@ -119,6 +122,7 @@ async def upload_file(
 async def batch_upload(
     request: Request,
     files: list[UploadFile],
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> BatchUploadResponse:
     """Upload multiple lecture files and start processing pipelines."""
@@ -186,7 +190,7 @@ async def batch_upload(
 
         # Dispatch pipeline
         try:
-            pipeline_result = run_pipeline(file_path)
+            pipeline_result = run_pipeline(file_path, user_id=user.id)
             results.append(BatchUploadFileResult(
                 filename=filename,
                 status="processing",
@@ -234,13 +238,14 @@ async def batch_upload(
 )
 async def get_upload_status(
     artifact_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> list[PipelineRunResponse]:
     """Get pipeline run status for an uploaded artifact."""
     runs = await pipeline_service.get_artifact_pipeline_runs(session, artifact_id)
     if not runs:
         # Check if artifact exists at all
-        artifact = await artifact_service.get_artifact(session, artifact_id)
+        artifact = await artifact_service.get_artifact(session, artifact_id, user_id=user.id)
         if not artifact:
             raise HTTPException(status_code=404, detail="Artifact not found")
     return [PipelineRunResponse.model_validate(r) for r in runs]
@@ -265,10 +270,11 @@ _PRE_STAGE_STATUS = {
 )
 async def retry_pipeline(
     artifact_id: str,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> RetryResponse:
     """Retry a failed artifact's pipeline from the failed stage."""
-    artifact = await artifact_service.get_artifact(session, artifact_id)
+    artifact = await artifact_service.get_artifact(session, artifact_id, user_id=user.id)
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
@@ -302,7 +308,7 @@ async def retry_pipeline(
         reset_status=pre_status,
     )
 
-    resume_pipeline(artifact_id, from_stage=failed_stage)
+    resume_pipeline(artifact_id, from_stage=failed_stage, user_id=user.id)
 
     return RetryResponse(
         artifact_id=artifact_id,
@@ -319,6 +325,7 @@ async def retry_pipeline(
 async def pipeline_events(
     request: Request,
     artifact_id: str = Query(default=""),
+    user: User = Depends(get_current_user_or_default),
 ) -> EventSourceResponse:
     """SSE stream of pipeline events, optionally filtered by artifact_id."""
 

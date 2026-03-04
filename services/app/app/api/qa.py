@@ -7,11 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.embeddings import get_embedding_provider
 from app.agents.factory import get_agent
+from app.api.deps import get_current_user_or_default
 from app.api.schemas import Citation, QARequest, QAResponse
 from app.config import settings
 from app.core.database import get_session
 from app.core.rate_limit import limiter
 from app.models.course import Course
+from app.models.user import User
 from app.services import search_service
 
 logger = structlog.get_logger()
@@ -29,6 +31,7 @@ router = APIRouter()
 async def ask_question(
     request: Request,
     body: QARequest,
+    user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> QAResponse:
     """Answer a question using retrieved context chunks and Claude.
@@ -61,6 +64,7 @@ async def ask_question(
         top_k=body.top_k or 10,
         course_id=course_id,
         week=body.week,
+        user_id=user.id,
     )
 
     if not chunks:

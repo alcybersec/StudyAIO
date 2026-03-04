@@ -20,11 +20,12 @@ from app.worker import celery_app
 logger = structlog.get_logger()
 
 
-async def _summarize(artifact_id: str) -> dict:
+async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
     """Async summarize implementation.
 
     Args:
         artifact_id: UUID of the artifact to summarize.
+        user_id: Owner user UUID.
 
     Returns:
         Dict with artifact_id, status, summary file path.
@@ -138,6 +139,7 @@ async def _summarize(artifact_id: str) -> dict:
 
             return {
                 "artifact_id": artifact_id,
+                "user_id": user_id or artifact.user_id,
                 "status": "summarized",
                 "summary_id": summary.id,
                 "version": summary.version,
@@ -180,6 +182,7 @@ def summarize_artifact(self, input_value: str | dict) -> dict:
         Dict with artifact_id, status, summary_id, version, file_path.
     """
     # Resolve input (chain compatibility)
+    user_id = None
     if isinstance(input_value, dict):
         status = input_value.get("status", "")
         if status in ("duplicate", "waiting_review", "failed"):
@@ -190,16 +193,17 @@ def summarize_artifact(self, input_value: str | dict) -> dict:
             )
             return input_value
         artifact_id = input_value.get("artifact_id", "")
+        user_id = input_value.get("user_id")
     else:
         artifact_id = input_value
 
     if not artifact_id:
         raise SummarizationError("No artifact_id provided")
 
-    logger.info("summarize_task_started", artifact_id=artifact_id)
+    logger.info("summarize_task_started", artifact_id=artifact_id, user_id=user_id)
     publish_pipeline_event_sync(artifact_id, "summarize", "started")
     try:
-        result = run_async(_summarize(artifact_id))
+        result = run_async(_summarize(artifact_id, user_id=user_id))
         publish_pipeline_event_sync(artifact_id, "summarize", result.get("status", "completed"))
         return result
     except (SummarizationError, AgentError):
