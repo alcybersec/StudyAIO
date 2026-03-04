@@ -1,6 +1,7 @@
 """Shared test fixtures for StudyAIO."""
 
-from unittest.mock import AsyncMock, MagicMock
+import tempfile
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -114,11 +115,14 @@ async def async_client(mock_session):
     from app.core.rate_limit import limiter
     limiter.reset()
 
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        yield client
+    # Use a writable temp dir for data_dir so upload tests work as non-root
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with patch("app.config.settings.data_dir", tmpdir):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                yield client
     app.dependency_overrides.clear()
 
 
