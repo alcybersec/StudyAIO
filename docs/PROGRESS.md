@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 15 — Multi-Tenant Data Isolation (Complete)
-> **Overall Status:** Complete (v1 + quality hardening + production readiness + spaced repetition + exam mode + extensibility + courseops + security hardening + auth backend + auth frontend + multi-tenant)
+> **Current Milestone:** 17 — Multi-AI Provider System (In Progress)
+> **Overall Status:** v1 Complete through M15 + M16.1-16.2 + M17.1-17.3 in progress
 
 ---
 
@@ -164,6 +164,21 @@
 | 15.3 | API routes + pipeline user threading | ✅ Done | Injected user context into all 12 data routers via Depends(get_current_user_or_default). Pipeline carries user_id through all 6 Celery stages via dict payload. resolve_pipeline_input returns (artifact_id, user_id) tuple. SSE events scoped per user. 16 test fixes for new signatures. |
 | 15.4 | Settings migration to DB + admin endpoints | ✅ Done | Rewrote settings_service.py from file-based to DB-backed per-user (get_user_settings, update_user_settings, get_effective_setting_async). Sync fallbacks for pipeline. Admin router (GET /api/admin/users, PATCH /api/admin/users/{id}, GET /api/admin/metrics) with require_role("admin"). admin_service.py. |
 | 15.5 | Multi-tenant tests + docs | ✅ Done | 64 new tests: user scoping (8), settings DB (8), admin service (8), admin API (8), pipeline threading (10), scoped API (4), deps default user (2), golden structures (6), settings API (5), settings validation (5). 695 total tests (585 unit + 110 golden). PROGRESS.md updated. |
+
+## Milestone 16 — UI Foundation Overhaul (v2)
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 16.1 | Frontend deps + CSS theme variables | ✅ Done | Installed motion, @radix-ui (dialog, dropdown-menu, tabs, tooltip, switch), sonner, react-hook-form, zod, @hookform/resolvers. CSS custom properties for 11 theme tokens (light + dark). @custom-variant dark for Tailwind v4. No-flash script in index.html. |
+| 16.2 | Shared foundation components | ✅ Done | Skeleton (pulsing placeholder, SkeletonText, SkeletonCard). Toast (Sonner wrapper, mounted in AppLayout). AnimatedCard (motion.div fade-in + slide-up). Sheet (Radix Dialog, bottom/right, AnimatePresence). Barrel exports. Dark mode classes on AppLayout. |
+
+## Milestone 17 — Multi-AI Provider System (v2)
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 17.1 | OpenAI adapter + backend deps | ✅ Done | Added openai, tiktoken, ollama to requirements.txt. OpenAIAdapter (AsyncOpenAI, all 6 AgentAdapter methods). Config: openai_api_key (SecretStr), openai_model. Settings service updated with new keys + backends. 17 tests. |
+| 17.2 | Ollama adapter + factory update | ✅ Done | OllamaAdapter (ollama.AsyncClient, all 6 methods). Factory routes to 4 backends (claude_code, anthropic_api, openai, ollama). Config: ollama_base_url, ollama_model. 16 Ollama tests + 5 factory tests. |
+| 17.3 | Embedding providers + parsing resilience | ✅ Done | OpenAIEmbeddingProvider (text-embedding-3-small, 1536d). OllamaEmbeddingProvider (nomic-embed-text, 768d). get_embedding_provider() factory with embedding_backend setting. Resilient parsing: prose preamble stripping, trailing comma removal, single-quote conversion, fallback { to } extraction. 12 embedding tests + 14 enhanced parsing tests. |
 
 ## Post-v1 — Fixes & Settings
 

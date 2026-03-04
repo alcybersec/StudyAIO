@@ -10,6 +10,8 @@ def get_agent() -> AgentAdapter:
     Reads agent_backend from settings to select the adapter:
     - "claude_code": ClaudeCodeAdapter (CLI subprocess)
     - "anthropic_api": AnthropicAPIAdapter (SDK direct)
+    - "openai": OpenAIAdapter (OpenAI SDK)
+    - "ollama": OllamaAdapter (local Ollama server)
 
     Returns:
         An AgentAdapter implementation.
@@ -21,6 +23,17 @@ def get_agent() -> AgentAdapter:
 
         return AnthropicAPIAdapter()
 
+    if backend == "openai":
+        from app.agents.openai_adapter import OpenAIAdapter
+
+        return OpenAIAdapter()
+
+    if backend == "ollama":
+        from app.agents.ollama_adapter import OllamaAdapter
+
+        return OllamaAdapter()
+
+    # Default: claude_code
     from app.agents.claude_code import ClaudeCodeAdapter
 
     return ClaudeCodeAdapter()

@@ -27,6 +27,11 @@ ALLOWED_KEYS = {
     "claude_model",
     "agent_backend",
     "anthropic_api_key",
+    "openai_api_key",
+    "openai_model",
+    "ollama_base_url",
+    "ollama_model",
+    "embedding_backend",
     "classification_confidence_threshold",
     "flashcard_count_per_week",
     "quiz_question_count_per_week",
@@ -36,7 +41,8 @@ ALLOWED_KEYS = {
 }
 
 VALID_MODELS = {"opus", "sonnet", "haiku"}
-VALID_BACKENDS = {"claude_code", "anthropic_api"}
+VALID_BACKENDS = {"claude_code", "anthropic_api", "openai", "ollama"}
+VALID_EMBEDDING_BACKENDS = {"sentence_transformers", "openai", "ollama"}
 
 # Validation rules: (type, min, max)
 _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
@@ -44,6 +50,11 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
     "claude_model": (str, None, None),
     "agent_backend": (str, None, None),
     "anthropic_api_key": (str, None, None),
+    "openai_api_key": (str, None, None),
+    "openai_model": (str, None, None),
+    "ollama_base_url": (str, None, None),
+    "ollama_model": (str, None, None),
+    "embedding_backend": (str, None, None),
     "classification_confidence_threshold": (float, 0.0, 1.0),
     "flashcard_count_per_week": (int, 1, 100),
     "quiz_question_count_per_week": (int, 1, 100),
@@ -60,6 +71,11 @@ def _defaults() -> dict[str, Any]:
         "claude_model": settings.claude_model,
         "agent_backend": settings.agent_backend,
         "anthropic_api_key": settings.anthropic_api_key.get_secret_value(),
+        "openai_api_key": settings.openai_api_key.get_secret_value(),
+        "openai_model": settings.openai_model,
+        "ollama_base_url": settings.ollama_base_url,
+        "ollama_model": settings.ollama_model,
+        "embedding_backend": settings.embedding_backend,
         "classification_confidence_threshold": settings.classification_confidence_threshold,
         "flashcard_count_per_week": settings.flashcard_count_per_week,
         "quiz_question_count_per_week": settings.quiz_question_count_per_week,
@@ -103,6 +119,33 @@ def validate_setting(key: str, value: Any) -> Any:
         if not isinstance(value, str):
             raise ValueError("anthropic_api_key must be a string")
         return value.strip()
+
+    if key == "openai_api_key":
+        if not isinstance(value, str):
+            raise ValueError("openai_api_key must be a string")
+        return value.strip()
+
+    if key == "openai_model":
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("openai_model must be a non-empty string")
+        return value.strip()
+
+    if key == "ollama_base_url":
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("ollama_base_url must be a non-empty string")
+        return value.strip()
+
+    if key == "ollama_model":
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("ollama_model must be a non-empty string")
+        return value.strip()
+
+    if key == "embedding_backend":
+        if value not in VALID_EMBEDDING_BACKENDS:
+            raise ValueError(
+                f"embedding_backend must be one of {sorted(VALID_EMBEDDING_BACKENDS)}, got '{value}'"
+            )
+        return value
 
     if key == "claude_code_path":
         if not isinstance(value, str) or not value.strip():
