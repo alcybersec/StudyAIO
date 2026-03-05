@@ -21,7 +21,7 @@ from app.core.database import get_session
 from app.core.rate_limit import limiter
 from app.models.course import Course
 from app.models.user import User
-from app.services import chat_service
+from app.services import billing_service, chat_service, quota_service
 
 logger = structlog.get_logger()
 
@@ -148,6 +148,9 @@ async def send_message(
     session: AsyncSession = Depends(get_session),
 ) -> SendMessageResponse:
     """Send a user message and get an AI assistant response."""
+    # Check AI quota (free tier: 20/day)
+    await quota_service.check_ai_quota(session, user.id, user.tier)
+
     try:
         user_msg, assistant_msg = await chat_service.send_message(
             session=session,
@@ -160,6 +163,12 @@ async def send_message(
     except Exception as e:
         logger.error("chat_send_error", error=str(e), session_id=session_id)
         raise HTTPException(status_code=500, detail="Failed to process message") from e
+
+    # Record AI usage (best-effort)
+    try:
+        await billing_service.record_usage(session, user.id, ai_calls=1)
+    except Exception:
+        logger.warning("usage_record_chat_failed", exc_info=True)
 
     await session.commit()
 

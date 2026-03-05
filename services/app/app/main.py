@@ -18,6 +18,7 @@ from app.api import (
     analytics_router,
     assets_router,
     auth_router,
+    billing_router,
     chat_router,
     concepts_router,
     courseops_router,
@@ -39,6 +40,7 @@ from app.core.exceptions import (
     AuthenticationError,
     AuthorizationError,
     DuplicateFileError,
+    QuotaExceededError,
     StudyAIOError,
     UserExistsError,
 )
@@ -112,6 +114,7 @@ app = FastAPI(
         {"name": "chat", "description": "Persistent AI study companion chat sessions"},
         {"name": "gamification", "description": "XP, levels, achievements, daily challenges, leaderboard"},
         {"name": "concepts", "description": "Knowledge graph: concept extraction, visualization, and relationships"},
+        {"name": "billing", "description": "Stripe billing, subscriptions, and usage quotas"},
     ],
 )
 
@@ -155,6 +158,7 @@ app.include_router(analytics_router, prefix="/api", tags=["analytics"])
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(gamification_router, prefix="/api", tags=["gamification"])
 app.include_router(concepts_router, prefix="/api", tags=["concepts"])
+app.include_router(billing_router, prefix="/api", tags=["billing"])
 
 
 # Exception handlers
@@ -174,6 +178,20 @@ async def authorization_error_handler(request: Request, exc: AuthorizationError)
 async def user_exists_handler(request: Request, exc: UserExistsError) -> JSONResponse:
     """Handle duplicate user registration with 409."""
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(QuotaExceededError)
+async def quota_exceeded_handler(request: Request, exc: QuotaExceededError) -> JSONResponse:
+    """Handle quota exceeded errors with 402 Payment Required."""
+    return JSONResponse(
+        status_code=402,
+        content={
+            "detail": str(exc),
+            "resource": exc.resource,
+            "limit": exc.limit,
+            "period": exc.period,
+        },
+    )
 
 
 @app.exception_handler(DuplicateFileError)

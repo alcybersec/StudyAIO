@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 26 — Knowledge Graph & Mind Maps (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M20 ✅, M22 ✅, M23 ✅, M25 ✅, M26 ✅, M28 ✅
+> **Current Milestone:** 19 — Plans & Stripe Integration (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M22 ✅, M23 ✅, M25 ✅, M26 ✅, M28 ✅
 
 ---
 
@@ -250,6 +250,16 @@
 | 26.5 | API endpoints + schemas | ✅ Done | 5 endpoints: GET graph, GET list, GET detail, GET related, POST extract. concept_schemas.py (7 schemas). Rate-limited extraction (10/min). Course code → course_id resolution helper. |
 | 26.6 | Frontend — Knowledge Graph page + D3 | ✅ Done | d3 + @types/d3 deps. ConceptGraph.tsx (D3 force-directed, category colors, zoom/drag, node selection). ConceptDetail.tsx (side panel with relations, similar concepts). ConceptList.tsx (table view). KnowledgeGraphPage.tsx (Radix Tabs graph/list, course filter, search, stats bar, category legend). Router + Sidebar + MobileNav updated. |
 | 26.7 | Tests + documentation | ✅ Done | 48 new tests: concept_service (12), api/concepts (7), agents/concept_extraction (11), golden/concept_structure (18). Docs updated. |
+
+## Milestone 19 — Plans & Stripe Integration
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 19.1 | Models + migration + config + deps | ✅ Done | Subscription model (user_id FK unique, stripe_customer_id, stripe_subscription_id, plan, status, period dates, cancel_at_period_end). UsageRecord model (user_id FK, record_date, ai_calls/tokens/uploads counts, UNIQUE(user_id, date)). Alembic migration l2m3n4o5p6q7. Config: stripe_api_key/webhook_secret (SecretStr), stripe_pro_price_id, stripe_portal_return_url. stripe>=8.0 pip dep. |
+| 19.2 | Billing service + quota service | ✅ Done | billing_service.py: create_checkout_session, create_portal_session, handle_webhook (sub created/updated/deleted), cancel_subscription, record_usage (upsert daily). quota_service.py: check_upload_quota (5/month free), check_ai_quota (20/day free), check_course_quota (1 free). QuotaExceededError exception. Self-hosted/Pro bypass. 47 tests. |
+| 19.3 | Billing API endpoints + webhook | ✅ Done | 4 endpoints: POST /billing/checkout, POST /billing/portal, GET /billing/subscription (overview with usage), POST /billing/webhook (Stripe signature verification). billing_schemas.py (7 schemas). Rate-limited checkout/portal (5/min). 402 exception handler for QuotaExceededError. |
+| 19.4 | Quota integration + feature gating | ✅ Done | Upload quota check in uploads.py (before save). AI quota check in qa.py, chat.py (send_message), concepts.py (extract). Usage recording (best-effort) after each operation. Self-hosted mode bypasses all checks. 15 quota integration tests. |
+| 19.5 | Frontend billing UI + upgrade prompts | ✅ Done | billing.ts API client (3 methods). useBilling hooks (overview, checkout, portal). usePlan hook (plan/isPro/canUpgrade). BillingSection component (usage bars, upgrade/manage buttons). UpgradePrompt modal (shown on 402). ProBadge component. QuotaContext + global 402 handler in API client. SettingsPage billing section. Frontend builds clean. |
 
 ## Post-v1 — Fixes & Settings
 

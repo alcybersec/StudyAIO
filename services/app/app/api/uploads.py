@@ -25,7 +25,8 @@ from app.core.rate_limit import limiter
 from app.core.utils import read_upload_with_limit, sanitize_filename
 from app.models.user import User
 from app.pipeline.orchestrator import resume_pipeline, run_pipeline
-from app.services import artifact_service, pipeline_service, xp_service
+from app.services import artifact_service, billing_service, pipeline_service, xp_service
+from app.services import quota_service
 from app.services.event_service import PIPELINE_EVENTS_CHANNEL
 
 logger = structlog.get_logger()
@@ -62,6 +63,9 @@ async def upload_file(
             status_code=400,
             detail=f"Unsupported file type: {ext}. Supported: {sorted(SUPPORTED_EXTENSIONS)}",
         )
+
+    # Check upload quota (free tier: 5/month)
+    await quota_service.check_upload_quota(session, user.id, user.tier)
 
     # Save to shared uploads directory (accessible by both API and worker containers)
     try:
@@ -102,6 +106,13 @@ async def upload_file(
             status_code=409,
             detail=f"File already exists as artifact {e.existing_artifact_id}",
         ) from e
+
+    # Record upload usage for quota tracking (best-effort)
+    try:
+        await billing_service.record_usage(session, user.id, uploads=1)
+        await session.commit()
+    except Exception:
+        logger.warning("usage_record_upload_failed", exc_info=True)
 
     # Award upload XP (best-effort, separate session since pipeline is async)
     try:

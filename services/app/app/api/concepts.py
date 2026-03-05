@@ -19,7 +19,7 @@ from app.core.database import get_session
 from app.core.rate_limit import limiter
 from app.models.course import Course
 from app.models.user import User
-from app.services import concept_service
+from app.services import billing_service, concept_service, quota_service
 
 logger = structlog.get_logger()
 
@@ -171,6 +171,9 @@ async def extract_concepts(
     session: AsyncSession = Depends(get_session),
 ) -> ConceptExtractionResponse:
     """Trigger concept extraction for an artifact."""
+    # Check AI quota (free tier: 20/day)
+    await quota_service.check_ai_quota(session, user.id, user.tier)
+
     from app.models.artifact import LectureArtifact
     from app.models.extraction import Extraction
 
@@ -210,6 +213,12 @@ async def extract_concepts(
         week=artifact.week,
         extraction_text=extraction_text,
     )
+
+    # Record AI usage (best-effort)
+    try:
+        await billing_service.record_usage(session, user.id, ai_calls=1)
+    except Exception:
+        logger.warning("usage_record_concepts_failed", exc_info=True)
 
     return ConceptExtractionResponse(
         artifact_id=artifact_id,

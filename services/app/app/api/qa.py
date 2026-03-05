@@ -14,7 +14,7 @@ from app.core.database import get_session
 from app.core.rate_limit import limiter
 from app.models.course import Course
 from app.models.user import User
-from app.services import search_service
+from app.services import billing_service, quota_service, search_service
 
 logger = structlog.get_logger()
 
@@ -38,6 +38,9 @@ async def ask_question(
 
     Flow: embed question -> search chunks -> Claude answers with citations.
     """
+    # Check AI quota (free tier: 20/day)
+    await quota_service.check_ai_quota(session, user.id, user.tier)
+
     # Resolve course_code to course_id if provided
     course_id: str | None = None
     if body.course_code:
@@ -87,6 +90,12 @@ async def ask_question(
     except Exception as e:
         logger.error("qa_agent_error", error=str(e), question=body.question[:100])
         raise HTTPException(status_code=500, detail=f"Failed to generate answer: {e}") from e
+
+    # Record AI usage (best-effort)
+    try:
+        await billing_service.record_usage(session, user.id, ai_calls=1)
+    except Exception:
+        logger.warning("usage_record_qa_failed", exc_info=True)
 
     # Build response
     citations = [
