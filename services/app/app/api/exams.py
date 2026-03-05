@@ -4,6 +4,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_or_default
 from app.api.exam_schemas import (
     DailyPlanResponse,
     ExamCreateRequest,
@@ -15,10 +16,15 @@ from app.api.exam_schemas import (
     StudySessionResponse,
     WeakTopicResponse,
 )
-from app.api.deps import get_current_user_or_default
 from app.core.database import get_session
 from app.models.user import User
-from app.services import exam_service, schedule_service, streak_service
+from app.services import (
+    challenge_service,
+    exam_service,
+    schedule_service,
+    streak_service,
+    xp_service,
+)
 
 logger = structlog.get_logger()
 
@@ -215,6 +221,16 @@ async def record_session(
         user_id=user.id,
     )
     await session.commit()
+
+    # Award XP for study session (best-effort)
+    try:
+        await xp_service.award_xp(session, user.id, "streak_day")
+        await challenge_service.update_challenge_progress(
+            session, user.id, "study_minutes", body.duration_seconds // 60
+        )
+    except Exception:
+        logger.warning("gamification_xp_failed", exc_info=True)
+
     return StudySessionResponse(
         id=study.id,
         exam_id=study.exam_id,

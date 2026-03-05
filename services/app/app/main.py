@@ -24,6 +24,7 @@ from app.api import (
     dashboard_router,
     exams_router,
     exports_router,
+    gamification_router,
     files_router,
     qa_router,
     review_items_router,
@@ -108,6 +109,7 @@ app = FastAPI(
         {"name": "admin", "description": "User management and system metrics (admin only)"},
         {"name": "analytics", "description": "Learning analytics, heatmaps, retention, and exam readiness"},
         {"name": "chat", "description": "Persistent AI study companion chat sessions"},
+        {"name": "gamification", "description": "XP, levels, achievements, daily challenges, leaderboard"},
     ],
 )
 
@@ -149,6 +151,7 @@ app.include_router(auth_router, prefix="/api", tags=["auth"])
 app.include_router(admin_router, prefix="/api", tags=["admin"])
 app.include_router(analytics_router, prefix="/api", tags=["analytics"])
 app.include_router(chat_router, prefix="/api", tags=["chat"])
+app.include_router(gamification_router, prefix="/api", tags=["gamification"])
 
 
 # Exception handlers

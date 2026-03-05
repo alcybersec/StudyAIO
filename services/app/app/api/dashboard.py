@@ -10,6 +10,7 @@ from app.api.schemas import (
     CourseDueCount,
     CourseListItem,
     DashboardExamSummary,
+    DashboardGamificationSummary,
     DashboardResponse,
     DashboardStreakInfo,
     DashboardStudyStats,
@@ -17,7 +18,18 @@ from app.api.schemas import (
 )
 from app.core.database import get_session
 from app.models.user import User
-from app.services import course_service, courseops_service, exam_service, pipeline_service, review_service, srs_service, streak_service
+from app.services import (
+    achievement_service,
+    challenge_service,
+    course_service,
+    courseops_service,
+    exam_service,
+    pipeline_service,
+    review_service,
+    srs_service,
+    streak_service,
+    xp_service,
+)
 
 logger = structlog.get_logger()
 
@@ -96,6 +108,26 @@ async def get_dashboard(
     except Exception:
         logger.warning("upcoming_deadlines_failed", exc_info=True)
 
+    # Gamification summary (best-effort)
+    gamification = None
+    try:
+        xp_data = await xp_service.get_xp_summary(session, user.id)
+        challenge_data = await challenge_service.get_user_challenge_progress(session, user.id)
+        unnotified = await achievement_service.get_unnotified(session, user.id)
+        gamification = DashboardGamificationSummary(
+            total_xp=xp_data["total_xp"],
+            level=xp_data["level"],
+            progress_pct=xp_data["progress_pct"],
+            next_threshold=xp_data["next_threshold"],
+            daily_challenge_description=challenge_data["description"],
+            daily_challenge_progress=challenge_data["progress"],
+            daily_challenge_target=challenge_data["target"],
+            daily_challenge_completed=challenge_data["completed"],
+            unnotified_achievement_count=len(unnotified),
+        )
+    except Exception:
+        logger.warning("gamification_failed", exc_info=True)
+
     return DashboardResponse(
         pending_review_count=pending_count,
         recent_activity=activity,
@@ -104,4 +136,5 @@ async def get_dashboard(
         active_exams=active_exams,
         streak=streak,
         upcoming_deadlines=upcoming_deadlines,
+        gamification=gamification,
     )

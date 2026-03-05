@@ -51,6 +51,11 @@ class User(Base):
         back_populates="user", uselist=False
     )
 
+    # Relationships — gamification
+    user_xp: Mapped["UserXP | None"] = relationship(uselist=False)
+    xp_events: Mapped[list["XPEvent"]] = relationship()
+    user_achievements: Mapped[list["UserAchievement"]] = relationship()
+
     __table_args__ = (
         Index("ix_users_email", "email", unique=True),
         Index("ix_users_username", "username", unique=True),
