@@ -663,6 +663,50 @@ export interface ConceptExtractionResult {
   relation_count: number
 }
 
+// ── Billing ──────────────────────────────────────────────────
+
+export interface Subscription {
+  plan: string
+  status: string
+  current_period_start: string | null
+  current_period_end: string | null
+  cancel_at_period_end: boolean
+}
+
+export interface UsageSummary {
+  ai_calls_today: number
+  ai_calls_limit: number | null
+  uploads_this_month: number
+  uploads_limit: number | null
+  courses_count: number
+  courses_limit: number | null
+}
+
+export interface BillingOverview {
+  subscription: Subscription
+  usage: UsageSummary
+}
+
+export interface CheckoutRequest {
+  success_url: string
+  cancel_url: string
+}
+
+export interface CheckoutResponse {
+  checkout_url: string
+}
+
+export interface PortalResponse {
+  portal_url: string
+}
+
+export interface QuotaError {
+  detail: string
+  resource: string
+  limit: number
+  period: string
+}
+
 // ── Analytics ──────────────────────────────────────────────────
 
 export interface AnalyticsOverview {

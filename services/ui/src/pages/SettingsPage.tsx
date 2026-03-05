@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { BillingSection } from '../components/billing/BillingSection'
 import { Card, ErrorBanner, LoadingSpinner, PageHeader } from '../components/ui'
 import { useSettings, useUpdateSettings } from '../hooks/useApi'
 import { useTheme, type Theme } from '../hooks/useTheme'
@@ -65,6 +66,11 @@ export function SettingsPage() {
           {feedback.message}
         </div>
       )}
+
+      {/* Plan & Billing */}
+      <div className="mb-6">
+        <BillingSection />
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Appearance */}

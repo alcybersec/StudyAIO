@@ -27,7 +27,9 @@ from app.models.quiz import QuizQuestion
 from app.models.quiz_attempt import QuizAttempt
 from app.models.review_item import ReviewItem
 from app.models.study_session import StudySession
+from app.models.subscription import Subscription
 from app.models.summary import Summary
+from app.models.usage_record import UsageRecord
 from app.models.user import User
 from app.models.user_achievement import UserAchievement
 from app.models.user_daily_challenge import UserDailyChallenge
@@ -60,7 +62,9 @@ __all__ = [
     "QuizQuestion",
     "ReviewItem",
     "StudySession",
+    "Subscription",
     "Summary",
+    "UsageRecord",
     "User",
     "UserAchievement",
     "UserDailyChallenge",

@@ -44,9 +44,22 @@ async function fetchWithRefresh(input: RequestInfo | URL, init?: RequestInit): P
   return fetch(input, init)
 }
 
+// Global quota error handler — set by QuotaProvider
+let onQuotaExceeded: ((error: { resource: string; limit: number; period: string }) => void) | null = null
+
+export function setQuotaExceededHandler(handler: typeof onQuotaExceeded) {
+  onQuotaExceeded = handler
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({ detail: response.statusText }))
+
+    // Trigger upgrade prompt on 402
+    if (response.status === 402 && body.resource && onQuotaExceeded) {
+      onQuotaExceeded({ resource: body.resource, limit: body.limit, period: body.period })
+    }
+
     throw new ApiError(response.status, body.detail || response.statusText)
   }
   return response.json()

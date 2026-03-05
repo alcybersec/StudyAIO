@@ -1,5 +1,6 @@
 import { Navigate, Outlet, createBrowserRouter, useParams } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { QuotaProvider } from './contexts/QuotaContext'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthLayout } from './components/layout/AuthLayout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
@@ -28,7 +29,9 @@ import { WeekViewPage } from './pages/WeekViewPage'
 function RootLayout() {
   return (
     <AuthProvider>
-      <Outlet />
+      <QuotaProvider>
+        <Outlet />
+      </QuotaProvider>
     </AuthProvider>
   )
 }

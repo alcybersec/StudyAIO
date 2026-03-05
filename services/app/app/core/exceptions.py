@@ -86,6 +86,19 @@ class UserExistsError(StudyAIOError):
         super().__init__(f"A user with this {field} already exists")
 
 
+class QuotaExceededError(StudyAIOError):
+    """Raised when a user exceeds their tier's usage quota."""
+
+    def __init__(self, resource: str, limit: int, period: str):
+        self.resource = resource
+        self.limit = limit
+        self.period = period
+        super().__init__(
+            f"Quota exceeded: {resource} limit is {limit} per {period}. "
+            "Upgrade to Pro for unlimited access."
+        )
+
+
 class ReviewRequiredError(StudyAIOError):
     """Raised when a pipeline stage needs human review to proceed."""
 

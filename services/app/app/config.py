@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 7
     self_hosted: bool = True
 
+    # Stripe billing
+    stripe_api_key: SecretStr = SecretStr("")
+    stripe_webhook_secret: SecretStr = SecretStr("")
+    stripe_pro_price_id: str = ""
+    stripe_portal_return_url: str = "http://localhost:3001/settings"
+
     # OAuth providers
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")
