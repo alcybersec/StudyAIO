@@ -19,6 +19,7 @@ from app.api import (
     assets_router,
     auth_router,
     chat_router,
+    concepts_router,
     courseops_router,
     courses_router,
     dashboard_router,
@@ -110,6 +111,7 @@ app = FastAPI(
         {"name": "analytics", "description": "Learning analytics, heatmaps, retention, and exam readiness"},
         {"name": "chat", "description": "Persistent AI study companion chat sessions"},
         {"name": "gamification", "description": "XP, levels, achievements, daily challenges, leaderboard"},
+        {"name": "concepts", "description": "Knowledge graph: concept extraction, visualization, and relationships"},
     ],
 )
 
@@ -152,6 +154,7 @@ app.include_router(admin_router, prefix="/api", tags=["admin"])
 app.include_router(analytics_router, prefix="/api", tags=["analytics"])
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(gamification_router, prefix="/api", tags=["gamification"])
+app.include_router(concepts_router, prefix="/api", tags=["concepts"])
 
 
 # Exception handlers

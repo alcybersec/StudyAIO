@@ -6,6 +6,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
+from app.agents import parsing
 from app.agents.factory import get_agent
 from app.core.database import async_session_factory, run_async
 from app.core.exceptions import AgentError, AssetGenerationError
@@ -124,6 +125,22 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
                 artifact_id=artifact_id,
                 questions=quiz_data,
             )
+
+            # Extract concepts (best-effort — won't break pipeline)
+            try:
+                from app.services import concept_service
+
+                extraction_text_for_concepts = parsing.build_extraction_text(extraction_data)
+                await concept_service.extract_and_save_concepts(
+                    session=session,
+                    artifact_id=artifact_id,
+                    user_id=user_id or artifact.user_id,
+                    course_id=artifact.course_id,
+                    week=artifact.week,
+                    extraction_text=extraction_text_for_concepts,
+                )
+            except Exception:
+                logger.warning("concept_extraction_in_pipeline_failed", exc_info=True)
 
             # Update artifact status — terminal stage
             artifact.status = "processed"

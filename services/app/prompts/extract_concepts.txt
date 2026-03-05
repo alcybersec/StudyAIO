@@ -1,0 +1,41 @@
+Analyze the following lecture content and extract key concepts and their relationships.
+
+Lecture content:
+---
+{{ text }}
+---
+
+{% if existing_concepts %}
+Existing concepts already extracted for this course (avoid duplicates, reference by exact name when a relationship involves one):
+{{ existing_concepts }}
+{% endif %}
+
+Extract:
+1. **Concepts**: Key terms, theories, algorithms, patterns, or ideas. For each provide:
+   - name: Short canonical name (2-5 words max)
+   - description: Clear 1-2 sentence explanation
+   - category: One of "theory", "algorithm", "data_structure", "pattern", "tool", "language", "protocol", "principle", "method", "general"
+
+2. **Relationships** between concepts (including links to existing concepts). For each provide:
+   - source: Name of the source concept (must match a concept name exactly)
+   - target: Name of the target concept (must match a concept name exactly)
+   - relation_type: One of "prerequisite", "extends", "uses", "related_to", "part_of"
+   - confidence: 0.0 to 1.0
+
+Respond with ONLY a JSON object (no other text):
+{
+  "concepts": [
+    {"name": "Binary Search", "description": "Efficient search algorithm for sorted arrays with O(log n) time complexity.", "category": "algorithm"}
+  ],
+  "relations": [
+    {"source": "Binary Search", "target": "Divide and Conquer", "relation_type": "uses", "confidence": 0.9}
+  ]
+}
+
+Rules:
+- Extract 5-20 concepts per lecture (focus on the most important ones)
+- Use concise, canonical names (e.g., "Binary Search" not "The Binary Search Algorithm")
+- Categories must be one of the specified values
+- relation_type must be one of: prerequisite, extends, uses, related_to, part_of
+- Only create relationships where the connection is meaningful and clear
+- confidence: 0.9+ for explicit relationships, 0.6-0.9 for inferred ones

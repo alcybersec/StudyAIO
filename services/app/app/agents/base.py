@@ -92,6 +92,33 @@ class CourseOpsResult:
     confidence: float = 0.0
 
 
+@dataclass
+class ConceptData:
+    """A single concept extracted by the AI."""
+
+    name: str
+    description: str
+    category: str = "general"
+
+
+@dataclass
+class ConceptRelationData:
+    """A relationship between two concepts."""
+
+    source: str
+    target: str
+    relation_type: str = "related_to"
+    confidence: float = 0.8
+
+
+@dataclass
+class ConceptExtractionResult:
+    """Result of extracting concepts from lecture content."""
+
+    concepts: list[ConceptData] = field(default_factory=list)
+    relations: list[ConceptRelationData] = field(default_factory=list)
+
+
 class AgentAdapter(ABC):
     """Abstract interface for AI operations.
 
@@ -189,5 +216,20 @@ class AgentAdapter(ABC):
 
         Returns:
             CourseOpsResult with assessments, deadlines, and metadata.
+        """
+        ...
+
+    @abstractmethod
+    async def extract_concepts(
+        self, text: str, existing_concepts: list[str] | None = None
+    ) -> ConceptExtractionResult:
+        """Extract concepts and relationships from lecture content.
+
+        Args:
+            text: Lecture text content.
+            existing_concepts: Names of concepts already extracted for this course.
+
+        Returns:
+            ConceptExtractionResult with concepts and relations.
         """
         ...
