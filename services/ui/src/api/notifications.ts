@@ -3,7 +3,6 @@ import type {
   NotificationPreferenceItem,
   NotificationPreferencesResponse,
   TelegramLinkResponse,
-  TelegramStatusResponse,
   TestNotificationResponse,
 } from '../types'
 
@@ -20,7 +19,7 @@ export const notificationsApi = {
     api.post<TelegramLinkResponse>('/notifications/telegram/link'),
 
   unlinkTelegram: () =>
-    api.delete<TelegramStatusResponse>('/notifications/telegram/unlink'),
+    api.delete('/notifications/telegram/unlink'),
 
   sendTest: (channel: string) =>
     api.post<TestNotificationResponse>('/notifications/test', { channel }),
