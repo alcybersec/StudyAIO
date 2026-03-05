@@ -9,6 +9,7 @@ import { QuickUpload } from '../components/dashboard/QuickUpload'
 import { StreakDisplay } from '../components/dashboard/StreakDisplay'
 import { StudyProgress } from '../components/dashboard/StudyProgress'
 import { EmptyState } from '../components/ui'
+import { InstallPrompt } from '../components/pwa/InstallPrompt'
 
 export function DashboardPage() {
   const { data, isLoading, error, refetch } = useDashboard()
@@ -96,6 +97,8 @@ export function DashboardPage() {
           actionTo="/upload"
         />
       )}
+
+      <InstallPrompt />
     </div>
   )
 }
