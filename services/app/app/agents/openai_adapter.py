@@ -8,6 +8,7 @@ from app.agents.base import (
     AgentAdapter,
     AnswerResult,
     ClassificationResult,
+    ConceptExtractionResult,
     CourseOpsResult,
     ExtractionData,
     FlashcardData,
@@ -369,3 +370,36 @@ Rules:
 
         result_text = await self._call_api(prompt, max_tokens=_SUMMARY_MAX_TOKENS)
         return parsing.parse_course_ops_response(result_text)
+
+    async def extract_concepts(
+        self, text: str, existing_concepts: list[str] | None = None
+    ) -> ConceptExtractionResult:
+        """Extract concepts and relationships by calling the OpenAI API."""
+        from pathlib import Path
+
+        from jinja2 import Template
+
+        template_path = Path("/app/prompts/extract_concepts.txt")
+        if template_path.exists():
+            template = Template(template_path.read_text())
+            prompt = template.render(
+                text=text[:8000],
+                existing_concepts=", ".join(existing_concepts) if existing_concepts else "",
+            )
+        else:
+            existing_block = ""
+            if existing_concepts:
+                existing_block = f"\nExisting concepts: {', '.join(existing_concepts)}\n"
+            prompt = f"""Extract key concepts and relationships from this lecture content.
+{existing_block}
+Content:
+---
+{text[:8000]}
+---
+
+Respond with ONLY a JSON object:
+{{"concepts": [{{"name": "...", "description": "...", "category": "general"}}], "relations": [{{"source": "...", "target": "...", "relation_type": "related_to", "confidence": 0.8}}]}}
+"""
+
+        result_text = await self._call_api(prompt)
+        return parsing.parse_concept_extraction_response(result_text)

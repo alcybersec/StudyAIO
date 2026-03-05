@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { analyticsApi, assetsApi, chatApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
+import { analyticsApi, assetsApi, chatApi, conceptsApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
 import type { CreateSessionRequest, DeadlineUpdate, QARequest, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
 export function useDashboard() {
@@ -320,6 +320,48 @@ export function useCreateExamFromDeadline() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['courseops'] })
       queryClient.invalidateQueries({ queryKey: ['exams'] })
+    },
+  })
+}
+
+// ── Knowledge Graph / Concepts ──────────────────────────────────
+
+export function useConceptGraph(courseCode?: string) {
+  return useQuery({
+    queryKey: ['concepts', 'graph', courseCode],
+    queryFn: () => conceptsApi.graph(courseCode),
+  })
+}
+
+export function useConceptList(courseCode?: string, search?: string) {
+  return useQuery({
+    queryKey: ['concepts', 'list', courseCode, search],
+    queryFn: () => conceptsApi.list(courseCode, search),
+  })
+}
+
+export function useConceptDetail(conceptId: string) {
+  return useQuery({
+    queryKey: ['concepts', 'detail', conceptId],
+    queryFn: () => conceptsApi.detail(conceptId),
+    enabled: !!conceptId,
+  })
+}
+
+export function useRelatedConcepts(conceptId: string) {
+  return useQuery({
+    queryKey: ['concepts', 'related', conceptId],
+    queryFn: () => conceptsApi.related(conceptId),
+    enabled: !!conceptId,
+  })
+}
+
+export function useExtractConcepts() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (artifactId: string) => conceptsApi.extract(artifactId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['concepts'] })
     },
   })
 }

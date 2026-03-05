@@ -1108,6 +1108,132 @@ Download a markdown task plan with assessments and deadline checklist.
 
 ---
 
+## Concepts (Knowledge Graph)
+
+### `GET /api/concepts/graph`
+
+Get concept graph with nodes and edges for D3 visualization.
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `course_code` | string | — | Filter by course code |
+
+**Response** `200`
+```json
+{
+  "nodes": [
+    {
+      "id": "0192...",
+      "name": "Binary Search",
+      "description": "Efficient search algorithm for sorted arrays",
+      "category": "algorithm",
+      "mention_count": 3,
+      "source_weeks": [1, 2],
+      "course_id": "0192..."
+    }
+  ],
+  "edges": [
+    {
+      "id": "0192...",
+      "source": "0192...",
+      "target": "0192...",
+      "relation_type": "uses",
+      "confidence": 0.9
+    }
+  ]
+}
+```
+
+---
+
+### `GET /api/concepts`
+
+List concepts with optional filters.
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `course_code` | string | — | Filter by course code |
+| `search` | string | — | Search by concept name |
+
+**Response** `200` — `ConceptNode[]`
+
+---
+
+### `GET /api/concepts/{concept_id}`
+
+Get concept detail with outgoing and incoming relations.
+
+**Response** `200`
+```json
+{
+  "id": "0192...",
+  "name": "Binary Search",
+  "description": "Efficient search algorithm",
+  "category": "algorithm",
+  "mention_count": 3,
+  "source_artifact_ids": ["0192..."],
+  "source_weeks": [1, 2],
+  "course_id": "0192...",
+  "outgoing_relations": [
+    {
+      "id": "0192...",
+      "concept_id": "0192...",
+      "concept_name": "Sorted Array",
+      "relation_type": "uses",
+      "confidence": 0.9
+    }
+  ],
+  "incoming_relations": [],
+  "created_at": "2026-03-05T10:00:00",
+  "updated_at": "2026-03-05T12:00:00"
+}
+```
+
+**Errors:** `404` if concept not found.
+
+---
+
+### `GET /api/concepts/{concept_id}/related`
+
+Find semantically similar concepts via pgvector embedding similarity.
+
+**Response** `200` — `SimilarConceptItem[]`
+```json
+[
+  {
+    "id": "0192...",
+    "name": "Linear Search",
+    "description": "Sequential search",
+    "category": "algorithm",
+    "course_id": "0192...",
+    "similarity": 0.85
+  }
+]
+```
+
+**Errors:** `404` if concept not found.
+
+---
+
+### `POST /api/concepts/extract/{artifact_id}`
+
+Trigger on-demand concept extraction for a specific artifact. Rate limited: 10/minute.
+
+**Response** `200`
+```json
+{
+  "artifact_id": "0192...",
+  "concept_count": 5,
+  "relation_count": 3
+}
+```
+
+**Errors:** `404` if artifact not found.
+
+---
+
 ## Schema Reference
 
 | Schema | Description |
@@ -1166,3 +1292,10 @@ Download a markdown task plan with assessments and deadline checklist.
 | `MagicLinkRequest` | email (EmailStr) |
 | `UpdateProfileRequest` | username? (3-100), avatar_url? |
 | `UserProfileResponse` | id, email, username, role, tier, is_active, email_verified, mfa_enabled, avatar_url, last_login_at, created_at |
+| `ConceptNode` | id, name, description, category, mention_count, source_weeks[], course_id |
+| `ConceptEdge` | id, source, target, relation_type, confidence |
+| `ConceptGraphResponse` | nodes (ConceptNode[]), edges (ConceptEdge[]) |
+| `ConceptRelationItem` | id, concept_id, concept_name, relation_type, confidence |
+| `ConceptDetailResponse` | ConceptNode + source_artifact_ids[], outgoing_relations[], incoming_relations[], timestamps |
+| `SimilarConceptItem` | id, name, description, category, course_id, similarity |
+| `ConceptExtractionResponse` | artifact_id, concept_count, relation_count |

@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 25 — Gamification System (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M20 ✅, M22 ✅, M23 ✅, M25 ✅, M28 ✅
+> **Current Milestone:** 26 — Knowledge Graph & Mind Maps (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M20 ✅, M22 ✅, M23 ✅, M25 ✅, M26 ✅, M28 ✅
 
 ---
 
@@ -238,6 +238,18 @@
 | 25.4 | Integration hooks + dashboard | ✅ Done | XP awarded on: card review (+5), quiz correct (+10), study session (+20), upload (+15). Challenge progress updated on matching types. Dashboard gamification summary (best-effort). All wrapped in try/except. 7 integration tests. |
 | 25.5 | Seed script + golden tests | ✅ Done | scripts/seed_achievements.py (20 achievements, idempotent upsert). Makefile seed-achievements target. 26 golden tests for all gamification structures. |
 | 25.6 | Frontend components | ✅ Done | 6 components (XPBar, LevelDisplay, AchievementBadge, AchievementUnlock, DailyChallenges, GamificationWidget). AchievementsPage with tabs (achievements grid + leaderboard). Dashboard widget. React Query hooks with invalidation on study mutations. /achievements route. |
+
+## Milestone 26 — Knowledge Graph & Mind Maps
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 26.1 | Data models + Alembic migration | ✅ Done | Concept model (id, user_id FK, course_id FK, name, description, category, embedding Vector(384), source_artifact_ids JSONB, source_weeks JSONB, mention_count). ConceptRelation model (source_concept_id FK, target_concept_id FK, relation_type, confidence). Alembic migration k1l2m3n4o5p6. UniqueConstraints on (user_id, course_id, name) and (source, target, relation_type). |
+| 26.2 | AI concept extraction (agent adapter) | ✅ Done | 3 dataclasses (ConceptData, ConceptRelationData, ConceptExtractionResult). Abstract `extract_concepts()` on AgentAdapter. Implemented in all 4 backends. Shared `parse_concept_extraction_response()` in parsing.py with category/relation_type validation, confidence clamping. Jinja2 prompt template. |
+| 26.3 | Concept service (business logic) | ✅ Done | concept_service.py: extract_and_save_concepts (AI call + upsert + embeddings), get_concepts (list + filters), get_concept_graph (nodes + edges for D3), get_concept_detail (with relations), find_related_concepts (pgvector cosine similarity). |
+| 26.4 | Pipeline integration + on-demand task | ✅ Done | Best-effort concept extraction in assets.py after quiz generation (try/except). Standalone Celery task in concepts_task.py for on-demand re-extraction. |
+| 26.5 | API endpoints + schemas | ✅ Done | 5 endpoints: GET graph, GET list, GET detail, GET related, POST extract. concept_schemas.py (7 schemas). Rate-limited extraction (10/min). Course code → course_id resolution helper. |
+| 26.6 | Frontend — Knowledge Graph page + D3 | ✅ Done | d3 + @types/d3 deps. ConceptGraph.tsx (D3 force-directed, category colors, zoom/drag, node selection). ConceptDetail.tsx (side panel with relations, similar concepts). ConceptList.tsx (table view). KnowledgeGraphPage.tsx (Radix Tabs graph/list, course filter, search, stats bar, category legend). Router + Sidebar + MobileNav updated. |
+| 26.7 | Tests + documentation | ✅ Done | 48 new tests: concept_service (12), api/concepts (7), agents/concept_extraction (11), golden/concept_structure (18). Docs updated. |
 
 ## Post-v1 — Fixes & Settings
 

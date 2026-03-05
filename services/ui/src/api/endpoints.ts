@@ -205,6 +205,26 @@ export const gamificationApi = {
     api.post('/gamification/achievements/mark-notified', { user_achievement_ids: ids }),
 }
 
+export const conceptsApi = {
+  graph: (courseCode?: string) =>
+    api.get<import('../types').ConceptGraph>(
+      `/concepts/graph${courseCode ? `?course_code=${courseCode}` : ''}`
+    ),
+  list: (courseCode?: string, search?: string) => {
+    const params = new URLSearchParams()
+    if (courseCode) params.set('course_code', courseCode)
+    if (search) params.set('search', search)
+    const qs = params.toString()
+    return api.get<import('../types').ConceptNode[]>(`/concepts${qs ? `?${qs}` : ''}`)
+  },
+  detail: (conceptId: string) =>
+    api.get<import('../types').ConceptDetail>(`/concepts/${conceptId}`),
+  related: (conceptId: string) =>
+    api.get<import('../types').SimilarConcept[]>(`/concepts/${conceptId}/related`),
+  extract: (artifactId: string) =>
+    api.post<import('../types').ConceptExtractionResult>(`/concepts/extract/${artifactId}`),
+}
+
 export const courseopsApi = {
   uploadDocument: async (file: File, courseCode: string, documentType: string) => {
     const formData = new FormData()

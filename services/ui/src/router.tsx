@@ -20,6 +20,7 @@ import { ReviewInboxPage } from './pages/ReviewInboxPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { StudyHubPage } from './pages/StudyHubPage'
 import { AchievementsPage } from './pages/AchievementsPage'
+import { KnowledgeGraphPage } from './pages/KnowledgeGraphPage'
 import { UploadPage } from './pages/UploadPage'
 import { WeekViewPage } from './pages/WeekViewPage'
 
@@ -72,6 +73,7 @@ export const router = createBrowserRouter([
               { path: '/timed-study', element: <Navigate to="/study?tab=timed" replace /> },
               { path: '/exams', element: <Navigate to="/study?tab=exams" replace /> },
               { path: '/exams/:examId', element: <ExamRedirect /> },
+              { path: '/knowledge', element: <KnowledgeGraphPage /> },
               { path: '/achievements', element: <AchievementsPage /> },
               { path: '/settings', element: <SettingsPage /> },
               { path: '/profile', element: <ProfilePage /> },

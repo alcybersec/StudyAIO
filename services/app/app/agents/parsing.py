@@ -12,6 +12,9 @@ import re
 import structlog
 
 from app.agents.base import (
+    ConceptData,
+    ConceptExtractionResult,
+    ConceptRelationData,
     CourseOpsAssessment,
     CourseOpsDeadline,
     CourseOpsResult,
@@ -303,3 +306,59 @@ def parse_course_ops_response(text: str) -> CourseOpsResult:
         course_info=parsed.get("course_info", {}),
         confidence=parsed.get("confidence", 0.0),
     )
+
+
+VALID_CONCEPT_CATEGORIES = {
+    "theory", "algorithm", "data_structure", "pattern", "tool",
+    "language", "protocol", "principle", "method", "general",
+}
+
+VALID_RELATION_TYPES = {
+    "prerequisite", "extends", "uses", "related_to", "part_of",
+}
+
+
+def parse_concept_extraction_response(text: str) -> ConceptExtractionResult:
+    """Parse a concept extraction response from the AI.
+
+    Args:
+        text: Raw AI response text.
+
+    Returns:
+        ConceptExtractionResult with concepts and relations.
+
+    Raises:
+        AgentError: If JSON parsing fails.
+    """
+    parsed = parse_json_response(text)
+
+    concepts = [
+        ConceptData(
+            name=c.get("name", "").strip(),
+            description=c.get("description", "").strip(),
+            category=(
+                c.get("category", "general")
+                if c.get("category", "general") in VALID_CONCEPT_CATEGORIES
+                else "general"
+            ),
+        )
+        for c in parsed.get("concepts", [])
+        if c.get("name", "").strip()
+    ]
+
+    relations = [
+        ConceptRelationData(
+            source=r.get("source", "").strip(),
+            target=r.get("target", "").strip(),
+            relation_type=(
+                r.get("relation_type", "related_to")
+                if r.get("relation_type", "related_to") in VALID_RELATION_TYPES
+                else "related_to"
+            ),
+            confidence=max(0.0, min(1.0, float(r.get("confidence", 0.8)))),
+        )
+        for r in parsed.get("relations", [])
+        if r.get("source", "").strip() and r.get("target", "").strip()
+    ]
+
+    return ConceptExtractionResult(concepts=concepts, relations=relations)

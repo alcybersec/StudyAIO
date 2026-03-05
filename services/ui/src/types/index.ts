@@ -599,6 +599,70 @@ export interface DashboardGamificationSummary {
   unnotified_achievement_count: number
 }
 
+// ── Knowledge Graph / Concepts ──────────────────────────────────
+
+export interface ConceptNode {
+  id: string
+  name: string
+  description: string
+  category: string
+  mention_count: number
+  source_weeks: number[]
+  course_id: string
+  created_at: string | null
+}
+
+export interface ConceptEdge {
+  id: string
+  source: string
+  target: string
+  relation_type: string
+  confidence: number
+}
+
+export interface ConceptGraph {
+  nodes: ConceptNode[]
+  edges: ConceptEdge[]
+}
+
+export interface ConceptRelationItem {
+  id: string
+  concept_id: string
+  concept_name: string
+  relation_type: string
+  confidence: number
+}
+
+export interface ConceptDetail {
+  id: string
+  name: string
+  description: string
+  category: string
+  mention_count: number
+  source_artifact_ids: string[]
+  source_weeks: number[]
+  course_id: string
+  outgoing_relations: ConceptRelationItem[]
+  incoming_relations: ConceptRelationItem[]
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface SimilarConcept {
+  id: string
+  name: string
+  description: string
+  category: string
+  course_id: string
+  similarity: number
+}
+
+export interface ConceptExtractionResult {
+  artifact_id: string
+  concept_count: number
+  relation_count: number
+}
+
 // ── Analytics ──────────────────────────────────────────────────
 
 export interface AnalyticsOverview {
