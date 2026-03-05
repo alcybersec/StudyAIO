@@ -190,6 +190,21 @@ export const chatApi = {
     api.delete(`/chat/sessions/${sessionId}`),
 }
 
+export const gamificationApi = {
+  getXP: () =>
+    api.get<import('../types').XPSummary>('/gamification/xp'),
+  getAchievements: () =>
+    api.get<import('../types').AchievementsList>('/gamification/achievements'),
+  getChallenges: () =>
+    api.get<import('../types').DailyChallengeData>('/gamification/challenges'),
+  getLeaderboard: () =>
+    api.get<import('../types').Leaderboard>('/gamification/leaderboard'),
+  getUnnotified: () =>
+    api.get<import('../types').UnnotifiedAchievement[]>('/gamification/achievements/unnotified'),
+  markNotified: (ids: string[]) =>
+    api.post('/gamification/achievements/mark-notified', { user_achievement_ids: ids }),
+}
+
 export const courseopsApi = {
   uploadDocument: async (file: File, courseCode: string, documentType: string) => {
     const formData = new FormData()

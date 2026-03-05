@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_or_default
 from app.api.study_schemas import (
     DueCardResponse,
     QuizAttemptRequest,
@@ -16,12 +17,18 @@ from app.api.study_schemas import (
     TimedPlanRequest,
     TimedPlanResponse,
 )
-from app.api.deps import get_current_user_or_default
 from app.core.database import get_session
 from app.models.flashcard import Flashcard
 from app.models.quiz import QuizQuestion
 from app.models.user import User
-from app.services import exam_service, srs_service, streak_service, timed_session_service
+from app.services import (
+    challenge_service,
+    exam_service,
+    srs_service,
+    streak_service,
+    timed_session_service,
+    xp_service,
+)
 
 logger = structlog.get_logger()
 
@@ -67,6 +74,14 @@ async def post_review(
 
     review = await srs_service.record_review(session, body.flashcard_id, body.quality, user_id=user.id)
     await session.commit()
+
+    # Award XP (best-effort)
+    try:
+        await xp_service.award_xp(session, user.id, "card_reviewed")
+        await challenge_service.update_challenge_progress(session, user.id, "review_cards")
+    except Exception:
+        logger.warning("gamification_xp_failed", exc_info=True)
+
     return ReviewResponse.model_validate(review)
 
 
@@ -122,6 +137,15 @@ async def post_quiz_attempt(
         time_spent_ms=body.time_spent_ms,
     )
     await session.commit()
+
+    # Award XP for correct answers (best-effort)
+    try:
+        if body.is_correct:
+            await xp_service.award_xp(session, user.id, "quiz_correct")
+            await challenge_service.update_challenge_progress(session, user.id, "quiz_correct")
+    except Exception:
+        logger.warning("gamification_xp_failed", exc_info=True)
+
     return QuizAttemptResponse.model_validate(attempt)
 
 

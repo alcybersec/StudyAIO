@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 22 — PWA + Offline Support (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M20 ✅, M22 ✅, M23 ✅, M28 ✅
+> **Current Milestone:** 25 — Gamification System (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M20 ✅, M22 ✅, M23 ✅, M25 ✅, M28 ✅
 
 ---
 
@@ -227,6 +227,17 @@
 | 28.3 | API endpoints + schemas | ✅ Done | 5 endpoints: POST/GET /chat/sessions, GET messages, POST message, DELETE session. Rate-limited send_message. chat_schemas.py with SendMessageResponse (user_message + assistant_message). |
 | 28.4 | Frontend — ChatPage + 4 components | ✅ Done | ChatPage (session sidebar + message area, mobile Sheet). SessionList (new/delete, relative dates). ChatWindow (auto-scroll, typing indicator). ChatMessage (user/assistant bubbles, react-markdown, citation links). ChatInput (auto-resize textarea, Enter=send, Shift+Enter=newline). |
 | 28.5 | Tests | ✅ Done | 43 new tests: chat_service (15), api/chat (11), golden/chat_structure (17). |
+
+## Milestone 25 — Gamification System
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 25.1 | Models + Alembic migration | ✅ Done | 6 new models (UserXP, XPEvent, Achievement, UserAchievement, DailyChallenge, UserDailyChallenge). Alembic migration i0j1k2l3m4n5. Relationships on User model. |
+| 25.2 | XP, achievement, challenge services | ✅ Done | xp_service.py (level calc, award_xp, summary, leaderboard), achievement_service.py (criteria eval: count/streak/total_xp/level, check/unlock, notified), challenge_service.py (7 templates, deterministic daily, progress tracking). Lazy imports to avoid circular deps. 33 unit tests. |
+| 25.3 | API endpoints + schemas | ✅ Done | 6 endpoints on /api/gamification/* (xp, achievements, challenges, leaderboard, unnotified, mark-notified). gamification_schemas.py. Rate-limited 30/min. 15 API tests. |
+| 25.4 | Integration hooks + dashboard | ✅ Done | XP awarded on: card review (+5), quiz correct (+10), study session (+20), upload (+15). Challenge progress updated on matching types. Dashboard gamification summary (best-effort). All wrapped in try/except. 7 integration tests. |
+| 25.5 | Seed script + golden tests | ✅ Done | scripts/seed_achievements.py (20 achievements, idempotent upsert). Makefile seed-achievements target. 26 golden tests for all gamification structures. |
+| 25.6 | Frontend components | ✅ Done | 6 components (XPBar, LevelDisplay, AchievementBadge, AchievementUnlock, DailyChallenges, GamificationWidget). AchievementsPage with tabs (achievements grid + leaderboard). Dashboard widget. React Query hooks with invalidation on study mutations. /achievements route. |
 
 ## Post-v1 — Fixes & Settings
 

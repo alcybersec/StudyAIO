@@ -98,6 +98,7 @@ export interface DashboardData {
   active_exams: DashboardExamSummary[]
   streak: StreakInfo | null
   upcoming_deadlines: UpcomingDeadline[]
+  gamification: DashboardGamificationSummary | null
 }
 
 export interface UploadResult {
@@ -514,6 +515,88 @@ export interface SendMessageRequest {
 export interface SendMessageResponse {
   user_message: ChatMessage
   assistant_message: ChatMessage
+}
+
+// ── Gamification ──────────────────────────────────────────────
+
+export interface XPEvent {
+  id: string
+  event_type: string
+  xp_amount: number
+  created_at: string
+}
+
+export interface XPSummary {
+  total_xp: number
+  level: number
+  progress_pct: number
+  current_threshold: number
+  next_threshold: number | null
+  recent_events: XPEvent[]
+}
+
+export interface Achievement {
+  id: string
+  code: string
+  title: string
+  description: string
+  icon: string
+  category: string
+  xp_reward: number
+  earned: boolean
+  earned_at: string | null
+}
+
+export interface AchievementsList {
+  total: number
+  earned: number
+  achievements: Achievement[]
+}
+
+export interface DailyChallengeData {
+  challenge_id: string
+  challenge_date: string
+  challenge_type: string
+  target: number
+  description: string
+  xp_reward: number
+  progress: number
+  completed: boolean
+  completed_at: string | null
+}
+
+export interface LeaderboardEntry {
+  user_id: string
+  username: string
+  total_xp: number
+  level: number
+  rank: number
+}
+
+export interface Leaderboard {
+  entries: LeaderboardEntry[]
+}
+
+export interface UnnotifiedAchievement {
+  user_achievement_id: string
+  code: string
+  title: string
+  description: string
+  icon: string
+  xp_reward: number
+  earned_at: string
+}
+
+export interface DashboardGamificationSummary {
+  total_xp: number
+  level: number
+  progress_pct: number
+  next_threshold: number | null
+  daily_challenge_description: string | null
+  daily_challenge_progress: number
+  daily_challenge_target: number
+  daily_challenge_completed: boolean
+  unnotified_achievement_count: number
 }
 
 // ── Analytics ──────────────────────────────────────────────────

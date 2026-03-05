@@ -20,12 +20,12 @@ from app.api.schemas import (
 )
 from app.config import settings
 from app.core.database import get_session
-from app.models.user import User
 from app.core.exceptions import DuplicateFileError
 from app.core.rate_limit import limiter
 from app.core.utils import read_upload_with_limit, sanitize_filename
+from app.models.user import User
 from app.pipeline.orchestrator import resume_pipeline, run_pipeline
-from app.services import artifact_service, pipeline_service
+from app.services import artifact_service, pipeline_service, xp_service
 from app.services.event_service import PIPELINE_EVENTS_CHANNEL
 
 logger = structlog.get_logger()
@@ -102,6 +102,15 @@ async def upload_file(
             status_code=409,
             detail=f"File already exists as artifact {e.existing_artifact_id}",
         ) from e
+
+    # Award upload XP (best-effort, separate session since pipeline is async)
+    try:
+        from app.core.database import async_session_factory
+
+        async with async_session_factory() as xp_session:
+            await xp_service.award_xp(xp_session, user.id, "upload")
+    except Exception:
+        logger.warning("gamification_upload_xp_failed", exc_info=True)
 
     return UploadResponse(
         artifact_id="pending",

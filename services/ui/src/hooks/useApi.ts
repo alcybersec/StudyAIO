@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { analyticsApi, assetsApi, chatApi, courseopsApi, coursesApi, dashboardApi, examsApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
+import { analyticsApi, assetsApi, chatApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
 import type { CreateSessionRequest, DeadlineUpdate, QARequest, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
 export function useDashboard() {
@@ -132,6 +132,7 @@ export function useRecordReview() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['study'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['gamification'] })
     },
   })
 }
@@ -209,6 +210,7 @@ export function useRecordQuizAttempt() {
     mutationFn: (request: QuizAttemptRequest) => studyApi.quizAttempt(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['exams'] })
+      queryClient.invalidateQueries({ queryKey: ['gamification'] })
     },
   })
 }
@@ -405,6 +407,54 @@ export function useDeleteChatSession() {
     mutationFn: (sessionId: string) => chatApi.deleteSession(sessionId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chat', 'sessions'] })
+    },
+  })
+}
+
+// ── Gamification ──────────────────────────────────────────────
+
+export function useXPSummary() {
+  return useQuery({
+    queryKey: ['gamification', 'xp'],
+    queryFn: gamificationApi.getXP,
+  })
+}
+
+export function useAchievements() {
+  return useQuery({
+    queryKey: ['gamification', 'achievements'],
+    queryFn: gamificationApi.getAchievements,
+  })
+}
+
+export function useDailyChallenge() {
+  return useQuery({
+    queryKey: ['gamification', 'challenges'],
+    queryFn: gamificationApi.getChallenges,
+  })
+}
+
+export function useLeaderboard() {
+  return useQuery({
+    queryKey: ['gamification', 'leaderboard'],
+    queryFn: gamificationApi.getLeaderboard,
+  })
+}
+
+export function useUnnotifiedAchievements() {
+  return useQuery({
+    queryKey: ['gamification', 'unnotified'],
+    queryFn: gamificationApi.getUnnotified,
+    refetchInterval: 30000, // poll every 30s
+  })
+}
+
+export function useMarkAchievementsNotified() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) => gamificationApi.markNotified(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gamification', 'unnotified'] })
     },
   })
 }

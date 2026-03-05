@@ -104,6 +104,10 @@ seed:
 	DATABASE_URL="postgresql+asyncpg://studyaio:studyaio@localhost:5433/studyaio" \
 	python scripts/seed_fixtures.py
 
+seed-achievements:
+	DATABASE_URL="postgresql+asyncpg://studyaio:studyaio@localhost:5433/studyaio" \
+	python scripts/seed_achievements.py
+
 reset-db:
 	docker compose exec db psql -U studyaio -d studyaio -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 	docker compose exec api alembic upgrade head

@@ -11,6 +11,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.exams import router as exams_router
 from app.api.exports import router as exports_router
 from app.api.files import router as files_router
+from app.api.gamification import router as gamification_router
 from app.api.qa import router as qa_router
 from app.api.review_items import router as review_items_router
 from app.api.settings import router as settings_router
@@ -29,6 +30,7 @@ __all__ = [
     "dashboard_router",
     "exams_router",
     "exports_router",
+    "gamification_router",
     "files_router",
     "qa_router",
     "review_items_router",

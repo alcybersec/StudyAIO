@@ -212,6 +212,20 @@ class UpcomingDeadlineItem(BaseModel):
     is_confirmed: bool
 
 
+class DashboardGamificationSummary(BaseModel):
+    """Gamification summary for dashboard."""
+
+    total_xp: int
+    level: int
+    progress_pct: float
+    next_threshold: int | None
+    daily_challenge_description: str | None = None
+    daily_challenge_progress: int = 0
+    daily_challenge_target: int = 0
+    daily_challenge_completed: bool = False
+    unnotified_achievement_count: int = 0
+
+
 class DashboardResponse(BaseModel):
     """Dashboard aggregate data."""
 
@@ -222,6 +236,7 @@ class DashboardResponse(BaseModel):
     active_exams: list[DashboardExamSummary] = []
     streak: DashboardStreakInfo | None = None
     upcoming_deadlines: list[UpcomingDeadlineItem] = []
+    gamification: DashboardGamificationSummary | None = None
 
 
 # ── Week Detail ───────────────────────────────────────────────────

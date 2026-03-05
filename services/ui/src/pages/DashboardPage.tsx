@@ -9,6 +9,8 @@ import { QuickUpload } from '../components/dashboard/QuickUpload'
 import { StreakDisplay } from '../components/dashboard/StreakDisplay'
 import { StudyProgress } from '../components/dashboard/StudyProgress'
 import { EmptyState } from '../components/ui'
+import { GamificationWidget } from '../components/gamification/GamificationWidget'
+import { AchievementUnlock } from '../components/gamification/AchievementUnlock'
 import { InstallPrompt } from '../components/pwa/InstallPrompt'
 
 export function DashboardPage() {
@@ -33,6 +35,12 @@ export function DashboardPage() {
           {data.active_exams && data.active_exams.length > 0 && (
             <ExamCountdown exams={data.active_exams} />
           )}
+        </div>
+      )}
+
+      {data.gamification && (
+        <div className="mb-6">
+          <GamificationWidget gamification={data.gamification} />
         </div>
       )}
 
@@ -98,6 +106,7 @@ export function DashboardPage() {
         />
       )}
 
+      <AchievementUnlock />
       <InstallPrompt />
     </div>
   )
