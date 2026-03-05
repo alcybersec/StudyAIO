@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 28 — AI Study Companion Chat (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M20 ✅, M23 ✅, M28 ✅
+> **Current Milestone:** 22 — PWA + Offline Support (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M20 ✅, M22 ✅, M23 ✅, M28 ✅
 
 ---
 
@@ -196,6 +196,17 @@
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 20.1 | Completed as part of M16.4 | ✅ Done | StudyHubPage merges StudyPage + TimedStudyPage + ExamListPage + ExamDetailPage into single tabbed view. See M16.4. |
+
+## Milestone 22 — PWA + Offline Support
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 22.1 | PWA icons + vite-plugin-pwa | ✅ Done | 3 PNG icons (192x192, 512x512, apple-touch-icon 180x180). vite-plugin-pwa with injectManifest strategy. Manifest: name "StudyAIO", theme_color #6366f1, display standalone. |
+| 22.2 | Custom service worker | ✅ Done | Workbox: precache static assets, StaleWhileRevalidate for study API (24h, 100 entries), NetworkFirst for general API (1h), CacheFirst for extraction images (7d, 200 entries). Auth endpoints excluded. |
+| 22.3 | Offline mutation queue | ✅ Done | IndexedDB queue intercepts POST /api/study/review and /api/study/quiz-attempt on network failure. Returns synthetic 200 responses. Replays on reconnect via SW message. Pending count broadcast to clients. |
+| 22.4 | PWA hooks | ✅ Done | useOnlineStatus (useSyncExternalStore + online/offline events), usePendingSync (SW message listener, auto-replay on reconnect). |
+| 22.5 | PWA UI components | ✅ Done | OfflineBanner (fixed top, amber offline / primary syncing), InstallPrompt (Chrome beforeinstallprompt + iOS share instructions, localStorage dismiss), PWAUpdateNotify (useRegisterSW, sonner toasts, 60min update check). |
+| 22.6 | Layout + nginx integration | ✅ Done | OfflineBanner + PWAUpdateNotify in AppLayout. InstallPrompt on DashboardPage. nginx: sw.js no-cache, manifest.webmanifest correct Content-Type. |
 
 ## Milestone 23 — Learning Analytics
 

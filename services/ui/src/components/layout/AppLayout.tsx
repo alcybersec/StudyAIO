@@ -1,12 +1,17 @@
 import { Link, Outlet } from 'react-router-dom'
 import { ErrorBoundary } from '../ErrorBoundary'
 import { Toaster } from '../ui/Toast'
+import { OfflineBanner } from '../ui/OfflineBanner'
+import { PWAUpdateNotify } from '../pwa/PWAUpdateNotify'
 import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 
 export function AppLayout() {
   return (
     <div className="min-h-screen bg-surface-alt flex">
+      {/* Offline status banner */}
+      <OfflineBanner />
+
       {/* Desktop sidebar */}
       <Sidebar />
 
@@ -31,6 +36,9 @@ export function AppLayout() {
 
       {/* Global toast notifications */}
       <Toaster />
+
+      {/* PWA update notifications */}
+      <PWAUpdateNotify />
     </div>
   )
 }
