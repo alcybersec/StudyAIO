@@ -742,6 +742,35 @@ export interface MasteryWeek {
   mastery_pct: number
 }
 
+// Notification types
+export interface NotificationPreferenceItem {
+  channel: string
+  event_type: string
+  enabled: boolean
+}
+
+export interface NotificationPreferencesResponse {
+  preferences: NotificationPreferenceItem[]
+}
+
+export interface TelegramLinkResponse {
+  link_token: string
+  bot_username: string
+  deep_link: string
+}
+
+export interface TelegramStatusResponse {
+  linked: boolean
+  username: string | null
+  verified: boolean
+}
+
+export interface TestNotificationResponse {
+  success: boolean
+  channel: string
+  message: string
+}
+
 export interface ExamReadinessData {
   exam_id: string
   title: string

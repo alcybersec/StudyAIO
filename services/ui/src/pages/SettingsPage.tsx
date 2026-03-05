@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BillingSection } from '../components/billing/BillingSection'
+import { NotificationsSection } from '../components/notifications/NotificationsSection'
 import { Card, ErrorBanner, LoadingSpinner, PageHeader } from '../components/ui'
 import { useSettings, useUpdateSettings } from '../hooks/useApi'
 import { useTheme, type Theme } from '../hooks/useTheme'
@@ -70,6 +71,11 @@ export function SettingsPage() {
       {/* Plan & Billing */}
       <div className="mb-6">
         <BillingSection />
+      </div>
+
+      {/* Notifications */}
+      <div className="mb-6">
+        <NotificationsSection />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">

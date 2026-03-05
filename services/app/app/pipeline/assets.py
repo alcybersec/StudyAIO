@@ -142,6 +142,22 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
             except Exception:
                 logger.warning("concept_extraction_in_pipeline_failed", exc_info=True)
 
+            # Notify user of pipeline completion (best-effort)
+            try:
+                from app.services import notification_service
+
+                await notification_service.notify_pipeline_complete(
+                    session=session,
+                    user_id=user_id or artifact.user_id,
+                    filename=artifact.original_filename or artifact.id,
+                    course_code=course.code,
+                    week=artifact.week,
+                    flashcard_count=len(flashcards),
+                    quiz_count=len(quiz_questions),
+                )
+            except Exception:
+                logger.warning("pipeline_notification_failed", exc_info=True)
+
             # Update artifact status — terminal stage
             artifact.status = "processed"
 

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Processing Complete</h2>
+<p>Your file <strong>{{ filename }}</strong> has been fully processed for <strong>{{ course_code }}</strong> (Week {{ week }}).</p>
+<p>Generated:</p>
+<ul>
+  <li>{{ flashcard_count }} flashcards</li>
+  <li>{{ quiz_count }} quiz questions</li>
+</ul>
+<p>Your study materials are ready!</p>
+{% endblock %}

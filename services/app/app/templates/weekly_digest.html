@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Weekly Study Digest</h2>
+<p>Here's your study summary for the past week:</p>
+<ul>
+  <li>Cards reviewed: <strong>{{ cards_reviewed }}</strong></li>
+  <li>Quiz attempts: <strong>{{ quiz_attempts }}</strong></li>
+  <li>Study sessions: <strong>{{ study_sessions }}</strong></li>
+  <li>Current streak: <strong>{{ streak_days }}</strong> days</li>
+</ul>
+{% if due_count > 0 %}
+<p>You have <strong>{{ due_count }}</strong> flashcards due. Keep up the momentum!</p>
+{% else %}
+<p>You're all caught up! Great job!</p>
+{% endif %}
+{% endblock %}

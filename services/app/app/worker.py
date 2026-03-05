@@ -1,6 +1,7 @@
 """Celery application factory."""
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.config import settings
 
@@ -16,6 +17,7 @@ celery_app = Celery(
         "app.pipeline.index",
         "app.pipeline.assets",
         "app.pipeline.courseops_task",
+        "app.pipeline.notification_tasks",
     ],
 )
 
@@ -28,4 +30,14 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    beat_schedule={
+        "daily-card-reminders": {
+            "task": "app.pipeline.notification_tasks.send_daily_reminders",
+            "schedule": crontab(hour=8, minute=0),
+        },
+        "weekly-study-digest": {
+            "task": "app.pipeline.notification_tasks.send_weekly_digest",
+            "schedule": crontab(hour=9, minute=0, day_of_week="sunday"),
+        },
+    },
 )

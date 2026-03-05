@@ -27,6 +27,7 @@ from app.api import (
     exams_router,
     exports_router,
     gamification_router,
+    notifications_router,
     files_router,
     qa_router,
     review_items_router,
@@ -115,6 +116,7 @@ app = FastAPI(
         {"name": "gamification", "description": "XP, levels, achievements, daily challenges, leaderboard"},
         {"name": "concepts", "description": "Knowledge graph: concept extraction, visualization, and relationships"},
         {"name": "billing", "description": "Stripe billing, subscriptions, and usage quotas"},
+        {"name": "notifications", "description": "Email/Telegram notifications, preferences, and Telegram linking"},
     ],
 )
 
@@ -159,6 +161,7 @@ app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(gamification_router, prefix="/api", tags=["gamification"])
 app.include_router(concepts_router, prefix="/api", tags=["concepts"])
 app.include_router(billing_router, prefix="/api", tags=["billing"])
+app.include_router(notifications_router, prefix="/api", tags=["notifications"])
 
 
 # Exception handlers

@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 19 — Plans & Stripe Integration (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M22 ✅, M23 ✅, M25 ✅, M26 ✅, M28 ✅
+> **Current Milestone:** 21 — Telegram + Email Notifications (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M25 ✅, M26 ✅, M28 ✅
 
 ---
 
@@ -260,6 +260,17 @@
 | 19.3 | Billing API endpoints + webhook | ✅ Done | 4 endpoints: POST /billing/checkout, POST /billing/portal, GET /billing/subscription (overview with usage), POST /billing/webhook (Stripe signature verification). billing_schemas.py (7 schemas). Rate-limited checkout/portal (5/min). 402 exception handler for QuotaExceededError. |
 | 19.4 | Quota integration + feature gating | ✅ Done | Upload quota check in uploads.py (before save). AI quota check in qa.py, chat.py (send_message), concepts.py (extract). Usage recording (best-effort) after each operation. Self-hosted mode bypasses all checks. 15 quota integration tests. |
 | 19.5 | Frontend billing UI + upgrade prompts | ✅ Done | billing.ts API client (3 methods). useBilling hooks (overview, checkout, portal). usePlan hook (plan/isPro/canUpgrade). BillingSection component (usage bars, upgrade/manage buttons). UpgradePrompt modal (shown on 402). ProBadge component. QuotaContext + global 402 handler in API client. SettingsPage billing section. Frontend builds clean. |
+
+## Milestone 21 — Telegram + Email Notifications
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 21.1 | Models + migration + config | ✅ Done | NotificationPreference model (user_id FK, channel, event_type, enabled, UniqueConstraint). TelegramLink model (user_id FK unique, chat_id BigInteger, username, verified, link_token unique). Alembic migration m3n4o5p6q7r8. Config: notifications_enabled (default False), telegram_bot_token/webhook_url, smtp_host/port/username/password/from_email/from_name/use_tls. NotificationError + TelegramLinkError exceptions. 3 tests. |
+| 21.2 | Email service + templates | ✅ Done | email_service.py: send_email (aiosmtplib, lazy import), send_templated_email, 4 typed senders (pipeline_complete, exam_reminder, cards_due, weekly_digest). 5 Jinja2 templates (base, pipeline_complete, exam_reminder, cards_due, weekly_digest). Best-effort (returns False on failure). aiosmtplib>=2.0 + aiogram>=3.0 deps. 6 tests. |
+| 21.3 | Telegram service | ✅ Done | telegram_service.py: generate_link_token (deep-link), verify_link (/start token), unlink, get_link, send_telegram_message (aiogram, lazy import), handle_telegram_webhook, 4 typed senders. Best-effort delivery. 9 tests. |
+| 21.4 | Notification dispatch + Celery Beat | ✅ Done | notification_service.py: notify() dispatcher (loads prefs, routes to email/telegram per enabled channels, best-effort), get/update/seed_default preferences, typed notify helpers. notification_tasks.py: send_daily_reminders (8am, due cards), send_weekly_digest (Sunday 9am). Beat schedule in worker.py. Pipeline hook in assets.py (notify_pipeline_complete). Beat service in docker-compose.yml. 8 tests. |
+| 21.5 | API endpoints + schemas | ✅ Done | 6 endpoints: GET/PUT /notifications/preferences, POST /notifications/telegram/link, DELETE /notifications/telegram/unlink, POST /notifications/telegram/webhook (no auth, secret header), POST /notifications/test. notification_schemas.py (7 schemas). Rate-limited link generation (5/min) and test (3/min). 8 tests. |
+| 21.6 | Frontend UI + golden tests | ✅ Done | notifications.ts API client (5 methods). useNotifications hooks (5 hooks). NotificationsSection component (event×channel toggle grid, test buttons). TelegramLinkCard component (deep-link generation, unlink). 6 notification TypeScript types. SettingsPage includes NotificationsSection. 11 golden tests. Frontend builds clean. |
 
 ## Post-v1 — Fixes & Settings
 

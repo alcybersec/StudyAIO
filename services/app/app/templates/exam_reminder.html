@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Exam Reminder</h2>
+<p>You have an upcoming exam:</p>
+<p><strong>{{ exam_title }}</strong></p>
+<p>Course: {{ course_code }}<br>
+Date: {{ exam_date }}</p>
+<p>Don't forget to review your study materials!</p>
+{% endblock %}
