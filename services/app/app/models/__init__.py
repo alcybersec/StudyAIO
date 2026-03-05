@@ -21,6 +21,7 @@ from app.models.extraction import Extraction
 from app.models.flashcard import Flashcard
 from app.models.flashcard_review import FlashcardReview
 from app.models.magic_link import MagicLink
+from app.models.notification_preference import NotificationPreference
 from app.models.oauth_account import OAuthAccount
 from app.models.pipeline_run import PipelineRun
 from app.models.quiz import QuizQuestion
@@ -29,6 +30,7 @@ from app.models.review_item import ReviewItem
 from app.models.study_session import StudySession
 from app.models.subscription import Subscription
 from app.models.summary import Summary
+from app.models.telegram_link import TelegramLink
 from app.models.usage_record import UsageRecord
 from app.models.user import User
 from app.models.user_achievement import UserAchievement
@@ -56,6 +58,7 @@ __all__ = [
     "FlashcardReview",
     "LectureArtifact",
     "MagicLink",
+    "NotificationPreference",
     "OAuthAccount",
     "PipelineRun",
     "QuizAttempt",
@@ -64,6 +67,7 @@ __all__ = [
     "StudySession",
     "Subscription",
     "Summary",
+    "TelegramLink",
     "UsageRecord",
     "User",
     "UserAchievement",

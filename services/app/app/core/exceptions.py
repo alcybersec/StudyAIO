@@ -99,6 +99,18 @@ class QuotaExceededError(StudyAIOError):
         )
 
 
+class NotificationError(StudyAIOError):
+    """Raised when a notification delivery fails."""
+
+    pass
+
+
+class TelegramLinkError(StudyAIOError):
+    """Raised when Telegram account linking fails."""
+
+    pass
+
+
 class ReviewRequiredError(StudyAIOError):
     """Raised when a pipeline stage needs human review to proceed."""
 

@@ -72,6 +72,18 @@ class Settings(BaseSettings):
     stripe_pro_price_id: str = ""
     stripe_portal_return_url: str = "http://localhost:3001/settings"
 
+    # Notifications
+    notifications_enabled: bool = False
+    telegram_bot_token: SecretStr = SecretStr("")
+    telegram_webhook_url: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_from_email: str = ""
+    smtp_from_name: str = "StudyAIO"
+    smtp_use_tls: bool = True
+
     # OAuth providers
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")
