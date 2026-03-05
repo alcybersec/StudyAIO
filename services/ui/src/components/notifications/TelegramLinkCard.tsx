@@ -2,14 +2,6 @@ import { useState } from 'react'
 import { Card } from '../ui'
 import { useTelegramLink, useUnlinkTelegram } from '../../hooks/useNotifications'
 
-const EVENT_LABELS: Record<string, string> = {
-  pipeline_complete: 'Pipeline Complete',
-  review_created: 'Review Created',
-  cards_due: 'Cards Due',
-  exam_reminder: 'Exam Reminder',
-  weekly_digest: 'Weekly Digest',
-}
-
 interface TelegramLinkCardProps {
   linked: boolean
   username?: string | null
