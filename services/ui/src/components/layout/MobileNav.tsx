@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useDashboard } from '../../hooks/useApi'
+import { useAuth } from '../../hooks/useAuth'
 import { Sheet } from '../ui/Sheet'
 
 const iconClass = 'w-5 h-5'
@@ -114,11 +115,27 @@ const MoreIcon = (
   </svg>
 )
 
+const adminItem = {
+  path: '/admin',
+  label: 'Admin',
+  icon: (
+    <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+    </svg>
+  ),
+}
+
 export function MobileNav() {
   const location = useLocation()
   const { data: dashboard } = useDashboard()
+  const { user } = useAuth()
   const [moreOpen, setMoreOpen] = useState(false)
   const pendingCount = dashboard?.pending_review_count ?? 0
+
+  const allMoreItems = useMemo(
+    () => (user?.role === 'admin' ? [adminItem, ...moreItems] : moreItems),
+    [user?.role],
+  )
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/'
@@ -126,7 +143,7 @@ export function MobileNav() {
   }
 
   // "More" is active if any of its sub-items is active
-  const moreActive = moreItems.some((item) => isActive(item.path))
+  const moreActive = allMoreItems.some((item) => isActive(item.path))
 
   return (
     <>
@@ -166,7 +183,7 @@ export function MobileNav() {
       {/* More Sheet */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen} side="bottom" title="More">
         <div className="space-y-1 pb-4">
-          {moreItems.map((item) => (
+          {allMoreItems.map((item) => (
             <Link
               key={item.path}
               to={item.path}

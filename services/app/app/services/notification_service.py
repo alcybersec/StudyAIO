@@ -19,7 +19,7 @@ EVENT_TYPES = [
     "weekly_digest",
 ]
 
-CHANNELS = ["email", "telegram"]
+CHANNELS = ["email", "telegram", "push"]
 
 
 async def get_preferences(
@@ -221,7 +221,38 @@ async def notify(
                 logger.warning("notify_telegram_failed", event_type=event_type, exc_info=True)
                 results["telegram"] = False
 
+        elif pref.channel == "push":
+            try:
+                from app.services import push_service
+
+                title = f"StudyAIO: {event_type.replace('_', ' ').title()}"
+                body = _build_push_body(event_type, kwargs)
+                sent = await push_service.send_push_notification(
+                    session, user_id, title=title, body=body
+                )
+                results["push"] = sent > 0
+            except Exception:
+                logger.warning("notify_push_failed", event_type=event_type, exc_info=True)
+                results["push"] = False
+
     return results
+
+
+def _build_push_body(event_type: str, kwargs: dict[str, object]) -> str:
+    """Build a human-readable push notification body for an event type."""
+    if event_type == "pipeline_complete":
+        filename = kwargs.get("filename", "file")
+        return f"{filename} has been processed and is ready to study."
+    if event_type == "cards_due":
+        due_count = kwargs.get("due_count", 0)
+        return f"You have {due_count} flashcard{'s' if due_count != 1 else ''} due for review."
+    if event_type == "exam_reminder":
+        title = kwargs.get("exam_title", "Exam")
+        date = kwargs.get("exam_date", "")
+        return f"{title} is coming up on {date}. Keep studying!"
+    if event_type == "weekly_digest":
+        return "Your weekly study digest is ready."
+    return f"New {event_type.replace('_', ' ')} notification."
 
 
 async def notify_pipeline_complete(

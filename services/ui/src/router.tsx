@@ -5,6 +5,7 @@ import { AppLayout } from './components/layout/AppLayout'
 import { AuthLayout } from './components/layout/AuthLayout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { PublicOnlyRoute } from './components/auth/PublicOnlyRoute'
+import { AdminPage } from './pages/AdminPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { ChatPage } from './pages/ChatPage'
 import { CoursePage } from './pages/CoursePage'
@@ -78,6 +79,7 @@ export const router = createBrowserRouter([
               { path: '/exams/:examId', element: <ExamRedirect /> },
               { path: '/knowledge', element: <KnowledgeGraphPage /> },
               { path: '/achievements', element: <AchievementsPage /> },
+              { path: '/admin', element: <AdminPage /> },
               { path: '/settings', element: <SettingsPage /> },
               { path: '/profile', element: <ProfilePage /> },
               { path: '*', element: <NotFoundPage /> },

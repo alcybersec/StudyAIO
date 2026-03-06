@@ -177,6 +177,7 @@ export interface Settings {
   quiz_question_count_per_week: number
   chunk_size_tokens: number
   chunk_overlap_tokens: number
+  dashboard_layout: Record<string, unknown> | null
 }
 
 export type SettingsUpdate = Partial<Settings>
@@ -770,6 +771,41 @@ export interface TestNotificationResponse {
   success: boolean
   channel: string
   message: string
+}
+
+// ── Admin ──────────────────────────────────────────────────────
+
+export interface AdminUser {
+  id: string
+  email: string
+  username: string | null
+  role: string
+  tier: string
+  is_active: boolean
+  created_at: string | null
+  last_login_at: string | null
+}
+
+export interface AdminUserList {
+  users: AdminUser[]
+  total: number
+  offset: number
+  limit: number
+}
+
+export interface AdminUserUpdate {
+  role?: string
+  tier?: string
+  is_active?: boolean
+}
+
+export interface SystemMetrics {
+  total_users: number
+  total_artifacts: number
+  total_courses: number
+  pipeline_runs_24h: number
+  total_storage_bytes: number
+  total_storage_mb: number
 }
 
 export interface ExamReadinessData {

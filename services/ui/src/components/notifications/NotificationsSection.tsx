@@ -5,6 +5,7 @@ import {
   useTestNotification,
 } from '../../hooks/useNotifications'
 import { TelegramLinkCard } from './TelegramLinkCard'
+import { PushNotificationToggle } from './PushNotificationToggle'
 import type { NotificationPreferenceItem } from '../../types'
 
 const EVENT_LABELS: Record<string, string> = {
@@ -23,7 +24,7 @@ const EVENT_DESCRIPTIONS: Record<string, string> = {
   weekly_digest: 'Weekly study summary',
 }
 
-const CHANNELS = ['email', 'telegram'] as const
+const CHANNELS = ['email', 'telegram', 'push'] as const
 const EVENT_TYPES = ['pipeline_complete', 'review_created', 'cards_due', 'exam_reminder', 'weekly_digest'] as const
 
 export function NotificationsSection() {
@@ -164,6 +165,11 @@ export function NotificationsSection() {
             </span>
           )}
         </div>
+      </Card>
+
+      {/* Push notifications */}
+      <Card>
+        <PushNotificationToggle />
       </Card>
 
       {/* Telegram linking */}

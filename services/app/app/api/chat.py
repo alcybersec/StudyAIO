@@ -1,9 +1,12 @@
 """Chat API endpoints — persistent AI study companion conversations."""
 
+import json
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sse_starlette.sse import EventSourceResponse
 
 from app.api.chat_schemas import (
     ChatMessageResponse,
@@ -176,6 +179,54 @@ async def send_message(
         user_message=ChatMessageResponse(**_message_to_response(user_msg)),
         assistant_message=ChatMessageResponse(**_message_to_response(assistant_msg)),
     )
+
+
+@router.post(
+    "/chat/sessions/{session_id}/messages/stream",
+    summary="Send a message (streaming)",
+    description="Send a message and receive the AI response as an SSE stream.",
+)
+@limiter.limit(lambda: settings.rate_limit_qa)
+async def stream_message(
+    request: Request,
+    session_id: str,
+    body: SendMessageRequest,
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> EventSourceResponse:
+    """Send a user message and stream the AI response via SSE."""
+    # Check AI quota
+    await quota_service.check_ai_quota(session, user.id, user.tier)
+
+    async def event_generator():
+        try:
+            async for event in chat_service.stream_message(
+                session=session,
+                session_id=session_id,
+                user_id=user.id,
+                content=body.content,
+            ):
+                event_type = event["event"]
+                data = event["data"]
+                if isinstance(data, dict):
+                    yield {"event": event_type, "data": json.dumps(data)}
+                else:
+                    yield {"event": event_type, "data": data}
+        except ValueError:
+            yield {"event": "error", "data": "Chat session not found"}
+        except Exception as e:
+            logger.error("chat_stream_error", error=str(e), session_id=session_id)
+            yield {"event": "error", "data": "Failed to process message"}
+
+        # Record AI usage (best-effort)
+        try:
+            await billing_service.record_usage(session, user.id, ai_calls=1)
+        except Exception:
+            logger.warning("usage_record_stream_failed", exc_info=True)
+
+        await session.commit()
+
+    return EventSourceResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.delete(

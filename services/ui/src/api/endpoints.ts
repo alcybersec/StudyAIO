@@ -188,6 +188,12 @@ export const chatApi = {
     api.post<SendMessageResponse>(`/chat/sessions/${sessionId}/messages`, { content }),
   deleteSession: (sessionId: string) =>
     api.delete(`/chat/sessions/${sessionId}`),
+  streamMessage: (sessionId: string, content: string) =>
+    fetch(`/api/chat/sessions/${sessionId}/messages/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    }),
 }
 
 export const gamificationApi = {

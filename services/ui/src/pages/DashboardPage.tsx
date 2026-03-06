@@ -1,5 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { Responsive, WidthProvider } from 'react-grid-layout'
+import 'react-grid-layout/css/styles.css'
+import 'react-resizable/css/styles.css'
 import { useDashboard } from '../hooks/useApi'
+import { useDashboardLayout } from '../hooks/useDashboardLayout'
 import { LoadingSpinner, ErrorBanner, PageHeader } from '../components/ui'
 import { ReviewAlert } from '../components/dashboard/ReviewAlert'
 import { ActivityFeed } from '../components/dashboard/ActivityFeed'
@@ -12,99 +16,124 @@ import { EmptyState } from '../components/ui'
 import { GamificationWidget } from '../components/gamification/GamificationWidget'
 import { AchievementUnlock } from '../components/gamification/AchievementUnlock'
 import { InstallPrompt } from '../components/pwa/InstallPrompt'
+import { DashboardCustomizer } from '../components/dashboard/DashboardCustomizer'
+
+const ResponsiveGridLayout = WidthProvider(Responsive)
+
+function DeadlinesWidget({ deadlines, now }: { deadlines: { id: string; title: string; due_date: string; course_code: string; is_confirmed: boolean }[]; now: number }) {
+  return (
+    <div className="h-full rounded-lg border border-border bg-surface p-4 overflow-auto">
+      <h3 className="mb-3 text-sm font-semibold text-text">Upcoming Deadlines</h3>
+      <div className="space-y-2">
+        {deadlines.map((d) => {
+          const days = Math.ceil((new Date(d.due_date).getTime() - now) / (1000 * 60 * 60 * 24))
+          return (
+            <div key={d.id} className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex rounded bg-surface-alt px-1.5 py-0.5 text-xs font-medium text-text-muted">
+                  {d.course_code}
+                </span>
+                <span className="text-text">{d.title}</span>
+                {!d.is_confirmed && <span className="text-xs text-yellow-600">(unconfirmed)</span>}
+              </div>
+              <span className={`text-xs ${days <= 3 ? 'font-medium text-red-600' : days <= 7 ? 'text-yellow-600' : 'text-text-muted'}`}>
+                {d.due_date} ({days <= 0 ? 'Today' : `${days}d`})
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 export function DashboardPage() {
   const { data, isLoading, error, refetch } = useDashboard()
   const now = useMemo(() => Date.now(), []) // eslint-disable-line react-hooks/purity
+  const { layouts, hiddenWidgets, visibleWidgets, onLayoutChange, toggleWidget, resetLayout } = useDashboardLayout()
+  const [customizerOpen, setCustomizerOpen] = useState(false)
 
   if (isLoading) return <LoadingSpinner label="Loading dashboard..." />
   if (error) return <ErrorBanner message="Failed to load dashboard. Check that the API server is running." onRetry={refetch} />
 
   if (!data) return null
 
+  const isVisible = (key: string) => visibleWidgets.some((w) => w.key === key)
+
+  const widgetContent: Record<string, React.ReactNode | null> = {
+    streak: data.streak ? <StreakDisplay streak={data.streak} /> : null,
+    exams: data.active_exams?.length ? <ExamCountdown exams={data.active_exams} /> : null,
+    gamification: data.gamification ? <GamificationWidget gamification={data.gamification} /> : null,
+    study: data.study_stats && data.study_stats.total > 0 ? <StudyProgress stats={data.study_stats} /> : null,
+    deadlines: data.upcoming_deadlines?.length ? <DeadlinesWidget deadlines={data.upcoming_deadlines} now={now} /> : null,
+    activity: <ActivityFeed items={data.recent_activity} />,
+    upload: <QuickUpload />,
+    courses: data.courses.length > 0 ? (
+      <div className="h-full overflow-auto">
+        <h2 className="text-sm font-semibold text-text mb-4">Your Courses</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {data.courses.map((course) => (
+            <CourseCard key={course.id} course={course} />
+          ))}
+        </div>
+      </div>
+    ) : (
+      <EmptyState
+        title="No courses yet"
+        description="Upload your first lecture file to get started."
+        actionLabel="Upload"
+        actionTo="/upload"
+      />
+    ),
+  }
+
+  // Filter to only visible widgets that have content
+  const activeWidgets = visibleWidgets.filter((w) => isVisible(w.key) && widgetContent[w.key] !== null)
+
   return (
     <div>
-      <PageHeader title="Dashboard" subtitle={`${data.courses.length} course${data.courses.length !== 1 ? 's' : ''} tracked`} />
+      <div className="flex items-center justify-between mb-2">
+        <PageHeader title="Dashboard" subtitle={`${data.courses.length} course${data.courses.length !== 1 ? 's' : ''} tracked`} />
+        <button
+          onClick={() => setCustomizerOpen(true)}
+          className="text-sm px-3 py-1.5 rounded-lg border border-border text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
+        >
+          Customize
+        </button>
+      </div>
 
       <ReviewAlert count={data.pending_review_count} />
 
-      {/* Streak + Exam widgets */}
-      {(data.streak || (data.active_exams && data.active_exams.length > 0)) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          {data.streak && <StreakDisplay streak={data.streak} />}
-          {data.active_exams && data.active_exams.length > 0 && (
-            <ExamCountdown exams={data.active_exams} />
-          )}
-        </div>
-      )}
-
-      {data.gamification && (
-        <div className="mb-6">
-          <GamificationWidget gamification={data.gamification} />
-        </div>
-      )}
-
-      {data.study_stats && data.study_stats.total > 0 && (
-        <div className="mb-6">
-          <StudyProgress stats={data.study_stats} />
-        </div>
-      )}
-
-      {data.upcoming_deadlines && data.upcoming_deadlines.length > 0 && (
-        <div className="mb-6 rounded-lg border border-border bg-surface p-4">
-          <h3 className="mb-3 text-sm font-semibold text-text">Upcoming Deadlines</h3>
-          <div className="space-y-2">
-            {data.upcoming_deadlines.map((d) => {
-              const days = Math.ceil(
-                (new Date(d.due_date).getTime() - now) / (1000 * 60 * 60 * 24)
-              )
-              return (
-                <div key={d.id} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex rounded bg-surface-alt px-1.5 py-0.5 text-xs font-medium text-text-muted">
-                      {d.course_code}
-                    </span>
-                    <span className="text-text">{d.title}</span>
-                    {!d.is_confirmed && (
-                      <span className="text-xs text-yellow-600">(unconfirmed)</span>
-                    )}
-                  </div>
-                  <span className={`text-xs ${days <= 3 ? 'font-medium text-red-600' : days <= 7 ? 'text-yellow-600' : 'text-text-muted'}`}>
-                    {d.due_date} ({days <= 0 ? 'Today' : `${days}d`})
-                  </span>
-                </div>
-              )
-            })}
+      <ResponsiveGridLayout
+        className="layout"
+        layouts={layouts}
+        breakpoints={{ lg: 1024, sm: 0 }}
+        cols={{ lg: 12, sm: 12 }}
+        rowHeight={30}
+        onLayoutChange={onLayoutChange}
+        isDraggable={window.innerWidth >= 1024}
+        isResizable={window.innerWidth >= 1024}
+        draggableHandle=".drag-handle"
+        containerPadding={[0, 0]}
+        margin={[16, 16]}
+      >
+        {activeWidgets.map((w) => (
+          <div key={w.key} className="relative group">
+            <div className="drag-handle absolute top-0 left-0 right-0 h-6 cursor-grab active:cursor-grabbing z-10 opacity-0 group-hover:opacity-100 transition-opacity hidden lg:flex items-center justify-center">
+              <div className="w-8 h-1 rounded-full bg-border" />
+            </div>
+            <div className="h-full">{widgetContent[w.key]}</div>
           </div>
-        </div>
-      )}
+        ))}
+      </ResponsiveGridLayout>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <div className="lg:col-span-2">
-          <ActivityFeed items={data.recent_activity} />
-        </div>
-        <div>
-          <QuickUpload />
-        </div>
-      </div>
-
-      {data.courses.length > 0 ? (
-        <section>
-          <h2 className="text-sm font-semibold text-text mb-4">Your Courses</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {data.courses.map((course) => (
-              <CourseCard key={course.id} course={course} />
-            ))}
-          </div>
-        </section>
-      ) : (
-        <EmptyState
-          title="No courses yet"
-          description="Upload your first lecture file to get started."
-          actionLabel="Upload"
-          actionTo="/upload"
-        />
-      )}
+      <DashboardCustomizer
+        open={customizerOpen}
+        onOpenChange={setCustomizerOpen}
+        hiddenWidgets={hiddenWidgets}
+        onToggle={toggleWidget}
+        onReset={resetLayout}
+      />
 
       <AchievementUnlock />
       <InstallPrompt />

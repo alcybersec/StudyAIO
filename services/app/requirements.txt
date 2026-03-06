@@ -46,6 +46,8 @@ stripe>=8.0,<10.0
 # Notifications
 aiosmtplib>=2.0,<3.0
 aiogram>=3.0,<4.0
+pywebpush>=2.0,<3.0
+py-vapid>=1.9,<2.0
 
 # Utilities
 uuid7==0.1.0

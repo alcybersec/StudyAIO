@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 24 — Demo Account + Onboarding Tour (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M28 ✅
+> **Current Milestone:** Gap Fill — v2 Feature Gaps (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M28 ✅, Gap Fill ✅
 
 ---
 
@@ -305,6 +305,18 @@
 | 24.3 | Frontend demo guards + UpgradeCTA | ✅ Done | isDemo in AuthContext, 403 handler in client.ts (setDemoRestrictionHandler), DemoBanner (sticky top bar), UpgradeCTA (Radix Dialog modal), "Demo" badge in Sidebar, UploadPage disabled for demo users. demo_enabled in AuthConfig type. |
 | 24.4 | Onboarding tour | ✅ Done | useTour hook (localStorage persistence, 8 steps), OnboardingTour (spotlight overlay via box-shadow, portal), TourTooltip (positioned tooltip with step counter), data-tour attributes on Sidebar nav items. Auto-starts for demo users. "Replay Tour" button on Settings page. |
 | 24.5 | Tests + documentation | ✅ Done | 9 middleware tests, 3 login tests, 11 golden tests (22 new tests). 1085 total passing. PROGRESS.md updated. |
+
+## Gap Fill — v2 Feature Gaps
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| GF.1 | Page transitions (AnimatePresence) | ✅ Done | PageTransition component (motion.div, opacity+y, 150ms ease-in-out). AnimatePresence mode="wait" wrapping Outlet in AppLayout with location.pathname key. |
+| GF.2 | Admin Page frontend | ✅ Done | AdminPage with metrics cards (users, artifacts, courses, pipeline runs, storage) + user table (inline role/tier editing, active toggle, pagination, filters). adminApi (listUsers, updateUser, getMetrics), 3 React Query hooks. patch() method added to API client. Admin nav conditional on user.role === 'admin' in Sidebar + MobileNav. /admin route. |
+| GF.3 | Dashboard Widget DnD (react-grid-layout) | ✅ Done | react-grid-layout + @types/react-grid-layout installed. WidgetRegistry (8 widgets, lg/sm layouts), useDashboardLayout hook (reads/persists layout via settings API, debounced 500ms save), DashboardCustomizer (Radix Dialog, widget show/hide toggles + reset). DashboardPage rewritten with ResponsiveGridLayout. Mobile: single column, no drag. dashboard_layout added to Settings type. |
+| GF.4 | Web Push Notifications | ✅ Done | PushSubscription model + Alembic migration n4o5p6q7r8s9. push_service.py (subscribe/unsubscribe/send, stale subscription cleanup on 410). VAPID config (public_key, private_key, admin_email). "push" channel added to notification_service dispatch. 3 API endpoints (vapid-key, subscribe, unsubscribe). Service worker push+notificationclick handlers. usePushNotifications hook + PushNotificationToggle component. pywebpush + py-vapid deps. generate_vapid_keys.py script. 14 unit tests + 21 golden tests. |
+| GF.5 | Chat Streaming (SSE) | ✅ Done | stream_answer() async generator on AgentAdapter base (default: yield full answer). Native streaming on AnthropicAPIAdapter (client.messages.stream text_stream) + OpenAIAdapter (create stream=True). stream_message() in chat_service (yields user_message→tokens→done events, saves to DB). POST /chat/sessions/{id}/messages/stream SSE endpoint via sse-starlette. Frontend: useStreamingChat hook (ReadableStream SSE parsing, token accumulation, cache invalidation), StreamingMessage component (blinking cursor), ChatWindow rewritten for streaming. chatApi.streamMessage (standalone fetch for POST SSE). 13 unit tests + 23 golden tests (existing admin golden). |
+
+**Tests:** 71 new tests (27 unit + 44 golden). ~1156 total.
 
 ## Issues & Blockers
 

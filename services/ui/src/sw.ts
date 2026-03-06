@@ -251,6 +251,36 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   }
 })
 
+// ── Web Push notification handler ────────────────────────────
+self.addEventListener('push', (event: PushEvent) => {
+  const data = event.data?.json() ?? { title: 'StudyAIO', body: 'New notification' }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/pwa-192x192.png',
+      badge: '/pwa-192x192.png',
+      data: { url: data.url || '/' },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+  event.notification.close()
+  const url = event.notification.data?.url || '/'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.focus()
+          client.postMessage({ type: 'NAVIGATE', url })
+          return
+        }
+      }
+      return self.clients.openWindow(url)
+    })
+  )
+})
+
 // ── Skip waiting on install ─────────────────────────────────
 self.addEventListener('install', () => {
   self.skipWaiting()

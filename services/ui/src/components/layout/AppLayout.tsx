@@ -1,4 +1,5 @@
-import { Link, Outlet } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
+import { AnimatePresence } from 'motion/react'
 import { useAuth } from '../../hooks/useAuth'
 import { ErrorBoundary } from '../ErrorBoundary'
 import { DemoBanner } from '../demo/DemoBanner'
@@ -6,11 +7,13 @@ import { OnboardingTour } from '../tour/OnboardingTour'
 import { Toaster } from '../ui/Toast'
 import { OfflineBanner } from '../ui/OfflineBanner'
 import { PWAUpdateNotify } from '../pwa/PWAUpdateNotify'
+import { PageTransition } from '../ui/PageTransition'
 import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 
 export function AppLayout() {
   const { isDemo } = useAuth()
+  const location = useLocation()
 
   return (
     <div className="min-h-screen bg-surface-alt flex flex-col">
@@ -35,7 +38,11 @@ export function AppLayout() {
 
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 pb-20 lg:pb-6 max-w-6xl w-full mx-auto">
           <ErrorBoundary>
-            <Outlet />
+            <AnimatePresence mode="wait">
+              <PageTransition key={location.pathname}>
+                <Outlet />
+              </PageTransition>
+            </AnimatePresence>
           </ErrorBoundary>
         </main>
       </div>
