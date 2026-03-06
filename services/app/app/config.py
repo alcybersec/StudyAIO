@@ -16,6 +16,16 @@ class Settings(BaseSettings):
 
     # File storage
     data_dir: str = "/app/data"
+    storage_backend: str = "local"  # "local" or "s3"
+
+    # S3-compatible storage (used when storage_backend = "s3")
+    s3_bucket: str = ""
+    s3_region: str = "us-east-1"
+    s3_access_key_id: str = ""
+    s3_secret_access_key: SecretStr = SecretStr("")
+    s3_endpoint_url: str = ""  # For MinIO/LocalStack
+    s3_prefix: str = ""  # Optional key prefix inside the bucket
+    cdn_base_url: str = ""  # CDN URL for serving S3 files
 
     # Logging
     log_level: str = "INFO"
@@ -58,6 +68,9 @@ class Settings(BaseSettings):
     # Rate limiting
     rate_limit_uploads: str = "10/minute"
     rate_limit_qa: str = "20/minute"
+
+    # Observability
+    prometheus_enabled: bool = False
 
     # Demo mode
     demo_enabled: bool = False

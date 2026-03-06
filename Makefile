@@ -1,4 +1,4 @@
-.PHONY: up down logs test test-unit test-integration test-golden migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod
+.PHONY: up down logs test test-unit test-integration test-golden migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup
 
 # === Docker ===
 up:
@@ -19,6 +19,17 @@ down-prod:
 
 build-prod:
 	docker compose -f docker-compose.yml -f docker-compose.prod.yml build
+
+# === Self-Hosted ===
+up-selfhosted:
+	docker compose -f docker-compose.yml -f docker-compose.selfhosted.yml up -d
+
+down-selfhosted:
+	docker compose -f docker-compose.yml -f docker-compose.selfhosted.yml down
+
+# === Backup ===
+backup:
+	bash scripts/backup.sh
 
 logs:
 	docker compose logs -f

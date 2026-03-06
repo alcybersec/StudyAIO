@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.core.exceptions import ExtractionError
+from app.core.storage import LocalStorageBackend
 from app.extractors.base import ExtractionResult, PageContent
 
 
@@ -41,7 +42,7 @@ class TestExtractStage:
 
         artifact = MagicMock()
         artifact.id = "art-001"
-        artifact.file_path = str(tmp_path / "test.pdf")
+        artifact.file_path = "uploads/test.pdf"
         artifact.file_type = "pdf"
 
         session = AsyncMock()
@@ -73,9 +74,13 @@ class TestExtractStage:
         )
         mock_get_extractor.return_value = extractor
 
-        with patch("app.pipeline.extract.settings") as mock_settings:
-            mock_settings.extractions_dir = str(tmp_path / "extractions")
+        # Create a local storage backend pointed at tmp_path
+        local_storage = LocalStorageBackend(base_dir=str(tmp_path))
+        # Create a fake source file so the extractor has something
+        (tmp_path / "uploads").mkdir()
+        (tmp_path / "uploads" / "test.pdf").write_bytes(b"fake pdf")
 
+        with patch("app.pipeline.extract.get_storage", return_value=local_storage):
             result = await _extract("art-001")
 
         assert result["status"] == "extracted"

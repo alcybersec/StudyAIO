@@ -89,6 +89,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("studyaio_shutting_down")
 
 
+# Prometheus metrics (conditional)
+if settings.prometheus_enabled:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    _instrumentator = Instrumentator()
+else:
+    _instrumentator = None
+
 app = FastAPI(
     title="StudyAIO",
     description="AI-powered study workspace — automates the journey from raw lecture "
@@ -170,6 +177,10 @@ app.include_router(concepts_router, prefix="/api", tags=["concepts"])
 app.include_router(billing_router, prefix="/api", tags=["billing"])
 app.include_router(notifications_router, prefix="/api", tags=["notifications"])
 app.include_router(calendar_sync_router, prefix="/api", tags=["calendar"])
+
+# Instrument with Prometheus if enabled
+if _instrumentator is not None:
+    _instrumentator.instrument(app).expose(app, endpoint="/metrics")
 
 
 # Exception handlers

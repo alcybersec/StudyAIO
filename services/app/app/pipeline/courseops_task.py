@@ -1,5 +1,6 @@
 """CourseOps Celery task — extract assessments and deadlines from course documents."""
 
+import tempfile
 from pathlib import Path
 
 import structlog
@@ -7,6 +8,7 @@ import structlog
 from app.agents.factory import get_agent
 from app.core.database import async_session_factory, run_async
 from app.core.exceptions import CourseOpsError
+from app.core.storage import LocalStorageBackend, get_storage, normalize_storage_key
 from app.extractors import get_extractor
 from app.models.course_document import CourseDocument
 from app.services import courseops_service
@@ -37,17 +39,32 @@ async def _process_document(document_id: str) -> dict:
         await session.commit()
 
         try:
-            # Extract text from file
-            file_path = Path(doc.file_path)
-            if not file_path.exists():
-                raise CourseOpsError(f"File not found: {doc.file_path}")
+            storage = get_storage()
+            storage_key = normalize_storage_key(doc.file_path)
 
-            extractor = get_extractor(doc.file_type)
-            # Use a temp dir for images (we don't need them for course docs)
-            output_dir = file_path.parent / "courseops_extract"
-            output_dir.mkdir(exist_ok=True)
+            # Resolve file to a local path for extraction
+            if isinstance(storage, LocalStorageBackend):
+                file_path = storage.resolve_path(storage_key)
+                if not file_path.exists():
+                    raise CourseOpsError(f"File not found: {storage_key}")
 
-            extraction_result = extractor.extract(file_path, output_dir)
+                extractor = get_extractor(doc.file_type)
+                output_dir = file_path.parent / "courseops_extract"
+                output_dir.mkdir(exist_ok=True)
+                extraction_result = extractor.extract(file_path, output_dir)
+            else:
+                # S3: download to temp dir, extract
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmp_path = Path(tmpdir)
+                    local_file = tmp_path / Path(storage_key).name
+                    await storage.get_to_file(storage_key, local_file)
+
+                    output_dir = tmp_path / "courseops_extract"
+                    output_dir.mkdir()
+
+                    extractor = get_extractor(doc.file_type)
+                    extraction_result = extractor.extract(local_file, output_dir)
+
             extracted_text = "\n\n".join(
                 page.text for page in extraction_result.pages if page.text.strip()
             )
