@@ -2,6 +2,7 @@
 
 import structlog
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_schemas import (
@@ -89,6 +90,7 @@ async def get_auth_config() -> AuthConfigResponse:
         self_hosted=settings.self_hosted,
         registration_enabled=not settings.self_hosted,
         oauth_providers=providers,
+        demo_enabled=settings.demo_enabled,
     )
 
 
@@ -301,6 +303,32 @@ async def request_magic_link(
     await user_service.request_password_reset(session, body.email)
     await session.commit()
     return {"detail": "If an account exists with that email, a magic link has been sent"}
+
+
+DEMO_USER_ID = "00000000-0000-0000-0000-000000000002"
+
+
+@router.get("/demo-login")
+@limiter.limit(lambda: "10/minute")
+async def demo_login(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Auto-authenticate as the demo user and redirect to dashboard.
+
+    Returns 404 if demo mode is disabled or the demo user doesn't exist.
+    """
+    if not settings.demo_enabled:
+        return JSONResponse(status_code=404, content={"detail": "Demo mode is not enabled"})
+
+    user = await user_service.get_user_by_id(session, DEMO_USER_ID)
+    if not user:
+        return JSONResponse(status_code=404, content={"detail": "Demo user not found"})
+
+    redirect = RedirectResponse(url="/", status_code=302)
+    _set_auth_cookies(redirect, user)
+    logger.info("demo_login", user_id=DEMO_USER_ID)
+    return redirect
 
 
 @router.get("/magic/{token}")

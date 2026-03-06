@@ -37,9 +37,11 @@ from app.api import (
     uploads_router,
 )
 from app.config import settings
+from app.core.demo_middleware import DemoAccountMiddleware
 from app.core.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    DemoRestrictionError,
     DuplicateFileError,
     QuotaExceededError,
     StudyAIOError,
@@ -130,6 +132,9 @@ app.add_middleware(RequestIDMiddleware)
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
 
+# Demo account restrictions (blocks writes for demo users)
+app.add_middleware(DemoAccountMiddleware)
+
 # CORS — origins from config
 cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
@@ -181,6 +186,18 @@ async def authorization_error_handler(request: Request, exc: AuthorizationError)
 async def user_exists_handler(request: Request, exc: UserExistsError) -> JSONResponse:
     """Handle duplicate user registration with 409."""
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(DemoRestrictionError)
+async def demo_restriction_handler(request: Request, exc: DemoRestrictionError) -> JSONResponse:
+    """Handle demo account restriction errors with 403."""
+    return JSONResponse(
+        status_code=403,
+        content={
+            "detail": exc.message,
+            "upgrade_url": "/register",
+        },
+    )
 
 
 @app.exception_handler(QuotaExceededError)

@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     rate_limit_uploads: str = "10/minute"
     rate_limit_qa: str = "20/minute"
 
+    # Demo mode
+    demo_enabled: bool = False
+
     # Authentication
     jwt_secret_key: SecretStr = SecretStr("changeme-in-production-use-a-real-secret")
     jwt_algorithm: str = "HS256"

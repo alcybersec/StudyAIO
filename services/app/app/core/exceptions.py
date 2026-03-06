@@ -111,6 +111,14 @@ class TelegramLinkError(StudyAIOError):
     pass
 
 
+class DemoRestrictionError(StudyAIOError):
+    """Raised when a demo user attempts a write operation."""
+
+    def __init__(self, message: str = "Demo account — read-only access"):
+        self.message = message
+        super().__init__(message)
+
+
 class ReviewRequiredError(StudyAIOError):
     """Raised when a pipeline stage needs human review to proceed."""
 

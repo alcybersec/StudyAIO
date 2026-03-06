@@ -51,6 +51,13 @@ export function setQuotaExceededHandler(handler: typeof onQuotaExceeded) {
   onQuotaExceeded = handler
 }
 
+// Global demo restriction handler — set by QuotaProvider
+let onDemoRestriction: (() => void) | null = null
+
+export function setDemoRestrictionHandler(handler: typeof onDemoRestriction) {
+  onDemoRestriction = handler
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({ detail: response.statusText }))
@@ -58,6 +65,11 @@ async function handleResponse<T>(response: Response): Promise<T> {
     // Trigger upgrade prompt on 402
     if (response.status === 402 && body.resource && onQuotaExceeded) {
       onQuotaExceeded({ resource: body.resource, limit: body.limit, period: body.period })
+    }
+
+    // Trigger demo restriction modal on 403 with upgrade_url
+    if (response.status === 403 && body.upgrade_url && onDemoRestriction) {
+      onDemoRestriction()
     }
 
     throw new ApiError(response.status, body.detail || response.statusText)

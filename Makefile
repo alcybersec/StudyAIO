@@ -1,4 +1,4 @@
-.PHONY: up down logs test test-unit test-integration test-golden migrate shell db status build clean ingest import-v0 seed lint-python lint-python-fix coverage up-prod down-prod build-prod
+.PHONY: up down logs test test-unit test-integration test-golden migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod
 
 # === Docker ===
 up:
@@ -103,6 +103,10 @@ import-v0:
 seed:
 	DATABASE_URL="postgresql+asyncpg://studyaio:studyaio@localhost:5433/studyaio" \
 	python scripts/seed_fixtures.py
+
+seed-demo:
+	DATABASE_URL="postgresql+asyncpg://studyaio:studyaio@localhost:5433/studyaio" \
+	python scripts/seed_demo.py
 
 seed-achievements:
 	DATABASE_URL="postgresql+asyncpg://studyaio:studyaio@localhost:5433/studyaio" \

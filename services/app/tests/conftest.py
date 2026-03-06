@@ -87,13 +87,25 @@ def mock_agent():
 
 @pytest.fixture
 def mock_session():
-    """AsyncMock of AsyncSession with basic query support."""
+    """AsyncMock of AsyncSession with basic query support.
+
+    The execute() return value is a MagicMock (not AsyncMock) so that
+    synchronous SQLAlchemy Result methods like .scalars().all() and
+    .scalar_one_or_none() work correctly without returning coroutines.
+    """
     session = AsyncMock()
     session.add = MagicMock()
     session.flush = AsyncMock()
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
     session.execute = AsyncMock()
+    # Return a MagicMock for the execute result so sync chains work
+    execute_result = MagicMock()
+    execute_result.scalars.return_value.all.return_value = []
+    execute_result.scalars.return_value.first.return_value = None
+    execute_result.scalar_one_or_none.return_value = None
+    execute_result.all.return_value = []
+    session.execute.return_value = execute_result
     return session
 
 

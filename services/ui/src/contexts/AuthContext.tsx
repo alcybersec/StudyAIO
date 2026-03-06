@@ -9,6 +9,7 @@ export interface AuthContextValue {
   isAuthenticated: boolean
   isLoading: boolean
   isSelfHosted: boolean
+  isDemo: boolean
   login: (data: LoginRequest) => Promise<AuthUser>
   register: (data: RegisterRequest) => Promise<AuthUser>
   logout: () => Promise<void>
@@ -81,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isLoading = configLoading || (!isSelfHosted && userLoading)
   const isAuthenticated = !!user || isSelfHosted
+  const isDemo = user?.role === 'demo'
 
   return (
     <AuthContext.Provider
@@ -90,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated,
         isLoading,
         isSelfHosted,
+        isDemo,
         login,
         register,
         logout,
