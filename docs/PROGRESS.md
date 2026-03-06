@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** Gap Fill — v2 Feature Gaps (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M28 ✅, Gap Fill ✅
+> **Current Milestone:** Milestone 27 — Google Calendar Bidirectional Sync (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M27 ✅, M28 ✅, Gap Fill ✅
 
 ---
 
@@ -317,6 +317,18 @@
 | GF.5 | Chat Streaming (SSE) | ✅ Done | stream_answer() async generator on AgentAdapter base (default: yield full answer). Native streaming on AnthropicAPIAdapter (client.messages.stream text_stream) + OpenAIAdapter (create stream=True). stream_message() in chat_service (yields user_message→tokens→done events, saves to DB). POST /chat/sessions/{id}/messages/stream SSE endpoint via sse-starlette. Frontend: useStreamingChat hook (ReadableStream SSE parsing, token accumulation, cache invalidation), StreamingMessage component (blinking cursor), ChatWindow rewritten for streaming. chatApi.streamMessage (standalone fetch for POST SSE). 13 unit tests + 23 golden tests (existing admin golden). |
 
 **Tests:** 71 new tests (27 unit + 44 golden). ~1156 total.
+
+## Milestone 27 — Google Calendar Bidirectional Sync
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 27.1 | Models + Migration + Config + Dependencies | ✅ Done | CalendarSync + CalendarEvent models. Alembic migration o5p6q7r8s9t0. google_calendar_scopes config. CalendarSyncError exception. google-api-python-client + google-auth-oauthlib + google-auth-httplib2 deps. |
+| 27.2 | Google Calendar Service | ✅ Done | gcal_service.py: connect_google_calendar (OAuth code exchange, creates StudyAIO calendar), disconnect_calendar (revoke + delete), get_sync_status, push_events (deadlines + exams → GCal, hash-based change detection), pull_events (incremental sync via syncToken), sync_calendar (orchestrate push/pull by direction), handle_gcal_webhook. Lazy imports for Google libs. |
+| 27.3 | API Endpoints + Celery Beat Task | ✅ Done | 5 endpoints: POST /calendar/connect, POST /calendar/sync, GET /calendar/status, DELETE /calendar/disconnect/{sync_id}, POST /calendar/webhook. Rate limited 5/min on connect+sync. calendar_task.py Celery task (sync_all_calendars every 15min via beat). Router registered in main.py. |
+| 27.4 | Frontend UI | ✅ Done | CalendarSyncSection component (connect via Google OAuth popup, sync now, disconnect with confirmation). Integrated in SettingsPage. calendar.ts API client, useCalendar.ts hooks (4 hooks). "Sync Calendar" button on ExamsTab + calendar icon on DeadlineTimeline (shown when calendar connected). TypeScript types added. |
+| 27.5 | Tests + Documentation | ✅ Done | 10 service tests (hash, connect, disconnect, status, push create/skip/update, pull import/incremental, bidirectional sync). 5 API tests (connect, status, disconnect, sync, webhook). 5 golden tests (status, connect response, event mapping, sync result, webhook). PROGRESS.md + api.md updated. |
+
+**Tests:** ~20 new tests (15 unit + 5 golden). ~1176 total.
 
 ## Issues & Blockers
 

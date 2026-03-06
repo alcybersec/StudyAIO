@@ -808,6 +808,30 @@ export interface SystemMetrics {
   total_storage_mb: number
 }
 
+// ── Calendar Sync ──────────────────────────────────────────────
+
+export interface CalendarSyncInfo {
+  id: string
+  google_calendar_id: string
+  sync_direction: string
+  last_synced_at: string | null
+  event_count: number
+}
+
+export interface CalendarSyncStatusResponse {
+  calendars: CalendarSyncInfo[]
+}
+
+export interface CalendarConnectResponse {
+  sync_id: string
+  calendar_id: string
+}
+
+export interface CalendarSyncResult {
+  pushed: number
+  pulled: number
+}
+
 export interface ExamReadinessData {
   exam_id: string
   title: string

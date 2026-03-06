@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BillingSection } from '../components/billing/BillingSection'
+import { CalendarSyncSection } from '../components/calendar/CalendarSyncSection'
 import { NotificationsSection } from '../components/notifications/NotificationsSection'
 import { Card, ErrorBanner, LoadingSpinner, PageHeader } from '../components/ui'
 import { useSettings, useUpdateSettings } from '../hooks/useApi'
@@ -78,6 +79,11 @@ export function SettingsPage() {
       {/* Notifications */}
       <div className="mb-6">
         <NotificationsSection />
+      </div>
+
+      {/* Google Calendar */}
+      <div className="mb-6">
+        <CalendarSyncSection />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">

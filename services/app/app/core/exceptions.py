@@ -111,6 +111,12 @@ class TelegramLinkError(StudyAIOError):
     pass
 
 
+class CalendarSyncError(StudyAIOError):
+    """Raised when Google Calendar sync fails."""
+
+    pass
+
+
 class DemoRestrictionError(StudyAIOError):
     """Raised when a demo user attempts a write operation."""
 

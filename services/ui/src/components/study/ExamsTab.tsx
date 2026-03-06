@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useExams } from '../../hooks/useApi'
+import { useCalendarStatus, useSyncCalendar } from '../../hooks/useCalendar'
 import { LoadingSpinner, ErrorBanner, EmptyState } from '../ui'
 import { ExamCreateForm } from '../exam/ExamCreateForm'
 import { ExamDetailInline } from './ExamDetailInline'
@@ -13,6 +14,9 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
   const { data: exams, isLoading, error, refetch } = useExams(undefined, 'active')
   const [showCreate, setShowCreate] = useState(false)
   const now = useMemo(() => Date.now(), []) // eslint-disable-line react-hooks/purity
+  const { data: calStatus } = useCalendarStatus()
+  const syncCalendar = useSyncCalendar()
+  const hasCalendar = (calStatus?.calendars?.length ?? 0) > 0
 
   // If an exam is selected, show its detail inline
   if (selectedExamId) {
@@ -33,12 +37,27 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
         <p className="text-sm text-text-muted">
           {exams?.length ?? 0} active exam{(exams?.length ?? 0) !== 1 ? 's' : ''}
         </p>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary/90 transition-colors"
-        >
-          + Create Exam
-        </button>
+        <div className="flex items-center gap-2">
+          {hasCalendar && (
+            <button
+              onClick={() => syncCalendar.mutate()}
+              disabled={syncCalendar.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium border border-border text-text hover:bg-surface-alt disabled:opacity-50 transition-colors"
+              title="Sync exams to Google Calendar"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {syncCalendar.isPending ? 'Syncing...' : 'Sync Calendar'}
+            </button>
+          )}
+          <button
+            onClick={() => setShowCreate(true)}
+            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary/90 transition-colors"
+          >
+            + Create Exam
+          </button>
+        </div>
       </div>
 
       {showCreate && (

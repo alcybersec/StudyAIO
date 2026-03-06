@@ -95,6 +95,7 @@ class Settings(BaseSettings):
     # OAuth providers
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")
+    google_calendar_scopes: str = "https://www.googleapis.com/auth/calendar"
     github_client_id: str = ""
     github_client_secret: SecretStr = SecretStr("")
 

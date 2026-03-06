@@ -1307,3 +1307,71 @@ Trigger on-demand concept extraction for a specific artifact. Rate limited: 10/m
 | `ConceptDetailResponse` | ConceptNode + source_artifact_ids[], outgoing_relations[], incoming_relations[], timestamps |
 | `SimilarConceptItem` | id, name, description, category, course_id, similarity |
 | `ConceptExtractionResponse` | artifact_id, concept_count, relation_count |
+| `CalendarConnectRequest` | auth_code |
+| `CalendarConnectResponse` | sync_id, calendar_id |
+| `CalendarSyncInfo` | id, google_calendar_id, sync_direction, last_synced_at?, event_count |
+| `CalendarSyncStatusResponse` | calendars (CalendarSyncInfo[]) |
+| `CalendarSyncResult` | pushed, pulled |
+
+---
+
+## Calendar Sync
+
+Google Calendar bidirectional sync. Push deadlines/exams to GCal, pull class schedules.
+
+### `POST /api/calendar/connect`
+
+Exchange OAuth authorization code for tokens and create a CalendarSync. Creates a "StudyAIO" calendar in Google Calendar. Rate limited: 5/minute.
+
+**Request**
+```json
+{ "auth_code": "4/0AfJohX..." }
+```
+
+**Response** `200`
+```json
+{ "sync_id": "uuid", "calendar_id": "abc@group.calendar.google.com" }
+```
+
+### `GET /api/calendar/status`
+
+Return connected calendars with sync status.
+
+**Response** `200`
+```json
+{
+  "calendars": [
+    {
+      "id": "uuid",
+      "google_calendar_id": "abc@group.calendar.google.com",
+      "sync_direction": "push",
+      "last_synced_at": "2026-03-06T12:00:00",
+      "event_count": 12
+    }
+  ]
+}
+```
+
+### `POST /api/calendar/sync`
+
+Trigger manual sync for all connected calendars. Rate limited: 5/minute.
+
+**Response** `200`
+```json
+{ "pushed": 5, "pulled": 2 }
+```
+
+### `DELETE /api/calendar/disconnect/{sync_id}`
+
+Disconnect a Google Calendar integration. Revokes token and deletes all event mappings.
+
+**Response** `200`
+```json
+{ "detail": "Calendar disconnected" }
+```
+
+### `POST /api/calendar/webhook`
+
+Google Calendar push notification handler. No auth — verified via channel token headers (`x-goog-channel-id`, `x-goog-resource-id`).
+
+**Response** `200`
