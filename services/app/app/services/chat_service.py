@@ -1,5 +1,6 @@
 """Chat service — persistent AI study companion conversations with RAG."""
 
+from collections.abc import AsyncIterator
 from datetime import datetime
 
 import structlog
@@ -244,6 +245,153 @@ async def send_message(
         citations=len(answer_citations),
     )
     return user_msg, assistant_msg
+
+
+async def stream_message(
+    session: AsyncSession,
+    session_id: str,
+    user_id: str,
+    content: str,
+) -> AsyncIterator[dict]:
+    """Stream a chat response token-by-token via SSE events.
+
+    Yields SSE event dicts:
+    - {"event": "token", "data": "text chunk"}
+    - {"event": "done", "data": JSON with full message + citations}
+    - {"event": "error", "data": error message}
+
+    The full assistant message is saved to the database at the end.
+
+    Args:
+        session: Database session.
+        session_id: Chat session ID.
+        user_id: User ID for ownership check.
+        content: User's message text.
+
+    Yields:
+        Dicts with event type and data for SSE serialization.
+    """
+    # Verify session ownership
+    chat_result = await session.execute(
+        select(ChatSession).where(
+            ChatSession.id == session_id,
+            ChatSession.user_id == user_id,
+        )
+    )
+    chat_session = chat_result.scalar_one_or_none()
+    if not chat_session:
+        yield {"event": "error", "data": "Chat session not found"}
+        return
+
+    now = datetime.now(tz=None)
+
+    # Save user message
+    user_msg = ChatMessage(
+        id=generate_id(),
+        session_id=session_id,
+        role="user",
+        content=content,
+        created_at=now,
+    )
+    session.add(user_msg)
+
+    # Get conversation history
+    history_result = await session.execute(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at.desc())
+        .limit(MAX_HISTORY_MESSAGES)
+    )
+    history_msgs = list(reversed(history_result.scalars().all()))
+    history = [{"role": m.role, "content": m.content} for m in history_msgs]
+    history.append({"role": "user", "content": content})
+
+    # RAG search
+    chunks: list[dict] = []
+    try:
+        provider = get_embedding_provider()
+        query_embeddings = provider.embed_texts([content])
+        if query_embeddings:
+            chunks = await search_service.search_chunks(
+                session=session,
+                query_embedding=query_embeddings[0],
+                top_k=MAX_RAG_CHUNKS,
+                course_id=chat_session.course_id,
+                user_id=user_id,
+            )
+    except Exception as e:
+        logger.warning("chat_stream_rag_failed", error=str(e))
+
+    # Yield user message ID
+    yield {
+        "event": "user_message",
+        "data": {"id": user_msg.id},
+    }
+
+    # Stream tokens from agent
+    agent = get_agent()
+    full_text = ""
+    try:
+        context_question = _build_contextual_question(content, history[:-1], chunks)
+        async for token in agent.stream_answer(context_question, chunks):
+            full_text += token
+            yield {"event": "token", "data": token}
+    except Exception as e:
+        logger.error("chat_stream_error", error=str(e))
+        error_msg = (
+            "I'm sorry, I encountered an error while processing your question. "
+            "Please try again."
+        )
+        full_text = error_msg
+        yield {"event": "token", "data": error_msg}
+
+    # Parse citations from the full response (best-effort)
+    citations: list[dict] = []
+    try:
+        from app.agents import parsing
+        parsed = parsing.parse_json_response(full_text)
+        if isinstance(parsed, dict) and "answer" in parsed:
+            full_text = parsed["answer"]
+            citations = parsed.get("citations", [])
+    except Exception:
+        pass  # Use raw text if not valid JSON
+
+    # Save assistant message
+    assistant_msg = ChatMessage(
+        id=generate_id(),
+        session_id=session_id,
+        role="assistant",
+        content=full_text,
+        citations_json=citations if citations else None,
+        created_at=datetime.now(tz=None),
+    )
+    session.add(assistant_msg)
+
+    # Update session metadata
+    chat_session.message_count += 2
+    chat_session.updated_at = datetime.now(tz=None)
+    if chat_session.message_count <= 2 and chat_session.title == "New Chat":
+        chat_session.title = content[:80] + ("..." if len(content) > 80 else "")
+
+    await session.flush()
+
+    # Final done event with full message + citations
+    yield {
+        "event": "done",
+        "data": {
+            "id": assistant_msg.id,
+            "content": full_text,
+            "citations_json": citations if citations else None,
+        },
+    }
+
+    logger.info(
+        "chat_stream_complete",
+        session_id=session_id,
+        chunks_used=len(chunks),
+        citations=len(citations),
+        response_length=len(full_text),
+    )
 
 
 def _build_contextual_question(

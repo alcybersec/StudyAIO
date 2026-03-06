@@ -1,5 +1,7 @@
 """OpenAI API adapter — calls the OpenAI SDK directly."""
 
+from collections.abc import AsyncIterator
+
 import structlog
 from openai import AsyncOpenAI
 
@@ -328,6 +330,73 @@ Respond with ONLY a JSON object:
             answer=parsed.get("answer", ""),
             citations=parsed.get("citations", []),
         )
+
+    async def stream_answer(
+        self, question: str, context_chunks: list[dict]
+    ) -> AsyncIterator[str]:
+        """Stream answer tokens using OpenAI's streaming API.
+
+        Args:
+            question: The user's question.
+            context_chunks: Relevant text chunks with metadata.
+
+        Yields:
+            Text token strings as they arrive from the API.
+        """
+        from pathlib import Path
+
+        from jinja2 import Template
+
+        template_path = Path("/app/prompts/answer_question.txt")
+        if template_path.exists():
+            template = Template(template_path.read_text())
+            prompt = template.render(question=question, chunks=context_chunks)
+        else:
+            chunks_text = ""
+            for i, chunk in enumerate(context_chunks, 1):
+                course = chunk.get("course_code", "Unknown")
+                week = chunk.get("week", 0)
+                page = chunk.get("page_ref", 0)
+                text = chunk.get("text", "")
+                chunks_text += f"[{i}] ({course} Week {week}, p.{page})\n{text}\n\n"
+            prompt = f"""Answer the following question using ONLY the provided context chunks.
+
+Question: {question}
+
+Context:
+{chunks_text}
+
+Respond with ONLY a JSON object:
+{{
+  "answer": "Your answer with [1] citation markers.",
+  "citations": [{{"ref": 1, "chunk_id": "", "text_snippet": "brief quote", "course_code": "CSIT302", "week": 5, "page_ref": 1}}]
+}}"""
+
+        if not self._api_key:
+            raise AgentError(
+                "OpenAI API key not configured. Set it in Settings > AI Configuration."
+            )
+
+        client = AsyncOpenAI(api_key=self._api_key)
+        logger.info(
+            "openai_stream_start",
+            prompt_length=len(prompt),
+            model=self._model,
+        )
+
+        try:
+            stream = await client.chat.completions.create(
+                model=self._model,
+                max_tokens=_DEFAULT_MAX_TOKENS,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    yield delta.content
+        except Exception as e:
+            raise AgentError(f"OpenAI streaming failed: {e}") from e
 
     async def extract_course_ops(
         self, document_text: str, course_code: str, document_type: str

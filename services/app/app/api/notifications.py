@@ -8,17 +8,20 @@ from app.api.deps import get_current_user_or_default
 from app.api.notification_schemas import (
     NotificationPreferenceItem,
     NotificationPreferencesResponse,
+    PushSubscribeRequest,
+    PushUnsubscribeRequest,
     TelegramLinkResponse,
     TelegramStatusResponse,
     TestNotificationRequest,
     TestNotificationResponse,
     UpdatePreferencesRequest,
+    VapidKeyResponse,
 )
 from app.config import settings
 from app.core.database import get_session
 from app.core.rate_limit import limiter
 from app.models.user import User
-from app.services import notification_service, telegram_service
+from app.services import notification_service, push_service, telegram_service
 
 logger = structlog.get_logger()
 
@@ -134,6 +137,46 @@ async def telegram_webhook(
     return {"ok": True, "response": response_text}
 
 
+@router.get("/push/vapid-key", response_model=VapidKeyResponse)
+async def get_vapid_key() -> VapidKeyResponse:
+    """Get the VAPID public key for Web Push subscriptions."""
+    if not settings.vapid_public_key:
+        raise HTTPException(status_code=400, detail="Web Push not configured")
+    return VapidKeyResponse(public_key=settings.vapid_public_key)
+
+
+@router.post("/push/subscribe")
+async def push_subscribe(
+    body: PushSubscribeRequest,
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Subscribe to Web Push notifications."""
+    sub = await push_service.subscribe(
+        session,
+        user_id=user.id,
+        endpoint=body.endpoint,
+        p256dh=body.p256dh,
+        auth=body.auth,
+    )
+    await session.commit()
+    return {"id": sub.id, "detail": "Subscribed to push notifications"}
+
+
+@router.delete("/push/unsubscribe")
+async def push_unsubscribe(
+    body: PushUnsubscribeRequest,
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Unsubscribe from Web Push notifications."""
+    deleted = await push_service.unsubscribe(session, user_id=user.id, endpoint=body.endpoint)
+    await session.commit()
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    return {"detail": "Unsubscribed from push notifications"}
+
+
 @router.post("/test", response_model=TestNotificationResponse)
 @limiter.limit("3/minute")
 async def test_notification(
@@ -178,6 +221,20 @@ async def test_notification(
             success=success,
             channel="telegram",
             message="Test message sent" if success else "Failed to send test message",
+        )
+
+    elif body.channel == "push":
+        sent = await push_service.send_push_notification(
+            session,
+            user.id,
+            title="StudyAIO: Test Notification",
+            body="This is a test push notification from StudyAIO. "
+            "If you see this, Web Push notifications are working!",
+        )
+        return TestNotificationResponse(
+            success=sent > 0,
+            channel="push",
+            message=f"Test push sent to {sent} device(s)" if sent > 0 else "No active push subscriptions",
         )
 
     else:

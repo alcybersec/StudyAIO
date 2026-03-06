@@ -24,6 +24,7 @@ from app.models.magic_link import MagicLink
 from app.models.notification_preference import NotificationPreference
 from app.models.oauth_account import OAuthAccount
 from app.models.pipeline_run import PipelineRun
+from app.models.push_subscription import PushSubscription
 from app.models.quiz import QuizQuestion
 from app.models.quiz_attempt import QuizAttempt
 from app.models.review_item import ReviewItem
@@ -61,6 +62,7 @@ __all__ = [
     "NotificationPreference",
     "OAuthAccount",
     "PipelineRun",
+    "PushSubscription",
     "QuizAttempt",
     "QuizQuestion",
     "ReviewItem",

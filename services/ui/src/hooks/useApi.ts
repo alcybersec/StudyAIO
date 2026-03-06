@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { analyticsApi, assetsApi, chatApi, conceptsApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
-import type { CreateSessionRequest, DeadlineUpdate, QARequest, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
+import { adminApi } from '../api/admin'
+import type { AdminUserUpdate, CreateSessionRequest, DeadlineUpdate, QARequest, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -498,5 +499,38 @@ export function useMarkAchievementsNotified() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gamification', 'unnotified'] })
     },
+  })
+}
+
+// ── Admin ──────────────────────────────────────────────────────
+
+export function useAdminUsers(params?: {
+  role?: string
+  tier?: string
+  is_active?: boolean
+  offset?: number
+  limit?: number
+}) {
+  return useQuery({
+    queryKey: ['admin', 'users', params],
+    queryFn: () => adminApi.listUsers(params),
+  })
+}
+
+export function useUpdateAdminUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: AdminUserUpdate }) =>
+      adminApi.updateUser(userId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+    },
+  })
+}
+
+export function useSystemMetrics() {
+  return useQuery({
+    queryKey: ['admin', 'metrics'],
+    queryFn: adminApi.getMetrics,
   })
 }

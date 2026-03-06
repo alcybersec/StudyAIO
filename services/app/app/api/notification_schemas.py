@@ -39,6 +39,26 @@ class TelegramStatusResponse(BaseModel):
     verified: bool = False
 
 
+class PushSubscribeRequest(BaseModel):
+    """Request to subscribe to Web Push notifications."""
+
+    endpoint: str
+    p256dh: str
+    auth: str
+
+
+class PushUnsubscribeRequest(BaseModel):
+    """Request to unsubscribe from Web Push notifications."""
+
+    endpoint: str
+
+
+class VapidKeyResponse(BaseModel):
+    """Response containing the VAPID public key."""
+
+    public_key: str
+
+
 class TestNotificationRequest(BaseModel):
     """Request to send a test notification."""
 

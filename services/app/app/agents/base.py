@@ -1,6 +1,7 @@
 """Abstract agent adapter interface for all AI operations."""
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
 
@@ -233,3 +234,22 @@ class AgentAdapter(ABC):
             ConceptExtractionResult with concepts and relations.
         """
         ...
+
+    async def stream_answer(
+        self, question: str, context_chunks: list[dict]
+    ) -> AsyncIterator[str]:
+        """Stream answer tokens for a question.
+
+        Default implementation calls answer_question() and yields the full
+        answer at once. Adapters with native streaming (Anthropic, OpenAI)
+        override this to yield tokens incrementally.
+
+        Args:
+            question: The user's question.
+            context_chunks: Relevant text chunks with metadata.
+
+        Yields:
+            Text token strings.
+        """
+        result = await self.answer_question(question, context_chunks)
+        yield result.answer

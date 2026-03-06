@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     smtp_from_name: str = "StudyAIO"
     smtp_use_tls: bool = True
 
+    # Web Push (VAPID)
+    vapid_public_key: str = ""
+    vapid_private_key: SecretStr = SecretStr("")
+    vapid_admin_email: str = "admin@studyaio.local"
+
     # OAuth providers
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")
