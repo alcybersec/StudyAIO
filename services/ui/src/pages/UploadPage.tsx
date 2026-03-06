@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { PageHeader, ConnectionBanner } from '../components/ui'
+import { useAuth } from '../hooks/useAuth'
+import { Card, PageHeader, ConnectionBanner } from '../components/ui'
 import { DropZone } from '../components/upload/DropZone'
 import { FileQueue, type QueuedFile } from '../components/upload/FileQueue'
 import { PipelineProgress } from '../components/upload/PipelineProgress'
@@ -13,6 +14,7 @@ let nextId = 0
 const BATCH_THRESHOLD = 3
 
 export function UploadPage() {
+  const { isDemo } = useAuth()
   const [queue, setQueue] = useState<QueuedFile[]>([])
   const processingRef = useRef(false)
   const queryClient = useQueryClient()
@@ -118,6 +120,28 @@ export function UploadPage() {
   }, [])
 
   const hasActive = queue.some((f) => f.status === 'uploading')
+
+  if (isDemo) {
+    return (
+      <div>
+        <PageHeader
+          title="Upload Lectures"
+          subtitle="Upload PDF, DOCX, or PPTX files to start the processing pipeline"
+        />
+        <Card>
+          <div className="text-center py-8">
+            <svg className="w-12 h-12 mx-auto mb-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <h3 className="text-lg font-semibold text-text mb-2">Uploads disabled in demo</h3>
+            <p className="text-sm text-text-muted">
+              Create a free account to upload your own lecture files and start the processing pipeline.
+            </p>
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div>

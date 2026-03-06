@@ -118,6 +118,7 @@ function NavSection({ label, items, collapsed, isActive, pendingCount }: {
           <li key={item.path} className="relative">
             <Link
               to={item.path}
+              data-tour={item.path === '/' ? 'dashboard' : item.path.replace('/', '')}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isActive(item.path)
                   ? 'bg-primary/10 text-primary'
@@ -151,7 +152,7 @@ export function Sidebar() {
   const [coursesExpanded, setCoursesExpanded] = useState(true)
   const { data: dashboard } = useDashboard()
   const { data: courses } = useCourses()
-  const { user, isSelfHosted, logout } = useAuth()
+  const { user, isSelfHosted, isDemo, logout } = useAuth()
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/'
@@ -247,6 +248,7 @@ export function Sidebar() {
         {/* Settings link */}
         <Link
           to="/settings"
+          data-tour="settings"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
             isActive('/settings')
               ? 'bg-primary/10 text-primary'
@@ -264,7 +266,7 @@ export function Sidebar() {
         </div>
 
         {/* User section */}
-        {!isSelfHosted && user && (
+        {(isDemo || (!isSelfHosted && user)) && user && (
           <div className="pt-1 border-t border-border mt-1">
             {collapsed ? (
               <Link
@@ -292,9 +294,16 @@ export function Sidebar() {
                   )}
                 </Link>
                 <div className="flex-1 min-w-0">
-                  <Link to="/profile" className="block text-sm font-medium text-text truncate hover:text-primary transition-colors">
-                    {user.username}
-                  </Link>
+                  <div className="flex items-center gap-1.5">
+                    <Link to="/profile" className="block text-sm font-medium text-text truncate hover:text-primary transition-colors">
+                      {user.username}
+                    </Link>
+                    {isDemo && (
+                      <span className="shrink-0 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                        Demo
+                      </span>
+                    )}
+                  </div>
                   <button onClick={() => logout()} className="text-xs text-text-muted hover:text-danger transition-colors">
                     Sign out
                   </button>

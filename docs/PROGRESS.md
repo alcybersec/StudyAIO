@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** 21 — Telegram + Email Notifications (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M25 ✅, M26 ✅, M28 ✅
+> **Current Milestone:** 24 — Demo Account + Onboarding Tour (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M28 ✅
 
 ---
 
@@ -295,6 +295,16 @@
 | 2026-02-28 | Local embeddings via sentence-transformers (all-MiniLM-L6-v2) | Avoid API keys/costs; EmbeddingProvider ABC is swappable for OpenAI/Voyage later |
 | 2026-02-28 | Vector(384) for chunk embeddings | Matches all-MiniLM-L6-v2 output; Alembic migration from Vector(1536) |
 | 2026-02-28 | EmbeddingProvider separate from AgentAdapter | Embeddings are deterministic, not generative; different concern from AI agents |
+
+## Milestone 24 — Demo Account + Onboarding Tour
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 24.1 | Demo account middleware | ✅ Done | DemoAccountMiddleware (BaseHTTPMiddleware), DemoRestrictionError, demo_enabled config. Blocks writes for demo users (role=demo), allowlists auth paths. 403 JSON with upgrade_url. |
+| 24.2 | Demo seed script + auto-login | ✅ Done | scripts/seed_demo.py: creates demo user (ID 00000000...0002, role=demo), 2 courses, 7 artifacts, summaries, ~42 flashcards, ~21 quiz questions, 30 flashcard reviews, 5 study sessions, 1 exam, XP/achievements, chat session, analytics snapshots, review items. GET /api/auth/demo-login endpoint (302 redirect with cookies). Makefile target `seed-demo`. |
+| 24.3 | Frontend demo guards + UpgradeCTA | ✅ Done | isDemo in AuthContext, 403 handler in client.ts (setDemoRestrictionHandler), DemoBanner (sticky top bar), UpgradeCTA (Radix Dialog modal), "Demo" badge in Sidebar, UploadPage disabled for demo users. demo_enabled in AuthConfig type. |
+| 24.4 | Onboarding tour | ✅ Done | useTour hook (localStorage persistence, 8 steps), OnboardingTour (spotlight overlay via box-shadow, portal), TourTooltip (positioned tooltip with step counter), data-tour attributes on Sidebar nav items. Auto-starts for demo users. "Replay Tour" button on Settings page. |
+| 24.5 | Tests + documentation | ✅ Done | 9 middleware tests, 3 login tests, 11 golden tests (22 new tests). 1085 total passing. PROGRESS.md updated. |
 
 ## Issues & Blockers
 

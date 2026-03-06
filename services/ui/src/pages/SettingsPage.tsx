@@ -4,6 +4,7 @@ import { NotificationsSection } from '../components/notifications/NotificationsS
 import { Card, ErrorBanner, LoadingSpinner, PageHeader } from '../components/ui'
 import { useSettings, useUpdateSettings } from '../hooks/useApi'
 import { useTheme, type Theme } from '../hooks/useTheme'
+import { useTour } from '../hooks/useTour'
 import type { Settings } from '../types'
 
 const inputClass = 'w-full px-3 py-2 border border-border bg-surface text-text rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none'
@@ -15,6 +16,7 @@ export function SettingsPage() {
   const { data: settings, isLoading, error } = useSettings()
   const updateMutation = useUpdateSettings()
   const { theme, setTheme } = useTheme()
+  const { replay: replayTour } = useTour()
   const [form, setForm] = useState<Settings | null>(null)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
@@ -102,6 +104,18 @@ export function SettingsPage() {
                 ))}
               </div>
               <p className={hintClass}>Choose how StudyAIO looks. System follows your OS preference.</p>
+            </div>
+
+            <div>
+              <label className={labelClass}>Onboarding Tour</label>
+              <button
+                type="button"
+                onClick={replayTour}
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-border text-text hover:bg-surface-alt transition-colors"
+              >
+                Replay Tour
+              </button>
+              <p className={hintClass}>Walk through the app's main features with a guided tour.</p>
             </div>
           </div>
         </Card>

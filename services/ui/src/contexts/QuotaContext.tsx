@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { setQuotaExceededHandler } from '../api/client'
+import { setQuotaExceededHandler, setDemoRestrictionHandler } from '../api/client'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
+import { UpgradeCTA } from '../components/demo/UpgradeCTA'
 import type { QuotaError } from '../types'
 
 interface QuotaContextValue {
@@ -11,6 +12,7 @@ const QuotaContext = createContext<QuotaContextValue | null>(null)
 
 export function QuotaProvider({ children }: { children: ReactNode }) {
   const [quotaError, setQuotaError] = useState<QuotaError | null>(null)
+  const [demoBlocked, setDemoBlocked] = useState(false)
 
   const showUpgradePrompt = useCallback((error: QuotaError) => {
     setQuotaError(error)
@@ -24,6 +26,14 @@ export function QuotaProvider({ children }: { children: ReactNode }) {
     return () => setQuotaExceededHandler(null)
   }, [])
 
+  // Register global 403 demo restriction handler
+  useEffect(() => {
+    setDemoRestrictionHandler(() => {
+      setDemoBlocked(true)
+    })
+    return () => setDemoRestrictionHandler(null)
+  }, [])
+
   return (
     <QuotaContext.Provider value={{ showUpgradePrompt }}>
       {children}
@@ -35,6 +45,7 @@ export function QuotaProvider({ children }: { children: ReactNode }) {
           onDismiss={() => setQuotaError(null)}
         />
       )}
+      <UpgradeCTA open={demoBlocked} onDismiss={() => setDemoBlocked(false)} />
     </QuotaContext.Provider>
   )
 }

@@ -405,6 +405,7 @@ export interface AuthConfig {
   self_hosted: boolean
   registration_enabled: boolean
   oauth_providers: string[]
+  demo_enabled: boolean
 }
 
 export interface AuthUser {

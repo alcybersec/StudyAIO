@@ -31,9 +31,17 @@ Public endpoint (no auth required). Returns auth configuration for the frontend.
 {
   "self_hosted": true,
   "registration_enabled": false,
-  "oauth_providers": []
+  "oauth_providers": [],
+  "demo_enabled": false
 }
 ```
+
+### `GET /api/auth/demo-login`
+
+Auto-authenticate as the demo user and redirect to dashboard. Rate limited: 10/minute. Requires `demo_enabled=true` in config and a seeded demo user (ID `00000000-0000-0000-0000-000000000002`).
+
+**Response** `302` Redirect to `/` with Set-Cookie (access_token, refresh_token)
+**Response** `404` if demo mode is disabled or demo user not found
 
 ### `POST /api/auth/register`
 

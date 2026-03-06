@@ -87,6 +87,7 @@ class AuthConfigResponse(BaseModel):
     self_hosted: bool
     registration_enabled: bool
     oauth_providers: list[str]
+    demo_enabled: bool = False
 
 
 class UserProfileResponse(BaseModel):

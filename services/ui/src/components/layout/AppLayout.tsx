@@ -1,5 +1,8 @@
 import { Link, Outlet } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth'
 import { ErrorBoundary } from '../ErrorBoundary'
+import { DemoBanner } from '../demo/DemoBanner'
+import { OnboardingTour } from '../tour/OnboardingTour'
 import { Toaster } from '../ui/Toast'
 import { OfflineBanner } from '../ui/OfflineBanner'
 import { PWAUpdateNotify } from '../pwa/PWAUpdateNotify'
@@ -7,8 +10,14 @@ import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 
 export function AppLayout() {
+  const { isDemo } = useAuth()
+
   return (
-    <div className="min-h-screen bg-surface-alt flex">
+    <div className="min-h-screen bg-surface-alt flex flex-col">
+      {/* Demo account banner */}
+      {isDemo && <DemoBanner />}
+
+      <div className="flex flex-1">
       {/* Offline status banner */}
       <OfflineBanner />
 
@@ -39,6 +48,10 @@ export function AppLayout() {
 
       {/* PWA update notifications */}
       <PWAUpdateNotify />
+
+      {/* Onboarding tour (auto-starts for demo users) */}
+      <OnboardingTour />
+      </div>
     </div>
   )
 }
