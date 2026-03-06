@@ -1,5 +1,6 @@
 """Pipeline stage 2: Extract — full content extraction with images."""
 
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.core.database import async_session_factory, run_async
 from app.core.exceptions import ExtractionError
+from app.core.storage import LocalStorageBackend, get_storage, normalize_storage_key
 from app.core.utils import generate_id
 from app.extractors import get_extractor
 from app.models.artifact import LectureArtifact
@@ -61,16 +63,46 @@ async def _extract(artifact_id: str, user_id: str | None = None) -> dict:
         await session.flush()
 
         try:
-            # Set up output directory
-            extraction_dir = Path(settings.extractions_dir) / artifact_id
-            extraction_dir.mkdir(parents=True, exist_ok=True)
+            storage = get_storage()
+            storage_key = normalize_storage_key(artifact.file_path)
+            extraction_prefix = f"extractions/{artifact_id}"
 
-            # Run appropriate extractor
-            extractor = get_extractor(artifact.file_type)
-            extraction_result = extractor.extract(
-                file_path=Path(artifact.file_path),
-                output_dir=extraction_dir,
-            )
+            # For local storage, operate directly on the filesystem
+            # For S3, download to a temp dir, run extractor, upload results
+            if isinstance(storage, LocalStorageBackend):
+                file_path = storage.resolve_path(storage_key)
+                extraction_dir = storage.resolve_path(extraction_prefix)
+                extraction_dir.mkdir(parents=True, exist_ok=True)
+
+                extractor = get_extractor(artifact.file_type)
+                extraction_result = extractor.extract(
+                    file_path=file_path,
+                    output_dir=extraction_dir,
+                )
+            else:
+                # S3: download → extract locally → upload results
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmp_path = Path(tmpdir)
+                    local_file = tmp_path / Path(storage_key).name
+                    await storage.get_to_file(storage_key, local_file)
+
+                    local_output = tmp_path / "extraction"
+                    local_output.mkdir()
+
+                    extractor = get_extractor(artifact.file_type)
+                    extraction_result = extractor.extract(
+                        file_path=local_file,
+                        output_dir=local_output,
+                    )
+
+                    # Upload extraction outputs (images, etc.) to S3
+                    for item in local_output.rglob("*"):
+                        if item.is_file():
+                            rel = item.relative_to(local_output)
+                            upload_key = f"{extraction_prefix}/{rel}"
+                            await storage.put_file(upload_key, item)
+
+                extraction_dir = Path(f"/app/data/{extraction_prefix}")  # logical path for DB
 
             # Create extraction record
             manifest = extraction_result.to_manifest()
@@ -80,7 +112,7 @@ async def _extract(artifact_id: str, user_id: str | None = None) -> dict:
                 manifest_json=manifest,
                 image_count=extraction_result.image_count,
                 page_count=extraction_result.page_count,
-                extraction_path=str(extraction_dir),
+                extraction_path=extraction_prefix,
             )
             session.add(extraction)
 
@@ -109,7 +141,7 @@ async def _extract(artifact_id: str, user_id: str | None = None) -> dict:
                 "status": "extracted",
                 "page_count": extraction_result.page_count,
                 "image_count": extraction_result.image_count,
-                "extraction_path": str(extraction_dir),
+                "extraction_path": extraction_prefix,
             }
 
         except ExtractionError as e:

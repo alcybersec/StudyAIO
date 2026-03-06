@@ -22,6 +22,7 @@ from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import DuplicateFileError
 from app.core.rate_limit import limiter
+from app.core.storage import get_storage
 from app.core.utils import read_upload_with_limit, sanitize_filename
 from app.models.user import User
 from app.pipeline.orchestrator import resume_pipeline, run_pipeline
@@ -67,29 +68,29 @@ async def upload_file(
     # Check upload quota (free tier: 5/month)
     await quota_service.check_upload_quota(session, user.id, user.tier)
 
-    # Save to shared uploads directory (accessible by both API and worker containers)
+    # Save to storage backend
     try:
-        uploads_dir = Path(settings.data_dir) / "uploads"
-        uploads_dir.mkdir(parents=True, exist_ok=True)
+        storage = get_storage()
+        await storage.ensure_dir("uploads")
 
         safe_name = sanitize_filename(file.filename)
         if not safe_name:
             safe_name = f"upload{Path(file.filename).suffix}"
-        dest = uploads_dir / safe_name
+        storage_key = f"uploads/{safe_name}"
 
-        # Handle filename collision with counter
-        if dest.exists():
-            stem = dest.stem
-            suffix = dest.suffix
+        # Handle key collision with counter
+        if await storage.exists(storage_key):
+            stem = Path(safe_name).stem
+            suffix = Path(safe_name).suffix
             counter = 1
-            while dest.exists():
-                dest = uploads_dir / f"{stem}_{counter}{suffix}"
+            while await storage.exists(storage_key):
+                storage_key = f"uploads/{stem}_{counter}{suffix}"
                 counter += 1
 
         max_bytes = settings.max_upload_size_mb * 1024 * 1024
         content = await read_upload_with_limit(file, max_bytes)
-        dest.write_bytes(content)
-        file_path = str(dest)
+        await storage.put(storage_key, content)
+        file_path = storage_key
     except HTTPException:
         raise
     except Exception as e:
@@ -154,8 +155,8 @@ async def batch_upload(
     duplicates = 0
     failed = 0
 
-    uploads_dir = Path(settings.data_dir) / "uploads"
-    uploads_dir.mkdir(parents=True, exist_ok=True)
+    storage = get_storage()
+    await storage.ensure_dir("uploads")
 
     for file in files:
         filename = file.filename or "unknown"
@@ -176,20 +177,20 @@ async def batch_upload(
             safe_name = sanitize_filename(filename)
             if not safe_name:
                 safe_name = f"upload{ext}"
-            dest = uploads_dir / safe_name
+            storage_key = f"uploads/{safe_name}"
 
-            if dest.exists():
-                stem = dest.stem
-                suffix = dest.suffix
+            if await storage.exists(storage_key):
+                stem = Path(safe_name).stem
+                suffix = Path(safe_name).suffix
                 counter = 1
-                while dest.exists():
-                    dest = uploads_dir / f"{stem}_{counter}{suffix}"
+                while await storage.exists(storage_key):
+                    storage_key = f"uploads/{stem}_{counter}{suffix}"
                     counter += 1
 
             max_bytes = settings.max_upload_size_mb * 1024 * 1024
             content = await read_upload_with_limit(file, max_bytes)
-            dest.write_bytes(content)
-            file_path = str(dest)
+            await storage.put(storage_key, content)
+            file_path = storage_key
         except HTTPException as e:
             results.append(BatchUploadFileResult(
                 filename=filename,

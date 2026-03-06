@@ -28,6 +28,11 @@ COPY --from=builder /install /usr/local
 # Create non-root user
 RUN groupadd -r studyaio && useradd -r -g studyaio -d /app -s /sbin/nologin studyaio
 
+# OCI image labels
+LABEL org.opencontainers.image.source="https://github.com/alcybersec/StudyAIO"
+LABEL org.opencontainers.image.description="StudyAIO API + Celery worker"
+LABEL org.opencontainers.image.licenses="MIT"
+
 COPY . .
 
 # Ensure data dir is writable by studyaio

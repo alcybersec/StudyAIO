@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** Milestone 27 — Google Calendar Bidirectional Sync (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M27 ✅, M28 ✅, Gap Fill ✅
+> **Current Milestone:** Milestone 29 — Cloud Infrastructure + Self-Hosted Packaging (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M27 ✅, M28 ✅, Gap Fill ✅, M29 ✅
 
 ---
 
@@ -329,6 +329,18 @@
 | 27.5 | Tests + Documentation | ✅ Done | 10 service tests (hash, connect, disconnect, status, push create/skip/update, pull import/incremental, bidirectional sync). 5 API tests (connect, status, disconnect, sync, webhook). 5 golden tests (status, connect response, event mapping, sync result, webhook). PROGRESS.md + api.md updated. |
 
 **Tests:** ~20 new tests (15 unit + 5 golden). ~1176 total.
+
+## Milestone 29 — Cloud Infrastructure + Self-Hosted Packaging
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 29.1 | Storage Backend Abstraction Layer | ✅ Done | StorageBackend ABC with `put`, `put_file`, `get`, `get_to_file`, `exists`, `delete`, `get_url`, `ensure_dir` + sync wrappers. LocalStorageBackend (pathlib under data_dir). S3StorageBackend (lazy boto3 client, prefix support, CDN/presigned URLs). `get_storage()` singleton + `reset_storage()`. `normalize_storage_key()` helper. Config: storage_backend, s3_bucket, s3_region, s3_access_key_id (SecretStr), s3_secret_access_key (SecretStr), s3_endpoint_url, s3_prefix, cdn_base_url. `compute_sha256_from_bytes()` utility. boto3 dep added. 20 unit tests. |
+| 29.2 | Migrate All File I/O to Storage Backend | ✅ Done | 10 files migrated: uploads.py (put), files.py (serve via storage, local FileResponse / S3 Response), courseops.py (put/delete), artifact_service.py (put_file, relative keys), extract.py (local resolve_path / S3 download-extract-upload), classify.py (storage-backed text preview), summarize.py (put), summary_service.py (build_summary_storage_key), courseops_task.py (storage resolution). DB stores relative storage keys. All 927 existing tests pass. |
+| 29.3 | Self-Hosted Compose + Setup Script | ✅ Done | docker-compose.selfhosted.yml: Traefik v3.2 reverse proxy, Let's Encrypt ACME, restart: unless-stopped, port restrictions (no host db/redis), backup sidecar (postgres:16-alpine). scripts/setup-selfhosted.sh: interactive prereq checks, domain/email/password prompts, auto JWT secret, .env generation, build+start+migrate. scripts/backup.sh: pg_dump+gzip, data tar, retention policy (default 7), optional S3 upload. Makefile targets: up-selfhosted, down-selfhosted, backup. |
+| 29.4 | Cloud Infrastructure + CI/CD | ✅ Done | AWS Terraform (infra/cloud/aws/): VPC (2 AZ, public/private subnets, NAT gateway), RDS PostgreSQL 16 (encrypted, 7-day backups), ElastiCache Redis 7.1, S3 (versioned, encrypted, private), ECS Fargate (API + worker services), ALB (HTTP→HTTPS redirect), IAM (least-privilege S3 access), CloudWatch (30-day retention). docker-compose.cloud.yml (single-VM with external RDS/Redis/S3). .github/workflows/deploy.yml (build→GHCR→ECS deploy on main/tag). OCI image labels on both Dockerfiles. |
+| 29.5 | Prometheus Metrics + Deployment Docs | ✅ Done | Conditional Prometheus instrumentation in main.py (prometheus-fastapi-instrumentator, /metrics endpoint when PROMETHEUS_ENABLED=true). prometheus_enabled config field. docs/deployment.md: self-hosted quickstart, manual setup, AWS Terraform, single-VM cloud, CI/CD pipeline, storage config, backup/restore, monitoring, env var reference, troubleshooting. 2 metrics tests. |
+
+**Tests:** ~22 new tests (20 storage + 2 metrics). All 927 unit + 232 golden tests pass.
 
 ## Issues & Blockers
 

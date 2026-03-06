@@ -7,9 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.agents.factory import get_agent
-from app.config import settings
 from app.core.database import async_session_factory, run_async
 from app.core.exceptions import AgentError, SummarizationError
+from app.core.storage import get_storage
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.pipeline_run import PipelineRun
@@ -96,11 +96,12 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
             agent = get_agent()
             summary_result = await agent.generate_summary(extraction_data, existing_md)
 
-            # Write summary to disk
-            file_path = summary_service.build_summary_file_path(
-                settings.summaries_dir, course.code, artifact.week
+            # Write summary to storage
+            storage = get_storage()
+            storage_key = summary_service.build_summary_storage_key(
+                course.code, artifact.week
             )
-            file_path.write_text(summary_result.content_md, encoding="utf-8")
+            await storage.put(storage_key, summary_result.content_md.encode("utf-8"))
 
             # Collect source artifact IDs from the merged extraction
             source_artifact_ids = extraction_data.metadata.get("artifact_ids", [artifact_id])
@@ -111,7 +112,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
                 course_id=artifact.course_id,
                 week=artifact.week,
                 content_md=summary_result.content_md,
-                file_path=str(file_path),
+                file_path=storage_key,
                 source_artifact_ids=source_artifact_ids,
             )
 
@@ -134,7 +135,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
                 week=artifact.week,
                 summary_id=summary.id,
                 version=summary.version,
-                file_path=str(file_path),
+                file_path=storage_key,
             )
 
             return {
@@ -143,7 +144,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
                 "status": "summarized",
                 "summary_id": summary.id,
                 "version": summary.version,
-                "file_path": str(file_path),
+                "file_path": storage_key,
             }
 
         except (SummarizationError, AgentError) as e:

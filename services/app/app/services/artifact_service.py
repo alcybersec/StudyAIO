@@ -1,6 +1,5 @@
 """Business logic for lecture artifact management."""
 
-import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -8,8 +7,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.core.exceptions import DuplicateFileError
+from app.core.storage import get_storage
 from app.core.utils import compute_sha256, generate_id, sanitize_filename
 from app.models.artifact import LectureArtifact
 
@@ -45,12 +44,12 @@ async def ingest_file(
 ) -> LectureArtifact:
     """Ingest a file into the system.
 
-    Computes SHA-256 for dedup, copies to uploads directory, creates
-    LectureArtifact record.
+    Computes SHA-256 for dedup, copies to uploads via storage backend,
+    creates LectureArtifact record.
 
     Args:
         session: Database session.
-        source_path: Path to the source file.
+        source_path: Path to the source file (local filesystem).
         user_id: Owner user UUID.
 
     Returns:
@@ -87,29 +86,30 @@ async def ingest_file(
         )
         raise DuplicateFileError(sha256=sha256, existing_artifact_id=existing.id)
 
-    # Generate artifact ID and copy file to uploads
+    # Generate artifact ID and copy file to uploads via storage backend
     artifact_id = generate_id()
     safe_name = sanitize_filename(path.name)
-    uploads_dir = Path(settings.uploads_dir)
-    uploads_dir.mkdir(parents=True, exist_ok=True)
     dest_filename = f"{artifact_id}_{safe_name}"
-    dest_path = uploads_dir / dest_filename
-    shutil.copy2(str(path), str(dest_path))
+    storage_key = f"uploads/{dest_filename}"
 
-    file_size = dest_path.stat().st_size
+    storage = get_storage()
+    await storage.ensure_dir("uploads")
+    await storage.put_file(storage_key, path)
+
+    file_size = path.stat().st_size
     logger.info(
         "ingest_file_copied",
         artifact_id=artifact_id,
-        dest=str(dest_path),
+        storage_key=storage_key,
         size=file_size,
     )
 
-    # Create artifact record
+    # Create artifact record — store relative storage key
     artifact = LectureArtifact(
         id=artifact_id,
         user_id=user_id,
         original_filename=path.name,
-        file_path=str(dest_path),
+        file_path=storage_key,
         file_type=file_type,
         sha256=sha256,
         file_size_bytes=file_size,

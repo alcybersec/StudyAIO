@@ -21,6 +21,11 @@ def compute_sha256(file_path: str | Path) -> str:
     return sha256.hexdigest()
 
 
+def compute_sha256_from_bytes(data: bytes) -> str:
+    """Compute SHA-256 hash from bytes."""
+    return hashlib.sha256(data).hexdigest()
+
+
 def sanitize_filename(filename: str) -> str:
     """Remove problematic characters from a filename."""
     keepchars = " ._-()"

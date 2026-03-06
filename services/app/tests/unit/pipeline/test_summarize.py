@@ -6,6 +6,7 @@ import pytest
 
 from app.agents.base import ExtractionData, SummaryResult
 from app.core.exceptions import SummarizationError
+from app.core.storage import LocalStorageBackend
 
 
 class TestSummarizeInput:
@@ -98,7 +99,7 @@ class TestSummarizeStage:
         summary_record.id = "summary-001"
         summary_record.version = 1
         mock_summary_svc.create_or_update_summary = AsyncMock(return_value=summary_record)
-        mock_summary_svc.build_summary_file_path.return_value = tmp_path / "CSIT302_Week5.md"
+        mock_summary_svc.build_summary_storage_key.return_value = "summaries/CSIT302/CSIT302_Week5.md"
 
         # Mock agent
         agent = AsyncMock()
@@ -108,9 +109,9 @@ class TestSummarizeStage:
         )
         mock_get_agent.return_value = agent
 
-        with patch("app.pipeline.summarize.settings") as mock_settings:
-            mock_settings.summaries_dir = str(tmp_path)
+        local_storage = LocalStorageBackend(base_dir=str(tmp_path))
 
+        with patch("app.pipeline.summarize.get_storage", return_value=local_storage):
             result = await _summarize("art-001")
 
         assert result["status"] == "summarized"

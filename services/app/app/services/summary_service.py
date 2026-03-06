@@ -223,3 +223,16 @@ def build_summary_file_path(summaries_dir: str, course_code: str, week: int) -> 
     course_dir = Path(summaries_dir) / course_code
     course_dir.mkdir(parents=True, exist_ok=True)
     return course_dir / f"{course_code}_Week{week}.md"
+
+
+def build_summary_storage_key(course_code: str, week: int) -> str:
+    """Build the storage key for a summary markdown file.
+
+    Args:
+        course_code: Course code (e.g., "CSIT302").
+        week: Week number.
+
+    Returns:
+        Key like ``summaries/CSIT302/CSIT302_Week3.md``
+    """
+    return f"summaries/{course_code}/{course_code}_Week{week}.md"

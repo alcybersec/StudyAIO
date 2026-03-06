@@ -1,0 +1,30 @@
+# StudyAIO — Terraform Variables Example
+# Copy to terraform.tfvars and fill in values.
+
+aws_region    = "us-east-1"
+environment   = "prod"
+
+# Database
+db_password   = "CHANGE_ME_STRONG_PASSWORD"
+db_instance_class    = "db.t4g.micro"
+db_allocated_storage = 20
+
+# Cache
+redis_node_type = "cache.t4g.micro"
+
+# ECS sizing
+api_cpu       = 512
+api_memory    = 1024
+worker_cpu    = 512
+worker_memory = 1024
+
+# Container images (updated by CI/CD)
+api_image = "ghcr.io/alcybersec/studyaio-api:latest"
+ui_image  = "ghcr.io/alcybersec/studyaio-ui:latest"
+
+# Domain & TLS
+domain          = "studyaio.example.com"
+certificate_arn = "arn:aws:acm:us-east-1:123456789:certificate/xxx"
+
+# Auth
+jwt_secret_key = "CHANGE_ME_USE_OPENSSL_RAND_HEX_32"

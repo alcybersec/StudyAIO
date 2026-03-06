@@ -19,6 +19,7 @@ from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import CourseOpsError
 from app.core.rate_limit import limiter
+from app.core.storage import get_storage
 from app.core.utils import read_upload_with_limit, sanitize_filename
 from app.models.user import User
 from app.services import courseops_service
@@ -66,22 +67,21 @@ async def upload_course_document(
             detail="document_type must be one of: outline, rubric, handbook, other",
         )
 
-    # Save file to disk
-    upload_dir = Path(settings.data_dir) / "courseops"
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    # Save file to storage backend
+    storage = get_storage()
+    await storage.ensure_dir("courseops")
 
     safe_name = sanitize_filename(file.filename)
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
     content = await read_upload_with_limit(file, max_bytes)
     file_size = len(content)
 
-    # Write temp then compute hash
     import hashlib
 
     sha256 = hashlib.sha256(content).hexdigest()
     stored_name = f"{sha256[:16]}_{safe_name}"
-    file_path = upload_dir / stored_name
-    file_path.write_bytes(content)
+    storage_key = f"courseops/{stored_name}"
+    await storage.put(storage_key, content)
 
     try:
         doc = await courseops_service.upload_course_document(
@@ -89,7 +89,7 @@ async def upload_course_document(
             course_code=course_code,
             document_type=document_type,
             original_filename=file.filename,
-            file_path=str(file_path),
+            file_path=storage_key,
             file_type=ext.lstrip("."),
             sha256=sha256,
             file_size_bytes=file_size,
@@ -97,7 +97,7 @@ async def upload_course_document(
         )
     except CourseOpsError as e:
         # Clean up file on error
-        file_path.unlink(missing_ok=True)
+        await storage.delete(storage_key)
         raise HTTPException(status_code=409, detail=str(e)) from e
 
     # Dispatch Celery task for AI extraction

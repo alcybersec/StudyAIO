@@ -21,6 +21,11 @@ RUN sed -i '/application\/javascript/s/;/ mjs;/' /etc/nginx/mime.types
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/studyaio.conf
 
+# OCI image labels
+LABEL org.opencontainers.image.source="https://github.com/alcybersec/StudyAIO"
+LABEL org.opencontainers.image.description="StudyAIO UI (nginx + React)"
+LABEL org.opencontainers.image.licenses="MIT"
+
 # Copy built assets from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.agents.factory import get_agent
 from app.core.database import async_session_factory, run_async
 from app.core.exceptions import AgentError, ClassificationError
+from app.core.storage import LocalStorageBackend, get_storage, normalize_storage_key
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
@@ -25,17 +26,34 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
     """Extract text from the first 2 pages for classification.
 
     Uses a lightweight extraction — just text, no images.
+    Resolves the file via the storage backend.
 
     Args:
-        file_path: Path to the file.
+        file_path: Path or storage key for the file.
         file_type: One of "pdf", "docx", "pptx".
 
     Returns:
         Text preview string.
     """
-    path = Path(file_path)
-    if not path.exists():
-        return ""
+    # Resolve file to a local path via storage backend
+    storage = get_storage()
+    key = normalize_storage_key(file_path)
+
+    if isinstance(storage, LocalStorageBackend):
+        path = storage.resolve_path(key)
+        if not path.exists():
+            return ""
+    else:
+        # S3: download to temp file
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=Path(key).suffix)
+        tmp.close()
+        path = Path(tmp.name)
+        try:
+            storage.get_to_file_sync(key, path)
+        except Exception:
+            path.unlink(missing_ok=True)
+            return ""
 
     try:
         if file_type == "pdf":

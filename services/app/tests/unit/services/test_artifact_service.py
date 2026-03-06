@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.core.exceptions import DuplicateFileError
+from app.core.storage import LocalStorageBackend
 from app.services import artifact_service
 
 TEST_USER_ID = "user-001"
@@ -62,17 +63,17 @@ class TestIngestFile:
         with pytest.raises(DuplicateFileError):
             await artifact_service.ingest_file(mock_session, str(simple_pdf), TEST_USER_ID)
 
-    @patch("app.services.artifact_service.settings")
-    async def test_ingest_success(self, mock_settings, mock_session, simple_pdf, tmp_path):
+    async def test_ingest_success(self, mock_session, simple_pdf, tmp_path):
         """Successful ingest creates artifact."""
-        mock_settings.uploads_dir = str(tmp_path / "uploads")
+        local_storage = LocalStorageBackend(base_dir=str(tmp_path))
 
         # No duplicate found
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        result = await artifact_service.ingest_file(mock_session, str(simple_pdf), TEST_USER_ID)
+        with patch("app.services.artifact_service.get_storage", return_value=local_storage):
+            result = await artifact_service.ingest_file(mock_session, str(simple_pdf), TEST_USER_ID)
 
         assert result.original_filename == simple_pdf.name
         assert result.file_type == "pdf"
