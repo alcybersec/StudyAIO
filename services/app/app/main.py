@@ -19,6 +19,7 @@ from app.api import (
     assets_router,
     auth_router,
     billing_router,
+    calendar_sync_router,
     chat_router,
     concepts_router,
     courseops_router,
@@ -119,6 +120,7 @@ app = FastAPI(
         {"name": "concepts", "description": "Knowledge graph: concept extraction, visualization, and relationships"},
         {"name": "billing", "description": "Stripe billing, subscriptions, and usage quotas"},
         {"name": "notifications", "description": "Email/Telegram notifications, preferences, and Telegram linking"},
+        {"name": "calendar", "description": "Google Calendar bidirectional sync"},
     ],
 )
 
@@ -167,6 +169,7 @@ app.include_router(gamification_router, prefix="/api", tags=["gamification"])
 app.include_router(concepts_router, prefix="/api", tags=["concepts"])
 app.include_router(billing_router, prefix="/api", tags=["billing"])
 app.include_router(notifications_router, prefix="/api", tags=["notifications"])
+app.include_router(calendar_sync_router, prefix="/api", tags=["calendar"])
 
 
 # Exception handlers

@@ -18,6 +18,7 @@ celery_app = Celery(
         "app.pipeline.assets",
         "app.pipeline.courseops_task",
         "app.pipeline.notification_tasks",
+        "app.pipeline.calendar_task",
     ],
 )
 
@@ -38,6 +39,10 @@ celery_app.conf.update(
         "weekly-study-digest": {
             "task": "app.pipeline.notification_tasks.send_weekly_digest",
             "schedule": crontab(hour=9, minute=0, day_of_week="sunday"),
+        },
+        "calendar-sync": {
+            "task": "app.pipeline.calendar_task.sync_all_calendars",
+            "schedule": crontab(minute="*/15"),
         },
     },
 )

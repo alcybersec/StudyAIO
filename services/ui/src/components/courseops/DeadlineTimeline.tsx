@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useCreateExamFromDeadline, useDeleteDeadline, useUpdateDeadline } from '../../hooks/useApi'
+import { useCalendarStatus, useSyncCalendar } from '../../hooks/useCalendar'
 import type { Deadline } from '../../types'
 import { DeadlineEditModal } from './DeadlineEditModal'
 
@@ -41,6 +42,9 @@ export function DeadlineTimeline({ deadlines, isLoading }: DeadlineTimelineProps
   const updateDeadline = useUpdateDeadline()
   const deleteDeadline = useDeleteDeadline()
   const createExam = useCreateExamFromDeadline()
+  const { data: calStatus } = useCalendarStatus()
+  const syncCalendar = useSyncCalendar()
+  const hasCalendar = (calStatus?.calendars?.length ?? 0) > 0
 
   if (isLoading) {
     return <div className="py-8 text-center text-sm text-gray-500">Loading deadlines...</div>
@@ -103,6 +107,18 @@ export function DeadlineTimeline({ deadlines, isLoading }: DeadlineTimelineProps
                 )}
               </div>
               <div className="flex flex-shrink-0 items-center gap-1">
+                {hasCalendar && (
+                  <button
+                    onClick={() => syncCalendar.mutate()}
+                    disabled={syncCalendar.isPending}
+                    className="rounded px-2 py-1 text-xs text-primary hover:bg-primary/10"
+                    title="Sync to Google Calendar"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                )}
                 {!d.is_confirmed && (
                   <button
                     onClick={() =>

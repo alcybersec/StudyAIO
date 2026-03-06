@@ -5,6 +5,8 @@ Import all models here so Alembic's autogenerate can discover them.
 
 from app.models.achievement import Achievement
 from app.models.analytics_snapshot import AnalyticsSnapshot
+from app.models.calendar_event import CalendarEvent
+from app.models.calendar_sync import CalendarSync
 from app.models.concept import Concept
 from app.models.concept_relation import ConceptRelation
 from app.models.artifact import LectureArtifact
@@ -43,6 +45,8 @@ from app.models.xp_event import XPEvent
 __all__ = [
     "Achievement",
     "AnalyticsSnapshot",
+    "CalendarEvent",
+    "CalendarSync",
     "Concept",
     "ConceptRelation",
     "Assessment",

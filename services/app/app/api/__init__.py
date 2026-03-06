@@ -5,6 +5,7 @@ from app.api.analytics import router as analytics_router
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
 from app.api.billing import router as billing_router
+from app.api.calendar_sync import router as calendar_sync_router
 from app.api.chat import router as chat_router
 from app.api.concepts import router as concepts_router
 from app.api.courseops import router as courseops_router
@@ -28,6 +29,7 @@ __all__ = [
     "assets_router",
     "auth_router",
     "billing_router",
+    "calendar_sync_router",
     "chat_router",
     "concepts_router",
     "courseops_router",
