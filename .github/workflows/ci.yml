@@ -50,11 +50,18 @@ jobs:
 
       - name: Run unit tests with coverage
         working-directory: services/app
-        run: python -m pytest tests/unit -x -v --cov=app --cov-report=term-missing --cov-fail-under=70
+        run: python -m pytest tests/unit -x -v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=75
 
       - name: Run golden tests
         working-directory: services/app
         run: python -m pytest tests/golden -x -v
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: services/app/coverage.xml
 
   integration-tests:
     name: Integration Tests

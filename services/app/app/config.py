@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     search_top_k: int = 10
 
     # Security
+    cookie_secure: bool = False
     max_upload_size_mb: int = 100
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
 

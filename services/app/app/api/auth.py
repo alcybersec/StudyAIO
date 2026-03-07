@@ -41,7 +41,6 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/auth")
 
 # Cookie settings
-_COOKIE_SECURE = False  # Set True in production via reverse proxy
 _COOKIE_SAMESITE = "lax"
 _COOKIE_HTTPONLY = True
 
@@ -55,7 +54,7 @@ def _set_auth_cookies(response: Response, user: User) -> None:
         key=ACCESS_TOKEN_COOKIE,
         value=access_token,
         httponly=_COOKIE_HTTPONLY,
-        secure=_COOKIE_SECURE,
+        secure=settings.cookie_secure,
         samesite=_COOKIE_SAMESITE,
         path="/",
         max_age=settings.jwt_access_token_expire_minutes * 60,
@@ -64,7 +63,7 @@ def _set_auth_cookies(response: Response, user: User) -> None:
         key=REFRESH_TOKEN_COOKIE,
         value=refresh_token,
         httponly=_COOKIE_HTTPONLY,
-        secure=_COOKIE_SECURE,
+        secure=settings.cookie_secure,
         samesite=_COOKIE_SAMESITE,
         path="/",
         max_age=settings.jwt_refresh_token_expire_days * 86400,

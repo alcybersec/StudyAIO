@@ -10,6 +10,7 @@ from app.agents.base import (
     ClassificationResult,
     SummaryResult,
 )
+from app.core.storage import reset_storage
 
 # ── Sample data dicts ──────────────────────────────────────────────
 
@@ -147,11 +148,15 @@ async def async_client(mock_session, default_test_user):
     # Use a writable temp dir for data_dir so upload tests work as non-root
     with tempfile.TemporaryDirectory() as tmpdir:
         with patch("app.config.settings.data_dir", tmpdir):
+            # Reset storage singleton so it picks up the patched data_dir
+            reset_storage()
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
                 base_url="http://test",
             ) as client:
                 yield client
+            # Reset again on teardown so other tests get a fresh singleton
+            reset_storage()
     app.dependency_overrides.clear()
 
 

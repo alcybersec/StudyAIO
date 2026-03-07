@@ -208,6 +208,8 @@ class TestDashboardGamification:
     """Tests for gamification in dashboard."""
 
     @pytest.mark.asyncio
+    @patch("app.api.dashboard.cache_set", new_callable=AsyncMock)
+    @patch("app.api.dashboard.cache_get", new_callable=AsyncMock, return_value=None)
     @patch("app.api.dashboard.achievement_service")
     @patch("app.api.dashboard.challenge_service")
     @patch("app.api.dashboard.xp_service")
@@ -230,6 +232,8 @@ class TestDashboardGamification:
         mock_xp,
         mock_challenge,
         mock_achievement,
+        _cache_get,
+        _cache_set,
         async_client,
     ):
         """GET /dashboard includes gamification summary."""
@@ -271,6 +275,8 @@ class TestDashboardGamification:
         assert data["gamification"]["daily_challenge_description"] == "Review 10 flashcards"
 
     @pytest.mark.asyncio
+    @patch("app.api.dashboard.cache_set", new_callable=AsyncMock)
+    @patch("app.api.dashboard.cache_get", new_callable=AsyncMock, return_value=None)
     @patch("app.api.dashboard.achievement_service")
     @patch("app.api.dashboard.challenge_service")
     @patch("app.api.dashboard.xp_service")
@@ -293,6 +299,8 @@ class TestDashboardGamification:
         mock_xp,
         mock_challenge,
         mock_achievement,
+        _cache_get,
+        _cache_set,
         async_client,
     ):
         """Gamification failure doesn't break dashboard."""

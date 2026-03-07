@@ -40,6 +40,8 @@ services:
   api:
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    environment:
+      COOKIE_SECURE: "true"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api`, `/health`, `/metrics`, `/docs`, `/openapi.json`)"
