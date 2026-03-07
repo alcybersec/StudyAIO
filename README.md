@@ -4,33 +4,56 @@
 
 A local-first, fully dockerized AI study workspace that turns raw university lecture files (PDF, DOCX, PPTX) into organized, searchable, exam-ready study materials.
 
+**v2:** 38 models, 111 API endpoints, 20 pages, ~1200 tests (579 backend + 30 E2E).
+
 ## Features
 
+**Core Pipeline**
 - **6-stage processing pipeline** — Ingest, classify, extract, summarize, index, and generate study assets automatically via Celery task chains
-- **Smart classification** — AI identifies course code, week number, and title from file contents; routes low-confidence results to a review inbox
-- **Rich summaries** — Generates structured markdown summaries with key concepts, definitions, code examples, and exam topics per course week
-- **Semantic search & Q&A** — Ask questions about your lectures with source citations backed by pgvector embeddings
-- **Flashcards & quizzes** — Auto-generated flashcards with flip/shuffle and MCQ/short-answer quizzes with scoring
-- **Real-time progress** — SSE-powered pipeline progress tracking in the browser
-- **Review inbox** — Human-in-the-loop for low-confidence AI decisions with suggestion buttons and manual override
+- **Smart classification** — AI identifies course code, week number, and title; routes low-confidence results to a review inbox
+- **Rich summaries** — Structured markdown with key concepts, definitions, code examples, and exam topics per course week
+- **Semantic search & Q&A** — Ask questions about lectures with source citations backed by pgvector embeddings
+
+**Study Tools**
+- **Flashcards with SM-2** — Spaced repetition algorithm, flip/shuffle, per-card ease tracking
+- **Quiz engine** — MCQ and short-answer with scoring, attempt history
+- **Exam mode** — Create exams with deadlines, auto-schedule study plans, track weak topics
+- **Timed study** — Pomodoro-style study sessions with automatic session recording
+- **AI chat** — Multi-turn RAG conversation with streaming responses
+- **Knowledge graph** — AI-extracted concepts with D3 force-directed visualization
+
+**Platform**
+- **Multi-AI provider** — Claude Code CLI, Anthropic API, OpenAI, Ollama (switchable at runtime)
+- **Auth & multi-tenant** — JWT + HttpOnly cookies, Argon2id, TOTP MFA, OAuth (Google/GitHub), magic links
+- **Billing** — Stripe integration with free/pro tiers and usage quotas
+- **Gamification** — XP, levels, achievements, daily challenges, leaderboard
+- **Notifications** — Email, Telegram bot, Web Push (VAPID)
+- **Calendar sync** — Google Calendar bidirectional sync with Celery beat
+- **Analytics** — Study heatmap, retention curves, mastery breakdown, exam readiness
+- **PWA** — Offline support with IndexedDB queue, install prompt
+- **Dark mode** — CSS custom property theming with system preference detection
+- **Cloud ready** — S3 storage backend, Traefik reverse proxy, AWS Terraform, CI/CD
 
 ## Architecture
 
 ```mermaid
 graph TB
     subgraph Browser
-        UI[React + Vite + Tailwind]
+        UI[React SPA + PWA]
     end
 
     subgraph Docker Compose
         API[FastAPI API Server]
-        Worker[Celery Worker]
+        Worker[Celery Worker + Beat]
         DB[(PostgreSQL + pgvector)]
         Redis[(Redis)]
     end
 
-    subgraph External
+    subgraph AI Providers
         Claude[Claude Code CLI]
+        Anthropic[Anthropic API]
+        OpenAI[OpenAI API]
+        Ollama[Ollama]
     end
 
     UI -->|REST + SSE| API
@@ -38,8 +61,10 @@ graph TB
     API -->|pub/sub| Redis
     Worker -->|task queue| Redis
     Worker -->|async sessions| DB
-    Worker -->|subprocess| Claude
-    Worker -->|embeddings| ST[sentence-transformers]
+    Worker -->|AgentAdapter| Claude
+    Worker -->|AgentAdapter| Anthropic
+    Worker -->|AgentAdapter| OpenAI
+    Worker -->|AgentAdapter| Ollama
 ```
 
 ### Pipeline Flow
@@ -61,43 +86,36 @@ graph LR
 | Layer | Technology |
 |-------|-----------|
 | Backend | Python 3.12, FastAPI, Celery, SQLAlchemy 2.0 (async), Alembic |
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS v4, React Query, React Router |
-| Database | PostgreSQL 16 + pgvector |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS v4, React Query, React Router |
+| UI Components | Radix UI, Motion (Framer), D3, Recharts, react-pdf |
+| Database | PostgreSQL 16 + pgvector (384-dim embeddings) |
 | Queue | Redis 7 |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
-| AI Runtime | Claude Code CLI via agent adapter pattern |
-| Infrastructure | Docker Compose |
-| Testing | pytest (212 unit + 28 integration tests), pytest-asyncio |
+| AI Runtime | Multi-provider via AgentAdapter (Claude, Anthropic, OpenAI, Ollama) |
+| Embeddings | Multi-provider via EmbeddingProvider (sentence-transformers, OpenAI, Ollama) |
+| Auth | Argon2id + JWT + TOTP + OAuth (PyJWT, pyotp) |
+| Storage | Local filesystem or AWS S3 via StorageBackend ABC |
+| Infrastructure | Docker Compose, Traefik, AWS ECS Fargate (Terraform) |
+| Testing | pytest (579 tests), Playwright (30 E2E tests) |
 
 ## Prerequisites
 
 - Docker & Docker Compose
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed on the host machine
+- An AI provider: [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), Anthropic API key, OpenAI API key, or Ollama
 
-### Claude CLI Setup
-
-The processing pipeline uses Claude Code CLI for AI tasks (classification, summarization, flashcard/quiz generation). The CLI binary and credentials are bind-mounted from the host into the worker container.
+### Claude CLI Setup (default provider)
 
 ```bash
-# 1. Install Claude Code CLI (if not already installed)
+# Install Claude Code CLI
 npm install -g @anthropic-ai/claude-code
 
-# 2. Login — opens browser for OAuth authentication
+# Login (opens browser for OAuth)
 claude
 
-# This creates ~/.claude/.credentials.json which the worker container needs.
+# Verify credentials exist
+ls ~/.claude/.credentials.json
 ```
 
-If your Claude binary is not at `~/.local/bin/claude`, set `CLAUDE_CLI_PATH` in `.env`:
-
-```bash
-# Find your Claude binary
-which claude
-
-# Add to .env
-CLAUDE_CLI_PATH=/usr/local/bin/claude    # macOS (npm global)
-CLAUDE_CLI_PATH=~/.npm-global/bin/claude # custom npm prefix
-```
+If your Claude binary is not at `~/.local/bin/claude`, set `CLAUDE_CLI_PATH` in `.env`.
 
 ## Quick Start
 
@@ -108,9 +126,6 @@ cd StudyAIO
 
 # Copy environment configuration
 cp .env.example .env
-
-# Login to Claude CLI (required for AI pipeline stages)
-claude
 
 # Start all services
 docker compose up -d
@@ -136,32 +151,37 @@ make db          # Open psql shell
 make logs        # Tail all service logs
 ```
 
-For frontend development with hot reload, run `npm run dev` locally in `services/ui/` instead of using the Docker container.
-
-See **[Developer Guide](docs/developer_guide.md)** for detailed setup, testing patterns, and architecture reference.
+For frontend development with hot reload, run `npm run dev` locally in `services/ui/`.
 
 ### Production Deployment
 
+See [Deployment Guide](docs/deployment.md) for full instructions.
+
+**Self-hosted:**
 ```bash
-make build-prod  # Build production images (nginx UI, multi-worker API)
-make up-prod     # Start with production settings
-make down-prod   # Stop production services
+./scripts/setup-selfhosted.sh   # Interactive setup
+docker compose -f docker-compose.selfhosted.yml up -d
 ```
 
-Production mode removes source bind mounts, disables hot-reload, unexposes DB/Redis ports, and runs with higher worker concurrency.
+**AWS:**
+```bash
+cd infra/cloud/aws && terraform apply
+```
 
 ## Testing
 
 ```bash
-# Run all unit tests
+# Backend unit + golden tests
 make test
 
-# Run specific test modules
-docker compose exec api pytest tests/unit/pipeline -v
-docker compose exec api pytest tests/unit/api -v
+# Integration tests (requires Docker services)
+docker compose exec api pytest tests/integration -v
 
-# Stop on first failure
-docker compose exec api pytest tests/unit -x -v
+# Frontend E2E tests (requires running stack)
+cd services/ui && npx playwright test
+
+# E2E with UI viewer
+cd services/ui && npx playwright test --ui
 ```
 
 ## Project Structure
@@ -171,26 +191,41 @@ studyaio/
 ├── services/
 │   ├── app/                    # FastAPI + Celery backend
 │   │   ├── app/
-│   │   │   ├── api/            # REST endpoints (17 routes)
-│   │   │   ├── agents/         # AI adapter pattern
+│   │   │   ├── api/            # REST endpoints (22 routers, 111 endpoints)
+│   │   │   ├── agents/         # AI adapter pattern (4 backends + embeddings)
 │   │   │   ├── extractors/     # PDF/DOCX/PPTX parsers
-│   │   │   ├── models/         # SQLAlchemy ORM (9 models)
+│   │   │   ├── models/         # SQLAlchemy ORM (38 models)
 │   │   │   ├── pipeline/       # Celery task stages (6)
-│   │   │   └── services/       # Business logic layer
+│   │   │   ├── services/       # Business logic layer
+│   │   │   └── core/           # DB, config, storage, rate limiting
 │   │   ├── prompts/            # Jinja2 AI prompt templates
-│   │   └── tests/              # 240 tests (unit + integration)
-│   └── ui/                     # React frontend (7 pages)
-│       └── src/
-│           ├── pages/          # Dashboard, Course, Week, Upload, Q&A, Review, Settings
-│           ├── components/     # Reusable UI components
-│           ├── hooks/          # React Query + SSE hooks
-│           └── api/            # Typed API client
+│   │   └── tests/              # 579 tests (unit + golden + integration)
+│   └── ui/                     # React frontend (20 pages)
+│       ├── src/
+│       │   ├── pages/          # Route-level code-split pages
+│       │   ├── components/     # Reusable UI components
+│       │   ├── hooks/          # React Query + custom hooks
+│       │   └── api/            # Typed API client
+│       └── e2e/                # Playwright E2E tests (30 tests)
 ├── infra/
 │   ├── docker-compose.yml
+│   ├── cloud/aws/              # Terraform (VPC, ECS, RDS, S3, ALB)
 │   └── db/init.sql
+├── scripts/                    # Setup, backup, seed scripts
 ├── docs/
 │   ├── PRD.md                  # Product requirements
 │   ├── PROGRESS.md             # Milestone tracker
-│   └── api.md                  # API reference
-└── .github/workflows/ci.yml   # GitHub Actions CI
+│   ├── api.md                  # API reference (111 endpoints)
+│   ├── architecture.md         # Architecture guide
+│   ├── deployment.md           # Deployment guide
+│   └── migration-v1-v2.md     # v1 → v2 migration guide
+└── .github/workflows/          # CI/CD (lint, test, deploy)
 ```
+
+## Documentation
+
+- [API Reference](docs/api.md) — All 111 endpoints
+- [Architecture](docs/architecture.md) — System design, data model, AI integration
+- [Deployment](docs/deployment.md) — Self-hosted, AWS, CI/CD
+- [Migration Guide](docs/migration-v1-v2.md) — Upgrading from v1 to v2
+- [Progress](docs/PROGRESS.md) — Milestone completion tracker

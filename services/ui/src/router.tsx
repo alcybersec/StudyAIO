@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Outlet, createBrowserRouter, useParams } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { QuotaProvider } from './contexts/QuotaContext'
@@ -5,26 +6,37 @@ import { AppLayout } from './components/layout/AppLayout'
 import { AuthLayout } from './components/layout/AuthLayout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { PublicOnlyRoute } from './components/auth/PublicOnlyRoute'
-import { AdminPage } from './pages/AdminPage'
-import { AnalyticsPage } from './pages/AnalyticsPage'
-import { ChatPage } from './pages/ChatPage'
-import { CoursePage } from './pages/CoursePage'
-import { CourseOpsPage } from './pages/CourseOpsPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
-import { LoginPage } from './pages/LoginPage'
-import { NotFoundPage } from './pages/NotFoundPage'
-import { ProfilePage } from './pages/ProfilePage'
-import { QAPage } from './pages/QAPage'
-import { RegisterPage } from './pages/RegisterPage'
-import { ResetPasswordPage } from './pages/ResetPasswordPage'
-import { ReviewInboxPage } from './pages/ReviewInboxPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { StudyHubPage } from './pages/StudyHubPage'
-import { AchievementsPage } from './pages/AchievementsPage'
-import { KnowledgeGraphPage } from './pages/KnowledgeGraphPage'
-import { UploadPage } from './pages/UploadPage'
-import { WeekViewPage } from './pages/WeekViewPage'
+import { LoadingSpinner } from './components/ui/LoadingSpinner'
+
+// Lazy-loaded page components (route-level code splitting)
+const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })))
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })))
+const ChatPage = lazy(() => import('./pages/ChatPage').then(m => ({ default: m.ChatPage })))
+const CoursePage = lazy(() => import('./pages/CoursePage').then(m => ({ default: m.CoursePage })))
+const CourseOpsPage = lazy(() => import('./pages/CourseOpsPage').then(m => ({ default: m.CourseOpsPage })))
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })))
+const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })))
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
+const QAPage = lazy(() => import('./pages/QAPage').then(m => ({ default: m.QAPage })))
+const RegisterPage = lazy(() => import('./pages/RegisterPage').then(m => ({ default: m.RegisterPage })))
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })))
+const ReviewInboxPage = lazy(() => import('./pages/ReviewInboxPage').then(m => ({ default: m.ReviewInboxPage })))
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
+const StudyHubPage = lazy(() => import('./pages/StudyHubPage').then(m => ({ default: m.StudyHubPage })))
+const AchievementsPage = lazy(() => import('./pages/AchievementsPage').then(m => ({ default: m.AchievementsPage })))
+const KnowledgeGraphPage = lazy(() => import('./pages/KnowledgeGraphPage').then(m => ({ default: m.KnowledgeGraphPage })))
+const UploadPage = lazy(() => import('./pages/UploadPage').then(m => ({ default: m.UploadPage })))
+const WeekViewPage = lazy(() => import('./pages/WeekViewPage').then(m => ({ default: m.WeekViewPage })))
+
+function SuspenseOutlet() {
+  return (
+    <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." />}>
+      <Outlet />
+    </Suspense>
+  )
+}
 
 // eslint-disable-next-line react-refresh/only-export-components
 function RootLayout() {
@@ -48,10 +60,15 @@ export const router = createBrowserRouter([
           {
             element: <AuthLayout />,
             children: [
-              { path: '/login', element: <LoginPage /> },
-              { path: '/register', element: <RegisterPage /> },
-              { path: '/forgot-password', element: <ForgotPasswordPage /> },
-              { path: '/reset-password', element: <ResetPasswordPage /> },
+              {
+                element: <SuspenseOutlet />,
+                children: [
+                  { path: '/login', element: <LoginPage /> },
+                  { path: '/register', element: <RegisterPage /> },
+                  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+                  { path: '/reset-password', element: <ResetPasswordPage /> },
+                ],
+              },
             ],
           },
         ],

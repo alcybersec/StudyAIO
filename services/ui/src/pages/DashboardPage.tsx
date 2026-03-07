@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
-import { Responsive, WidthProvider } from 'react-grid-layout'
+import { useMemo, useRef, useState } from 'react'
+import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import { useDashboard } from '../hooks/useApi'
 import { useDashboardLayout } from '../hooks/useDashboardLayout'
-import { LoadingSpinner, ErrorBanner, PageHeader } from '../components/ui'
+import { LoadingSpinner, ErrorBanner, PageHeader, EmptyState } from '../components/ui'
 import { ReviewAlert } from '../components/dashboard/ReviewAlert'
 import { ActivityFeed } from '../components/dashboard/ActivityFeed'
 import { CourseCard } from '../components/dashboard/CourseCard'
@@ -12,13 +12,10 @@ import { ExamCountdown } from '../components/dashboard/ExamCountdown'
 import { QuickUpload } from '../components/dashboard/QuickUpload'
 import { StreakDisplay } from '../components/dashboard/StreakDisplay'
 import { StudyProgress } from '../components/dashboard/StudyProgress'
-import { EmptyState } from '../components/ui'
 import { GamificationWidget } from '../components/gamification/GamificationWidget'
 import { AchievementUnlock } from '../components/gamification/AchievementUnlock'
 import { InstallPrompt } from '../components/pwa/InstallPrompt'
 import { DashboardCustomizer } from '../components/dashboard/DashboardCustomizer'
-
-const ResponsiveGridLayout = WidthProvider(Responsive)
 
 function DeadlinesWidget({ deadlines, now }: { deadlines: { id: string; title: string; due_date: string; course_code: string; is_confirmed: boolean }[]; now: number }) {
   return (
@@ -52,6 +49,8 @@ export function DashboardPage() {
   const now = useMemo(() => Date.now(), []) // eslint-disable-line react-hooks/purity
   const { layouts, hiddenWidgets, visibleWidgets, onLayoutChange, toggleWidget, resetLayout } = useDashboardLayout()
   const [customizerOpen, setCustomizerOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const { width } = useContainerWidth(containerRef)
 
   if (isLoading) return <LoadingSpinner label="Loading dashboard..." />
   if (error) return <ErrorBanner message="Failed to load dashboard. Check that the API server is running." onRetry={refetch} />
@@ -91,11 +90,12 @@ export function DashboardPage() {
   const activeWidgets = visibleWidgets.filter((w) => isVisible(w.key) && widgetContent[w.key] !== null)
 
   return (
-    <div>
+    <div ref={containerRef}>
       <div className="flex items-center justify-between mb-2">
         <PageHeader title="Dashboard" subtitle={`${data.courses.length} course${data.courses.length !== 1 ? 's' : ''} tracked`} />
         <button
           onClick={() => setCustomizerOpen(true)}
+          aria-label="Customize dashboard"
           className="text-sm px-3 py-1.5 rounded-lg border border-border text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
         >
           Customize
@@ -106,6 +106,7 @@ export function DashboardPage() {
 
       <ResponsiveGridLayout
         className="layout"
+        width={width ?? 1200}
         layouts={layouts}
         breakpoints={{ lg: 1024, sm: 0 }}
         cols={{ lg: 12, sm: 12 }}

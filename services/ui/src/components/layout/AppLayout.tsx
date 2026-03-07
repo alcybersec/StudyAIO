@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'motion/react'
 import { useAuth } from '../../hooks/useAuth'
@@ -8,6 +9,7 @@ import { Toaster } from '../ui/Toast'
 import { OfflineBanner } from '../ui/OfflineBanner'
 import { PWAUpdateNotify } from '../pwa/PWAUpdateNotify'
 import { PageTransition } from '../ui/PageTransition'
+import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 
@@ -17,6 +19,14 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen bg-surface-alt flex flex-col">
+      {/* Skip to main content (accessibility) */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:text-sm focus:font-medium"
+      >
+        Skip to main content
+      </a>
+
       {/* Demo account banner */}
       {isDemo && <DemoBanner />}
 
@@ -36,11 +46,13 @@ export function AppLayout() {
           </Link>
         </header>
 
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 pb-20 lg:pb-6 max-w-6xl w-full mx-auto">
+        <main id="main-content" className="flex-1 px-4 sm:px-6 lg:px-8 py-6 pb-20 lg:pb-6 max-w-6xl w-full mx-auto">
           <ErrorBoundary>
             <AnimatePresence mode="wait">
               <PageTransition key={location.pathname}>
-                <Outlet />
+                <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." />}>
+                  <Outlet />
+                </Suspense>
               </PageTransition>
             </AnimatePresence>
           </ErrorBoundary>

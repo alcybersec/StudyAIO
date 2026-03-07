@@ -125,6 +125,7 @@ function NavSection({ label, items, collapsed, isActive, pendingCount }: {
             <Link
               to={item.path}
               data-tour={item.path === '/' ? 'dashboard' : item.path.replace('/', '')}
+              aria-current={isActive(item.path) ? 'page' : undefined}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isActive(item.path)
                   ? 'bg-primary/10 text-primary'
@@ -183,7 +184,7 @@ export function Sidebar() {
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? ExpandIcon : CollapseIcon}
         </button>
@@ -212,6 +213,7 @@ export function Sidebar() {
                   <li key={course.id}>
                     <Link
                       to={`/courses/${course.code}`}
+                      aria-current={location.pathname.startsWith(`/courses/${course.code}`) ? 'page' : undefined}
                       className={`flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm transition-colors ${
                         location.pathname.startsWith(`/courses/${course.code}`)
                           ? 'bg-primary/10 text-primary font-medium'
@@ -255,6 +257,7 @@ export function Sidebar() {
         {user?.role === 'admin' && (
           <Link
             to="/admin"
+            aria-current={isActive('/admin') ? 'page' : undefined}
             className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               isActive('/admin')
                 ? 'bg-primary/10 text-primary'
@@ -271,6 +274,7 @@ export function Sidebar() {
         <Link
           to="/settings"
           data-tour="settings"
+          aria-current={isActive('/settings') ? 'page' : undefined}
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
             isActive('/settings')
               ? 'bg-primary/10 text-primary'
