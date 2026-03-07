@@ -16,6 +16,7 @@ from app.api.schemas import (
     DashboardStudyStats,
     UpcomingDeadlineItem,
 )
+from app.core.cache import DASHBOARD_TTL_SECONDS, cache_get, cache_set, dashboard_cache_key
 from app.core.database import get_session
 from app.models.user import User
 from app.services import (
@@ -47,6 +48,12 @@ async def get_dashboard(
     session: AsyncSession = Depends(get_session),
 ) -> DashboardResponse:
     """Get dashboard data: pending reviews, recent activity, courses, study stats."""
+    # Check cache first
+    cache_key = dashboard_cache_key(str(user.id))
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return DashboardResponse(**cached)
+
     pending_count = await review_service.count_pending_reviews(session, user_id=user.id)
     activity_raw = await pipeline_service.get_recent_activity(session, limit=10, user_id=user.id)
     course_stats = await course_service.list_courses_with_stats(session, user_id=user.id)
@@ -128,7 +135,7 @@ async def get_dashboard(
     except Exception:
         logger.warning("gamification_failed", exc_info=True)
 
-    return DashboardResponse(
+    response = DashboardResponse(
         pending_review_count=pending_count,
         recent_activity=activity,
         courses=course_items,
@@ -138,3 +145,8 @@ async def get_dashboard(
         upcoming_deadlines=upcoming_deadlines,
         gamification=gamification,
     )
+
+    # Cache the response (best-effort)
+    await cache_set(cache_key, response.model_dump(mode="json"), ttl=DASHBOARD_TTL_SECONDS)
+
+    return response

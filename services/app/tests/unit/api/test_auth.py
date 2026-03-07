@@ -182,6 +182,44 @@ class TestGetMe:
         assert response.status_code == 401
 
 
+class TestCookieSecureFlag:
+    """Verify Secure flag propagation from settings."""
+
+    @pytest.mark.asyncio
+    async def test_cookie_secure_flag_from_settings(self, async_client, mock_session):
+        """Cookies should use settings.cookie_secure value."""
+        user = _make_db_user()
+
+        with (
+            patch("app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user),
+            patch("app.api.auth.settings.cookie_secure", True),
+        ):
+            response = await async_client.post(
+                "/api/auth/login",
+                json={"email": "test@example.com", "password": "TestPass1!"},
+            )
+        assert response.status_code == 200
+        # Check that Set-Cookie headers include Secure
+        set_cookie_headers = response.headers.get_list("set-cookie")
+        for header in set_cookie_headers:
+            assert "Secure" in header
+
+    @pytest.mark.asyncio
+    async def test_cookie_not_secure_by_default(self, async_client, mock_session):
+        """Cookies should not be Secure when cookie_secure is False."""
+        user = _make_db_user()
+
+        with patch("app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user):
+            response = await async_client.post(
+                "/api/auth/login",
+                json={"email": "test@example.com", "password": "TestPass1!"},
+            )
+        assert response.status_code == 200
+        set_cookie_headers = response.headers.get_list("set-cookie")
+        for header in set_cookie_headers:
+            assert "Secure" not in header
+
+
 class TestForgotPassword:
     """POST /api/auth/forgot-password"""
 

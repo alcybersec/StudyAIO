@@ -353,6 +353,18 @@
 
 **Tests:** 30 new E2E tests (Playwright). Total: ~579 backend + 30 E2E = ~609 tests.
 
+## Technical Hardening
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| TH.1 | Fix 8 failing upload unit tests | ✅ Done | Added `reset_storage()` to `async_client` fixture in conftest.py. Storage singleton now picks up patched `data_dir` tmpdir. All 8 previously-failing upload tests pass. |
+| TH.2 | Cookie Secure flag configurable | ✅ Done | Added `cookie_secure: bool` to Settings. auth.py reads `settings.cookie_secure` at call time (removed hardcoded `_COOKIE_SECURE = False`). docker-compose.selfhosted.yml sets `COOKIE_SECURE=true`. 2 new tests. |
+| TH.3 | Dashboard Redis cache | ✅ Done | New `app/core/cache.py` with async Redis cache helpers. Dashboard endpoint: cache-first with 30s TTL, per-user key. Upload endpoint invalidates user's dashboard cache. 3 new tests. |
+| TH.4 | CI coverage enforcement | ✅ Done | Raised `--cov-fail-under` from 70% to 75%. Added `--cov-report=xml:coverage.xml`. Added `actions/upload-artifact@v4` step for coverage report. |
+| TH.5 | E2E Settings + Dark Mode tests | ✅ Done | New `settings.spec.ts` with 4 tests: navigate to settings, sections render, dark mode toggle, dark mode persistence across reload. |
+
+**Tests:** 934 unit + 232 golden + 34 E2E = ~1200 total tests.
+
 ## Issues & Blockers
 
 | Date | Issue | Status | Resolution |

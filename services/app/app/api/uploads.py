@@ -19,6 +19,7 @@ from app.api.schemas import (
     UploadResponse,
 )
 from app.config import settings
+from app.core.cache import cache_delete, dashboard_cache_key
 from app.core.database import get_session
 from app.core.exceptions import DuplicateFileError
 from app.core.rate_limit import limiter
@@ -123,6 +124,9 @@ async def upload_file(
             await xp_service.award_xp(xp_session, user.id, "upload")
     except Exception:
         logger.warning("gamification_upload_xp_failed", exc_info=True)
+
+    # Invalidate dashboard cache so next load reflects the new upload
+    await cache_delete(dashboard_cache_key(str(user.id)))
 
     return UploadResponse(
         artifact_id="pending",
