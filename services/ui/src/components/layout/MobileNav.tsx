@@ -153,6 +153,8 @@ export function MobileNav() {
             <Link
               key={tab.path}
               to={tab.path}
+              aria-label={tab.label}
+              aria-current={isActive(tab.path) ? 'page' : undefined}
               className={`relative flex flex-col items-center justify-center gap-0.5 w-full h-full text-xs transition-colors min-h-[44px] ${
                 isActive(tab.path) ? 'text-primary font-medium' : 'text-text-muted'
               }`}
@@ -165,6 +167,7 @@ export function MobileNav() {
           {/* More button */}
           <button
             onClick={() => setMoreOpen(true)}
+            aria-label="More navigation options"
             className={`relative flex flex-col items-center justify-center gap-0.5 w-full h-full text-xs transition-colors min-h-[44px] ${
               moreActive ? 'text-primary font-medium' : 'text-text-muted'
             }`}
@@ -188,6 +191,7 @@ export function MobileNav() {
               key={item.path}
               to={item.path}
               onClick={() => setMoreOpen(false)}
+              aria-current={isActive(item.path) ? 'page' : undefined}
               className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
                 isActive(item.path)
                   ? 'bg-primary/10 text-primary'

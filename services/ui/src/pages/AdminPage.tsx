@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAdminUsers, useSystemMetrics, useUpdateAdminUser } from '../hooks/useApi'
+import { ErrorBanner } from '../components/ui/ErrorBanner'
 import type { AdminUser } from '../types'
 
 function MetricCard({ label, value }: { label: string; value: string | number }) {
@@ -65,8 +66,8 @@ export function AdminPage() {
   const [tierFilter, setTierFilter] = useState<string>('')
   const pageSize = 25
 
-  const { data: metrics, isLoading: metricsLoading } = useSystemMetrics()
-  const { data: usersData, isLoading: usersLoading } = useAdminUsers({
+  const { data: metrics, isLoading: metricsLoading, error: metricsError, refetch: refetchMetrics } = useSystemMetrics()
+  const { data: usersData, isLoading: usersLoading, error: usersError, refetch: refetchUsers } = useAdminUsers({
     role: roleFilter || undefined,
     tier: tierFilter || undefined,
     offset: page * pageSize,
@@ -83,6 +84,13 @@ export function AdminPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-text">Admin Dashboard</h1>
+
+      {metricsError && (
+        <ErrorBanner message="Failed to load system metrics." onRetry={() => refetchMetrics()} />
+      )}
+      {usersError && (
+        <ErrorBanner message="Failed to load users." onRetry={() => refetchUsers()} />
+      )}
 
       {/* Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

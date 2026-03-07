@@ -1375,3 +1375,270 @@ Disconnect a Google Calendar integration. Revokes token and deletes all event ma
 Google Calendar push notification handler. No auth — verified via channel token headers (`x-goog-channel-id`, `x-goog-resource-id`).
 
 **Response** `200`
+
+---
+
+## Notifications
+
+### `GET /api/notifications/preferences`
+
+Get notification preferences for current user.
+
+**Response** `200` `NotificationPreferencesResponse`
+
+### `PUT /api/notifications/preferences`
+
+Update notification preferences.
+
+**Body** `UpdateNotificationPreferencesRequest`
+**Response** `200` `NotificationPreferencesResponse`
+
+### `POST /api/notifications/telegram/link`
+
+Generate a Telegram deep-link token for account linking.
+
+**Response** `200` `{ "link_url": "https://t.me/..." }`
+
+### `DELETE /api/notifications/telegram/unlink`
+
+Unlink Telegram account from current user.
+
+**Response** `200` `{ "detail": "Telegram unlinked" }`
+
+### `POST /api/notifications/telegram/webhook`
+
+Handle incoming Telegram webhook updates (bot commands, link verification). No auth — verified via Telegram.
+
+**Response** `200`
+
+### `GET /api/notifications/push/vapid-key`
+
+Get VAPID public key for Web Push subscription setup.
+
+**Response** `200` `{ "public_key": "base64..." }`
+
+### `POST /api/notifications/push/subscribe`
+
+Subscribe to Web Push notifications.
+
+**Body** `PushSubscribeRequest` (endpoint, p256dh, auth keys)
+**Response** `201` `{ "detail": "Subscribed" }`
+
+### `DELETE /api/notifications/push/unsubscribe`
+
+Unsubscribe from Web Push notifications.
+
+**Body** `{ "endpoint": "..." }`
+**Response** `200`
+
+### `POST /api/notifications/test`
+
+Send a test notification via a specified channel (email, telegram, push).
+
+**Body** `{ "channel": "email" }`
+**Response** `200`
+
+---
+
+## Gamification
+
+### `GET /api/gamification/xp`
+
+Get XP summary: total XP, current level, progress percentage, next threshold, recent XP events.
+
+**Response** `200` `XPSummaryResponse`
+
+### `GET /api/gamification/achievements`
+
+Get all achievements with earned/unearned status and progress.
+
+**Response** `200` `AchievementsResponse`
+
+### `GET /api/gamification/challenges`
+
+Get today's daily challenge with current progress.
+
+**Response** `200` `DailyChallengeResponse`
+
+### `GET /api/gamification/leaderboard`
+
+Get XP leaderboard (top users ranked by total XP).
+
+**Response** `200` `LeaderboardResponse`
+
+### `GET /api/gamification/achievements/unnotified`
+
+Get achievements earned but not yet shown to the user.
+
+**Response** `200` `AchievementsResponse`
+
+### `POST /api/gamification/achievements/mark-notified`
+
+Mark achievements as shown to the user.
+
+**Body** `{ "achievement_ids": ["uuid", ...] }`
+**Response** `200`
+
+---
+
+## Chat
+
+### `POST /api/chat/sessions`
+
+Create a new persistent chat session.
+
+**Body** `CreateChatSessionRequest` (optional title, course_code)
+**Response** `201` `ChatSessionResponse`
+
+### `GET /api/chat/sessions`
+
+List current user's chat sessions (most recent first).
+
+**Response** `200` `ChatSessionListResponse`
+
+### `GET /api/chat/sessions/{session_id}/messages`
+
+Get messages for a chat session (paginated via offset/limit query params).
+
+**Response** `200` `ChatMessagesResponse`
+
+### `POST /api/chat/sessions/{session_id}/messages`
+
+Send a message and receive the AI response (synchronous).
+
+**Body** `SendMessageRequest`
+**Response** `200` `ChatMessageResponse`
+
+### `POST /api/chat/sessions/{session_id}/messages/stream`
+
+Send a message and stream the AI response via SSE (Server-Sent Events). Returns `text/event-stream`.
+
+**Body** `SendMessageRequest`
+**Response** `200` SSE stream (events: `user_message`, `token`, `done`)
+
+### `DELETE /api/chat/sessions/{session_id}`
+
+Delete a chat session and all its messages.
+
+**Response** `200`
+
+---
+
+## Analytics
+
+### `GET /api/analytics/overview`
+
+Get aggregated study statistics (total hours, mastery percentage, session count).
+
+**Response** `200` `AnalyticsOverviewResponse`
+
+### `GET /api/analytics/heatmap`
+
+Get daily study totals for heatmap visualization. Query params: `days` (default 365).
+
+**Response** `200` `HeatmapResponse`
+
+### `GET /api/analytics/retention`
+
+Get retention curve data grouped by review interval buckets.
+
+**Response** `200` `RetentionResponse`
+
+### `GET /api/analytics/mastery`
+
+Get per-week mastery breakdown with flashcard pass/fail counts.
+
+**Response** `200` `MasteryResponse`
+
+### `GET /api/analytics/readiness/{exam_id}`
+
+Get weighted exam readiness score for a specific exam.
+
+**Response** `200` `ReadinessResponse`
+
+---
+
+## Billing
+
+### `POST /api/billing/checkout`
+
+Create a Stripe Checkout session for upgrading to Pro plan.
+
+**Body** `{ "plan": "pro" }`
+**Response** `200` `{ "checkout_url": "https://checkout.stripe.com/..." }`
+
+### `POST /api/billing/portal`
+
+Create a Stripe Customer Portal session for subscription management.
+
+**Response** `200` `{ "portal_url": "https://billing.stripe.com/..." }`
+
+### `GET /api/billing/subscription`
+
+Get user's current subscription status, plan, period dates, and usage.
+
+**Response** `200` `BillingOverviewResponse`
+
+### `POST /api/billing/webhook`
+
+Handle Stripe webhook events (subscription created/updated/deleted). Verified via Stripe signature.
+
+**Response** `200`
+
+---
+
+## Admin
+
+Requires `admin` role.
+
+### `GET /api/admin/users`
+
+List all users with optional filters. Query params: `role`, `tier`, `offset`, `limit`.
+
+**Response** `200` `AdminUsersResponse`
+
+### `PATCH /api/admin/users/{user_id}`
+
+Update a user's role, tier, or active status.
+
+**Body** `UpdateUserRequest`
+**Response** `200` `AdminUserResponse`
+
+### `GET /api/admin/metrics`
+
+Get aggregate system metrics (user count, course count, artifact count, pipeline runs, storage).
+
+**Response** `200` `SystemMetricsResponse`
+
+---
+
+## Settings
+
+### `GET /api/settings`
+
+Get all current application settings (merged defaults + user overrides).
+
+**Response** `200` `SettingsResponse`
+
+### `PUT /api/settings`
+
+Partially update application settings.
+
+**Body** `UpdateSettingsRequest`
+**Response** `200` `SettingsResponse`
+
+---
+
+## Assets
+
+### `GET /api/assets/flashcards`
+
+Get flashcards for a course, optionally filtered by week. Query params: `course_code` (required), `week` (optional).
+
+**Response** `200` `FlashcardsResponse`
+
+### `GET /api/assets/quiz`
+
+Get quiz questions for a course, optionally filtered by week. Query params: `course_code` (required), `week` (optional).
+
+**Response** `200` `QuizResponse`

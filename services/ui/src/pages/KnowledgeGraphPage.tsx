@@ -3,6 +3,7 @@ import * as Tabs from '@radix-ui/react-tabs'
 import { ConceptGraph } from '../components/concepts/ConceptGraph'
 import { ConceptDetailPanel } from '../components/concepts/ConceptDetail'
 import { ConceptList } from '../components/concepts/ConceptList'
+import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { useConceptGraph, useConceptList, useCourses } from '../hooks/useApi'
 
 export function KnowledgeGraphPage() {
@@ -12,8 +13,8 @@ export function KnowledgeGraphPage() {
   const [search, setSearch] = useState('')
 
   const { data: courses } = useCourses()
-  const { data: graph, isLoading: graphLoading } = useConceptGraph(courseFilter || undefined)
-  const { data: conceptList, isLoading: listLoading } = useConceptList(
+  const { data: graph, isLoading: graphLoading, error: graphError, refetch: refetchGraph } = useConceptGraph(courseFilter || undefined)
+  const { data: conceptList, isLoading: listLoading, error: listError, refetch: refetchList } = useConceptList(
     courseFilter || undefined,
     search || undefined
   )
@@ -28,6 +29,13 @@ export function KnowledgeGraphPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
+      {graphError && (
+        <ErrorBanner message="Failed to load knowledge graph." onRetry={() => refetchGraph()} />
+      )}
+      {listError && !graphError && (
+        <ErrorBanner message="Failed to load concept list." onRetry={() => refetchList()} />
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

@@ -1,15 +1,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import type { Layouts } from 'react-grid-layout'
+import type { ResponsiveLayouts } from 'react-grid-layout'
 import { useSettings, useUpdateSettings } from './useApi'
 import { defaultLayouts, widgets } from '../components/dashboard/WidgetRegistry'
 
 function parseStored(raw: Record<string, unknown> | null | undefined): {
-  layouts: Layouts
+  layouts: ResponsiveLayouts
   hiddenWidgets: string[]
 } {
   if (!raw) return { layouts: defaultLayouts, hiddenWidgets: [] }
   try {
-    const layouts = (raw.layouts ?? null) as Layouts | null
+    const layouts = (raw.layouts ?? null) as ResponsiveLayouts | null
     const hiddenWidgets = (raw.hiddenWidgets ?? []) as string[]
     return { layouts: layouts ?? defaultLayouts, hiddenWidgets }
   } catch {
@@ -23,7 +23,7 @@ export function useDashboardLayout() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Local overrides — set when user drags/toggles, cleared when server catches up
-  const [localLayouts, setLocalLayouts] = useState<Layouts | null>(null)
+  const [localLayouts, setLocalLayouts] = useState<ResponsiveLayouts | null>(null)
   const [localHidden, setLocalHidden] = useState<string[] | null>(null)
 
   const serverState = useMemo(
@@ -35,7 +35,7 @@ export function useDashboardLayout() {
   const hiddenWidgets = localHidden ?? serverState.hiddenWidgets
 
   const persist = useCallback(
-    (newLayouts: Layouts, newHidden: string[]) => {
+    (newLayouts: ResponsiveLayouts, newHidden: string[]) => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         updateSettings.mutate(
@@ -54,7 +54,7 @@ export function useDashboardLayout() {
   )
 
   const onLayoutChange = useCallback(
-    (_currentLayout: unknown, allLayouts: Layouts) => {
+    (_currentLayout: unknown, allLayouts: ResponsiveLayouts) => {
       setLocalLayouts(allLayouts)
       persist(allLayouts, hiddenWidgets)
     },

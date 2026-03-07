@@ -1,4 +1,4 @@
-import type { Layout } from 'react-grid-layout'
+import type { LayoutItem, ResponsiveLayouts } from 'react-grid-layout'
 
 export interface WidgetDef {
   key: string
@@ -17,7 +17,7 @@ export const widgets: WidgetDef[] = [
   { key: 'courses', label: 'Your Courses', defaultVisible: true },
 ]
 
-export const defaultLayouts: Record<string, Layout[]> = {
+export const defaultLayouts: ResponsiveLayouts = {
   lg: [
     { i: 'streak', x: 0, y: 0, w: 6, h: 3 },
     { i: 'exams', x: 6, y: 0, w: 6, h: 3 },

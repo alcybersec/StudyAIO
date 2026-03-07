@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** Milestone 29 — Cloud Infrastructure + Self-Hosted Packaging (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M27 ✅, M28 ✅, Gap Fill ✅, M29 ✅
+> **Current Milestone:** Milestone 30 — Final Polish, E2E Tests, Launch Prep (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M27 ✅, M28 ✅, Gap Fill ✅, M29 ✅, M30 ✅
 
 ---
 
@@ -341,6 +341,17 @@
 | 29.5 | Prometheus Metrics + Deployment Docs | ✅ Done | Conditional Prometheus instrumentation in main.py (prometheus-fastapi-instrumentator, /metrics endpoint when PROMETHEUS_ENABLED=true). prometheus_enabled config field. docs/deployment.md: self-hosted quickstart, manual setup, AWS Terraform, single-VM cloud, CI/CD pipeline, storage config, backup/restore, monitoring, env var reference, troubleshooting. 2 metrics tests. |
 
 **Tests:** ~22 new tests (20 storage + 2 metrics). All 927 unit + 232 golden tests pass.
+
+## Milestone 30 — Final Polish, E2E Tests, Launch Prep
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 30.1 | Frontend Performance Optimization | ✅ Done | Route-level code splitting: all 20 page imports converted to React.lazy() with named-export adapter. Vite manualChunks: vendor-react, vendor-query, vendor-ui (radix+motion+sonner), vendor-viz (d3+recharts), vendor-pdf, vendor-forms (react-hook-form+zod). Suspense boundary in AppLayout wrapping Outlet inside AnimatePresence. OG meta tags in index.html. Fixed pre-existing react-grid-layout v2 API breakage (WidthProvider → useContainerWidth, Layout → LayoutItem, Layouts → ResponsiveLayouts). Build produces 15+ chunks. |
+| 30.2 | Accessibility + Error Handling Pass | ✅ Done | Skip-to-content link (#main-content) in AppLayout. aria-current="page" on all active nav links (Sidebar NavSection, courses, admin, settings; MobileNav tabs + More sheet items). aria-label on collapse button (Sidebar), More button (MobileNav), chat sessions toggle (ChatPage). ErrorBoundary theme-aware (text-text, bg-surface-alt, dark:bg-red-950). ErrorBanner added to ChatPage (sessions error), KnowledgeGraphPage (graph/list errors), AdminPage (metrics/users errors). |
+| 30.3 | Playwright E2E Test Suite | ✅ Done | @playwright/test installed. playwright.config.ts (chromium, baseURL localhost:3001, screenshot on failure). 30 tests across 8 spec files: auth (5), dashboard (3), upload (4), course (4), study (4), chat (3), search-qa (3), navigation (4). Tests adapt to self-hosted vs SaaS mode. Shared fixtures in e2e/fixtures.ts (testEmail, registerUser, loginViaAPI, seedCourse, buildMinimalPDF). |
+| 30.4 | Documentation Update | ✅ Done | api.md: added 40 missing endpoint docs (notifications 9, gamification 6, chat 6, analytics 5, billing 4, admin 3, settings 2, assets 2). Now covers all 111 endpoints. architecture.md: v2 system diagram (multi-AI, storage, external services), 38-model ER diagram, auth flow, storage backends, deployment topologies, code splitting. README.md: updated stats, v2 feature list, project structure, deployment commands. migration-v1-v2.md: new file with DB changes, env vars, breaking API changes, storage migration, rollback steps. PROGRESS.md: M30 table added. |
+
+**Tests:** 30 new E2E tests (Playwright). Total: ~579 backend + 30 E2E = ~609 tests.
 
 ## Issues & Blockers
 

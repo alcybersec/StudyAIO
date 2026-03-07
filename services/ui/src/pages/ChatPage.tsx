@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { SessionList } from '../components/chat/SessionList'
 import { ChatWindow } from '../components/chat/ChatWindow'
 import { Sheet } from '../components/ui/Sheet'
+import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { useChatSessions, useCreateChatSession } from '../hooks/useApi'
 
 export function ChatPage() {
@@ -10,7 +11,7 @@ export function ChatPage() {
   const selectedSessionId = searchParams.get('session') || ''
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
 
-  const { data: sessionsData } = useChatSessions()
+  const { data: sessionsData, error: sessionsError, refetch: refetchSessions } = useChatSessions()
   const sessions = useMemo(() => sessionsData?.sessions ?? [], [sessionsData])
   const createSession = useCreateChatSession()
 
@@ -36,11 +37,18 @@ export function ChatPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] lg:h-[calc(100vh-0px)]">
+      {sessionsError && (
+        <div className="px-4 pt-2">
+          <ErrorBanner message="Failed to load chat sessions." onRetry={() => refetchSessions()} />
+        </div>
+      )}
+
       {/* Mobile header with sessions toggle */}
       <div className="lg:hidden flex items-center justify-between px-4 py-2 border-b border-border">
         <h1 className="text-lg font-semibold text-text">Chat</h1>
         <button
           onClick={() => setMobileSessionsOpen(true)}
+          aria-label="Open conversations list"
           className="p-2 rounded-lg text-text-muted hover:text-text hover:bg-surface-alt transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
