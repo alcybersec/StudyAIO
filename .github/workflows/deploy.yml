@@ -9,10 +9,13 @@ on:
       - 'v*'
     branches:
       - main
+      - master
+      - develop
     paths:
       - 'services/**'
       - 'infra/**'
       - '.github/workflows/deploy.yml'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
