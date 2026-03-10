@@ -1,9 +1,12 @@
 """Integration tests for review items API endpoints."""
 
+import pytest
+
 from app.core.utils import generate_id
 from app.models.review_item import ReviewItem
 
 
+@pytest.mark.asyncio(loop_scope="session")
 class TestReviewItemsEndpoints:
     """Test /api/review-items endpoints against a real database."""
 

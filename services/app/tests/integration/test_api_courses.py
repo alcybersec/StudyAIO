@@ -1,10 +1,13 @@
 """Integration tests for courses API endpoints."""
 
+import pytest
+
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
 
 
+@pytest.mark.asyncio(loop_scope="session")
 class TestCoursesEndpoints:
     """Test /api/courses endpoints against a real database."""
 

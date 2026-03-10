@@ -2,11 +2,14 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.pipeline_run import PipelineRun
 
 
+@pytest.mark.asyncio(loop_scope="session")
 class TestUploadEndpoints:
     """Test /api/uploads endpoints against a real database."""
 
