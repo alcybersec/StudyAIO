@@ -18,31 +18,31 @@ SECURITY_HEADERS = {
 class TestRateLimiting:
     """Rate limiting returns 429 after exceeding limits."""
 
-    async def test_upload_rate_limit_returns_429(self, async_client):
-        """Exceeding upload rate limit returns 429."""
+    async def test_rate_limit_returns_429(self, async_client):
+        """Exceeding rate limit returns 429."""
         from app.core.rate_limit import limiter
 
         limiter.reset()
 
-        mock_result = MagicMock()
-        mock_result.id = "task-id"
-
-        # Default rate_limit_uploads is "10/minute".  Patching Pydantic v2
-        # Settings attributes via mock.patch is unreliable, so we hit the
-        # real limit by sending 10+1 requests instead.
-        with patch("app.api.uploads.run_pipeline", return_value=mock_result):
-            small_pdf = b"x" * 100
-            for _ in range(10):
+        # Use /api/auth/forgot-password which has a hardcoded "3/minute"
+        # limit.  Auth endpoints are reliable across all environments,
+        # whereas upload endpoint limits are timing-sensitive on slow CI
+        # runners (the 60-second window can expire mid-test).
+        with patch(
+            "app.api.auth.user_service.request_password_reset",
+            new_callable=AsyncMock,
+        ):
+            for _ in range(3):
                 resp = await async_client.post(
-                    "/api/uploads",
-                    files={"file": ("test.pdf", small_pdf, "application/pdf")},
+                    "/api/auth/forgot-password",
+                    json={"email": "test@example.com"},
                 )
-                assert resp.status_code == 201
+                assert resp.status_code == 202
 
-            # 11th request should be rate limited
+            # 4th request should be rate limited
             resp = await async_client.post(
-                "/api/uploads",
-                files={"file": ("test.pdf", small_pdf, "application/pdf")},
+                "/api/auth/forgot-password",
+                json={"email": "test@example.com"},
             )
             assert resp.status_code == 429
 
