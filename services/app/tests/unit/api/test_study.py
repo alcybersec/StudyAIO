@@ -1,6 +1,6 @@
 """Tests for the study API endpoints."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -79,7 +79,7 @@ class TestPostReview:
             ),
             patch(
                 "app.api.study.select",
-            ) as mock_select,
+            ),
         ):
             # Mock the flashcard existence check
             async_client._transport.app.dependency_overrides  # noqa: B018

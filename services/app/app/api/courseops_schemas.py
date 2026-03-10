@@ -2,10 +2,10 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel
 
 # ── Course Documents ────────────────────────────────────────────
+
 
 class CourseDocumentResponse(BaseModel):
     """Response schema for a course document."""
@@ -34,6 +34,7 @@ class CourseDocumentDetailResponse(CourseDocumentResponse):
 
 # ── Assessments ─────────────────────────────────────────────────
 
+
 class AssessmentResponse(BaseModel):
     """Response schema for an assessment."""
 
@@ -52,6 +53,7 @@ class AssessmentResponse(BaseModel):
 
 
 # ── Deadlines ───────────────────────────────────────────────────
+
 
 class DeadlineResponse(BaseModel):
     """Response schema for a deadline."""
@@ -82,6 +84,7 @@ class DeadlineUpdateRequest(BaseModel):
 
 
 # ── Dashboard ───────────────────────────────────────────────────
+
 
 class UpcomingDeadlineResponse(BaseModel):
     """Upcoming deadline for dashboard display."""

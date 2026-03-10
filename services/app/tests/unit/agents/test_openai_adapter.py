@@ -87,9 +87,7 @@ class TestCallApi:
         mock_client = MagicMock()
         mock_client.chat = MagicMock()
         mock_client.chat.completions = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(
-            side_effect=Exception("connection error")
-        )
+        mock_client.chat.completions.create = AsyncMock(side_effect=Exception("connection error"))
 
         with (
             patch("app.agents.openai_adapter.AsyncOpenAI", return_value=mock_client),
@@ -172,13 +170,15 @@ class TestClassifyLecture:
 
     async def test_parses_classification_response(self, adapter):
         """Successful classification returns ClassificationResult."""
-        response_json = json.dumps({
-            "course_code": "CSIT302",
-            "week": 5,
-            "title": "Network Security",
-            "confidence": 0.92,
-            "reasoning": "Found in header",
-        })
+        response_json = json.dumps(
+            {
+                "course_code": "CSIT302",
+                "week": 5,
+                "title": "Network Security",
+                "confidence": 0.92,
+                "reasoning": "Found in header",
+            }
+        )
 
         with patch.object(adapter, "_call_api", return_value=response_json):
             result = await adapter.classify_lecture(
@@ -250,20 +250,22 @@ class TestGenerateFlashcards:
 
     async def test_parses_flashcard_array(self, adapter):
         """Flashcard JSON array is parsed into FlashcardData list."""
-        response = json.dumps([
-            {
-                "front": "What is a firewall?",
-                "back": "A network security system",
-                "tags": ["security"],
-                "source_page_ref": 1,
-            },
-            {
-                "front": "What is IDS?",
-                "back": "Intrusion Detection System",
-                "tags": ["security"],
-                "source_page_ref": 2,
-            },
-        ])
+        response = json.dumps(
+            [
+                {
+                    "front": "What is a firewall?",
+                    "back": "A network security system",
+                    "tags": ["security"],
+                    "source_page_ref": 1,
+                },
+                {
+                    "front": "What is IDS?",
+                    "back": "Intrusion Detection System",
+                    "tags": ["security"],
+                    "source_page_ref": 2,
+                },
+            ]
+        )
 
         extraction = ExtractionData(
             pages=[{"page_number": 1, "text": "Content", "images": []}],
@@ -284,16 +286,18 @@ class TestGenerateQuiz:
 
     async def test_parses_quiz_array(self, adapter):
         """Quiz JSON array is parsed into QuizQuestionData list."""
-        response = json.dumps([
-            {
-                "question_type": "multiple_choice",
-                "question": "What is a firewall?",
-                "options": ["A. Router", "B. Security system", "C. Cable", "D. Switch"],
-                "correct_answer": "B",
-                "explanation": "Firewalls are security systems.",
-                "source_page_ref": 1,
-            },
-        ])
+        response = json.dumps(
+            [
+                {
+                    "question_type": "multiple_choice",
+                    "question": "What is a firewall?",
+                    "options": ["A. Router", "B. Security system", "C. Cable", "D. Switch"],
+                    "correct_answer": "B",
+                    "explanation": "Firewalls are security systems.",
+                    "source_page_ref": 1,
+                },
+            ]
+        )
 
         extraction = ExtractionData(
             pages=[{"page_number": 1, "text": "Content", "images": []}],
@@ -314,19 +318,21 @@ class TestAnswerQuestion:
 
     async def test_parses_answer_response(self, adapter):
         """Answer JSON is parsed into AnswerResult."""
-        response = json.dumps({
-            "answer": "A firewall is a network security system [1].",
-            "citations": [
-                {
-                    "ref": 1,
-                    "chunk_id": "abc_p1_c0",
-                    "text_snippet": "Firewalls are security systems",
-                    "course_code": "CSIT302",
-                    "week": 5,
-                    "page_ref": 1,
-                }
-            ],
-        })
+        response = json.dumps(
+            {
+                "answer": "A firewall is a network security system [1].",
+                "citations": [
+                    {
+                        "ref": 1,
+                        "chunk_id": "abc_p1_c0",
+                        "text_snippet": "Firewalls are security systems",
+                        "course_code": "CSIT302",
+                        "week": 5,
+                        "page_ref": 1,
+                    }
+                ],
+            }
+        )
 
         chunks = [
             {
@@ -351,27 +357,29 @@ class TestExtractCourseOps:
 
     async def test_parses_course_ops_response(self, adapter):
         """CourseOps JSON is parsed into CourseOpsResult."""
-        response = json.dumps({
-            "assessments": [
-                {
-                    "title": "Final Exam",
-                    "assessment_type": "exam",
-                    "weight_pct": 40.0,
-                    "description": "Covers weeks 1-13",
-                    "weeks_relevant": [1, 2, 3],
-                }
-            ],
-            "deadlines": [
-                {
-                    "title": "Assignment 1 Due",
-                    "due_date": "2026-04-15",
-                    "deadline_type": "assignment",
-                    "description": "Submit via Moodle",
-                }
-            ],
-            "course_info": {"course_name": "Software Engineering"},
-            "confidence": 0.85,
-        })
+        response = json.dumps(
+            {
+                "assessments": [
+                    {
+                        "title": "Final Exam",
+                        "assessment_type": "exam",
+                        "weight_pct": 40.0,
+                        "description": "Covers weeks 1-13",
+                        "weeks_relevant": [1, 2, 3],
+                    }
+                ],
+                "deadlines": [
+                    {
+                        "title": "Assignment 1 Due",
+                        "due_date": "2026-04-15",
+                        "deadline_type": "assignment",
+                        "description": "Submit via Moodle",
+                    }
+                ],
+                "course_info": {"course_name": "Software Engineering"},
+                "confidence": 0.85,
+            }
+        )
 
         with patch.object(adapter, "_call_api", return_value=response):
             result = await adapter.extract_course_ops("doc text", "CSIT302", "outline")

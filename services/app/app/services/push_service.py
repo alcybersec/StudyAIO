@@ -129,11 +129,13 @@ async def send_push_notification(
         logger.warning("pywebpush_not_installed")
         return 0
 
-    payload = json.dumps({
-        "title": title,
-        "body": body,
-        "url": url or "/",
-    })
+    payload = json.dumps(
+        {
+            "title": title,
+            "body": body,
+            "url": url or "/",
+        }
+    )
 
     vapid_claims = {
         "sub": f"mailto:{settings.vapid_admin_email}",
@@ -172,9 +174,7 @@ async def send_push_notification(
 
     # Clean up stale subscriptions
     if stale_ids:
-        await session.execute(
-            delete(PushSubscription).where(PushSubscription.id.in_(stale_ids))
-        )
+        await session.execute(delete(PushSubscription).where(PushSubscription.id.in_(stale_ids)))
         logger.info("push_stale_cleaned", count=len(stale_ids))
 
     return sent

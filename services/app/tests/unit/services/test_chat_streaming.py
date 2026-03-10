@@ -48,17 +48,13 @@ class TestBaseStreamAnswer:
         class ConcreteAgent(AgentAdapter):
             """Minimal concrete implementation for testing."""
 
-            async def classify_lecture(self, *a, **kw):
-                ...
+            async def classify_lecture(self, *a, **kw): ...
 
-            async def generate_summary(self, *a, **kw):
-                ...
+            async def generate_summary(self, *a, **kw): ...
 
-            async def generate_flashcards(self, *a, **kw):
-                ...
+            async def generate_flashcards(self, *a, **kw): ...
 
-            async def generate_quiz(self, *a, **kw):
-                ...
+            async def generate_quiz(self, *a, **kw): ...
 
             async def answer_question(self, question, context_chunks):
                 return AnswerResult(
@@ -66,11 +62,9 @@ class TestBaseStreamAnswer:
                     citations=[{"ref": 1, "text_snippet": "42"}],
                 )
 
-            async def extract_course_ops(self, *a, **kw):
-                ...
+            async def extract_course_ops(self, *a, **kw): ...
 
-            async def extract_concepts(self, *a, **kw):
-                ...
+            async def extract_concepts(self, *a, **kw): ...
 
         agent = ConcreteAgent()
         tokens = []
@@ -178,7 +172,7 @@ class TestStreamMessage:
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
         ):
-            events = await _collect_events(
+            await _collect_events(
                 stream_message(session, "session-001", "user-001", "What is TCP?")
             )
 

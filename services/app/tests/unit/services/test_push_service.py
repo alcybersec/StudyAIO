@@ -40,7 +40,7 @@ class TestSubscribe:
         result_mock.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=result_mock)
 
-        result = await subscribe(
+        await subscribe(
             session,
             user_id="user-001",
             endpoint="https://push.example.com/send/abc123",

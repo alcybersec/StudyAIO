@@ -3,7 +3,7 @@
 from datetime import datetime
 
 import structlog
-from sqlalchemy import Integer as SAInteger, case, func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.utils import generate_id
@@ -73,9 +73,7 @@ async def create_exam(
     return exam
 
 
-async def get_exam(
-    session: AsyncSession, exam_id: str, user_id: str | None = None
-) -> Exam | None:
+async def get_exam(session: AsyncSession, exam_id: str, user_id: str | None = None) -> Exam | None:
     """Get an exam by ID. Auto-completes if exam_date has passed.
 
     Args:
@@ -281,7 +279,7 @@ async def get_weak_topics(
 
         if quiz["accuracy"] is not None and quiz["accuracy"] < 70:
             reasons.append("low_quiz_accuracy")
-            weakness_score += (70 - quiz["accuracy"])
+            weakness_score += 70 - quiz["accuracy"]
 
         if avg_ease is not None and avg_ease < 2.0:
             reasons.append("low_flashcard_ease")
@@ -293,14 +291,18 @@ async def get_weak_topics(
             weakness_score += 100
 
         if reasons:
-            weak.append({
-                "week": week,
-                "quiz_accuracy": round(quiz["accuracy"], 1) if quiz["accuracy"] is not None else None,
-                "quiz_attempts": quiz["attempts"],
-                "avg_ease": round(avg_ease, 2) if avg_ease is not None else None,
-                "reasons": reasons,
-                "weakness_score": round(weakness_score, 1),
-            })
+            weak.append(
+                {
+                    "week": week,
+                    "quiz_accuracy": round(quiz["accuracy"], 1)
+                    if quiz["accuracy"] is not None
+                    else None,
+                    "quiz_attempts": quiz["attempts"],
+                    "avg_ease": round(avg_ease, 2) if avg_ease is not None else None,
+                    "reasons": reasons,
+                    "weakness_score": round(weakness_score, 1),
+                }
+            )
 
     weak.sort(key=lambda x: x["weakness_score"], reverse=True)
     return weak
@@ -347,8 +349,7 @@ async def get_exam_progress(
     fc_result = await session.execute(
         select(
             func.count(Flashcard.id).label("total"),
-        )
-        .where(
+        ).where(
             Flashcard.course_id == exam.course_id,
             Flashcard.week.in_(exam.weeks_scope),
         )

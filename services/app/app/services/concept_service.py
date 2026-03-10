@@ -1,7 +1,7 @@
 """Concept service — business logic for knowledge graph extraction and queries."""
 
 import structlog
-from sqlalchemy import select, func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 

@@ -47,10 +47,16 @@ class TestRegister:
 
         # Patch register_user to return a fully-populated user mock
         user = _make_db_user(email="new@example.com", username="newuser")
-        with patch("app.api.auth.user_service.register_user", new_callable=AsyncMock, return_value=user):
+        with patch(
+            "app.api.auth.user_service.register_user", new_callable=AsyncMock, return_value=user
+        ):
             response = await async_client.post(
                 "/api/auth/register",
-                json={"email": "new@example.com", "username": "newuser", "password": "StrongPass1!"},
+                json={
+                    "email": "new@example.com",
+                    "username": "newuser",
+                    "password": "StrongPass1!",
+                },
             )
         assert response.status_code == 201
         data = response.json()
@@ -89,7 +95,9 @@ class TestLogin:
     async def test_login_success(self, async_client, mock_session):
         user = _make_db_user()
 
-        with patch("app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user):
+        with patch(
+            "app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user
+        ):
             response = await async_client.post(
                 "/api/auth/login",
                 json={"email": "test@example.com", "password": "TestPass1!"},
@@ -191,7 +199,11 @@ class TestCookieSecureFlag:
         user = _make_db_user()
 
         with (
-            patch("app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user),
+            patch(
+                "app.api.auth.user_service.authenticate_user",
+                new_callable=AsyncMock,
+                return_value=user,
+            ),
             patch("app.api.auth.settings.cookie_secure", True),
         ):
             response = await async_client.post(
@@ -209,7 +221,9 @@ class TestCookieSecureFlag:
         """Cookies should not be Secure when cookie_secure is False."""
         user = _make_db_user()
 
-        with patch("app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user):
+        with patch(
+            "app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user
+        ):
             response = await async_client.post(
                 "/api/auth/login",
                 json={"email": "test@example.com", "password": "TestPass1!"},

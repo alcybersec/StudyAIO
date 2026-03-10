@@ -6,10 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.services.timed_session_service import (
-    CARD_TIME_FRACTION,
     MINUTES_PER_CARD,
     MINUTES_PER_QUIZ,
-    QUIZ_TIME_FRACTION,
     TimedSessionPlan,
     generate_timed_plan,
 )
@@ -126,9 +124,7 @@ class TestScoping:
             new_callable=AsyncMock,
             return_value=cards,
         ) as mock_get_due:
-            plan = await generate_timed_plan(
-                session, total_minutes=30, course_code="CSIT302"
-            )
+            plan = await generate_timed_plan(session, total_minutes=30, course_code="CSIT302")
 
         # Verify course_code was passed through
         mock_get_due.assert_called_once()
@@ -167,9 +163,7 @@ class TestScoping:
             new_callable=AsyncMock,
             return_value=cards,
         ) as mock_get_due:
-            plan = await generate_timed_plan(
-                session, total_minutes=30, exam_id="exam-001"
-            )
+            plan = await generate_timed_plan(session, total_minutes=30, exam_id="exam-001")
 
         assert plan.course_code == "CSIT302"
         assert plan.exam_id == "exam-001"
@@ -202,9 +196,7 @@ class TestScoping:
             new_callable=AsyncMock,
             return_value=[],
         ):
-            plan = await generate_timed_plan(
-                session, total_minutes=30, exam_id="exam-002"
-            )
+            plan = await generate_timed_plan(session, total_minutes=30, exam_id="exam-002")
 
         assert plan.course_code == "CSIT314"
 
@@ -240,9 +232,7 @@ class TestScoping:
             new_callable=AsyncMock,
             return_value=[card_w5, card_w1, card_w3, card_w2],
         ):
-            plan = await generate_timed_plan(
-                session, total_minutes=30, exam_id="exam-001"
-            )
+            plan = await generate_timed_plan(session, total_minutes=30, exam_id="exam-001")
 
         # Exam-week cards (w1, w3, w2) should come before non-exam card (w5)
         exam_week_ids = {"fc-w1", "fc-w3", "fc-w2"}
@@ -379,9 +369,7 @@ class TestSchemaValidation:
         """TimedPlanRequest accepts optional course_code and exam_id."""
         from app.api.study_schemas import TimedPlanRequest
 
-        req = TimedPlanRequest(
-            minutes=60, course_code="CSIT302", exam_id="exam-001"
-        )
+        req = TimedPlanRequest(minutes=60, course_code="CSIT302", exam_id="exam-001")
         assert req.minutes == 60
         assert req.course_code == "CSIT302"
         assert req.exam_id == "exam-001"

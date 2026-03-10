@@ -1,7 +1,8 @@
 """Tests for DemoAccountMiddleware."""
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from app.core.auth import create_access_token
 

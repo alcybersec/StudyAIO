@@ -15,9 +15,7 @@ class UserDailyChallenge(Base):
     __tablename__ = "user_daily_challenges"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     daily_challenge_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("daily_challenges.id"), nullable=False
     )

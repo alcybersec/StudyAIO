@@ -1,11 +1,10 @@
 """Tests for notification API endpoints."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.models.notification_preference import NotificationPreference
-from app.models.telegram_link import TelegramLink
 
 
 @pytest.fixture
@@ -42,18 +41,24 @@ class TestGetPreferences:
     @pytest.mark.asyncio
     async def test_get_preferences_seeds_defaults(self, notif_client) -> None:
         """Returns seeded defaults when no preferences exist."""
-        with patch(
-            "app.api.notifications.notification_service.get_preferences",
-            new_callable=AsyncMock,
-        ) as mock_get, patch(
-            "app.api.notifications.notification_service.seed_default_preferences",
-            new_callable=AsyncMock,
-        ) as mock_seed:
+        with (
+            patch(
+                "app.api.notifications.notification_service.get_preferences",
+                new_callable=AsyncMock,
+            ) as mock_get,
+            patch(
+                "app.api.notifications.notification_service.seed_default_preferences",
+                new_callable=AsyncMock,
+            ) as mock_seed,
+        ):
             mock_get.return_value = []
             mock_seed.return_value = [
                 NotificationPreference(
-                    id="p1", user_id="u1", channel="email",
-                    event_type="cards_due", enabled=False,
+                    id="p1",
+                    user_id="u1",
+                    channel="email",
+                    event_type="cards_due",
+                    enabled=False,
                 ),
             ]
             response = await notif_client.get("/api/notifications/preferences")
@@ -67,12 +72,18 @@ class TestGetPreferences:
         """Returns existing preferences without seeding."""
         prefs = [
             NotificationPreference(
-                id="p1", user_id="u1", channel="email",
-                event_type="cards_due", enabled=True,
+                id="p1",
+                user_id="u1",
+                channel="email",
+                event_type="cards_due",
+                enabled=True,
             ),
             NotificationPreference(
-                id="p2", user_id="u1", channel="telegram",
-                event_type="cards_due", enabled=False,
+                id="p2",
+                user_id="u1",
+                channel="telegram",
+                event_type="cards_due",
+                enabled=False,
             ),
         ]
         with patch(
@@ -94,8 +105,11 @@ class TestUpdatePreferences:
         """Updates preferences and returns updated list."""
         updated = [
             NotificationPreference(
-                id="p1", user_id="u1", channel="email",
-                event_type="cards_due", enabled=True,
+                id="p1",
+                user_id="u1",
+                channel="email",
+                event_type="cards_due",
+                enabled=True,
             ),
         ]
         with patch(

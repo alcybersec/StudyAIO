@@ -23,9 +23,7 @@ class UserSettings(Base):
     dashboard_layout: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     theme: Mapped[str] = mapped_column(String(20), nullable=False, default="system")
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="settings")

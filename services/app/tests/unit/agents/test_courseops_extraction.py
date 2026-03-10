@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.agents.base import CourseOpsAssessment, CourseOpsDeadline, CourseOpsResult
+from app.agents.base import CourseOpsResult
 from app.agents.parsing import parse_course_ops_response
 from app.core.exceptions import AgentError
 
@@ -15,30 +15,32 @@ class TestParseCourseOpsResponse:
 
     def test_parses_valid_response(self):
         """Parses a well-formed JSON response."""
-        text = json.dumps({
-            "assessments": [
-                {
-                    "title": "Final Exam",
-                    "assessment_type": "exam",
-                    "weight_pct": 40.0,
-                    "description": "Covers all weeks",
-                    "weeks_relevant": [1, 2, 3],
-                }
-            ],
-            "deadlines": [
-                {
-                    "title": "Assignment 1 Due",
-                    "due_date": "2026-04-15",
-                    "deadline_type": "assignment",
-                    "description": "Submit via Moodle",
-                }
-            ],
-            "course_info": {
-                "course_name": "Software Engineering",
-                "term": "Spring 2026",
-            },
-            "confidence": 0.85,
-        })
+        text = json.dumps(
+            {
+                "assessments": [
+                    {
+                        "title": "Final Exam",
+                        "assessment_type": "exam",
+                        "weight_pct": 40.0,
+                        "description": "Covers all weeks",
+                        "weeks_relevant": [1, 2, 3],
+                    }
+                ],
+                "deadlines": [
+                    {
+                        "title": "Assignment 1 Due",
+                        "due_date": "2026-04-15",
+                        "deadline_type": "assignment",
+                        "description": "Submit via Moodle",
+                    }
+                ],
+                "course_info": {
+                    "course_name": "Software Engineering",
+                    "term": "Spring 2026",
+                },
+                "confidence": 0.85,
+            }
+        )
 
         result = parse_course_ops_response(text)
         assert isinstance(result, CourseOpsResult)
@@ -67,12 +69,14 @@ class TestParseCourseOpsResponse:
 
     def test_handles_empty_lists(self):
         """Handles response with empty assessments and deadlines."""
-        text = json.dumps({
-            "assessments": [],
-            "deadlines": [],
-            "course_info": {},
-            "confidence": 0.3,
-        })
+        text = json.dumps(
+            {
+                "assessments": [],
+                "deadlines": [],
+                "course_info": {},
+                "confidence": 0.3,
+            }
+        )
 
         result = parse_course_ops_response(text)
         assert result.assessments == []
@@ -81,10 +85,12 @@ class TestParseCourseOpsResponse:
 
     def test_defaults_missing_fields(self):
         """Uses defaults when fields are missing from items."""
-        text = json.dumps({
-            "assessments": [{"title": "Exam"}],
-            "deadlines": [{"title": "Due", "due_date": "2026-05-01"}],
-        })
+        text = json.dumps(
+            {
+                "assessments": [{"title": "Exam"}],
+                "deadlines": [{"title": "Due", "due_date": "2026-05-01"}],
+            }
+        )
 
         result = parse_course_ops_response(text)
         assert result.assessments[0].assessment_type == "other"
@@ -109,18 +115,22 @@ class TestClaudeCodeAdapterExtractCourseOps:
 
         adapter = ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet")
 
-        response_json = json.dumps({
-            "assessments": [
-                {"title": "Midterm", "assessment_type": "exam", "weight_pct": 30.0}
-            ],
-            "deadlines": [
-                {"title": "Midterm Date", "due_date": "2026-04-20", "deadline_type": "exam"}
-            ],
-            "course_info": {"course_name": "Data Structures"},
-            "confidence": 0.9,
-        })
+        response_json = json.dumps(
+            {
+                "assessments": [
+                    {"title": "Midterm", "assessment_type": "exam", "weight_pct": 30.0}
+                ],
+                "deadlines": [
+                    {"title": "Midterm Date", "due_date": "2026-04-20", "deadline_type": "exam"}
+                ],
+                "course_info": {"course_name": "Data Structures"},
+                "confidence": 0.9,
+            }
+        )
 
-        with patch.object(adapter, "_run_claude_code", new_callable=AsyncMock, return_value=response_json):
+        with patch.object(
+            adapter, "_run_claude_code", new_callable=AsyncMock, return_value=response_json
+        ):
             result = await adapter.extract_course_ops("doc text", "CSIT302", "outline")
 
         assert isinstance(result, CourseOpsResult)
@@ -135,14 +145,16 @@ class TestClaudeCodeAdapterExtractCourseOps:
 
         adapter = ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet")
 
-        with patch.object(
-            adapter,
-            "_run_claude_code",
-            new_callable=AsyncMock,
-            side_effect=AgentError("CLI failed"),
+        with (
+            patch.object(
+                adapter,
+                "_run_claude_code",
+                new_callable=AsyncMock,
+                side_effect=AgentError("CLI failed"),
+            ),
+            pytest.raises(AgentError),
         ):
-            with pytest.raises(AgentError):
-                await adapter.extract_course_ops("text", "CSIT302", "outline")
+            await adapter.extract_course_ops("text", "CSIT302", "outline")
 
 
 class TestAnthropicAPIAdapterExtractCourseOps:
@@ -155,14 +167,16 @@ class TestAnthropicAPIAdapterExtractCourseOps:
 
         adapter = AnthropicAPIAdapter(api_key="test-key", model="sonnet")
 
-        response_json = json.dumps({
-            "assessments": [
-                {"title": "Project", "assessment_type": "project", "weight_pct": 25.0}
-            ],
-            "deadlines": [],
-            "course_info": {},
-            "confidence": 0.7,
-        })
+        response_json = json.dumps(
+            {
+                "assessments": [
+                    {"title": "Project", "assessment_type": "project", "weight_pct": 25.0}
+                ],
+                "deadlines": [],
+                "course_info": {},
+                "confidence": 0.7,
+            }
+        )
 
         with patch.object(adapter, "_call_api", new_callable=AsyncMock, return_value=response_json):
             result = await adapter.extract_course_ops("doc text", "CSIT314", "rubric")

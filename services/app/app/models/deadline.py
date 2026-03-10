@@ -15,9 +15,7 @@ class Deadline(Base):
     __tablename__ = "deadlines"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    course_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("courses.id"), nullable=False
-    )
+    course_id: Mapped[str] = mapped_column(String(36), ForeignKey("courses.id"), nullable=False)
     assessment_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True
     )
@@ -32,16 +30,12 @@ class Deadline(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="deadlines")
     assessment: Mapped["Assessment | None"] = relationship(back_populates="deadlines")
-    source_document: Mapped["CourseDocument | None"] = relationship(
-        back_populates="deadlines"
-    )
+    source_document: Mapped["CourseDocument | None"] = relationship(back_populates="deadlines")
 
     __table_args__ = (
         Index("ix_deadlines_course", "course_id"),

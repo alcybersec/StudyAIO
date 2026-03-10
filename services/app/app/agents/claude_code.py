@@ -10,8 +10,6 @@ from app.agents.base import (
     AnswerResult,
     ClassificationResult,
     ConceptExtractionResult,
-    CourseOpsAssessment,
-    CourseOpsDeadline,
     CourseOpsResult,
     ExtractionData,
     FlashcardData,

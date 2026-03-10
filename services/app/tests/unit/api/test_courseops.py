@@ -144,7 +144,9 @@ class TestListDeadlines:
             new_callable=AsyncMock,
             return_value=[],
         ) as mock_list:
-            response = await async_client.get("/api/courseops/deadlines?course_code=CSIT302&upcoming=true")
+            response = await async_client.get(
+                "/api/courseops/deadlines?course_code=CSIT302&upcoming=true"
+            )
 
         assert response.status_code == 200
         mock_list.assert_called_once_with(

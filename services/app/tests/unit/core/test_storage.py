@@ -1,6 +1,5 @@
 """Unit tests for the storage backend abstraction."""
 
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,10 +13,10 @@ from app.core.storage import (
     reset_storage,
 )
 
-
 # ======================================================================
 # LocalStorageBackend
 # ======================================================================
+
 
 class TestLocalStorageBackend:
     """Tests for the local filesystem storage backend."""
@@ -91,6 +90,7 @@ class TestLocalStorageBackend:
 # ======================================================================
 # S3StorageBackend (mocked boto3)
 # ======================================================================
+
 
 @pytest.fixture()
 def _s3_settings():
@@ -179,6 +179,7 @@ class TestS3StorageBackend:
 # ======================================================================
 # Singleton & helpers
 # ======================================================================
+
 
 class TestGetStorage:
     """Tests for get_storage() factory and normalize_storage_key()."""

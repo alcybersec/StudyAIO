@@ -97,12 +97,8 @@ def upgrade() -> None:
         ),
     )
 
-    op.create_index(
-        "ix_concept_relations_source", "concept_relations", ["source_concept_id"]
-    )
-    op.create_index(
-        "ix_concept_relations_target", "concept_relations", ["target_concept_id"]
-    )
+    op.create_index("ix_concept_relations_source", "concept_relations", ["source_concept_id"])
+    op.create_index("ix_concept_relations_target", "concept_relations", ["target_concept_id"])
     op.create_unique_constraint(
         "uq_concept_relation",
         "concept_relations",

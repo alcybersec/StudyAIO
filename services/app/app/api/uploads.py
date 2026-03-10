@@ -27,8 +27,13 @@ from app.core.storage import get_storage
 from app.core.utils import read_upload_with_limit, sanitize_filename
 from app.models.user import User
 from app.pipeline.orchestrator import resume_pipeline, run_pipeline
-from app.services import artifact_service, billing_service, pipeline_service, xp_service
-from app.services import quota_service
+from app.services import (
+    artifact_service,
+    billing_service,
+    pipeline_service,
+    quota_service,
+    xp_service,
+)
 from app.services.event_service import PIPELINE_EVENTS_CHANNEL
 
 logger = structlog.get_logger()
@@ -168,11 +173,13 @@ async def batch_upload(
         # Validate extension
         ext = Path(filename).suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
-            results.append(BatchUploadFileResult(
-                filename=filename,
-                status="error",
-                error=f"Unsupported file type: {ext}",
-            ))
+            results.append(
+                BatchUploadFileResult(
+                    filename=filename,
+                    status="error",
+                    error=f"Unsupported file type: {ext}",
+                )
+            )
             failed += 1
             continue
 
@@ -196,46 +203,56 @@ async def batch_upload(
             await storage.put(storage_key, content)
             file_path = storage_key
         except HTTPException as e:
-            results.append(BatchUploadFileResult(
-                filename=filename,
-                status="error",
-                error=e.detail,
-            ))
+            results.append(
+                BatchUploadFileResult(
+                    filename=filename,
+                    status="error",
+                    error=e.detail,
+                )
+            )
             failed += 1
             continue
         except Exception as e:
             logger.error("batch_upload_save_failed", filename=filename, error=str(e))
-            results.append(BatchUploadFileResult(
-                filename=filename,
-                status="error",
-                error="Failed to save file",
-            ))
+            results.append(
+                BatchUploadFileResult(
+                    filename=filename,
+                    status="error",
+                    error="Failed to save file",
+                )
+            )
             failed += 1
             continue
 
         # Dispatch pipeline
         try:
-            pipeline_result = run_pipeline(file_path, user_id=user.id)
-            results.append(BatchUploadFileResult(
-                filename=filename,
-                status="processing",
-                artifact_id="pending",
-            ))
+            run_pipeline(file_path, user_id=user.id)
+            results.append(
+                BatchUploadFileResult(
+                    filename=filename,
+                    status="processing",
+                    artifact_id="pending",
+                )
+            )
             succeeded += 1
         except DuplicateFileError as e:
-            results.append(BatchUploadFileResult(
-                filename=filename,
-                status="duplicate",
-                artifact_id=e.existing_artifact_id,
-            ))
+            results.append(
+                BatchUploadFileResult(
+                    filename=filename,
+                    status="duplicate",
+                    artifact_id=e.existing_artifact_id,
+                )
+            )
             duplicates += 1
         except Exception as e:
             logger.error("batch_upload_pipeline_failed", filename=filename, error=str(e))
-            results.append(BatchUploadFileResult(
-                filename=filename,
-                status="error",
-                error="Pipeline dispatch failed",
-            ))
+            results.append(
+                BatchUploadFileResult(
+                    filename=filename,
+                    status="error",
+                    error="Pipeline dispatch failed",
+                )
+            )
             failed += 1
 
     logger.info(

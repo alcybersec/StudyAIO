@@ -31,9 +31,7 @@ async def generate_link_token(session: AsyncSession, user_id: str) -> str:
     Returns:
         The generated link token.
     """
-    result = await session.execute(
-        select(TelegramLink).where(TelegramLink.user_id == user_id)
-    )
+    result = await session.execute(select(TelegramLink).where(TelegramLink.user_id == user_id))
     link = result.scalar_one_or_none()
 
     token = secrets.token_urlsafe(32)
@@ -73,9 +71,7 @@ async def verify_link(
     Raises:
         TelegramLinkError: If token is invalid or expired.
     """
-    result = await session.execute(
-        select(TelegramLink).where(TelegramLink.link_token == token)
-    )
+    result = await session.execute(select(TelegramLink).where(TelegramLink.link_token == token))
     link = result.scalar_one_or_none()
 
     if not link:
@@ -101,9 +97,7 @@ async def unlink(session: AsyncSession, user_id: str) -> bool:
     Returns:
         True if link was removed, False if none existed.
     """
-    result = await session.execute(
-        select(TelegramLink).where(TelegramLink.user_id == user_id)
-    )
+    result = await session.execute(select(TelegramLink).where(TelegramLink.user_id == user_id))
     link = result.scalar_one_or_none()
 
     if not link:
@@ -125,9 +119,7 @@ async def get_link(session: AsyncSession, user_id: str) -> TelegramLink | None:
     Returns:
         TelegramLink or None.
     """
-    result = await session.execute(
-        select(TelegramLink).where(TelegramLink.user_id == user_id)
-    )
+    result = await session.execute(select(TelegramLink).where(TelegramLink.user_id == user_id))
     return result.scalar_one_or_none()
 
 
@@ -192,10 +184,14 @@ async def handle_telegram_webhook(session: AsyncSession, update: dict) -> str:
             await session.commit()
             return "Your Telegram account has been linked to StudyAIO! You'll now receive notifications here."
         except TelegramLinkError:
-            return "Invalid or expired link token. Please generate a new link from your Settings page."
+            return (
+                "Invalid or expired link token. Please generate a new link from your Settings page."
+            )
 
     elif text.startswith("/start"):
-        return "Welcome to StudyAIO Bot! Use the link from your Settings page to connect your account."
+        return (
+            "Welcome to StudyAIO Bot! Use the link from your Settings page to connect your account."
+        )
 
     return "Send /start with your link token to connect your StudyAIO account."
 

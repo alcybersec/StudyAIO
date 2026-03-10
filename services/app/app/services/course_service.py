@@ -13,9 +13,7 @@ from app.models.summary import Summary
 logger = structlog.get_logger()
 
 
-async def list_courses(
-    session: AsyncSession, user_id: str | None = None
-) -> list[Course]:
+async def list_courses(session: AsyncSession, user_id: str | None = None) -> list[Course]:
     """Get all courses, optionally filtered by user, ordered by code.
 
     Args:
@@ -53,9 +51,7 @@ async def get_course_by_code(
     return result.scalar_one_or_none()
 
 
-async def list_courses_with_stats(
-    session: AsyncSession, user_id: str | None = None
-) -> list[dict]:
+async def list_courses_with_stats(session: AsyncSession, user_id: str | None = None) -> list[dict]:
     """Get all courses with aggregate stats in O(1) queries.
 
     Args:

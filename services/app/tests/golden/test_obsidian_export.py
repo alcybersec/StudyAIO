@@ -16,7 +16,6 @@ import pytest
 
 from app.services.export_service import generate_obsidian_vault
 
-
 # ── Fixtures ────────────────────────────────────────────────────────
 
 
@@ -86,9 +85,7 @@ def _build_mock_session(
     qq_result = MagicMock()
     qq_result.scalars.return_value.all.return_value = quizzes or []
 
-    session.execute = AsyncMock(
-        side_effect=[course_result, summary_result, fc_result, qq_result]
-    )
+    session.execute = AsyncMock(side_effect=[course_result, summary_result, fc_result, qq_result])
     return session
 
 
@@ -107,13 +104,19 @@ def sample_vault_data():
     ]
     quizzes = [
         _make_quiz(
-            1, "Which is NOT part of CIA triad?", "multiple_choice",
+            1,
+            "Which is NOT part of CIA triad?",
+            "multiple_choice",
             ["A. Confidentiality", "B. Integrity", "C. Availability", "D. Scalability"],
-            "D. Scalability", "CIA stands for Confidentiality, Integrity, Availability.",
+            "D. Scalability",
+            "CIA stands for Confidentiality, Integrity, Availability.",
         ),
         _make_quiz(
-            2, "Explain the TCP three-way handshake.", "short_answer",
-            None, "SYN, SYN-ACK, ACK sequence to establish connection.",
+            2,
+            "Explain the TCP three-way handshake.",
+            "short_answer",
+            None,
+            "SYN, SYN-ACK, ACK sequence to establish connection.",
             "TCP uses a three-way handshake for reliable connection setup.",
         ),
     ]
@@ -202,9 +205,7 @@ class TestFrontmatterFormat:
                 if name.endswith(".md"):
                     content = zf.read(name).decode()
                     frontmatter = content.split("---")[1]
-                    assert "type:" in frontmatter, (
-                        f"{name} frontmatter missing 'type' field"
-                    )
+                    assert "type:" in frontmatter, f"{name} frontmatter missing 'type' field"
 
 
 @pytest.mark.asyncio
@@ -237,7 +238,12 @@ class TestWikiLinksPresent:
 
         with zipfile.ZipFile(buf) as zf:
             for name in zf.namelist():
-                if name.endswith(".md") and "/Week" in name and "/Flashcards/" not in name and "/Quizzes/" not in name:
+                if (
+                    name.endswith(".md")
+                    and "/Week" in name
+                    and "/Flashcards/" not in name
+                    and "/Quizzes/" not in name
+                ):
                     content = zf.read(name).decode()
                     matches = wiki_link_pattern.findall(content)
                     assert len(matches) >= 3, (
@@ -264,9 +270,7 @@ class TestFlashcardCalloutFormat:
             # Week 1 has 2 flashcards
             content = zf.read("CSIT302/Flashcards/Week01.md").decode()
             matches = callout_pattern.findall(content)
-            assert len(matches) == 2, (
-                f"Expected 2 callout blocks for Week 1, found {len(matches)}"
-            )
+            assert len(matches) == 2, f"Expected 2 callout blocks for Week 1, found {len(matches)}"
 
     async def test_flashcard_answer_follows_question(self, sample_vault_data):
         """Each flashcard callout has an answer line starting with '> '."""
@@ -324,9 +328,7 @@ class TestQuizAnswerFormat:
                     content = zf.read(name).decode()
                     if "> [!success]- Answer" in content:
                         matches = bold_answer_pattern.findall(content)
-                        assert len(matches) >= 1, (
-                            f"{name} should have bold answer text"
-                        )
+                        assert len(matches) >= 1, f"{name} should have bold answer text"
 
     async def test_mcq_quiz_has_option_list(self, sample_vault_data):
         """Multiple choice quizzes include option list items."""

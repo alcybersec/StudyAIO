@@ -69,15 +69,11 @@ async def get_course_count(session: AsyncSession, user_id: str) -> int:
     Returns:
         Number of courses.
     """
-    result = await session.execute(
-        select(func.count(Course.id)).where(Course.user_id == user_id)
-    )
+    result = await session.execute(select(func.count(Course.id)).where(Course.user_id == user_id))
     return result.scalar_one()
 
 
-async def check_upload_quota(
-    session: AsyncSession, user_id: str, user_tier: str
-) -> None:
+async def check_upload_quota(session: AsyncSession, user_id: str, user_tier: str) -> None:
     """Check if user can upload a file.
 
     Args:
@@ -102,9 +98,7 @@ async def check_upload_quota(
         )
 
 
-async def check_ai_quota(
-    session: AsyncSession, user_id: str, user_tier: str
-) -> None:
+async def check_ai_quota(session: AsyncSession, user_id: str, user_tier: str) -> None:
     """Check if user can make an AI call.
 
     Args:
@@ -130,9 +124,7 @@ async def check_ai_quota(
         )
 
 
-async def check_course_quota(
-    session: AsyncSession, user_id: str, user_tier: str
-) -> None:
+async def check_course_quota(session: AsyncSession, user_id: str, user_tier: str) -> None:
     """Check if user can create a new course.
 
     Args:

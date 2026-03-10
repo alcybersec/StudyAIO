@@ -1,6 +1,6 @@
 """Study streak calculation and session recording."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import structlog
 from sqlalchemy import func, select
@@ -98,9 +98,8 @@ async def get_streak(
     Returns:
         Dict with current_streak, longest_streak, last_study_date.
     """
-    query = (
-        select(func.distinct(StudySession.session_date))
-        .order_by(StudySession.session_date.desc())
+    query = select(func.distinct(StudySession.session_date)).order_by(
+        StudySession.session_date.desc()
     )
     if user_id:
         query = query.where(StudySession.user_id == user_id)

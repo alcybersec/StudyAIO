@@ -64,9 +64,7 @@ async def get_retention(
     session: AsyncSession = Depends(get_session),
 ) -> RetentionResponse:
     """Get retention curve data."""
-    data = await analytics_service.get_retention_data(
-        session, user.id, course_code=course_code
-    )
+    data = await analytics_service.get_retention_data(session, user.id, course_code=course_code)
     return RetentionResponse(points=data)
 
 
@@ -82,9 +80,7 @@ async def get_mastery(
     session: AsyncSession = Depends(get_session),
 ) -> MasteryResponse:
     """Get per-week mastery breakdown."""
-    data = await analytics_service.get_mastery_breakdown(
-        session, user.id, course_code=course_code
-    )
+    data = await analytics_service.get_mastery_breakdown(session, user.id, course_code=course_code)
     return MasteryResponse(weeks=data)
 
 

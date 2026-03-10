@@ -36,8 +36,9 @@ async def _evaluate_criteria(
     if criteria_type == "count":
         event_type = criteria.get("event_type", "")
         result = await session.execute(
-            select(func.count(XPEvent.id))
-            .where(XPEvent.user_id == user_id, XPEvent.event_type == event_type)
+            select(func.count(XPEvent.id)).where(
+                XPEvent.user_id == user_id, XPEvent.event_type == event_type
+            )
         )
         count = result.scalar() or 0
         return count >= threshold
@@ -49,16 +50,12 @@ async def _evaluate_criteria(
         return streak_data.get("current_streak", 0) >= threshold
 
     elif criteria_type == "total_xp":
-        result = await session.execute(
-            select(UserXP.total_xp).where(UserXP.user_id == user_id)
-        )
+        result = await session.execute(select(UserXP.total_xp).where(UserXP.user_id == user_id))
         total = result.scalar() or 0
         return total >= threshold
 
     elif criteria_type == "level":
-        result = await session.execute(
-            select(UserXP.level).where(UserXP.user_id == user_id)
-        )
+        result = await session.execute(select(UserXP.level).where(UserXP.user_id == user_id))
         level = result.scalar() or 1
         return level >= threshold
 
@@ -81,13 +78,8 @@ async def check_achievements(
         List of newly earned UserAchievement records.
     """
     # Get all achievements the user has NOT yet earned
-    earned_subq = (
-        select(UserAchievement.achievement_id)
-        .where(UserAchievement.user_id == user_id)
-    )
-    result = await session.execute(
-        select(Achievement).where(Achievement.id.not_in(earned_subq))
-    )
+    earned_subq = select(UserAchievement.achievement_id).where(UserAchievement.user_id == user_id)
+    result = await session.execute(select(Achievement).where(Achievement.id.not_in(earned_subq)))
     unearned = result.scalars().all()
 
     newly_earned: list[UserAchievement] = []
@@ -157,27 +149,26 @@ async def get_all_with_status(session: AsyncSession, user_id: str) -> list[dict]
 
     # Get user's earned achievements
     earned_result = await session.execute(
-        select(UserAchievement)
-        .where(UserAchievement.user_id == user_id)
+        select(UserAchievement).where(UserAchievement.user_id == user_id)
     )
-    earned_map = {
-        ua.achievement_id: ua for ua in earned_result.scalars().all()
-    }
+    earned_map = {ua.achievement_id: ua for ua in earned_result.scalars().all()}
 
     items = []
     for a in achievements:
         ua = earned_map.get(a.id)
-        items.append({
-            "id": a.id,
-            "code": a.code,
-            "title": a.title,
-            "description": a.description,
-            "icon": a.icon,
-            "category": a.category,
-            "xp_reward": a.xp_reward,
-            "earned": ua is not None,
-            "earned_at": ua.earned_at.isoformat() if ua else None,
-        })
+        items.append(
+            {
+                "id": a.id,
+                "code": a.code,
+                "title": a.title,
+                "description": a.description,
+                "icon": a.icon,
+                "category": a.category,
+                "xp_reward": a.xp_reward,
+                "earned": ua is not None,
+                "earned_at": ua.earned_at.isoformat() if ua else None,
+            }
+        )
 
     return items
 

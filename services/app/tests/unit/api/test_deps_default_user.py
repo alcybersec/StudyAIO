@@ -1,9 +1,7 @@
 """Tests for get_current_user_or_default dependency in self-hosted vs SaaS mode."""
 
-import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 from app.api.deps import DEFAULT_ADMIN_ID
@@ -16,10 +14,10 @@ class TestGetCurrentUserOrDefault:
 
     async def test_self_hosted_returns_default_admin(self, mock_session):
         """In self-hosted mode with no JWT, returns default admin user."""
-        from app.api.deps import _default_user_cache, get_current_user_or_default
-
         # Clear cache
         import app.api.deps
+        from app.api.deps import get_current_user_or_default
+
         app.api.deps._default_user_cache = None
 
         # Mock the admin user lookup

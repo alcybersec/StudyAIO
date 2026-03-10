@@ -15,16 +15,12 @@ class PushSubscription(Base):
     __tablename__ = "push_subscriptions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     endpoint: Mapped[str] = mapped_column(String(512), nullable=False)
     p256dh: Mapped[str] = mapped_column(String(256), nullable=False)
     auth: Mapped[str] = mapped_column(String(256), nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
         UniqueConstraint("user_id", "endpoint", name="uq_push_subscriptions_user_endpoint"),

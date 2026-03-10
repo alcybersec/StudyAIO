@@ -10,7 +10,6 @@ Validates that calendar-related API responses conform to expected schemas:
 
 import pytest
 
-
 # ── Sample data fixtures ────────────────────────────────────────────
 
 
@@ -150,8 +149,14 @@ class TestCalendarEventMappingStructure:
     def test_has_all_required_fields(self, sample_event_mapping):
         """Event mapping has all required fields."""
         required = {
-            "id", "user_id", "calendar_sync_id", "google_event_id",
-            "entity_type", "entity_id", "last_synced_hash", "created_at",
+            "id",
+            "user_id",
+            "calendar_sync_id",
+            "google_event_id",
+            "entity_type",
+            "entity_id",
+            "last_synced_hash",
+            "created_at",
         }
         missing = required - sample_event_mapping.keys()
         assert not missing, f"Missing fields: {missing}"

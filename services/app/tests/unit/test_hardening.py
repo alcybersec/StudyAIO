@@ -18,6 +18,10 @@ class TestRateLimiting:
 
     async def test_upload_rate_limit_returns_429(self, async_client):
         """Exceeding upload rate limit returns 429."""
+        from app.core.rate_limit import limiter
+
+        limiter.reset()
+
         mock_result = MagicMock()
         mock_result.id = "task-id"
 

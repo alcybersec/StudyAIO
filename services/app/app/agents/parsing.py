@@ -309,12 +309,24 @@ def parse_course_ops_response(text: str) -> CourseOpsResult:
 
 
 VALID_CONCEPT_CATEGORIES = {
-    "theory", "algorithm", "data_structure", "pattern", "tool",
-    "language", "protocol", "principle", "method", "general",
+    "theory",
+    "algorithm",
+    "data_structure",
+    "pattern",
+    "tool",
+    "language",
+    "protocol",
+    "principle",
+    "method",
+    "general",
 }
 
 VALID_RELATION_TYPES = {
-    "prerequisite", "extends", "uses", "related_to", "part_of",
+    "prerequisite",
+    "extends",
+    "uses",
+    "related_to",
+    "part_of",
 }
 
 

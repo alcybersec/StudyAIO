@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 
 interface OAuthButtonsProps {
   providers: string[]
@@ -10,7 +10,7 @@ const providerLabels: Record<string, string> = {
   github: 'GitHub',
 }
 
-const providerIcons: Record<string, JSX.Element> = {
+const providerIcons: Record<string, React.ReactNode> = {
   google: (
     <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
       <path

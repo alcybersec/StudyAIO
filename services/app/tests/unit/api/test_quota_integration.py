@@ -41,17 +41,17 @@ async def saas_client(mock_session, free_user):
 
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with (
-            patch("app.config.settings.data_dir", tmpdir),
-            patch("app.config.settings.self_hosted", False),
-            patch("app.api.uploads.settings.self_hosted", False),
-        ):
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
-                base_url="http://test",
-            ) as client:
-                yield client
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch("app.config.settings.data_dir", tmpdir),
+        patch("app.config.settings.self_hosted", False),
+        patch("app.api.uploads.settings.self_hosted", False),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            yield client
 
     app.dependency_overrides.clear()
 
@@ -64,9 +64,7 @@ class TestUploadQuota:
     async def test_upload_blocked_when_quota_exceeded(self, mock_quota, saas_client):
         """Free user gets 402 when upload quota exceeded."""
         mock_quota.check_upload_quota = AsyncMock(
-            side_effect=QuotaExceededError(
-                resource="uploads", limit=5, period="month"
-            )
+            side_effect=QuotaExceededError(resource="uploads", limit=5, period="month")
         )
 
         # Create a small PDF-like file
@@ -115,9 +113,7 @@ class TestQAQuota:
     async def test_qa_blocked_when_quota_exceeded(self, mock_quota, saas_client):
         """Free user gets 402 when AI quota exceeded."""
         mock_quota.check_ai_quota = AsyncMock(
-            side_effect=QuotaExceededError(
-                resource="ai_calls", limit=20, period="day"
-            )
+            side_effect=QuotaExceededError(resource="ai_calls", limit=20, period="day")
         )
 
         resp = await saas_client.post(
@@ -136,9 +132,7 @@ class TestChatQuota:
     async def test_chat_blocked_when_quota_exceeded(self, mock_quota, saas_client):
         """Free user gets 402 when AI quota exceeded in chat."""
         mock_quota.check_ai_quota = AsyncMock(
-            side_effect=QuotaExceededError(
-                resource="ai_calls", limit=20, period="day"
-            )
+            side_effect=QuotaExceededError(resource="ai_calls", limit=20, period="day")
         )
 
         resp = await saas_client.post(
@@ -156,9 +150,7 @@ class TestConceptExtractionQuota:
     async def test_extraction_blocked_when_quota_exceeded(self, mock_quota, saas_client):
         """Free user gets 402 when AI quota exceeded for concept extraction."""
         mock_quota.check_ai_quota = AsyncMock(
-            side_effect=QuotaExceededError(
-                resource="ai_calls", limit=20, period="day"
-            )
+            side_effect=QuotaExceededError(resource="ai_calls", limit=20, period="day")
         )
 
         resp = await saas_client.post("/api/concepts/extract/artifact-123")

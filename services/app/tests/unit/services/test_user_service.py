@@ -85,9 +85,7 @@ class TestRegisterUser:
         session = _mock_session_returning(existing)
 
         with pytest.raises(UserExistsError, match="email"):
-            await user_service.register_user(
-                session, "test@example.com", "other", "StrongPass1!"
-            )
+            await user_service.register_user(session, "test@example.com", "other", "StrongPass1!")
 
     @pytest.mark.asyncio
     async def test_register_duplicate_username_raises(self):
@@ -101,17 +99,13 @@ class TestRegisterUser:
         session.execute.side_effect = [result_none, result_user]
 
         with pytest.raises(UserExistsError, match="username"):
-            await user_service.register_user(
-                session, "new@example.com", "testuser", "StrongPass1!"
-            )
+            await user_service.register_user(session, "new@example.com", "testuser", "StrongPass1!")
 
     @pytest.mark.asyncio
     async def test_register_short_password_raises(self):
         session = AsyncMock()
         with pytest.raises(ValueError, match="at least 8"):
-            await user_service.register_user(
-                session, "new@example.com", "newuser", "short"
-            )
+            await user_service.register_user(session, "new@example.com", "newuser", "short")
 
     @pytest.mark.asyncio
     async def test_register_password_is_hashed(self):
@@ -138,9 +132,7 @@ class TestAuthenticateUser:
         user = _make_user(hashed_password=hashed)
         session = _mock_session_returning(user)
 
-        result = await user_service.authenticate_user(
-            session, "test@example.com", "CorrectPass!"
-        )
+        result = await user_service.authenticate_user(session, "test@example.com", "CorrectPass!")
         assert result.id == "user-001"
 
     @pytest.mark.asyncio
@@ -152,18 +144,14 @@ class TestAuthenticateUser:
         session = _mock_session_returning(user)
 
         with pytest.raises(AuthenticationError, match="Invalid email or password"):
-            await user_service.authenticate_user(
-                session, "test@example.com", "WrongPass!"
-            )
+            await user_service.authenticate_user(session, "test@example.com", "WrongPass!")
 
     @pytest.mark.asyncio
     async def test_authenticate_unknown_email(self):
         session = _mock_session_returning(None)
 
         with pytest.raises(AuthenticationError, match="Invalid email or password"):
-            await user_service.authenticate_user(
-                session, "nobody@example.com", "AnyPass1!"
-            )
+            await user_service.authenticate_user(session, "nobody@example.com", "AnyPass1!")
 
     @pytest.mark.asyncio
     async def test_authenticate_inactive_user(self):
@@ -174,9 +162,7 @@ class TestAuthenticateUser:
         session = _mock_session_returning(user)
 
         with pytest.raises(AuthenticationError, match="deactivated"):
-            await user_service.authenticate_user(
-                session, "test@example.com", "CorrectPass!"
-            )
+            await user_service.authenticate_user(session, "test@example.com", "CorrectPass!")
 
     @pytest.mark.asyncio
     async def test_authenticate_no_password_set(self):
@@ -184,9 +170,7 @@ class TestAuthenticateUser:
         session = _mock_session_returning(user)
 
         with pytest.raises(AuthenticationError, match="Invalid email or password"):
-            await user_service.authenticate_user(
-                session, "test@example.com", "AnyPass1!"
-            )
+            await user_service.authenticate_user(session, "test@example.com", "AnyPass1!")
 
 
 class TestGetUser:
@@ -220,9 +204,7 @@ class TestUpdateProfile:
         result_none.scalar_one_or_none.return_value = None
         session.execute.side_effect = [result_user, result_none]
 
-        updated = await user_service.update_profile(
-            session, "user-001", username="newname"
-        )
+        updated = await user_service.update_profile(session, "user-001", username="newname")
         assert updated.username == "newname"
 
 
@@ -237,9 +219,7 @@ class TestChangePassword:
         user = _make_user(hashed_password=old_hashed)
         session = _mock_session_returning(user)
 
-        await user_service.change_password(
-            session, "user-001", "OldPass1!", "NewPass1!"
-        )
+        await user_service.change_password(session, "user-001", "OldPass1!", "NewPass1!")
         assert user.hashed_password != old_hashed
 
     @pytest.mark.asyncio
@@ -251,9 +231,7 @@ class TestChangePassword:
         session = _mock_session_returning(user)
 
         with pytest.raises(AuthenticationError, match="Current password"):
-            await user_service.change_password(
-                session, "user-001", "WrongOld!", "NewPass1!"
-            )
+            await user_service.change_password(session, "user-001", "WrongOld!", "NewPass1!")
 
 
 class TestPasswordReset:
@@ -286,9 +264,7 @@ class TestPasswordReset:
         result_user.scalar_one_or_none.return_value = user
         session.execute.side_effect = [result_link, result_user]
 
-        await user_service.reset_password_with_token(
-            session, "test-token-abc", "NewSecure1!"
-        )
+        await user_service.reset_password_with_token(session, "test-token-abc", "NewSecure1!")
         assert link.used_at is not None
 
     @pytest.mark.asyncio
@@ -299,9 +275,7 @@ class TestPasswordReset:
         session = _mock_session_returning(link)
 
         with pytest.raises(AuthenticationError, match="expired"):
-            await user_service.reset_password_with_token(
-                session, "test-token-abc", "NewSecure1!"
-            )
+            await user_service.reset_password_with_token(session, "test-token-abc", "NewSecure1!")
 
     @pytest.mark.asyncio
     async def test_reset_with_used_token(self):
@@ -309,9 +283,7 @@ class TestPasswordReset:
         session = _mock_session_returning(link)
 
         with pytest.raises(AuthenticationError, match="already used"):
-            await user_service.reset_password_with_token(
-                session, "test-token-abc", "NewSecure1!"
-            )
+            await user_service.reset_password_with_token(session, "test-token-abc", "NewSecure1!")
 
 
 class TestMFA:
@@ -323,9 +295,7 @@ class TestMFA:
         session = _mock_session_returning(user)
 
         with patch("app.services.user_service.verify_totp", return_value=True):
-            codes = await user_service.enable_mfa(
-                session, "user-001", "123456", "JBSWY3DPEHPK3PXP"
-            )
+            codes = await user_service.enable_mfa(session, "user-001", "123456", "JBSWY3DPEHPK3PXP")
         assert len(codes) == 10
         assert user.mfa_enabled is True
         assert user.mfa_secret == "JBSWY3DPEHPK3PXP"
@@ -339,9 +309,7 @@ class TestMFA:
             patch("app.services.user_service.verify_totp", return_value=False),
             pytest.raises(AuthorizationError, match="Invalid TOTP"),
         ):
-            await user_service.enable_mfa(
-                session, "user-001", "000000", "JBSWY3DPEHPK3PXP"
-            )
+            await user_service.enable_mfa(session, "user-001", "000000", "JBSWY3DPEHPK3PXP")
 
 
 class TestOAuth:
@@ -381,6 +349,4 @@ class TestOAuth:
     async def test_oauth_no_email_raises(self):
         session = AsyncMock()
         with pytest.raises(AuthenticationError, match="did not return an email"):
-            await user_service.create_or_link_oauth(
-                session, "google", "goog-123", ""
-            )
+            await user_service.create_or_link_oauth(session, "google", "goog-123", "")

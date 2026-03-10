@@ -1,6 +1,5 @@
 """Tests for billing service."""
 
-from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -78,9 +77,7 @@ class TestGetOrCreateSubscription:
         mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        result = await billing_service.get_or_create_subscription(
-            mock_session, "user-1", "cus_new123"
-        )
+        await billing_service.get_or_create_subscription(mock_session, "user-1", "cus_new123")
         mock_session.add.assert_called_once()
         added = mock_session.add.call_args[0][0]
         assert added.user_id == "user-1"
@@ -119,6 +116,7 @@ class TestCreateCheckoutSession:
         """Creates a Stripe customer when user has no subscription."""
         # First call: get_subscription returns None; second: get_or_create returns new
         call_count = [0]
+
         def execute_side_effect(*args, **kwargs):
             call_count[0] += 1
             result = MagicMock()
@@ -293,9 +291,7 @@ class TestCancelSubscription:
         ):
             await billing_service.cancel_subscription(mock_session, "user-1")
 
-        mock_modify.assert_called_once_with(
-            "sub_test123", cancel_at_period_end=True
-        )
+        mock_modify.assert_called_once_with("sub_test123", cancel_at_period_end=True)
         assert mock_subscription.cancel_at_period_end is True
 
     @pytest.mark.asyncio

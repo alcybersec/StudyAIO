@@ -98,9 +98,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
 
             # Write summary to storage
             storage = get_storage()
-            storage_key = summary_service.build_summary_storage_key(
-                course.code, artifact.week
-            )
+            storage_key = summary_service.build_summary_storage_key(course.code, artifact.week)
             await storage.put(storage_key, summary_result.content_md.encode("utf-8"))
 
             # Collect source artifact IDs from the merged extraction

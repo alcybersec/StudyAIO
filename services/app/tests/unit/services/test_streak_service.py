@@ -168,16 +168,20 @@ class TestGetStudyHistory:
         today = date.today()
 
         mock_result = MagicMock()
-        mock_result.__iter__ = MagicMock(return_value=iter([
-            MagicMock(
-                session_date=today,
-                cards_reviewed=20,
-                quiz_answered=10,
-                quiz_correct=8,
-                duration_seconds=1200,
-                session_count=2,
-            ),
-        ]))
+        mock_result.__iter__ = MagicMock(
+            return_value=iter(
+                [
+                    MagicMock(
+                        session_date=today,
+                        cards_reviewed=20,
+                        quiz_answered=10,
+                        quiz_correct=8,
+                        duration_seconds=1200,
+                        session_count=2,
+                    ),
+                ]
+            )
+        )
         session.execute = AsyncMock(return_value=mock_result)
 
         result = await get_study_history(session, days=7)

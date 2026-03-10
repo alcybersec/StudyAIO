@@ -28,9 +28,7 @@ async def _ingest(file_path: str, user_id: str | None = None) -> dict:
         )
 
         try:
-            artifact = await artifact_service.ingest_file(
-                session, file_path, user_id=user_id or ""
-            )
+            artifact = await artifact_service.ingest_file(session, file_path, user_id=user_id or "")
 
             # Update pipeline run with real artifact_id
             run.artifact_id = artifact.id

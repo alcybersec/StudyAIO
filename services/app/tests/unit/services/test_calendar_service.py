@@ -1,6 +1,6 @@
 """Tests for calendar service."""
 
-from datetime import date, datetime
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -54,7 +54,9 @@ class TestGenerateIcs:
 
         deadlines = [
             _make_deadline(id="dl-001", title="Assignment 1", due_date=date(2026, 4, 15)),
-            _make_deadline(id="dl-002", title="Final Exam", due_date=date(2026, 6, 15), deadline_type="exam"),
+            _make_deadline(
+                id="dl-002", title="Final Exam", due_date=date(2026, 6, 15), deadline_type="exam"
+            ),
         ]
         dl_result = MagicMock()
         dl_result.scalars.return_value.all.return_value = deadlines

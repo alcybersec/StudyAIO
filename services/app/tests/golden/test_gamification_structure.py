@@ -12,9 +12,8 @@ Validates that gamification-related data conforms to expected schemas:
 
 import pytest
 
-from app.services.xp_service import LEVEL_THRESHOLDS, XP_AMOUNTS
 from app.services.challenge_service import CHALLENGE_TEMPLATES
-
+from app.services.xp_service import LEVEL_THRESHOLDS, XP_AMOUNTS
 
 # ── Sample data fixtures ────────────────────────────────────────────
 
@@ -151,8 +150,12 @@ class TestXPSummaryStructure:
     def test_has_required_fields(self, sample_xp_summary):
         """XP summary has all required fields."""
         required = {
-            "total_xp", "level", "progress_pct", "current_threshold",
-            "next_threshold", "recent_events",
+            "total_xp",
+            "level",
+            "progress_pct",
+            "current_threshold",
+            "next_threshold",
+            "recent_events",
         }
         missing = required - sample_xp_summary.keys()
         assert not missing, f"Missing fields: {missing}"
@@ -201,8 +204,15 @@ class TestAchievementStructure:
     def test_earned_has_required_fields(self, sample_achievement_earned):
         """Earned achievement has all required fields."""
         required = {
-            "id", "code", "title", "description", "icon",
-            "category", "xp_reward", "earned", "earned_at",
+            "id",
+            "code",
+            "title",
+            "description",
+            "icon",
+            "category",
+            "xp_reward",
+            "earned",
+            "earned_at",
         }
         missing = required - sample_achievement_earned.keys()
         assert not missing, f"Missing fields: {missing}"
@@ -227,8 +237,15 @@ class TestDailyChallengeStructure:
     def test_incomplete_has_required_fields(self, sample_daily_challenge):
         """Incomplete challenge has all required fields."""
         required = {
-            "challenge_id", "challenge_date", "challenge_type", "target",
-            "description", "xp_reward", "progress", "completed", "completed_at",
+            "challenge_id",
+            "challenge_date",
+            "challenge_type",
+            "target",
+            "description",
+            "xp_reward",
+            "progress",
+            "completed",
+            "completed_at",
         }
         missing = required - sample_daily_challenge.keys()
         assert not missing, f"Missing fields: {missing}"
@@ -275,9 +292,14 @@ class TestDashboardGamificationStructure:
     def test_has_required_fields(self, sample_dashboard_gamification):
         """Dashboard gamification has all required fields."""
         required = {
-            "total_xp", "level", "progress_pct", "next_threshold",
-            "daily_challenge_description", "daily_challenge_progress",
-            "daily_challenge_target", "daily_challenge_completed",
+            "total_xp",
+            "level",
+            "progress_pct",
+            "next_threshold",
+            "daily_challenge_description",
+            "daily_challenge_progress",
+            "daily_challenge_target",
+            "daily_challenge_completed",
             "unnotified_achievement_count",
         }
         missing = required - sample_dashboard_gamification.keys()
@@ -299,7 +321,7 @@ class TestLevelThresholdsValidity:
         for i in range(1, len(LEVEL_THRESHOLDS)):
             assert LEVEL_THRESHOLDS[i] > LEVEL_THRESHOLDS[i - 1], (
                 f"Threshold {i} ({LEVEL_THRESHOLDS[i]}) not greater than "
-                f"threshold {i-1} ({LEVEL_THRESHOLDS[i-1]})"
+                f"threshold {i - 1} ({LEVEL_THRESHOLDS[i - 1]})"
             )
 
     def test_starts_at_zero(self):

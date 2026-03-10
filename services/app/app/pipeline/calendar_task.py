@@ -21,9 +21,7 @@ async def _sync_all() -> int:
         synced = 0
         for cal_sync in syncs:
             try:
-                await gcal_service.sync_calendar(
-                    session, cal_sync.user_id, cal_sync.id
-                )
+                await gcal_service.sync_calendar(session, cal_sync.user_id, cal_sync.id)
                 synced += 1
             except Exception:
                 logger.warning(

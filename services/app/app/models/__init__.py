@@ -5,15 +5,15 @@ Import all models here so Alembic's autogenerate can discover them.
 
 from app.models.achievement import Achievement
 from app.models.analytics_snapshot import AnalyticsSnapshot
-from app.models.calendar_event import CalendarEvent
-from app.models.calendar_sync import CalendarSync
-from app.models.concept import Concept
-from app.models.concept_relation import ConceptRelation
 from app.models.artifact import LectureArtifact
 from app.models.assessment import Assessment
+from app.models.calendar_event import CalendarEvent
+from app.models.calendar_sync import CalendarSync
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.chunk import Chunk
+from app.models.concept import Concept
+from app.models.concept_relation import ConceptRelation
 from app.models.course import Course
 from app.models.course_document import CourseDocument
 from app.models.daily_challenge import DailyChallenge

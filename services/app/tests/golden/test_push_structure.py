@@ -16,7 +16,6 @@ from app.api.notification_schemas import (
 )
 from app.models.push_subscription import PushSubscription
 
-
 # -- Sample data fixtures ---------------------------------------------------
 
 
@@ -92,7 +91,8 @@ class TestPushSubscriptionModelStructure:
     def test_unique_constraint_user_endpoint(self) -> None:
         """Unique constraint exists on (user_id, endpoint)."""
         constraint_names = [
-            c.name for c in PushSubscription.__table__.constraints
+            c.name
+            for c in PushSubscription.__table__.constraints
             if hasattr(c, "columns") and len(c.columns) > 1
         ]
         assert "uq_push_subscriptions_user_endpoint" in constraint_names
@@ -128,6 +128,7 @@ class TestVapidKeyResponseStructure:
         """public_key looks like a base64url-encoded string (no padding required)."""
         key = sample_vapid_key_response["public_key"]
         import re
+
         # Base64url: alphanumeric, -, _, optional = padding
         assert re.match(r"^[A-Za-z0-9_\-]+=*$", key), (
             f"public_key doesn't look base64url: {key[:20]}..."

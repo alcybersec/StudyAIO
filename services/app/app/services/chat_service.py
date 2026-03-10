@@ -212,8 +212,7 @@ async def send_message(
     except Exception as e:
         logger.error("chat_agent_error", error=str(e))
         answer_text = (
-            "I'm sorry, I encountered an error while processing your question. "
-            "Please try again."
+            "I'm sorry, I encountered an error while processing your question. Please try again."
         )
         answer_citations = []
 
@@ -339,8 +338,7 @@ async def stream_message(
     except Exception as e:
         logger.error("chat_stream_error", error=str(e))
         error_msg = (
-            "I'm sorry, I encountered an error while processing your question. "
-            "Please try again."
+            "I'm sorry, I encountered an error while processing your question. Please try again."
         )
         full_text = error_msg
         yield {"event": "token", "data": error_msg}
@@ -349,6 +347,7 @@ async def stream_message(
     citations: list[dict] = []
     try:
         from app.agents import parsing
+
         parsed = parsing.parse_json_response(full_text)
         if isinstance(parsed, dict) and "answer" in parsed:
             full_text = parsed["answer"]

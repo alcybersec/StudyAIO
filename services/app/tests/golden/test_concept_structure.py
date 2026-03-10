@@ -12,7 +12,6 @@ Validates that concept/graph-related data conforms to expected schemas:
 
 import pytest
 
-
 # ── Sample data fixtures ────────────────────────────────────────────
 
 
@@ -116,7 +115,15 @@ def sample_extraction_result():
 class TestConceptNodeStructure:
     """Verify concept node has required fields."""
 
-    REQUIRED_FIELDS = {"id", "name", "description", "category", "mention_count", "source_weeks", "course_id"}
+    REQUIRED_FIELDS = {
+        "id",
+        "name",
+        "description",
+        "category",
+        "mention_count",
+        "source_weeks",
+        "course_id",
+    }
 
     def test_has_all_required_fields(self, sample_concept_node):
         """Node has all required fields."""
@@ -132,8 +139,18 @@ class TestConceptNodeStructure:
         assert isinstance(sample_concept_node["description"], str)
 
     def test_category_is_valid(self, sample_concept_node):
-        valid = {"theory", "algorithm", "data_structure", "pattern", "tool",
-                 "language", "protocol", "principle", "method", "general"}
+        valid = {
+            "theory",
+            "algorithm",
+            "data_structure",
+            "pattern",
+            "tool",
+            "language",
+            "protocol",
+            "principle",
+            "method",
+            "general",
+        }
         assert sample_concept_node["category"] in valid
 
     def test_mention_count_is_positive_int(self, sample_concept_node):
@@ -193,9 +210,16 @@ class TestConceptDetailStructure:
     """Verify concept detail has required fields."""
 
     REQUIRED_FIELDS = {
-        "id", "name", "description", "category", "mention_count",
-        "source_artifact_ids", "source_weeks", "course_id",
-        "outgoing_relations", "incoming_relations",
+        "id",
+        "name",
+        "description",
+        "category",
+        "mention_count",
+        "source_artifact_ids",
+        "source_weeks",
+        "course_id",
+        "outgoing_relations",
+        "incoming_relations",
     }
 
     def test_has_all_required_fields(self, sample_concept_detail):

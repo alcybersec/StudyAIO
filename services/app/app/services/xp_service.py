@@ -71,9 +71,7 @@ async def get_or_create_user_xp(session: AsyncSession, user_id: str) -> UserXP:
     Returns:
         The UserXP record.
     """
-    result = await session.execute(
-        select(UserXP).where(UserXP.user_id == user_id)
-    )
+    result = await session.execute(select(UserXP).where(UserXP.user_id == user_id))
     user_xp = result.scalar_one_or_none()
 
     if not user_xp:
@@ -139,9 +137,7 @@ async def award_xp(
         )
 
     # Check for newly unlocked achievements
-    new_achievements = await achievement_service.check_achievements(
-        session, user_id, event_type
-    )
+    new_achievements = await achievement_service.check_achievements(session, user_id, event_type)
 
     await session.commit()
 

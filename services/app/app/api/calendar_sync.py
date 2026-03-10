@@ -32,9 +32,7 @@ async def connect_calendar(
     user: User = Depends(get_current_user_or_default),
 ) -> CalendarConnectResponse:
     """Connect a Google Calendar using an OAuth authorization code."""
-    cal_sync = await gcal_service.connect_google_calendar(
-        session, user.id, body.auth_code
-    )
+    cal_sync = await gcal_service.connect_google_calendar(session, user.id, body.auth_code)
     await session.commit()
     return CalendarConnectResponse(
         sync_id=cal_sync.id,
@@ -73,9 +71,7 @@ async def get_status(
 ) -> CalendarSyncStatusResponse:
     """Return list of connected calendars with sync status."""
     statuses = await gcal_service.get_sync_status(session, user.id)
-    return CalendarSyncStatusResponse(
-        calendars=[CalendarSyncInfo(**s) for s in statuses]
-    )
+    return CalendarSyncStatusResponse(calendars=[CalendarSyncInfo(**s) for s in statuses])
 
 
 @router.delete("/disconnect/{sync_id}")

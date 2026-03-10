@@ -1,7 +1,5 @@
 """Golden tests for multi-tenant structure validation."""
 
-import pytest
-
 from app.models.user_settings import UserSettings
 
 
@@ -11,7 +9,15 @@ class TestUserSettingsSchema:
     def test_has_required_columns(self):
         """UserSettings model has all expected column names."""
         columns = {c.key for c in UserSettings.__table__.columns}
-        expected = {"id", "user_id", "settings_json", "theme", "dashboard_layout", "created_at", "updated_at"}
+        expected = {
+            "id",
+            "user_id",
+            "settings_json",
+            "theme",
+            "dashboard_layout",
+            "created_at",
+            "updated_at",
+        }
         assert expected.issubset(columns), f"Missing columns: {expected - columns}"
 
     def test_user_id_is_unique(self):
@@ -56,5 +62,14 @@ class TestUserResponseStructure:
         from app.api.admin import UserResponse
 
         fields = set(UserResponse.model_fields.keys())
-        expected = {"id", "email", "username", "role", "tier", "is_active", "created_at", "last_login_at"}
+        expected = {
+            "id",
+            "email",
+            "username",
+            "role",
+            "tier",
+            "is_active",
+            "created_at",
+            "last_login_at",
+        }
         assert expected == fields

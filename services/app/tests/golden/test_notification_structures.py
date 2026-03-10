@@ -9,7 +9,6 @@ import pytest
 
 from app.services.notification_service import CHANNELS, EVENT_TYPES
 
-
 # ── Sample data fixtures ────────────────────────────────────────────
 
 
@@ -75,16 +74,12 @@ class TestNotificationPreferencesStructure:
     def test_preference_channels_valid(self, sample_preferences_response) -> None:
         """All channels are from the valid set."""
         for item in sample_preferences_response["preferences"]:
-            assert item["channel"] in CHANNELS, (
-                f"Invalid channel: {item['channel']}"
-            )
+            assert item["channel"] in CHANNELS, f"Invalid channel: {item['channel']}"
 
     def test_preference_event_types_valid(self, sample_preferences_response) -> None:
         """All event_types are from the valid set."""
         for item in sample_preferences_response["preferences"]:
-            assert item["event_type"] in EVENT_TYPES, (
-                f"Invalid event_type: {item['event_type']}"
-            )
+            assert item["event_type"] in EVENT_TYPES, f"Invalid event_type: {item['event_type']}"
 
     def test_preference_enabled_is_bool(self, sample_preferences_response) -> None:
         """The enabled field is a boolean."""

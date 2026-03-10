@@ -54,15 +54,15 @@ async def admin_client(mock_session):
     app.dependency_overrides[get_current_user] = override_user
 
     from app.core.rate_limit import limiter
+
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("app.config.settings.data_dir", tmpdir):
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
-                base_url="http://test",
-            ) as client:
-                yield client
+    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            yield client
     app.dependency_overrides.clear()
 
 
@@ -85,15 +85,15 @@ async def nonadmin_client(mock_session):
     app.dependency_overrides[get_current_user] = override_user
 
     from app.core.rate_limit import limiter
+
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("app.config.settings.data_dir", tmpdir):
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
-                base_url="http://test",
-            ) as client:
-                yield client
+    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            yield client
     app.dependency_overrides.clear()
 
 

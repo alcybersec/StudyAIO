@@ -57,7 +57,7 @@ async def create_exam(
         await session.commit()
         return ExamResponse.model_validate(exam)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get(
@@ -256,5 +256,7 @@ async def get_history(
     session: AsyncSession = Depends(get_session),
 ) -> list[StudyHistoryDayResponse]:
     """Get study history for an exam."""
-    history = await streak_service.get_study_history(session, exam_id=exam_id, days=days, user_id=user.id)
+    history = await streak_service.get_study_history(
+        session, exam_id=exam_id, days=days, user_id=user.id
+    )
     return [StudyHistoryDayResponse(**h) for h in history]

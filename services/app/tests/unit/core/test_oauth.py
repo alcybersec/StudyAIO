@@ -6,7 +6,6 @@ import pytest
 
 from app.core.oauth import (
     VALID_PROVIDERS,
-    OAuthUserInfo,
     build_authorize_url,
     build_callback_url,
     fetch_userinfo,
@@ -92,7 +91,10 @@ class TestBuildAuthorizeUrl:
                 "client_id": "goog-id",
                 "scope": "openid email profile",
             }
-            with patch("app.core.oauth.build_callback_url", return_value="https://app.example.com/api/auth/oauth/google/callback"):
+            with patch(
+                "app.core.oauth.build_callback_url",
+                return_value="https://app.example.com/api/auth/oauth/google/callback",
+            ):
                 url = build_authorize_url("google", "test-state")
 
         assert "client_id=goog-id" in url
@@ -108,7 +110,10 @@ class TestBuildAuthorizeUrl:
                 "client_id": "gh-id",
                 "scope": "read:user user:email",
             }
-            with patch("app.core.oauth.build_callback_url", return_value="https://app.example.com/api/auth/oauth/github/callback"):
+            with patch(
+                "app.core.oauth.build_callback_url",
+                return_value="https://app.example.com/api/auth/oauth/github/callback",
+            ):
                 url = build_authorize_url("github", "test-state")
 
         assert "client_id=gh-id" in url
@@ -196,10 +201,14 @@ class TestFetchUserInfo:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
-            patch("app.core.oauth.get_provider_config", return_value={
-                "client_id": "id", "client_secret": "sec",
-                "userinfo_url": "https://googleapis.com/userinfo",
-            }),
+            patch(
+                "app.core.oauth.get_provider_config",
+                return_value={
+                    "client_id": "id",
+                    "client_secret": "sec",
+                    "userinfo_url": "https://googleapis.com/userinfo",
+                },
+            ),
             patch("app.core.oauth.AsyncOAuth2Client", return_value=mock_client),
         ):
             info = await fetch_userinfo("google", {"access_token": "tok"})
@@ -228,10 +237,14 @@ class TestFetchUserInfo:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
-            patch("app.core.oauth.get_provider_config", return_value={
-                "client_id": "id", "client_secret": "sec",
-                "userinfo_url": "https://api.github.com/user",
-            }),
+            patch(
+                "app.core.oauth.get_provider_config",
+                return_value={
+                    "client_id": "id",
+                    "client_secret": "sec",
+                    "userinfo_url": "https://api.github.com/user",
+                },
+            ),
             patch("app.core.oauth.AsyncOAuth2Client", return_value=mock_client),
         ):
             info = await fetch_userinfo("github", {"access_token": "tok"})
@@ -268,10 +281,14 @@ class TestFetchUserInfo:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
-            patch("app.core.oauth.get_provider_config", return_value={
-                "client_id": "id", "client_secret": "sec",
-                "userinfo_url": "https://api.github.com/user",
-            }),
+            patch(
+                "app.core.oauth.get_provider_config",
+                return_value={
+                    "client_id": "id",
+                    "client_secret": "sec",
+                    "userinfo_url": "https://api.github.com/user",
+                },
+            ),
             patch("app.core.oauth.AsyncOAuth2Client", return_value=mock_client),
         ):
             info = await fetch_userinfo("github", {"access_token": "tok"})

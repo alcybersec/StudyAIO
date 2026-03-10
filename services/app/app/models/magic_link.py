@@ -19,9 +19,7 @@ class MagicLink(Base):
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    link_type: Mapped[str] = mapped_column(
-        String(30), nullable=False, default="password_reset"
-    )
+    link_type: Mapped[str] = mapped_column(String(30), nullable=False, default="password_reset")
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)

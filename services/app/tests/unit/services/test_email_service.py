@@ -1,6 +1,6 @@
 """Tests for email notification service."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -67,7 +67,9 @@ class TestEmailService:
         with (
             patch("app.services.email_service.settings") as mock_settings,
             patch("app.services.email_service._smtp_configured", return_value=True),
-            patch("aiosmtplib.send", new_callable=AsyncMock, side_effect=ConnectionError("SMTP down")),
+            patch(
+                "aiosmtplib.send", new_callable=AsyncMock, side_effect=ConnectionError("SMTP down")
+            ),
         ):
             mock_settings.smtp_host = "smtp.test.com"
             mock_settings.smtp_port = 587
@@ -96,12 +98,12 @@ class TestEmailService:
     @pytest.mark.asyncio
     async def test_typed_senders(self) -> None:
         """Typed sender functions call send_templated_email correctly."""
-        with patch("app.services.email_service.send_templated_email", new_callable=AsyncMock) as mock:
+        with patch(
+            "app.services.email_service.send_templated_email", new_callable=AsyncMock
+        ) as mock:
             mock.return_value = True
 
-            await send_pipeline_complete(
-                "to@test.com", "lec.pdf", "CS101", 1, 10, 5
-            )
+            await send_pipeline_complete("to@test.com", "lec.pdf", "CS101", 1, 10, 5)
             assert mock.call_count == 1
 
             await send_cards_due("to@test.com", 7)

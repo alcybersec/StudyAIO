@@ -51,10 +51,7 @@ def generate_backup_codes(count: int = 10) -> list[str]:
         List of 8-character alphanumeric backup codes.
     """
     alphabet = string.ascii_uppercase + string.digits
-    return [
-        "".join(secrets.choice(alphabet) for _ in range(8))
-        for _ in range(count)
-    ]
+    return ["".join(secrets.choice(alphabet) for _ in range(8)) for _ in range(count)]
 
 
 def generate_qr_code_base64(provisioning_uri: str) -> str:

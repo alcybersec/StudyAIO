@@ -206,9 +206,7 @@ async def get_sync_status(
     Returns:
         List of calendar sync info dicts.
     """
-    result = await session.execute(
-        select(CalendarSync).where(CalendarSync.user_id == user_id)
-    )
+    result = await session.execute(select(CalendarSync).where(CalendarSync.user_id == user_id))
     syncs = list(result.scalars().all())
 
     statuses = []
@@ -219,13 +217,15 @@ async def get_sync_status(
         )
         event_count = count_result.scalar() or 0
 
-        statuses.append({
-            "id": s.id,
-            "google_calendar_id": s.google_calendar_id,
-            "sync_direction": s.sync_direction,
-            "last_synced_at": s.last_synced_at.isoformat() if s.last_synced_at else None,
-            "event_count": event_count,
-        })
+        statuses.append(
+            {
+                "id": s.id,
+                "google_calendar_id": s.google_calendar_id,
+                "sync_direction": s.sync_direction,
+                "last_synced_at": s.last_synced_at.isoformat() if s.last_synced_at else None,
+                "event_count": event_count,
+            }
+        )
 
     return statuses
 
@@ -266,6 +266,7 @@ async def push_events(
     if creds.expired and creds.refresh_token:
         try:
             from google.auth.transport.requests import Request
+
             creds.refresh(Request())
             cal_sync.access_token = creds.token
             await session.flush()
@@ -276,17 +277,13 @@ async def push_events(
     result = await session.execute(
         select(CalendarEvent).where(CalendarEvent.calendar_sync_id == sync_id)
     )
-    existing_events = {
-        f"{e.entity_type}:{e.entity_id}": e for e in result.scalars().all()
-    }
+    existing_events = {f"{e.entity_type}:{e.entity_id}": e for e in result.scalars().all()}
 
     changes = 0
 
     # Push deadlines
     result = await session.execute(
-        select(Deadline).join(
-            Deadline.course
-        ).where(Deadline.course.has(user_id=user_id))
+        select(Deadline).join(Deadline.course).where(Deadline.course.has(user_id=user_id))
     )
     deadlines = list(result.scalars().all())
 
@@ -318,10 +315,14 @@ async def push_events(
                 logger.warning("gcal_push_update_failed", deadline_id=deadline.id, error=str(e))
         else:
             try:
-                created = service.events().insert(
-                    calendarId=cal_sync.google_calendar_id,
-                    body=gcal_event_body,
-                ).execute()
+                created = (
+                    service.events()
+                    .insert(
+                        calendarId=cal_sync.google_calendar_id,
+                        body=gcal_event_body,
+                    )
+                    .execute()
+                )
                 cal_event = CalendarEvent(
                     id=generate_id(),
                     user_id=user_id,
@@ -372,10 +373,14 @@ async def push_events(
                 logger.warning("gcal_push_exam_update_failed", exam_id=exam.id, error=str(e))
         else:
             try:
-                created = service.events().insert(
-                    calendarId=cal_sync.google_calendar_id,
-                    body=gcal_event_body,
-                ).execute()
+                created = (
+                    service.events()
+                    .insert(
+                        calendarId=cal_sync.google_calendar_id,
+                        body=gcal_event_body,
+                    )
+                    .execute()
+                )
                 cal_event = CalendarEvent(
                     id=generate_id(),
                     user_id=user_id,
@@ -433,6 +438,7 @@ async def pull_events(
     if creds.expired and creds.refresh_token:
         try:
             from google.auth.transport.requests import Request
+
             creds.refresh(Request())
             cal_sync.access_token = creds.token
             await session.flush()
@@ -561,9 +567,7 @@ async def handle_gcal_webhook(
         channel_id: The notification channel ID (maps to sync_id).
         resource_id: The Google resource ID.
     """
-    result = await session.execute(
-        select(CalendarSync).where(CalendarSync.id == channel_id)
-    )
+    result = await session.execute(select(CalendarSync).where(CalendarSync.id == channel_id))
     cal_sync = result.scalar_one_or_none()
     if not cal_sync:
         logger.warning("gcal_webhook_unknown_channel", channel_id=channel_id)

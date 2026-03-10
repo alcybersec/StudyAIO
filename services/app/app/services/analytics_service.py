@@ -62,8 +62,7 @@ async def get_overview(session: AsyncSession, user_id: str) -> dict:
 
     # Active courses count
     active_courses_result = await session.execute(
-        select(func.count(func.distinct(Course.id)))
-        .where(Course.user_id == user_id)
+        select(func.count(func.distinct(Course.id))).where(Course.user_id == user_id)
     )
     active_courses = active_courses_result.scalar() or 0
 
@@ -78,9 +77,7 @@ async def get_overview(session: AsyncSession, user_id: str) -> dict:
     }
 
 
-async def get_study_heatmap(
-    session: AsyncSession, user_id: str, days: int = 90
-) -> list[dict]:
+async def get_study_heatmap(session: AsyncSession, user_id: str, days: int = 90) -> list[dict]:
     """Get daily study totals for heatmap display.
 
     Returns list of {date: "YYYY-MM-DD", minutes: float, cards: int, sessions: int}
@@ -126,12 +123,14 @@ async def get_study_heatmap(
         if current in data_by_date:
             heatmap.append(data_by_date[current])
         else:
-            heatmap.append({
-                "date": current.isoformat(),
-                "minutes": 0,
-                "cards": 0,
-                "sessions": 0,
-            })
+            heatmap.append(
+                {
+                    "date": current.isoformat(),
+                    "minutes": 0,
+                    "cards": 0,
+                    "sessions": 0,
+                }
+            )
         current += timedelta(days=1)
 
     return heatmap
@@ -183,9 +182,7 @@ async def get_retention_data(
         return 90
 
     # Group by bucket
-    bucket_data: dict[int, dict[str, int]] = defaultdict(
-        lambda: {"total": 0, "retained": 0}
-    )
+    bucket_data: dict[int, dict[str, int]] = defaultdict(lambda: {"total": 0, "retained": 0})
 
     for interval, ease, _code in rows:
         b = get_bucket(interval)
@@ -197,9 +194,7 @@ async def get_retention_data(
     return [
         {
             "interval_bucket": b,
-            "retention_pct": round(
-                bucket_data[b]["retained"] / bucket_data[b]["total"] * 100, 1
-            )
+            "retention_pct": round(bucket_data[b]["retained"] / bucket_data[b]["total"] * 100, 1)
             if bucket_data[b]["total"] > 0
             else 0,
             "card_count": bucket_data[b]["total"],
@@ -242,8 +237,7 @@ async def get_mastery_breakdown(
             func.sum(
                 case(
                     (
-                        (FlashcardReview.id.isnot(None))
-                        & (FlashcardReview.interval_days <= 21),
+                        (FlashcardReview.id.isnot(None)) & (FlashcardReview.interval_days <= 21),
                         1,
                     ),
                     else_=0,
@@ -257,9 +251,7 @@ async def get_mastery_breakdown(
     if course_code:
         query = query.where(Course.code == course_code)
 
-    query = query.group_by(Course.code, Flashcard.week).order_by(
-        Course.code, Flashcard.week
-    )
+    query = query.group_by(Course.code, Flashcard.week).order_by(Course.code, Flashcard.week)
 
     result = await session.execute(query)
 
@@ -271,17 +263,13 @@ async def get_mastery_breakdown(
             "mastered": row.mastered or 0,
             "learning": row.learning or 0,
             "new": row.total - (row.mastered or 0) - (row.learning or 0),
-            "mastery_pct": round((row.mastered or 0) / row.total * 100, 1)
-            if row.total > 0
-            else 0,
+            "mastery_pct": round((row.mastered or 0) / row.total * 100, 1) if row.total > 0 else 0,
         }
         for row in result
     ]
 
 
-async def get_exam_readiness(
-    session: AsyncSession, exam_id: str, user_id: str
-) -> dict | None:
+async def get_exam_readiness(session: AsyncSession, exam_id: str, user_id: str) -> dict | None:
     """Get exam readiness score — weighted combination of mastery, quiz accuracy, and study consistency.
 
     Weights: mastery 40%, quiz accuracy 30%, study consistency 30%.
@@ -322,9 +310,7 @@ async def get_exam_readiness(
     study_days = consistency_result.scalar() or 0
     consistency_score = min(100, round(study_days / 7 * 100, 1))
 
-    readiness_score = round(
-        mastery_score * 0.4 + quiz_score * 0.3 + consistency_score * 0.3, 1
-    )
+    readiness_score = round(mastery_score * 0.4 + quiz_score * 0.3 + consistency_score * 0.3, 1)
 
     weak_topics = await get_weak_topics(session, exam.course_id, exam.weeks_scope)
 
@@ -345,9 +331,7 @@ async def get_exam_readiness(
     }
 
 
-async def compute_and_store_snapshot(
-    session: AsyncSession, user_id: str
-) -> AnalyticsSnapshot:
+async def compute_and_store_snapshot(session: AsyncSession, user_id: str) -> AnalyticsSnapshot:
     """Compute and store a daily analytics snapshot.
 
     If a snapshot already exists for today, updates it. Otherwise creates a new one.
@@ -376,9 +360,7 @@ async def compute_and_store_snapshot(
     if existing:
         existing.metrics_json = overview
         await session.flush()
-        logger.info(
-            "analytics_snapshot_updated", user_id=user_id, date=today.isoformat()
-        )
+        logger.info("analytics_snapshot_updated", user_id=user_id, date=today.isoformat())
         return existing
 
     snapshot = AnalyticsSnapshot(
@@ -389,7 +371,5 @@ async def compute_and_store_snapshot(
     )
     session.add(snapshot)
     await session.flush()
-    logger.info(
-        "analytics_snapshot_created", user_id=user_id, date=today.isoformat()
-    )
+    logger.info("analytics_snapshot_created", user_id=user_id, date=today.isoformat())
     return snapshot

@@ -27,10 +27,12 @@ async def _send_daily_reminders() -> int:
     async with async_session_factory() as session:
         # Find users with cards_due notifications enabled
         pref_result = await session.execute(
-            select(NotificationPreference.user_id).where(
+            select(NotificationPreference.user_id)
+            .where(
                 NotificationPreference.event_type == "cards_due",
                 NotificationPreference.enabled == True,  # noqa: E712
-            ).distinct()
+            )
+            .distinct()
         )
         user_ids = [row[0] for row in pref_result.all()]
 
@@ -47,16 +49,13 @@ async def _send_daily_reminders() -> int:
                     .outerjoin(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
                     .where(
                         Flashcard.user_id == user_id,
-                        (FlashcardReview.next_review_at <= today)
-                        | (FlashcardReview.id == None),  # noqa: E711
+                        (FlashcardReview.next_review_at <= today) | (FlashcardReview.id == None),  # noqa: E711
                     )
                 )
                 due_count = due_result.scalar() or 0
 
                 if due_count > 0:
-                    await notification_service.notify_cards_due(
-                        session, user_id, due_count
-                    )
+                    await notification_service.notify_cards_due(session, user_id, due_count)
                     notified += 1
 
             except Exception:
@@ -77,8 +76,8 @@ async def _send_weekly_digest() -> int:
     Returns:
         Number of users notified.
     """
-    from app.models.notification_preference import NotificationPreference
     from app.models.flashcard_review import FlashcardReview
+    from app.models.notification_preference import NotificationPreference
     from app.models.quiz_attempt import QuizAttempt
     from app.models.study_session import StudySession
     from app.services import notification_service
@@ -89,10 +88,12 @@ async def _send_weekly_digest() -> int:
     async with async_session_factory() as session:
         # Find users with weekly_digest enabled
         pref_result = await session.execute(
-            select(NotificationPreference.user_id).where(
+            select(NotificationPreference.user_id)
+            .where(
                 NotificationPreference.event_type == "weekly_digest",
                 NotificationPreference.enabled == True,  # noqa: E712
-            ).distinct()
+            )
+            .distinct()
         )
         user_ids = [row[0] for row in pref_result.all()]
 

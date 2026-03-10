@@ -22,9 +22,7 @@ EVENT_TYPES = [
 CHANNELS = ["email", "telegram", "push"]
 
 
-async def get_preferences(
-    session: AsyncSession, user_id: str
-) -> list[NotificationPreference]:
+async def get_preferences(session: AsyncSession, user_id: str) -> list[NotificationPreference]:
     """Get all notification preferences for a user.
 
     Args:
@@ -35,9 +33,7 @@ async def get_preferences(
         List of NotificationPreference records.
     """
     result = await session.execute(
-        select(NotificationPreference).where(
-            NotificationPreference.user_id == user_id
-        )
+        select(NotificationPreference).where(NotificationPreference.user_id == user_id)
     )
     return list(result.scalars().all())
 
@@ -174,9 +170,7 @@ async def notify(
             try:
                 from app.models.user import User
 
-                user_result = await session.execute(
-                    select(User.email).where(User.id == user_id)
-                )
+                user_result = await session.execute(select(User.email).where(User.id == user_id))
                 user_email = user_result.scalar_one_or_none()
             except Exception:
                 logger.warning("notify_load_user_failed", user_id=user_id, exc_info=True)
@@ -278,8 +272,13 @@ async def notify_pipeline_complete(
 
 
 async def notify_review_created(
-    session: AsyncSession, user_id: str, filename: str, course_code: str, week: int,
-    flashcard_count: int = 0, quiz_count: int = 0,
+    session: AsyncSession,
+    user_id: str,
+    filename: str,
+    course_code: str,
+    week: int,
+    flashcard_count: int = 0,
+    quiz_count: int = 0,
 ) -> dict[str, bool]:
     """Send review item created notification (reuses pipeline_complete template)."""
     return await notify(
@@ -294,9 +293,7 @@ async def notify_review_created(
     )
 
 
-async def notify_cards_due(
-    session: AsyncSession, user_id: str, due_count: int
-) -> dict[str, bool]:
+async def notify_cards_due(session: AsyncSession, user_id: str, due_count: int) -> dict[str, bool]:
     """Send cards due reminder notification."""
     return await notify(session, user_id, "cards_due", due_count=due_count)
 

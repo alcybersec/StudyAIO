@@ -24,9 +24,7 @@ async def get_subscription(session: AsyncSession, user_id: str) -> Subscription 
     Returns:
         Subscription or None if not found.
     """
-    result = await session.execute(
-        select(Subscription).where(Subscription.user_id == user_id)
-    )
+    result = await session.execute(select(Subscription).where(Subscription.user_id == user_id))
     return result.scalar_one_or_none()
 
 
@@ -130,9 +128,7 @@ async def create_portal_session(session: AsyncSession, user_id: str) -> str:
     return portal.url
 
 
-async def handle_webhook_event(
-    session: AsyncSession, event_type: str, data: dict
-) -> None:
+async def handle_webhook_event(session: AsyncSession, event_type: str, data: dict) -> None:
     """Process a Stripe webhook event.
 
     Args:
@@ -155,9 +151,7 @@ async def handle_webhook_event(
         logger.debug("webhook_event_ignored", event_type=event_type)
 
 
-async def _handle_subscription_update(
-    session: AsyncSession, sub_obj: dict
-) -> None:
+async def _handle_subscription_update(session: AsyncSession, sub_obj: dict) -> None:
     """Handle subscription created or updated events."""
     customer_id = sub_obj.get("customer")
     stripe_sub_id = sub_obj.get("id")
@@ -193,9 +187,7 @@ async def _handle_subscription_update(
     # Sync tier to user model
     from app.models.user import User
 
-    user_result = await session.execute(
-        select(User).where(User.id == sub.user_id)
-    )
+    user_result = await session.execute(select(User).where(User.id == sub.user_id))
     user = user_result.scalar_one_or_none()
     if user:
         user.tier = sub.plan
@@ -209,9 +201,7 @@ async def _handle_subscription_update(
     )
 
 
-async def _handle_subscription_deleted(
-    session: AsyncSession, sub_obj: dict
-) -> None:
+async def _handle_subscription_deleted(session: AsyncSession, sub_obj: dict) -> None:
     """Handle subscription deleted event — downgrade to free."""
     customer_id = sub_obj.get("customer")
 
@@ -230,9 +220,7 @@ async def _handle_subscription_deleted(
     # Sync tier to user model
     from app.models.user import User
 
-    user_result = await session.execute(
-        select(User).where(User.id == sub.user_id)
-    )
+    user_result = await session.execute(select(User).where(User.id == sub.user_id))
     user = user_result.scalar_one_or_none()
     if user:
         user.tier = "free"

@@ -15,9 +15,7 @@ class CalendarSync(Base):
     __tablename__ = "calendar_syncs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     google_calendar_id: Mapped[str] = mapped_column(String(255), nullable=False)
     sync_direction: Mapped[str] = mapped_column(
         String(20), nullable=False, default="push"
@@ -27,15 +25,11 @@ class CalendarSync(Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(nullable=True)
     sync_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     events: Mapped[list["CalendarEvent"]] = relationship(
         back_populates="calendar_sync", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        Index("ix_calendar_syncs_user_id", "user_id"),
-    )
+    __table_args__ = (Index("ix_calendar_syncs_user_id", "user_id"),)

@@ -8,7 +8,6 @@ Validates that CourseOps-related data structures conform to expected schemas:
 
 import pytest
 
-
 # ── Sample data fixtures ────────────────────────────────────────────
 
 
@@ -184,9 +183,16 @@ class TestAssessmentResponseStructure:
     def test_has_required_fields(self, sample_assessment_response):
         """Assessment has all required API fields."""
         required = {
-            "id", "course_id", "source_document_id", "title",
-            "assessment_type", "weight_pct", "description",
-            "weeks_relevant", "created_at", "updated_at",
+            "id",
+            "course_id",
+            "source_document_id",
+            "title",
+            "assessment_type",
+            "weight_pct",
+            "description",
+            "weeks_relevant",
+            "created_at",
+            "updated_at",
         }
         assert required <= set(sample_assessment_response.keys())
 
@@ -205,9 +211,17 @@ class TestDeadlineResponseStructure:
     def test_has_required_fields(self, sample_deadline_response):
         """Deadline has all required API fields."""
         required = {
-            "id", "course_id", "assessment_id", "source_document_id",
-            "title", "due_date", "deadline_type", "description",
-            "is_confirmed", "created_at", "updated_at",
+            "id",
+            "course_id",
+            "assessment_id",
+            "source_document_id",
+            "title",
+            "due_date",
+            "deadline_type",
+            "description",
+            "is_confirmed",
+            "created_at",
+            "updated_at",
         }
         assert required <= set(sample_deadline_response.keys())
 

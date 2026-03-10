@@ -174,10 +174,9 @@ async def extract_concepts(
     # Check AI quota (free tier: 20/day)
     await quota_service.check_ai_quota(session, user.id, user.tier)
 
+    from app.agents import parsing
     from app.models.artifact import LectureArtifact
     from app.models.extraction import Extraction
-
-    from app.agents import parsing
     from app.services.summary_service import merge_extractions
 
     # Verify artifact exists and belongs to user

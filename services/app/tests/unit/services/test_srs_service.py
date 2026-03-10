@@ -1,17 +1,12 @@
 """Tests for the SM-2 spaced repetition service."""
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.services.srs_service import (
-    SM2Result,
-    StudyStats,
     calculate_sm2,
-    get_due_cards,
-    get_global_study_stats,
-    get_per_course_due_counts,
     get_study_stats,
     record_review,
 )
@@ -55,7 +50,9 @@ class TestCalculateSM2:
         intervals = []
 
         for _ in range(5):
-            result = calculate_sm2(quality=5, ease_factor=ef, interval_days=interval, repetition_count=reps)
+            result = calculate_sm2(
+                quality=5, ease_factor=ef, interval_days=interval, repetition_count=reps
+            )
             ef = result.ease_factor
             interval = result.interval_days
             reps = result.repetition_count
@@ -96,7 +93,9 @@ class TestCalculateSM2:
     def test_quality_clamped_to_0_5(self):
         """Quality values outside 0-5 are clamped."""
         result_low = calculate_sm2(quality=-1, ease_factor=2.5, interval_days=0, repetition_count=0)
-        result_high = calculate_sm2(quality=10, ease_factor=2.5, interval_days=0, repetition_count=0)
+        result_high = calculate_sm2(
+            quality=10, ease_factor=2.5, interval_days=0, repetition_count=0
+        )
         # -1 clamped to 0, 10 clamped to 5
         assert result_low.repetition_count == 0  # quality 0 → fail
         assert result_high.repetition_count == 1  # quality 5 → pass
@@ -171,9 +170,9 @@ class TestGetStudyStats:
         # Reviewed: 3 cards (1 mastered, 2 learning)
         mock_reviewed = MagicMock()
         mock_reviewed.all.return_value = [
-            ("fc-1", 25, now - timedelta(days=1)),   # mastered, overdue
-            ("fc-2", 6, now + timedelta(days=3)),     # learning, not due
-            ("fc-3", 10, now - timedelta(hours=1)),   # learning, overdue
+            ("fc-1", 25, now - timedelta(days=1)),  # mastered, overdue
+            ("fc-2", 6, now + timedelta(days=3)),  # learning, not due
+            ("fc-3", 10, now - timedelta(hours=1)),  # learning, overdue
         ]
 
         session.execute = AsyncMock(side_effect=[mock_total, mock_reviewed])
@@ -181,7 +180,7 @@ class TestGetStudyStats:
         stats = await get_study_stats(session, course_code="TEST")
 
         assert stats.total == 5
-        assert stats.new == 2       # 5 total - 3 reviewed
+        assert stats.new == 2  # 5 total - 3 reviewed
         assert stats.mastered == 1  # interval > 21
         assert stats.learning == 2  # interval 1-21
-        assert stats.due_today == 4 # 2 new + 1 mastered overdue + 1 learning overdue
+        assert stats.due_today == 4  # 2 new + 1 mastered overdue + 1 learning overdue

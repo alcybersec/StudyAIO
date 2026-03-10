@@ -46,7 +46,10 @@ class TestValidateSetting:
 
     def test_claude_code_path_strips_whitespace(self):
         """Path is stripped of whitespace."""
-        assert settings_service.validate_setting("claude_code_path", "  /usr/bin/claude  ") == "/usr/bin/claude"
+        assert (
+            settings_service.validate_setting("claude_code_path", "  /usr/bin/claude  ")
+            == "/usr/bin/claude"
+        )
 
     def test_confidence_threshold_valid_range(self):
         """Threshold within 0-1 is accepted."""
@@ -82,7 +85,9 @@ class TestValidateSetting:
     def test_agent_backend_valid(self):
         """Valid agent backends are accepted."""
         assert settings_service.validate_setting("agent_backend", "claude_code") == "claude_code"
-        assert settings_service.validate_setting("agent_backend", "anthropic_api") == "anthropic_api"
+        assert (
+            settings_service.validate_setting("agent_backend", "anthropic_api") == "anthropic_api"
+        )
 
     def test_agent_backend_invalid(self):
         """Invalid agent backend is rejected."""
@@ -91,7 +96,9 @@ class TestValidateSetting:
 
     def test_anthropic_api_key_strips_whitespace(self):
         """API key is stripped of whitespace."""
-        assert settings_service.validate_setting("anthropic_api_key", "  sk-ant-xxx  ") == "sk-ant-xxx"
+        assert (
+            settings_service.validate_setting("anthropic_api_key", "  sk-ant-xxx  ") == "sk-ant-xxx"
+        )
 
     def test_max_upload_size_mb_bounds(self):
         """Max upload size respects bounds."""

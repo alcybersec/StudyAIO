@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 MOCK_SETTINGS = {
     "claude_code_path": "claude",
     "claude_model": "opus",

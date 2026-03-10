@@ -14,7 +14,6 @@ from app.services.export_service import (
     generate_obsidian_vault,
 )
 
-
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
@@ -95,9 +94,7 @@ def _mock_session_for_vault(
     qq_result = MagicMock()
     qq_result.scalars.return_value.all.return_value = quizzes or []
 
-    session.execute = AsyncMock(
-        side_effect=[course_result, summary_result, fc_result, qq_result]
-    )
+    session.execute = AsyncMock(side_effect=[course_result, summary_result, fc_result, qq_result])
     return session
 
 
@@ -183,16 +180,28 @@ class TestGenerateQuizzesMd:
     """Tests for _generate_quizzes_md helper."""
 
     def test_quizzes_have_collapsible_answers(self):
-        q = _make_quiz(1, "Which protocol?", "multiple_choice",
-                       ["A. TCP", "B. UDP", "C. HTTP", "D. FTP"], "B", "UDP is connectionless")
+        q = _make_quiz(
+            1,
+            "Which protocol?",
+            "multiple_choice",
+            ["A. TCP", "B. UDP", "C. HTTP", "D. FTP"],
+            "B",
+            "UDP is connectionless",
+        )
         result = _generate_quizzes_md("CSIT302", 1, [q])
         assert "> [!success]- Answer" in result
         assert "> **B**" in result
         assert "> UDP is connectionless" in result
 
     def test_quizzes_show_options(self):
-        q = _make_quiz(1, "Which is fastest?", "multiple_choice",
-                       ["A. TCP", "B. UDP"], "B. UDP", "UDP has no overhead")
+        q = _make_quiz(
+            1,
+            "Which is fastest?",
+            "multiple_choice",
+            ["A. TCP", "B. UDP"],
+            "B. UDP",
+            "UDP has no overhead",
+        )
         result = _generate_quizzes_md("CSIT302", 1, [q])
         assert "- A. TCP" in result
         assert "- B. UDP" in result
@@ -202,8 +211,14 @@ class TestGenerateQuizzesMd:
         assert "No quiz questions available for this week" in result
 
     def test_quizzes_short_answer_no_options(self):
-        q = _make_quiz(1, "Explain TCP.", "short_answer",
-                       None, "TCP is a connection-oriented protocol.", "It ensures reliable delivery.")
+        q = _make_quiz(
+            1,
+            "Explain TCP.",
+            "short_answer",
+            None,
+            "TCP is a connection-oriented protocol.",
+            "It ensures reliable delivery.",
+        )
         result = _generate_quizzes_md("CSIT302", 1, [q])
         assert "Short Answer" in result
         # Should not have option list items (no "- " lines for options)
@@ -343,8 +358,14 @@ class TestGenerateObsidianVault:
     async def test_quizzes_have_collapsible_answers_in_vault(self):
         """Quiz file in vault uses collapsible answer syntax."""
         course = _make_course()
-        qq = _make_quiz(1, "Which layer?", "multiple_choice",
-                        ["A. 1", "B. 2", "C. 3", "D. 4"], "C. 3", "Layer 3 is network.")
+        qq = _make_quiz(
+            1,
+            "Which layer?",
+            "multiple_choice",
+            ["A. 1", "B. 2", "C. 3", "D. 4"],
+            "C. 3",
+            "Layer 3 is network.",
+        )
         session = _mock_session_for_vault(course, [], [], [qq])
 
         result = await generate_obsidian_vault(session, "CSIT302")

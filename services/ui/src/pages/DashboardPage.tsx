@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
@@ -49,8 +49,7 @@ export function DashboardPage() {
   const now = useMemo(() => Date.now(), []) // eslint-disable-line react-hooks/purity
   const { layouts, hiddenWidgets, visibleWidgets, onLayoutChange, toggleWidget, resetLayout } = useDashboardLayout()
   const [customizerOpen, setCustomizerOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const { width } = useContainerWidth(containerRef)
+  const { width, containerRef } = useContainerWidth()
 
   if (isLoading) return <LoadingSpinner label="Loading dashboard..." />
   if (error) return <ErrorBanner message="Failed to load dashboard. Check that the API server is running." onRetry={refetch} />
@@ -112,11 +111,15 @@ export function DashboardPage() {
         cols={{ lg: 12, sm: 12 }}
         rowHeight={30}
         onLayoutChange={onLayoutChange}
-        isDraggable={window.innerWidth >= 1024}
-        isResizable={window.innerWidth >= 1024}
-        draggableHandle=".drag-handle"
-        containerPadding={[0, 0]}
-        margin={[16, 16]}
+        dragConfig={{
+          isDraggable: window.innerWidth >= 1024,
+          handle: '.drag-handle',
+        }}
+        resizeConfig={{
+          isResizable: window.innerWidth >= 1024,
+        }}
+        containerPadding={[0, 0] as const}
+        margin={[16, 16] as const}
       >
         {activeWidgets.map((w) => (
           <div key={w.key} className="relative group">

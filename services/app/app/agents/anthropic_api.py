@@ -342,9 +342,7 @@ Respond with ONLY a JSON object:
             citations=parsed.get("citations", []),
         )
 
-    async def stream_answer(
-        self, question: str, context_chunks: list[dict]
-    ) -> AsyncIterator[str]:
+    async def stream_answer(self, question: str, context_chunks: list[dict]) -> AsyncIterator[str]:
         """Stream answer tokens using Anthropic's streaming API.
 
         Args:

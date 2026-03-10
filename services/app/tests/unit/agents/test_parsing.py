@@ -138,7 +138,7 @@ class TestCleanJsonText:
 
     def test_removes_trailing_comma_before_bracket(self):
         """Trailing comma before ] is removed."""
-        result = _clean_json_text('[1, 2, 3,]')
+        result = _clean_json_text("[1, 2, 3,]")
         assert "3]" in result
 
     def test_strips_prose_preamble(self):

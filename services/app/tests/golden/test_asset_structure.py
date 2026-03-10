@@ -6,8 +6,6 @@ Validates that AI-generated study assets conform to expected schemas:
 - Quiz short answer: question_type="short_answer", no options, has correct_answer
 """
 
-import pytest
-
 
 # ── Flashcard structure validation ───────────────────────────────────
 
@@ -43,9 +41,7 @@ class TestFlashcardStructure:
             assert isinstance(card["source_page_ref"], int), (
                 f"Flashcard {i} 'source_page_ref' must be int"
             )
-            assert card["source_page_ref"] >= 1, (
-                f"Flashcard {i} 'source_page_ref' must be >= 1"
-            )
+            assert card["source_page_ref"] >= 1, f"Flashcard {i} 'source_page_ref' must be >= 1"
 
     def test_flashcard_list_nonempty(self, sample_flashcard_list):
         assert len(sample_flashcard_list) > 0, "Must have at least one flashcard"
@@ -59,8 +55,11 @@ class TestQuizQuestionStructure:
 
     def test_quiz_has_required_fields(self, sample_quiz_list):
         required_fields = {
-            "question_type", "question", "correct_answer",
-            "explanation", "source_page_ref",
+            "question_type",
+            "question",
+            "correct_answer",
+            "explanation",
+            "source_page_ref",
         }
         for i, q in enumerate(sample_quiz_list):
             assert isinstance(q, dict), f"Quiz question {i} must be a dict"
@@ -80,17 +79,17 @@ class TestQuizQuestionStructure:
             assert q["question"].strip(), f"Quiz question {i} 'question' must not be empty"
 
     def test_quiz_correct_answer_is_nonempty(self, sample_quiz_list):
-        for i, q in enumerate(sample_quiz_list):
+        for _i, q in enumerate(sample_quiz_list):
             assert isinstance(q["correct_answer"], str)
             assert q["correct_answer"].strip()
 
     def test_quiz_explanation_is_nonempty(self, sample_quiz_list):
-        for i, q in enumerate(sample_quiz_list):
+        for _i, q in enumerate(sample_quiz_list):
             assert isinstance(q["explanation"], str)
             assert q["explanation"].strip()
 
     def test_quiz_source_page_ref_is_positive_int(self, sample_quiz_list):
-        for i, q in enumerate(sample_quiz_list):
+        for _i, q in enumerate(sample_quiz_list):
             assert isinstance(q["source_page_ref"], int)
             assert q["source_page_ref"] >= 1
 

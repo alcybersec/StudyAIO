@@ -245,25 +245,29 @@ class TestDashboardGamification:
         mock_streak.get_streak = AsyncMock(side_effect=Exception("skip"))
         mock_courseops.get_upcoming_deadlines_all_courses = AsyncMock(return_value=[])
 
-        mock_xp.get_xp_summary = AsyncMock(return_value={
-            "total_xp": 100,
-            "level": 2,
-            "progress_pct": 50.0,
-            "current_threshold": 100,
-            "next_threshold": 300,
-            "recent_events": [],
-        })
-        mock_challenge.get_user_challenge_progress = AsyncMock(return_value={
-            "challenge_id": "dc-001",
-            "challenge_date": "2026-03-05",
-            "challenge_type": "review_cards",
-            "target": 10,
-            "description": "Review 10 flashcards",
-            "xp_reward": 25,
-            "progress": 3,
-            "completed": False,
-            "completed_at": None,
-        })
+        mock_xp.get_xp_summary = AsyncMock(
+            return_value={
+                "total_xp": 100,
+                "level": 2,
+                "progress_pct": 50.0,
+                "current_threshold": 100,
+                "next_threshold": 300,
+                "recent_events": [],
+            }
+        )
+        mock_challenge.get_user_challenge_progress = AsyncMock(
+            return_value={
+                "challenge_id": "dc-001",
+                "challenge_date": "2026-03-05",
+                "challenge_type": "review_cards",
+                "target": 10,
+                "description": "Review 10 flashcards",
+                "xp_reward": 25,
+                "progress": 3,
+                "completed": False,
+                "completed_at": None,
+            }
+        )
         mock_achievement.get_unnotified = AsyncMock(return_value=[])
 
         resp = await async_client.get("/api/dashboard")

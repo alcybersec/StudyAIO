@@ -1,7 +1,7 @@
 """Calendar service — generate .ics files and markdown task plans from deadlines."""
 
 import io
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import structlog
 from icalendar import Calendar, Event
@@ -28,17 +28,13 @@ async def generate_ics(
     Returns:
         Tuple of (ics_bytes_io, filename) or None if course not found.
     """
-    result = await session.execute(
-        select(Course).where(Course.code == course_code)
-    )
+    result = await session.execute(select(Course).where(Course.code == course_code))
     course = result.scalar_one_or_none()
     if not course:
         return None
 
     deadlines_result = await session.execute(
-        select(Deadline)
-        .where(Deadline.course_id == course.id)
-        .order_by(Deadline.due_date)
+        select(Deadline).where(Deadline.course_id == course.id).order_by(Deadline.due_date)
     )
     deadlines = list(deadlines_result.scalars().all())
 
@@ -54,7 +50,7 @@ async def generate_ics(
         # All-day event on the due date
         event.add("dtstart", deadline.due_date)
         event.add("dtend", deadline.due_date + timedelta(days=1))
-        event.add("dtstamp", datetime.now(timezone.utc))
+        event.add("dtstamp", datetime.now(UTC))
 
         description_parts = [f"Type: {deadline.deadline_type}"]
         if deadline.description:
@@ -93,9 +89,7 @@ async def generate_task_plan_md(
     Returns:
         Tuple of (md_bytes_io, filename) or None if course not found.
     """
-    result = await session.execute(
-        select(Course).where(Course.code == course_code)
-    )
+    result = await session.execute(select(Course).where(Course.code == course_code))
     course = result.scalar_one_or_none()
     if not course:
         return None
@@ -109,9 +103,7 @@ async def generate_task_plan_md(
     assessments = list(assessments_result.scalars().all())
 
     deadlines_result = await session.execute(
-        select(Deadline)
-        .where(Deadline.course_id == course.id)
-        .order_by(Deadline.due_date)
+        select(Deadline).where(Deadline.course_id == course.id).order_by(Deadline.due_date)
     )
     deadlines = list(deadlines_result.scalars().all())
 

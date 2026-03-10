@@ -1,6 +1,6 @@
 """Tests for Google Calendar sync service."""
 
-from datetime import date, datetime
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -88,16 +88,19 @@ class TestConnectGoogleCalendar:
         mock_discovery_mod = MagicMock()
         mock_discovery_mod.build.return_value = mock_service
 
-        with patch.dict("sys.modules", {
-            "google_auth_oauthlib.flow": mock_flow_mod,
-            "google_auth_oauthlib": MagicMock(flow=mock_flow_mod),
-            "google.auth.transport.requests": MagicMock(),
-            "google.auth.transport": MagicMock(),
-            "google.auth": MagicMock(),
-            "google": MagicMock(),
-            "googleapiclient.discovery": mock_discovery_mod,
-            "googleapiclient": MagicMock(discovery=mock_discovery_mod),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "google_auth_oauthlib.flow": mock_flow_mod,
+                "google_auth_oauthlib": MagicMock(flow=mock_flow_mod),
+                "google.auth.transport.requests": MagicMock(),
+                "google.auth.transport": MagicMock(),
+                "google.auth": MagicMock(),
+                "google": MagicMock(),
+                "googleapiclient.discovery": mock_discovery_mod,
+                "googleapiclient": MagicMock(discovery=mock_discovery_mod),
+            },
+        ):
             result = await gcal_service.connect_google_calendar(
                 mock_session, "user-001", "test-auth-code"
             )
@@ -118,18 +121,21 @@ class TestConnectGoogleCalendar:
         mock_flow_mod = MagicMock()
         mock_flow_mod.Flow = mock_flow_cls
 
-        with patch.dict("sys.modules", {
-            "google_auth_oauthlib.flow": mock_flow_mod,
-            "google_auth_oauthlib": MagicMock(flow=mock_flow_mod),
-            "google.auth.transport.requests": MagicMock(),
-            "google.auth.transport": MagicMock(),
-            "google.auth": MagicMock(),
-            "google": MagicMock(),
-        }):
-            with pytest.raises(CalendarSyncError, match="Failed to exchange"):
-                await gcal_service.connect_google_calendar(
-                    mock_session, "user-001", "bad-code"
-                )
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "google_auth_oauthlib.flow": mock_flow_mod,
+                    "google_auth_oauthlib": MagicMock(flow=mock_flow_mod),
+                    "google.auth.transport.requests": MagicMock(),
+                    "google.auth.transport": MagicMock(),
+                    "google.auth": MagicMock(),
+                    "google": MagicMock(),
+                },
+            ),
+            pytest.raises(CalendarSyncError, match="Failed to exchange"),
+        ):
+            await gcal_service.connect_google_calendar(mock_session, "user-001", "bad-code")
 
 
 class TestDisconnectCalendar:
@@ -147,9 +153,7 @@ class TestDisconnectCalendar:
             MockClient.return_value = mock_http
             mock_http.post = AsyncMock()
 
-            result = await gcal_service.disconnect_calendar(
-                mock_session, "user-001", "sync-001"
-            )
+            result = await gcal_service.disconnect_calendar(mock_session, "user-001", "sync-001")
 
         assert result is True
         mock_session.delete.assert_awaited_once_with(mock_cal_sync)
@@ -157,9 +161,7 @@ class TestDisconnectCalendar:
     @pytest.mark.asyncio
     async def test_disconnect_nonexistent_returns_false(self, mock_session):
         """Returns False when sync record not found."""
-        result = await gcal_service.disconnect_calendar(
-            mock_session, "user-001", "nonexistent"
-        )
+        result = await gcal_service.disconnect_calendar(mock_session, "user-001", "nonexistent")
         assert result is False
 
 
@@ -228,7 +230,9 @@ class TestPushEvents:
         mock_creds = MagicMock()
         mock_creds.expired = False
 
-        with patch.object(gcal_service, "_build_gcal_service", return_value=(mock_service, mock_creds)):
+        with patch.object(
+            gcal_service, "_build_gcal_service", return_value=(mock_service, mock_creds)
+        ):
             changes = await gcal_service.push_events(mock_session, "user-001", "sync-001")
 
         assert changes == 1
@@ -271,7 +275,9 @@ class TestPushEvents:
         mock_creds = MagicMock()
         mock_creds.expired = False
 
-        with patch.object(gcal_service, "_build_gcal_service", return_value=(MagicMock(), mock_creds)):
+        with patch.object(
+            gcal_service, "_build_gcal_service", return_value=(MagicMock(), mock_creds)
+        ):
             changes = await gcal_service.push_events(mock_session, "user-001", "sync-001")
 
         assert changes == 0
@@ -312,7 +318,9 @@ class TestPushEvents:
         mock_creds = MagicMock()
         mock_creds.expired = False
 
-        with patch.object(gcal_service, "_build_gcal_service", return_value=(mock_service, mock_creds)):
+        with patch.object(
+            gcal_service, "_build_gcal_service", return_value=(mock_service, mock_creds)
+        ):
             changes = await gcal_service.push_events(mock_session, "user-001", "sync-001")
 
         assert changes == 1
@@ -342,11 +350,11 @@ class TestPullEvents:
         not_found_result = MagicMock()
         not_found_result.scalar_one_or_none.return_value = None
 
-        mock_session.execute = AsyncMock(
-            side_effect=[sync_result, not_found_result]
-        )
+        mock_session.execute = AsyncMock(side_effect=[sync_result, not_found_result])
 
-        with patch.object(gcal_service, "_build_gcal_service", return_value=(mock_service, mock_creds)):
+        with patch.object(
+            gcal_service, "_build_gcal_service", return_value=(mock_service, mock_creds)
+        ):
             imported = await gcal_service.pull_events(mock_session, "user-001", "sync-001")
 
         assert imported == 1
@@ -370,7 +378,9 @@ class TestPullEvents:
 
         mock_session.execute = AsyncMock(return_value=sync_result)
 
-        with patch.object(gcal_service, "_build_gcal_service", return_value=(mock_service, mock_creds)):
+        with patch.object(
+            gcal_service, "_build_gcal_service", return_value=(mock_service, mock_creds)
+        ):
             await gcal_service.pull_events(mock_session, "user-001", "sync-001")
 
         # Verify syncToken was passed to events().list()
@@ -390,8 +400,10 @@ class TestSyncCalendar:
         sync_result.scalar_one_or_none.return_value = mock_cal_sync
         mock_session.execute = AsyncMock(return_value=sync_result)
 
-        with patch.object(gcal_service, "push_events", new_callable=AsyncMock, return_value=3), \
-             patch.object(gcal_service, "pull_events", new_callable=AsyncMock, return_value=2):
+        with (
+            patch.object(gcal_service, "push_events", new_callable=AsyncMock, return_value=3),
+            patch.object(gcal_service, "pull_events", new_callable=AsyncMock, return_value=2),
+        ):
             result = await gcal_service.sync_calendar(mock_session, "user-001", "sync-001")
 
         assert result == {"pushed": 3, "pulled": 2}

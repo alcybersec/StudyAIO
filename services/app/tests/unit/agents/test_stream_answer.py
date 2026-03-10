@@ -17,17 +17,13 @@ class TestBaseDefaultStreamAnswer:
         class MinimalAgent(AgentAdapter):
             """Minimal concrete implementation."""
 
-            async def classify_lecture(self, *a, **kw):
-                ...
+            async def classify_lecture(self, *a, **kw): ...
 
-            async def generate_summary(self, *a, **kw):
-                ...
+            async def generate_summary(self, *a, **kw): ...
 
-            async def generate_flashcards(self, *a, **kw):
-                ...
+            async def generate_flashcards(self, *a, **kw): ...
 
-            async def generate_quiz(self, *a, **kw):
-                ...
+            async def generate_quiz(self, *a, **kw): ...
 
             async def answer_question(self, question, context_chunks):
                 return AnswerResult(
@@ -35,11 +31,9 @@ class TestBaseDefaultStreamAnswer:
                     citations=[],
                 )
 
-            async def extract_course_ops(self, *a, **kw):
-                ...
+            async def extract_course_ops(self, *a, **kw): ...
 
-            async def extract_concepts(self, *a, **kw):
-                ...
+            async def extract_concepts(self, *a, **kw): ...
 
         agent = MinimalAgent()
         tokens = []
@@ -70,7 +64,7 @@ class TestAnthropicStreamAnswer:
             adapter = AnthropicAPIAdapter(api_key="test-key", model="sonnet")
 
         # Mock the streaming context manager
-        mock_text_stream = AsyncMock()
+        AsyncMock()
 
         async def mock_text_iter():
             for token in ["Hello", " ", "World", "!"]:
@@ -188,9 +182,7 @@ class TestOpenAIStreamAnswer:
             adapter = OpenAIAdapter(api_key="test-key", model="gpt-4")
 
         mock_client = AsyncMock()
-        mock_client.chat.completions.create = AsyncMock(
-            side_effect=RuntimeError("API rate limit")
-        )
+        mock_client.chat.completions.create = AsyncMock(side_effect=RuntimeError("API rate limit"))
 
         with (
             patch("app.agents.openai_adapter.AsyncOpenAI", return_value=mock_client),

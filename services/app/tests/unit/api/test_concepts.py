@@ -12,28 +12,30 @@ class TestGetConceptGraph:
     @patch("app.api.concepts.concept_service")
     async def test_returns_graph(self, mock_service, async_client):
         """Returns nodes and edges."""
-        mock_service.get_concept_graph = AsyncMock(return_value={
-            "nodes": [
-                {
-                    "id": "c-001",
-                    "name": "Binary Search",
-                    "description": "Search algorithm",
-                    "category": "algorithm",
-                    "mention_count": 3,
-                    "source_weeks": [1, 2],
-                    "course_id": "course-001",
-                },
-            ],
-            "edges": [
-                {
-                    "id": "r-001",
-                    "source": "c-001",
-                    "target": "c-002",
-                    "relation_type": "uses",
-                    "confidence": 0.9,
-                },
-            ],
-        })
+        mock_service.get_concept_graph = AsyncMock(
+            return_value={
+                "nodes": [
+                    {
+                        "id": "c-001",
+                        "name": "Binary Search",
+                        "description": "Search algorithm",
+                        "category": "algorithm",
+                        "mention_count": 3,
+                        "source_weeks": [1, 2],
+                        "course_id": "course-001",
+                    },
+                ],
+                "edges": [
+                    {
+                        "id": "r-001",
+                        "source": "c-001",
+                        "target": "c-002",
+                        "relation_type": "uses",
+                        "confidence": 0.9,
+                    },
+                ],
+            }
+        )
 
         resp = await async_client.get("/api/concepts/graph")
         assert resp.status_code == 200
@@ -46,10 +48,12 @@ class TestGetConceptGraph:
     @patch("app.api.concepts.concept_service")
     async def test_empty_graph(self, mock_service, async_client):
         """Returns empty graph when no concepts."""
-        mock_service.get_concept_graph = AsyncMock(return_value={
-            "nodes": [],
-            "edges": [],
-        })
+        mock_service.get_concept_graph = AsyncMock(
+            return_value={
+                "nodes": [],
+                "edges": [],
+            }
+        )
 
         resp = await async_client.get("/api/concepts/graph")
         assert resp.status_code == 200
@@ -75,18 +79,20 @@ class TestListConcepts:
     @patch("app.api.concepts.concept_service")
     async def test_returns_concept_list(self, mock_service, async_client):
         """Returns list of concepts."""
-        mock_service.get_concepts = AsyncMock(return_value=[
-            {
-                "id": "c-001",
-                "name": "Binary Search",
-                "description": "Search algorithm",
-                "category": "algorithm",
-                "mention_count": 3,
-                "source_weeks": [1],
-                "course_id": "course-001",
-                "created_at": "2026-03-05T10:00:00",
-            },
-        ])
+        mock_service.get_concepts = AsyncMock(
+            return_value=[
+                {
+                    "id": "c-001",
+                    "name": "Binary Search",
+                    "description": "Search algorithm",
+                    "category": "algorithm",
+                    "mention_count": 3,
+                    "source_weeks": [1],
+                    "course_id": "course-001",
+                    "created_at": "2026-03-05T10:00:00",
+                },
+            ]
+        )
 
         resp = await async_client.get("/api/concepts")
         assert resp.status_code == 200
@@ -102,28 +108,30 @@ class TestGetConceptDetail:
     @patch("app.api.concepts.concept_service")
     async def test_returns_detail(self, mock_service, async_client):
         """Returns concept detail with relations."""
-        mock_service.get_concept_detail = AsyncMock(return_value={
-            "id": "c-001",
-            "name": "Binary Search",
-            "description": "Search algorithm",
-            "category": "algorithm",
-            "mention_count": 2,
-            "source_artifact_ids": ["art-001"],
-            "source_weeks": [1],
-            "course_id": "course-001",
-            "outgoing_relations": [
-                {
-                    "id": "r-001",
-                    "target_id": "c-002",
-                    "target_name": "Arrays",
-                    "relation_type": "uses",
-                    "confidence": 0.9,
-                },
-            ],
-            "incoming_relations": [],
-            "created_at": "2026-03-05T10:00:00",
-            "updated_at": "2026-03-05T10:00:00",
-        })
+        mock_service.get_concept_detail = AsyncMock(
+            return_value={
+                "id": "c-001",
+                "name": "Binary Search",
+                "description": "Search algorithm",
+                "category": "algorithm",
+                "mention_count": 2,
+                "source_artifact_ids": ["art-001"],
+                "source_weeks": [1],
+                "course_id": "course-001",
+                "outgoing_relations": [
+                    {
+                        "id": "r-001",
+                        "target_id": "c-002",
+                        "target_name": "Arrays",
+                        "relation_type": "uses",
+                        "confidence": 0.9,
+                    },
+                ],
+                "incoming_relations": [],
+                "created_at": "2026-03-05T10:00:00",
+                "updated_at": "2026-03-05T10:00:00",
+            }
+        )
 
         resp = await async_client.get("/api/concepts/c-001")
         assert resp.status_code == 200
@@ -149,16 +157,18 @@ class TestFindRelatedConcepts:
     @patch("app.api.concepts.concept_service")
     async def test_returns_similar_concepts(self, mock_service, async_client):
         """Returns semantically similar concepts."""
-        mock_service.find_related_concepts = AsyncMock(return_value=[
-            {
-                "id": "c-002",
-                "name": "Linear Search",
-                "description": "Sequential search",
-                "category": "algorithm",
-                "course_id": "course-001",
-                "similarity": 0.85,
-            },
-        ])
+        mock_service.find_related_concepts = AsyncMock(
+            return_value=[
+                {
+                    "id": "c-002",
+                    "name": "Linear Search",
+                    "description": "Sequential search",
+                    "category": "algorithm",
+                    "course_id": "course-001",
+                    "similarity": 0.85,
+                },
+            ]
+        )
 
         resp = await async_client.get("/api/concepts/c-001/related")
         assert resp.status_code == 200

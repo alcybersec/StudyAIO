@@ -27,13 +27,12 @@ async def cal_client(mock_session, default_test_user):
 
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("app.config.settings.data_dir", tmpdir):
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
-                base_url="http://test",
-            ) as client:
-                yield client
+    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            yield client
 
     app.dependency_overrides.clear()
 
@@ -114,14 +113,17 @@ class TestSyncEndpoint:
     @pytest.mark.asyncio
     async def test_sync_endpoint(self, cal_client):
         """Sync endpoint triggers sync and returns results."""
-        with patch(
-            "app.api.calendar_sync.gcal_service.get_sync_status",
-            new_callable=AsyncMock,
-            return_value=[{"id": "sync-001"}],
-        ), patch(
-            "app.api.calendar_sync.gcal_service.sync_calendar",
-            new_callable=AsyncMock,
-            return_value={"pushed": 3, "pulled": 1},
+        with (
+            patch(
+                "app.api.calendar_sync.gcal_service.get_sync_status",
+                new_callable=AsyncMock,
+                return_value=[{"id": "sync-001"}],
+            ),
+            patch(
+                "app.api.calendar_sync.gcal_service.sync_calendar",
+                new_callable=AsyncMock,
+                return_value={"pushed": 3, "pulled": 1},
+            ),
         ):
             response = await cal_client.post("/api/calendar/sync")
 

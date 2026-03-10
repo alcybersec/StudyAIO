@@ -11,10 +11,7 @@ from app.services import (
     review_service,
     srs_service,
     streak_service,
-    courseops_service,
-    search_service,
 )
-
 
 USER_A = "user-aaa-001"
 USER_B = "user-bbb-002"

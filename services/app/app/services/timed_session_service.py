@@ -86,9 +86,7 @@ async def generate_timed_plan(
         cards = (exam_cards + other_cards)[:card_budget]
 
     # Fetch quiz questions
-    quiz_query = select(QuizQuestion).join(
-        Course, QuizQuestion.course_id == Course.id
-    )
+    quiz_query = select(QuizQuestion).join(Course, QuizQuestion.course_id == Course.id)
     if course_code:
         quiz_query = quiz_query.where(Course.code == course_code)
     if exam_weeks:

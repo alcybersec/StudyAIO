@@ -16,9 +16,7 @@ class XPEvent(Base):
     __tablename__ = "xp_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     xp_amount: Mapped[int] = mapped_column(Integer, nullable=False)
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

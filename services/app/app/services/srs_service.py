@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
 from app.core.utils import generate_id
 from app.models.course import Course
@@ -106,9 +105,7 @@ async def get_due_cards(
         select(Flashcard)
         .outerjoin(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
         .join(Course, Flashcard.course_id == Course.id)
-        .where(
-            (FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at <= now)
-        )
+        .where((FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at <= now))
         .order_by(
             # New cards (no review) first, then most overdue
             FlashcardReview.next_review_at.asc().nulls_first()
@@ -154,7 +151,9 @@ async def record_review(
     review = result.scalar_one_or_none()
 
     if review:
-        sm2 = calculate_sm2(quality, review.ease_factor, review.interval_days, review.repetition_count)
+        sm2 = calculate_sm2(
+            quality, review.ease_factor, review.interval_days, review.repetition_count
+        )
         review.ease_factor = sm2.ease_factor
         review.interval_days = sm2.interval_days
         review.repetition_count = sm2.repetition_count
@@ -262,9 +261,7 @@ async def get_study_stats(
     )
 
 
-async def get_global_study_stats(
-    session: AsyncSession, user_id: str | None = None
-) -> StudyStats:
+async def get_global_study_stats(session: AsyncSession, user_id: str | None = None) -> StudyStats:
     """Get study statistics across all courses.
 
     Returns:

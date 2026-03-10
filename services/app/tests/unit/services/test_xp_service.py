@@ -117,9 +117,7 @@ class TestAwardXP:
         session.flush = AsyncMock()
         session.commit = AsyncMock()
 
-        user_xp, event, achievements = await award_xp(
-            session, "user-001", "card_reviewed"
-        )
+        user_xp, event, achievements = await award_xp(session, "user-001", "card_reviewed")
 
         assert user_xp.total_xp == XP_AMOUNTS["card_reviewed"]
         assert event.xp_amount == XP_AMOUNTS["card_reviewed"]
@@ -144,9 +142,7 @@ class TestAwardXP:
         session.flush = AsyncMock()
         session.commit = AsyncMock()
 
-        user_xp, event, _ = await award_xp(
-            session, "user-001", "card_reviewed", xp_amount=50
-        )
+        user_xp, event, _ = await award_xp(session, "user-001", "card_reviewed", xp_amount=50)
 
         assert event.xp_amount == 50
         assert user_xp.total_xp == 50
@@ -171,7 +167,9 @@ class TestAwardXP:
         session.commit = AsyncMock()
 
         user_xp, _, _ = await award_xp(
-            session, "user-001", "quiz_correct"  # 10 XP → total 105
+            session,
+            "user-001",
+            "quiz_correct",  # 10 XP → total 105
         )
 
         assert user_xp.total_xp == 105

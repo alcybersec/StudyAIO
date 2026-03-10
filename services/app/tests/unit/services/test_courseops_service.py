@@ -1,7 +1,7 @@
 """Tests for courseops service."""
 
-from datetime import date, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import date
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -10,7 +10,6 @@ from app.core.exceptions import CourseOpsError
 from app.services.courseops_service import (
     create_exam_from_deadline,
     delete_deadline,
-    get_upcoming_deadlines_all_courses,
     list_assessments,
     list_course_documents,
     list_deadlines,
@@ -114,10 +113,12 @@ class TestProcessCourseDocument:
         mock_course.name = None
         mock_course.term = None
 
-        session.get = AsyncMock(side_effect=lambda model, id: {
-            "doc-001": mock_doc,
-            "course-001": mock_course,
-        }.get(id))
+        session.get = AsyncMock(
+            side_effect=lambda model, id: {
+                "doc-001": mock_doc,
+                "course-001": mock_course,
+            }.get(id)
+        )
         session.add = MagicMock()
         session.commit = AsyncMock()
 
@@ -169,10 +170,12 @@ class TestProcessCourseDocument:
         session = AsyncMock()
         mock_doc = MagicMock()
         mock_doc.course_id = "course-001"
-        session.get = AsyncMock(side_effect=lambda model, id: {
-            "doc-001": mock_doc,
-            "course-001": MagicMock(name=None, term=None),
-        }.get(id))
+        session.get = AsyncMock(
+            side_effect=lambda model, id: {
+                "doc-001": mock_doc,
+                "course-001": MagicMock(name=None, term=None),
+            }.get(id)
+        )
         session.add = MagicMock()
         session.commit = AsyncMock()
 
@@ -210,9 +213,7 @@ class TestUpdateDeadline:
         session.commit = AsyncMock()
         session.refresh = AsyncMock()
 
-        result = await update_deadline(
-            session, "dl-001", title="New Title", is_confirmed=True
-        )
+        result = await update_deadline(session, "dl-001", title="New Title", is_confirmed=True)
 
         assert result.title == "New Title"
         assert result.is_confirmed is True
@@ -267,10 +268,12 @@ class TestCreateExamFromDeadline:
         mock_assessment = MagicMock()
         mock_assessment.weeks_relevant = [1, 2, 3, 4, 5]
 
-        session.get = AsyncMock(side_effect=lambda model, id: {
-            "dl-001": mock_deadline,
-            "assess-001": mock_assessment,
-        }.get(id))
+        session.get = AsyncMock(
+            side_effect=lambda model, id: {
+                "dl-001": mock_deadline,
+                "assess-001": mock_assessment,
+            }.get(id)
+        )
         session.add = MagicMock()
         session.commit = AsyncMock()
         session.refresh = AsyncMock()

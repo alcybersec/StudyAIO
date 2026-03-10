@@ -28,6 +28,4 @@ class ChatMessage(Base):
     # Relationships
     session: Mapped["ChatSession"] = relationship(back_populates="messages")
 
-    __table_args__ = (
-        Index("ix_chat_messages_session_id", "session_id"),
-    )
+    __table_args__ = (Index("ix_chat_messages_session_id", "session_id"),)

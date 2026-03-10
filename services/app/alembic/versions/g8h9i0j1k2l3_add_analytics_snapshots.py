@@ -54,7 +54,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_analytics_snapshots_user_id", table_name="analytics_snapshots")
-    op.drop_constraint(
-        "uq_analytics_snapshot_user_date", "analytics_snapshots", type_="unique"
-    )
+    op.drop_constraint("uq_analytics_snapshot_user_date", "analytics_snapshots", type_="unique")
     op.drop_table("analytics_snapshots")
