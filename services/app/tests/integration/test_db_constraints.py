@@ -9,6 +9,7 @@ from app.models.course import Course
 from app.models.summary import Summary
 
 
+@pytest.mark.asyncio(loop_scope="session")
 class TestCourseConstraints:
     """Test Course model DB constraints."""
 
@@ -31,6 +32,7 @@ class TestCourseConstraints:
             await db_session.flush()
 
 
+@pytest.mark.asyncio(loop_scope="session")
 class TestArtifactConstraints:
     """Test LectureArtifact model DB constraints."""
 
@@ -79,6 +81,7 @@ class TestArtifactConstraints:
             await db_session.flush()
 
 
+@pytest.mark.asyncio(loop_scope="session")
 class TestSummaryConstraints:
     """Test Summary model DB constraints."""
 

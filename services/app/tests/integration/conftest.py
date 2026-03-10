@@ -7,6 +7,7 @@ Environment variables are set before any app code is imported.
 import os
 
 import pytest
+import pytest_asyncio
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
@@ -107,7 +108,7 @@ def _app_setup(_run_migrations):
 # ── Function-scoped fixtures ──────────────────────────────────────────
 
 
-@pytest.fixture
+@pytest_asyncio.fixture(loop_scope="session")
 async def db_session(_app_setup):
     """Provide an async session with SAVEPOINT isolation.
 
@@ -135,7 +136,7 @@ async def db_session(_app_setup):
             await trans.rollback()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture(loop_scope="session")
 async def integration_client(db_session):
     """Async HTTP client wired to the real database via SAVEPOINT.
 

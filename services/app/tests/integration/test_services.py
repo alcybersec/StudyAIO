@@ -9,6 +9,7 @@ from app.models.course import Course
 from app.services import artifact_service, course_service, review_service
 
 
+@pytest.mark.asyncio(loop_scope="session")
 class TestArtifactService:
     """Test artifact_service with a real database."""
 
@@ -42,6 +43,7 @@ class TestArtifactService:
             await artifact_service.ingest_file(db_session, str(txt_file))
 
 
+@pytest.mark.asyncio(loop_scope="session")
 class TestReviewService:
     """Test review_service lifecycle with a real database."""
 
@@ -120,6 +122,7 @@ class TestReviewService:
             await review_service.resolve_review_item(db_session, item.id, {})
 
 
+@pytest.mark.asyncio(loop_scope="session")
 class TestCourseService:
     """Test course_service with a real database."""
 
