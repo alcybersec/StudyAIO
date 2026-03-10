@@ -63,9 +63,12 @@ def _set_env(postgres_container, redis_container):
         os.environ["REDIS_URL"] = f"redis://{host}:{port}/0"
 
 
+TEST_USER_ID = "00000000-0000-0000-0000-000000000099"
+
+
 @pytest.fixture(scope="session")
 def _run_migrations(_set_env):
-    """Create pgvector extension and run Alembic migrations."""
+    """Create pgvector extension, run Alembic migrations, seed test user."""
     import sqlalchemy
 
     sync_url = os.environ.get("DATABASE_URL_SYNC") or os.environ["DATABASE_URL"].replace(
@@ -89,6 +92,30 @@ def _run_migrations(_set_env):
         os.environ.get("DATABASE_URL_SYNC") or os.environ["DATABASE_URL"].replace("+asyncpg", ""),
     )
     command.upgrade(alembic_cfg, "head")
+
+    # Seed a test user for integration tests (multi-tenant FK requirement)
+    engine2 = sqlalchemy.create_engine(sync_url)
+    with engine2.connect() as conn:
+        conn.execute(
+            sqlalchemy.text(
+                "INSERT INTO users (id, email, username, role, tier, is_active, email_verified, mfa_enabled) "
+                "VALUES (:id, :email, :username, 'admin', 'free', true, false, false) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "id": TEST_USER_ID,
+                "email": "integration@test.local",
+                "username": "integration_test",
+            },
+        )
+        conn.commit()
+    engine2.dispose()
+
+
+@pytest.fixture(scope="session")
+def test_user_id():
+    """Return the ID of the seeded integration test user."""
+    return TEST_USER_ID
 
 
 @pytest.fixture(scope="session")
@@ -137,21 +164,42 @@ async def db_session(_app_setup):
 
 
 @pytest_asyncio.fixture(loop_scope="session")
-async def integration_client(db_session):
+async def integration_client(db_session, test_user_id):
     """Async HTTP client wired to the real database via SAVEPOINT.
 
-    Overrides get_session to return the test session so all API calls
-    use the same transaction that gets rolled back.
+    Overrides get_session to return the test session and
+    get_current_user_or_default to return the seeded test user.
     """
     import httpx
 
+    from app.api.deps import get_current_user_or_default
     from app.core.database import get_session
     from app.main import app
+    from app.models.user import User
 
-    async def override():
+    async def override_session():
         yield db_session
 
-    app.dependency_overrides[get_session] = override
+    # Build a User object matching the seeded row
+    test_user = User(
+        id=test_user_id,
+        email="integration@test.local",
+        username="integration_test",
+        role="admin",
+        tier="free",
+        is_active=True,
+        email_verified=False,
+        mfa_enabled=False,
+    )
+
+    async def override_user(
+        request=None,  # noqa: ARG001
+        session=None,  # noqa: ARG001
+    ):
+        return test_user
+
+    app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[get_current_user_or_default] = override_user
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",
