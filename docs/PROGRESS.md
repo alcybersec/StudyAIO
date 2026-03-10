@@ -377,6 +377,19 @@
 
 **Tests:** 953 unit + 232 golden + 34 E2E = ~1219 total tests (24 new).
 
+## OAuth + SaaS Launch Prep
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| OA.1 | OAuth Client Factory | ✅ Done | `core/oauth.py`: Authlib `AsyncOAuth2Client` helpers, Google+GitHub provider configs, `OAuthUserInfo` dataclass, Redis state storage (10min TTL), `build_authorize_url`/`exchange_code_for_token`/`fetch_userinfo`. Config: `oauth_redirect_base_url`. |
+| OA.2 | OAuth Redirect Endpoint | ✅ Done | `GET /api/auth/oauth/{provider}`: validates provider, generates CSRF state, stores in Redis, returns 302 to provider consent screen. Scopes: Google (openid email profile), GitHub (read:user user:email). |
+| OA.3 | OAuth Callback Endpoint | ✅ Done | `GET /api/auth/oauth/{provider}/callback`: validates state from Redis, exchanges code for token, fetches userinfo, calls `create_or_link_oauth`, sets auth cookies, redirects to `/`. Error paths: invalid state→403, no email→400, provider error→redirect to `/login?error=oauth_failed`. |
+| OA.4 | Avatar URL in OAuth Service | ✅ Done | `create_or_link_oauth()` now accepts `avatar_url` param. Sets avatar on new users, fills missing avatar on existing users (won't overwrite existing). |
+| OA.5 | Frontend OAuth Improvements | ✅ Done | `OAuthButtons.tsx`: CSS theme vars (border-border, bg-surface, text-text), loading spinner, provider SVG icons. `LoginPage.tsx`: reads `?error=` query param, displays OAuth error message. |
+| OA.6 | OAuth Tests | ✅ Done | 40 new tests: `test_oauth.py` (20 — state, config, URLs, userinfo), `test_auth_oauth.py` (13 — redirect, callback endpoints), `test_user_service_oauth.py` (7 — service logic). All pass, no regressions. |
+
+**Tests:** 993 unit + 232 golden + 34 E2E = ~1259 total tests (40 new).
+
 ## Issues & Blockers
 
 | Date | Issue | Status | Resolution |
