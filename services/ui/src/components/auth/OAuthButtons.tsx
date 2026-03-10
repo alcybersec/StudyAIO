@@ -45,7 +45,7 @@ export function OAuthButtons({ providers, error }: OAuthButtonsProps) {
 
   const handleOAuthClick = (provider: string) => {
     setLoadingProvider(provider)
-    window.location.href = `/api/auth/oauth/${provider}`
+    window.location.assign(`/api/auth/oauth/${provider}`)
   }
 
   return (

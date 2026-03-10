@@ -1,4 +1,4 @@
-import type { LayoutItem, ResponsiveLayouts } from 'react-grid-layout'
+import type { ResponsiveLayouts } from 'react-grid-layout'
 
 export interface WidgetDef {
   key: string

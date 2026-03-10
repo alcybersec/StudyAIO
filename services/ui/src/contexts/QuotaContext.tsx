@@ -50,6 +50,7 @@ export function QuotaProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useQuota(): QuotaContextValue {
   const ctx = useContext(QuotaContext)
   if (!ctx) {

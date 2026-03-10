@@ -18,10 +18,10 @@ export function OnboardingTour() {
     }
   }, [isDemo, completed, active, start])
 
-  // Find and track the target element
+  // Find and track the target element (DOM measurement requires setState in effect)
   useEffect(() => {
     if (!active || !currentStep) {
-      setTargetRect(null)
+      setTargetRect(null) // eslint-disable-line react-hooks/set-state-in-effect
       return
     }
 
