@@ -1,8 +1,10 @@
 """Comprehensive hardening tests for Milestone 12 security features."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from app.core.exceptions import AuthenticationError
 
 SECURITY_HEADERS = {
     "x-content-type-options": "nosniff",
@@ -25,21 +27,19 @@ class TestRateLimiting:
         mock_result = MagicMock()
         mock_result.id = "task-id"
 
-        # Set a very low rate limit for testing
-        with (
-            patch("app.config.settings.rate_limit_uploads", "2/minute"),
-            patch("app.api.uploads.run_pipeline", return_value=mock_result),
-        ):
+        # Default rate_limit_uploads is "10/minute".  Patching Pydantic v2
+        # Settings attributes via mock.patch is unreliable, so we hit the
+        # real limit by sending 10+1 requests instead.
+        with patch("app.api.uploads.run_pipeline", return_value=mock_result):
             small_pdf = b"x" * 100
-            # First two should succeed
-            for _ in range(2):
+            for _ in range(10):
                 resp = await async_client.post(
                     "/api/uploads",
                     files={"file": ("test.pdf", small_pdf, "application/pdf")},
                 )
                 assert resp.status_code == 201
 
-            # Third should be rate limited
+            # 11th request should be rate limited
             resp = await async_client.post(
                 "/api/uploads",
                 files={"file": ("test.pdf", small_pdf, "application/pdf")},
@@ -48,22 +48,26 @@ class TestRateLimiting:
 
     async def test_rate_limit_headers_present(self, async_client):
         """Rate limited responses should still include security headers."""
-        mock_result = MagicMock()
-        mock_result.id = "task-id"
+        from app.core.rate_limit import limiter
 
-        with (
-            patch("app.config.settings.rate_limit_uploads", "1/minute"),
-            patch("app.api.uploads.run_pipeline", return_value=mock_result),
+        limiter.reset()
+
+        # Use /api/auth/register which has a hardcoded "3/minute" limit —
+        # avoids patching Pydantic Settings and keeps the test fast.
+        with patch(
+            "app.api.auth.user_service.register_user",
+            new_callable=AsyncMock,
+            side_effect=AuthenticationError("mocked"),
         ):
-            small_pdf = b"x" * 100
-            await async_client.post(
-                "/api/uploads",
-                files={"file": ("test.pdf", small_pdf, "application/pdf")},
-            )
-            # Second request triggers 429
+            for _ in range(3):
+                await async_client.post(
+                    "/api/auth/register",
+                    json={"email": "u@e.com", "username": "usr", "password": "Pass1!aa"},
+                )
+            # 4th request triggers 429
             resp = await async_client.post(
-                "/api/uploads",
-                files={"file": ("test.pdf", small_pdf, "application/pdf")},
+                "/api/auth/register",
+                json={"email": "u@e.com", "username": "usr", "password": "Pass1!aa"},
             )
             assert resp.status_code == 429
             # Security headers still present on 429
