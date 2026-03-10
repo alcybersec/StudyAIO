@@ -46,16 +46,9 @@ jobs:
             build-essential libpq-dev \
           && rm -rf /var/lib/apt/lists/*
 
-      - name: Pip cache
-        uses: actions/cache@v4
-        with:
-          path: /root/.cache/pip
-          key: pip-${{ hashFiles('services/app/requirements.txt') }}
-          restore-keys: pip-
-
-      - name: Install dependencies
+      - name: Install dependencies (CPU-only PyTorch)
         working-directory: services/app
-        run: pip install -r requirements.txt
+        run: pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
       - name: Run unit tests with coverage
         working-directory: services/app
@@ -113,16 +106,9 @@ jobs:
             build-essential libpq-dev postgresql-client \
           && rm -rf /var/lib/apt/lists/*
 
-      - name: Pip cache
-        uses: actions/cache@v4
-        with:
-          path: /root/.cache/pip
-          key: pip-${{ hashFiles('services/app/requirements.txt') }}
-          restore-keys: pip-
-
-      - name: Install dependencies
+      - name: Install dependencies (CPU-only PyTorch)
         working-directory: services/app
-        run: pip install -r requirements.txt
+        run: pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
       - name: Enable pgvector extension
         run: PGPASSWORD=testpass psql -h postgres -U testuser -d testdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
