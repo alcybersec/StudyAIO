@@ -17,13 +17,14 @@ class TestCoursesEndpoints:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_list_courses_with_stats(self, integration_client, db_session):
+    async def test_list_courses_with_stats(self, integration_client, db_session, test_user_id):
         """GET /api/courses returns courses with aggregate stats."""
-        course = Course(id=generate_id(), code="INT100", name="Integration")
+        course = Course(id=generate_id(), code="INT100", name="Integration", user_id=test_user_id)
         db_session.add(course)
         a = LectureArtifact(
             id=generate_id(),
             course_id=course.id,
+            user_id=test_user_id,
             week=1,
             original_filename="lec.pdf",
             file_path="/data/uploads/lec.pdf",
@@ -43,13 +44,14 @@ class TestCoursesEndpoints:
         assert data[0]["weeks_covered"] == 1
         assert data[0]["total_artifacts"] == 1
 
-    async def test_get_course_detail(self, integration_client, db_session):
+    async def test_get_course_detail(self, integration_client, db_session, test_user_id):
         """GET /api/courses/{code} returns course with weeks."""
-        course = Course(id=generate_id(), code="INT200", name="Detail Test")
+        course = Course(id=generate_id(), code="INT200", name="Detail Test", user_id=test_user_id)
         db_session.add(course)
         a = LectureArtifact(
             id=generate_id(),
             course_id=course.id,
+            user_id=test_user_id,
             week=3,
             title="Week 3 Lecture",
             original_filename="w3.pdf",

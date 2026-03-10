@@ -13,9 +13,11 @@ from app.services import artifact_service, course_service, review_service
 class TestArtifactService:
     """Test artifact_service with a real database."""
 
-    async def test_ingest_file_round_trip(self, db_session, simple_pdf, tmp_path):
+    async def test_ingest_file_round_trip(self, db_session, simple_pdf, tmp_path, test_user_id):
         """ingest_file creates an artifact and persists it."""
-        artifact = await artifact_service.ingest_file(db_session, str(simple_pdf))
+        artifact = await artifact_service.ingest_file(
+            db_session, str(simple_pdf), user_id=test_user_id
+        )
 
         assert artifact.id is not None
         assert artifact.original_filename == "test_lecture.pdf"
@@ -28,19 +30,19 @@ class TestArtifactService:
         assert fetched is not None
         assert fetched.sha256 == artifact.sha256
 
-    async def test_ingest_duplicate_raises(self, db_session, simple_pdf):
+    async def test_ingest_duplicate_raises(self, db_session, simple_pdf, test_user_id):
         """Ingesting the same file twice raises DuplicateFileError."""
-        await artifact_service.ingest_file(db_session, str(simple_pdf))
+        await artifact_service.ingest_file(db_session, str(simple_pdf), user_id=test_user_id)
 
         with pytest.raises(DuplicateFileError):
-            await artifact_service.ingest_file(db_session, str(simple_pdf))
+            await artifact_service.ingest_file(db_session, str(simple_pdf), user_id=test_user_id)
 
-    async def test_ingest_unsupported_type_raises(self, db_session, tmp_path):
+    async def test_ingest_unsupported_type_raises(self, db_session, tmp_path, test_user_id):
         """Ingesting an unsupported file type raises ValueError."""
         txt_file = tmp_path / "notes.txt"
         txt_file.write_text("hello")
         with pytest.raises(ValueError, match="Unsupported file type"):
-            await artifact_service.ingest_file(db_session, str(txt_file))
+            await artifact_service.ingest_file(db_session, str(txt_file), user_id=test_user_id)
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -126,14 +128,14 @@ class TestReviewService:
 class TestCourseService:
     """Test course_service with a real database."""
 
-    async def test_list_courses_with_stats_empty(self, db_session):
+    async def test_list_courses_with_stats_empty(self, db_session, test_user_id):
         """Returns empty list when no courses exist."""
-        result = await course_service.list_courses_with_stats(db_session)
+        result = await course_service.list_courses_with_stats(db_session, user_id=test_user_id)
         assert result == []
 
-    async def test_list_courses_with_stats_aggregation(self, db_session):
+    async def test_list_courses_with_stats_aggregation(self, db_session, test_user_id):
         """Stats reflect actual artifact counts."""
-        course = Course(id=generate_id(), code="TEST200", name="Test")
+        course = Course(id=generate_id(), code="TEST200", name="Test", user_id=test_user_id)
         db_session.add(course)
         await db_session.flush()
 
@@ -142,6 +144,7 @@ class TestCourseService:
             a = LectureArtifact(
                 id=generate_id(),
                 course_id=course.id,
+                user_id=test_user_id,
                 week=week,
                 original_filename=f"lec{i}.pdf",
                 file_path=f"/data/uploads/lec{i}.pdf",
@@ -153,7 +156,7 @@ class TestCourseService:
             db_session.add(a)
         await db_session.flush()
 
-        result = await course_service.list_courses_with_stats(db_session)
+        result = await course_service.list_courses_with_stats(db_session, user_id=test_user_id)
         assert len(result) == 1
         assert result[0]["code"] == "TEST200"
         assert result[0]["weeks_covered"] == 2

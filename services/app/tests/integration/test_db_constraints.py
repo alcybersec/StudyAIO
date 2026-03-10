@@ -13,20 +13,20 @@ from app.models.summary import Summary
 class TestCourseConstraints:
     """Test Course model DB constraints."""
 
-    async def test_course_code_unique(self, db_session):
+    async def test_course_code_unique(self, db_session, test_user_id):
         """Duplicate course codes raise IntegrityError."""
-        c1 = Course(id=generate_id(), code="CSIT302", name="Cybersecurity")
+        c1 = Course(id=generate_id(), code="CSIT302", name="Cybersecurity", user_id=test_user_id)
         db_session.add(c1)
         await db_session.flush()
 
-        c2 = Course(id=generate_id(), code="CSIT302", name="Duplicate")
+        c2 = Course(id=generate_id(), code="CSIT302", name="Duplicate", user_id=test_user_id)
         db_session.add(c2)
         with pytest.raises(IntegrityError):
             await db_session.flush()
 
-    async def test_course_code_not_null(self, db_session):
+    async def test_course_code_not_null(self, db_session, test_user_id):
         """Course code cannot be null."""
-        c = Course(id=generate_id(), code=None, name="No Code")
+        c = Course(id=generate_id(), code=None, name="No Code", user_id=test_user_id)
         db_session.add(c)
         with pytest.raises(IntegrityError):
             await db_session.flush()
@@ -36,11 +36,12 @@ class TestCourseConstraints:
 class TestArtifactConstraints:
     """Test LectureArtifact model DB constraints."""
 
-    async def test_artifact_sha256_unique(self, db_session):
+    async def test_artifact_sha256_unique(self, db_session, test_user_id):
         """Duplicate SHA-256 hashes raise IntegrityError."""
         sha = "a" * 64
         a1 = LectureArtifact(
             id=generate_id(),
+            user_id=test_user_id,
             original_filename="file1.pdf",
             file_path="/data/uploads/file1.pdf",
             file_type="pdf",
@@ -53,6 +54,7 @@ class TestArtifactConstraints:
 
         a2 = LectureArtifact(
             id=generate_id(),
+            user_id=test_user_id,
             original_filename="file2.pdf",
             file_path="/data/uploads/file2.pdf",
             file_type="pdf",
@@ -64,10 +66,11 @@ class TestArtifactConstraints:
         with pytest.raises(IntegrityError):
             await db_session.flush()
 
-    async def test_artifact_fk_course(self, db_session):
+    async def test_artifact_fk_course(self, db_session, test_user_id):
         """Artifact with nonexistent course_id raises IntegrityError."""
         a = LectureArtifact(
             id=generate_id(),
+            user_id=test_user_id,
             course_id="nonexistent-id",
             original_filename="file.pdf",
             file_path="/data/uploads/file.pdf",
@@ -85,9 +88,9 @@ class TestArtifactConstraints:
 class TestSummaryConstraints:
     """Test Summary model DB constraints."""
 
-    async def test_summary_course_week_unique(self, db_session):
+    async def test_summary_course_week_unique(self, db_session, test_user_id):
         """Duplicate (course_id, week) raises IntegrityError."""
-        course = Course(id=generate_id(), code="TEST101", name="Test Course")
+        course = Course(id=generate_id(), code="TEST101", name="Test Course", user_id=test_user_id)
         db_session.add(course)
         await db_session.flush()
 

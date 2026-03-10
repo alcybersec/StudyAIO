@@ -39,10 +39,13 @@ class TestUploadEndpoints:
         assert resp.status_code == 400
         assert "Unsupported file type" in resp.json()["detail"]
 
-    async def test_get_status_returns_pipeline_runs(self, integration_client, db_session):
+    async def test_get_status_returns_pipeline_runs(
+        self, integration_client, db_session, test_user_id
+    ):
         """GET /api/uploads/{id}/status returns pipeline runs."""
         artifact = LectureArtifact(
             id=generate_id(),
+            user_id=test_user_id,
             original_filename="test.pdf",
             file_path="/data/uploads/test.pdf",
             file_type="pdf",
@@ -73,10 +76,13 @@ class TestUploadEndpoints:
         resp = await integration_client.get("/api/uploads/nonexistent-id/status")
         assert resp.status_code == 404
 
-    async def test_retry_resets_failed_artifact(self, integration_client, db_session):
+    async def test_retry_resets_failed_artifact(
+        self, integration_client, db_session, test_user_id
+    ):
         """POST /api/uploads/{id}/retry resets status and dispatches pipeline."""
         artifact = LectureArtifact(
             id=generate_id(),
+            user_id=test_user_id,
             original_filename="fail.pdf",
             file_path="/data/uploads/fail.pdf",
             file_type="pdf",
