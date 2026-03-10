@@ -32,7 +32,7 @@ jobs:
     runs-on: [self-hosted, homelab]
     steps:
       - name: Fix workspace permissions
-        run: sudo chown -R $(id -u):$(id -g) "${{ github.workspace }}" || true
+        run: docker run --rm -v "${{ github.workspace }}:/__w" alpine chown -R $(id -u):$(id -g) /__w || true
 
       - uses: actions/checkout@v4
 
@@ -67,7 +67,7 @@ jobs:
     runs-on: [self-hosted, homelab]
     steps:
       - name: Fix workspace permissions
-        run: sudo chown -R $(id -u):$(id -g) "${{ github.workspace }}" || true
+        run: docker run --rm -v "${{ github.workspace }}:/__w" alpine chown -R $(id -u):$(id -g) /__w || true
 
       - uses: actions/checkout@v4
 
