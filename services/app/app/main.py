@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -77,13 +78,50 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if settings.cookie_secure:
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
         return response
+
+
+class AccessLogMiddleware(BaseHTTPMiddleware):
+    """Log every HTTP request with method, path, status, and duration."""
+
+    _SKIP_PATHS = {"/health", "/health/live", "/health/ready", "/metrics"}
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        if request.url.path in self._SKIP_PATHS:
+            return await call_next(request)
+
+        start = time.monotonic()
+        response = await call_next(request)
+        duration_ms = round((time.monotonic() - start) * 1000, 1)
+
+        logger.info(
+            "http_request",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+        )
+        return response
+
+
+_DEFAULT_JWT_SECRET = "changeme-in-production-use-a-real-secret"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application startup and shutdown events."""
     configure_logging(settings.log_level)
+
+    # Refuse to start with default JWT secret in SaaS mode
+    if not settings.self_hosted and settings.jwt_secret_key.get_secret_value() == _DEFAULT_JWT_SECRET:
+        raise RuntimeError(
+            "FATAL: JWT_SECRET_KEY is set to the default value. "
+            "You MUST set a unique, random JWT_SECRET_KEY in production (SaaS mode). "
+            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+        )
+
     logger.info("studyaio_starting", data_dir=settings.data_dir)
     yield
     logger.info("studyaio_shutting_down")
@@ -102,6 +140,9 @@ app = FastAPI(
     "files (PDF, DOCX, PPTX) to organized, searchable, exam-ready study materials.",
     version="0.1.0",
     lifespan=lifespan,
+    openapi_url="/openapi.json" if settings.openapi_enabled else None,
+    docs_url="/docs" if settings.openapi_enabled else None,
+    redoc_url="/redoc" if settings.openapi_enabled else None,
     openapi_tags=[
         {"name": "dashboard", "description": "Aggregated dashboard data"},
         {"name": "courses", "description": "Course listing and per-week breakdowns"},
@@ -140,6 +181,9 @@ app.add_middleware(RequestIDMiddleware)
 
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Access log middleware (inside RequestID context for request_id in logs)
+app.add_middleware(AccessLogMiddleware)
 
 # Demo account restrictions (blocks writes for demo users)
 app.add_middleware(DemoAccountMiddleware)
@@ -254,3 +298,32 @@ async def studyaio_error_handler(request: Request, exc: StudyAIOError) -> JSONRe
 async def health_check() -> dict[str, str]:
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+@app.get("/health/live")
+async def liveness_check() -> dict[str, str]:
+    """Liveness probe — confirms the process is running."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def readiness_check() -> Response:
+    """Readiness probe — verifies DB and Redis connectivity."""
+    from app.core.cache import check_redis_connectivity
+    from app.core.database import check_db_connectivity
+
+    db_ok = await check_db_connectivity()
+    redis_ok = await check_redis_connectivity()
+    all_ok = db_ok and redis_ok
+
+    status_code = 200 if all_ok else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "ok" if all_ok else "degraded",
+            "checks": {
+                "database": "ok" if db_ok else "unavailable",
+                "redis": "ok" if redis_ok else "unavailable",
+            },
+        },
+    )

@@ -1,5 +1,7 @@
 """Tests for security headers and CORS configuration."""
 
+from unittest.mock import patch
+
 import pytest
 
 SECURITY_HEADERS = {
@@ -36,6 +38,23 @@ class TestSecurityHeaders:
         assert response.status_code == 200
         for header in SECURITY_HEADERS:
             assert header in response.headers, f"Missing header: {header}"
+
+    async def test_hsts_present_when_cookie_secure(self, async_client):
+        """HSTS header is present when cookie_secure is True."""
+        with patch("app.main.settings.cookie_secure", True):
+            response = await async_client.get("/health")
+        assert response.status_code == 200
+        hsts = response.headers.get("strict-transport-security")
+        assert hsts is not None
+        assert "max-age=63072000" in hsts
+        assert "includeSubDomains" in hsts
+
+    async def test_hsts_absent_when_cookie_not_secure(self, async_client):
+        """HSTS header is absent when cookie_secure is False (dev)."""
+        with patch("app.main.settings.cookie_secure", False):
+            response = await async_client.get("/health")
+        assert response.status_code == 200
+        assert "strict-transport-security" not in response.headers
 
 
 @pytest.mark.asyncio

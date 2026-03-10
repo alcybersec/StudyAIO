@@ -203,11 +203,46 @@ Creates `backups/studyaio_YYYYMMDD_HHMMSS_db.sql.gz` and `..._data.tar.gz`.
 S3_BACKUP_BUCKET=my-backup-bucket bash scripts/backup.sh
 ```
 
+### Automated Daily Backups
+
+Enable automated backups via Celery beat by setting these environment variables:
+
+```bash
+BACKUP_ENABLED=true
+BACKUP_SCHEDULE_HOUR=2   # Hour (UTC) for daily backup, default 2 AM
+BACKUP_RETENTION=7       # Number of backups to keep
+```
+
+The backup task runs daily and includes dump integrity verification.
+
 ### Retention Policy
 
 Default: keep last 7 backups. Override with `BACKUP_RETENTION=14`.
 
 ### Restore
+
+Use the restore script for a guided restore process:
+
+```bash
+# List available backups and restore interactively
+make restore ts=20260310_020000
+
+# Or directly
+bash scripts/restore.sh 20260310_020000
+
+# List available backups without restoring
+bash scripts/restore.sh
+```
+
+The restore script will:
+1. Verify dump integrity
+2. Stop application services
+3. Restore the database (with schema recreation)
+4. Restore the data directory (if archive exists)
+5. Run migrations
+6. Restart all services
+
+**Manual restore** (if the script is not available):
 
 ```bash
 # Database
@@ -217,6 +252,17 @@ gunzip -c backups/studyaio_20260306_db.sql.gz | \
 # Data directory
 tar xzf backups/studyaio_20260306_data.tar.gz
 ```
+
+### Pre-flight Configuration Check
+
+Before deploying, validate your `.env` file:
+
+```bash
+make preflight
+# Or: bash scripts/preflight-check.sh
+```
+
+This checks for common misconfigurations: default JWT secrets, insecure cookie settings, exposed OpenAPI docs, and more.
 
 ---
 

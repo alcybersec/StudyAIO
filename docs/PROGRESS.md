@@ -365,6 +365,18 @@
 
 **Tests:** 934 unit + 232 golden + 34 E2E = ~1200 total tests.
 
+## Production Launch Readiness
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| PLR.1 | Deep Health Checks | ✅ Done | `/health/live` (liveness) + `/health/ready` (DB+Redis check, returns 503 when degraded). Updated all compose healthchecks + ECS. `check_db_connectivity()` + `check_redis_connectivity()` helpers. 6 new tests. |
+| PLR.2 | Production Logging | ✅ Done | structlog renderer selection: `LOG_FORMAT=json|console|auto` (auto=JSON when not TTY). AccessLogMiddleware logs method/path/status/duration_ms (skips health endpoints). 5 new tests. |
+| PLR.3 | DB & Startup Safety | ✅ Done | `pool_pre_ping=True`, configurable `db_pool_size`/`db_max_overflow`/`db_pool_recycle`. JWT secret startup check (rejects default in SaaS mode). Graceful shutdown (`--timeout-graceful-shutdown 30` + `stop_grace_period: 35s`). `worker_max_tasks_per_child=100`. 3 new tests. |
+| PLR.4 | Security Hardening | ✅ Done | HSTS header (when `cookie_secure=true`). CSP in nginx.conf. Conditional OpenAPI (`openapi_enabled` config). Auth rate limits tightened: register 3/min, forgot-password 3/min, reset-password 3/min. `scripts/preflight-check.sh` validates .env. 5 new tests. |
+| PLR.5 | Automated Backups + Restore | ✅ Done | Celery beat `daily-backup` task (configurable hour, `backup_enabled` flag). Dump integrity verification in backup.sh. `scripts/restore.sh` with guided restore. `make restore`, `make preflight`. Deployment docs updated. |
+
+**Tests:** 953 unit + 232 golden + 34 E2E = ~1219 total tests (24 new).
+
 ## Issues & Blockers
 
 | Date | Issue | Status | Resolution |

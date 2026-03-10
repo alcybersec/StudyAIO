@@ -17,6 +17,21 @@ def dashboard_cache_key(user_id: str) -> str:
     return f"cache:dashboard:{user_id}"
 
 
+async def check_redis_connectivity() -> bool:
+    """Check Redis connectivity with a PING command.
+
+    Returns True if Redis is reachable, False otherwise.
+    """
+    try:
+        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        try:
+            return await redis.ping()
+        finally:
+            await redis.aclose()
+    except Exception:
+        return False
+
+
 async def cache_get(key: str) -> dict | None:
     """Fetch a JSON value from Redis cache. Returns None on miss or error."""
     try:

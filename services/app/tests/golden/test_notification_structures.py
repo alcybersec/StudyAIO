@@ -104,7 +104,7 @@ class TestNotificationPreferencesStructure:
 
     def test_channels_closed_set(self) -> None:
         """CHANNELS is the expected closed set."""
-        expected = {"email", "telegram"}
+        expected = {"email", "telegram", "push"}
         assert set(CHANNELS) == expected
 
 

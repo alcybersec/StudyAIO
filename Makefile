@@ -1,4 +1,4 @@
-.PHONY: up down logs test test-unit test-integration test-golden migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup
+.PHONY: up down logs test test-unit test-integration test-golden migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup restore preflight
 
 # === Docker ===
 up:
@@ -27,9 +27,17 @@ up-selfhosted:
 down-selfhosted:
 	docker compose -f docker-compose.yml -f docker-compose.selfhosted.yml down
 
-# === Backup ===
+# === Backup & Restore ===
 backup:
 	bash scripts/backup.sh
+
+restore:
+	@if [ -z "$(ts)" ]; then echo "Usage: make restore ts=<timestamp>"; bash scripts/restore.sh; exit 1; fi
+	bash scripts/restore.sh $(ts)
+
+# === Pre-flight ===
+preflight:
+	bash scripts/preflight-check.sh
 
 logs:
 	docker compose logs -f
