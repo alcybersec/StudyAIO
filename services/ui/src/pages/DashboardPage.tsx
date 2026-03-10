@@ -112,11 +112,11 @@ export function DashboardPage() {
         rowHeight={30}
         onLayoutChange={onLayoutChange}
         dragConfig={{
-          isDraggable: window.innerWidth >= 1024,
+          enabled: window.innerWidth >= 1024,
           handle: '.drag-handle',
         }}
         resizeConfig={{
-          isResizable: window.innerWidth >= 1024,
+          enabled: window.innerWidth >= 1024,
         }}
         containerPadding={[0, 0] as const}
         margin={[16, 16] as const}
