@@ -76,9 +76,7 @@ class TestUploadEndpoints:
         resp = await integration_client.get("/api/uploads/nonexistent-id/status")
         assert resp.status_code == 404
 
-    async def test_retry_resets_failed_artifact(
-        self, integration_client, db_session, test_user_id
-    ):
+    async def test_retry_resets_failed_artifact(self, integration_client, db_session, test_user_id):
         """POST /api/uploads/{id}/retry resets status and dispatches pipeline."""
         artifact = LectureArtifact(
             id=generate_id(),
