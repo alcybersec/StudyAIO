@@ -12,6 +12,9 @@ jobs:
     container:
       image: python:3.12-slim
     steps:
+      - name: Fix workspace permissions
+        run: chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE || true
+
       - uses: actions/checkout@v4
 
       - name: Install ruff
@@ -32,6 +35,9 @@ jobs:
     container:
       image: python:3.12-slim
     steps:
+      - name: Fix workspace permissions
+        run: chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE || true
+
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
@@ -96,6 +102,9 @@ jobs:
       DATABASE_URL_SYNC: postgresql://testuser:testpass@postgres:5432/testdb
       REDIS_URL: redis://redis:6379/0
     steps:
+      - name: Fix workspace permissions
+        run: chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE || true
+
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
@@ -128,6 +137,9 @@ jobs:
     container:
       image: node:20-slim
     steps:
+      - name: Fix workspace permissions
+        run: chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE || true
+
       - uses: actions/checkout@v4
 
       - name: Npm cache
