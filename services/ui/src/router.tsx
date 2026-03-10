@@ -30,6 +30,7 @@ const KnowledgeGraphPage = lazy(() => import('./pages/KnowledgeGraphPage').then(
 const UploadPage = lazy(() => import('./pages/UploadPage').then(m => ({ default: m.UploadPage })))
 const WeekViewPage = lazy(() => import('./pages/WeekViewPage').then(m => ({ default: m.WeekViewPage })))
 
+// eslint-disable-next-line react-refresh/only-export-components
 function SuspenseOutlet() {
   return (
     <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." />}>

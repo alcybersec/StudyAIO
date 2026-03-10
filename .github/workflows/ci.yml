@@ -9,14 +9,10 @@ jobs:
   python-lint:
     name: Python Lint
     runs-on: [self-hosted, homelab]
-
+    container:
+      image: python:3.12-slim
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
 
       - name: Install ruff
         run: pip install "ruff>=0.8,<1.0"
@@ -32,16 +28,23 @@ jobs:
   backend-tests:
     name: Backend Tests
     runs-on: [self-hosted, homelab]
-
+    container:
+      image: python:3.12-slim
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Install system dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            build-essential libpq-dev \
+          && rm -rf /var/lib/apt/lists/*
+
+      - name: Pip cache
+        uses: actions/cache@v4
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: services/app/requirements.txt
+          path: /root/.cache/pip
+          key: pip-${{ hashFiles('services/app/requirements.txt') }}
+          restore-keys: pip-
 
       - name: Install dependencies
         working-directory: services/app
@@ -65,7 +68,8 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: [self-hosted, homelab]
-
+    container:
+      image: python:3.12-slim
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -73,45 +77,44 @@ jobs:
           POSTGRES_USER: testuser
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: testdb
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U testuser -d testdb"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
       redis:
         image: redis:7-alpine
-        ports:
-          - 6379:6379
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     env:
-      DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5432/testdb
-      DATABASE_URL_SYNC: postgresql://testuser:testpass@localhost:5432/testdb
-      REDIS_URL: redis://localhost:6379/0
-
+      DATABASE_URL: postgresql+asyncpg://testuser:testpass@postgres:5432/testdb
+      DATABASE_URL_SYNC: postgresql://testuser:testpass@postgres:5432/testdb
+      REDIS_URL: redis://redis:6379/0
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Install system dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            build-essential libpq-dev postgresql-client \
+          && rm -rf /var/lib/apt/lists/*
+
+      - name: Pip cache
+        uses: actions/cache@v4
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: services/app/requirements.txt
+          path: /root/.cache/pip
+          key: pip-${{ hashFiles('services/app/requirements.txt') }}
+          restore-keys: pip-
 
       - name: Install dependencies
         working-directory: services/app
         run: pip install -r requirements.txt
 
       - name: Enable pgvector extension
-        run: PGPASSWORD=testpass psql -h localhost -U testuser -d testdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+        run: PGPASSWORD=testpass psql -h postgres -U testuser -d testdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Run integration tests
         working-directory: services/app
@@ -120,16 +123,17 @@ jobs:
   frontend-checks:
     name: Frontend Checks
     runs-on: [self-hosted, homelab]
-
+    container:
+      image: node:20-slim
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
+      - name: Npm cache
+        uses: actions/cache@v4
         with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: services/ui/package-lock.json
+          path: /root/.npm
+          key: npm-${{ hashFiles('services/ui/package-lock.json') }}
+          restore-keys: npm-
 
       - name: Install dependencies
         working-directory: services/ui
