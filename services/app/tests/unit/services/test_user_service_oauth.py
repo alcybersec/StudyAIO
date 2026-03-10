@@ -58,9 +58,7 @@ class TestCreateOrLinkOAuth:
     async def test_no_email_raises(self):
         session = AsyncMock()
         with pytest.raises(AuthenticationError, match="did not return an email"):
-            await user_service.create_or_link_oauth(
-                session, "google", "goog-123", ""
-            )
+            await user_service.create_or_link_oauth(session, "google", "goog-123", "")
 
     @pytest.mark.asyncio
     async def test_existing_oauth_account_updates_tokens(self):
@@ -79,8 +77,12 @@ class TestCreateOrLinkOAuth:
         session.execute = AsyncMock(side_effect=[result_oauth, result_user])
 
         returned = await user_service.create_or_link_oauth(
-            session, "google", "goog-123", "test@example.com",
-            access_token="new-access", refresh_token="new-refresh",
+            session,
+            "google",
+            "goog-123",
+            "test@example.com",
+            access_token="new-access",
+            refresh_token="new-refresh",
         )
 
         assert returned is user
@@ -100,7 +102,10 @@ class TestCreateOrLinkOAuth:
         session.execute = AsyncMock(side_effect=[result_oauth, result_user])
 
         await user_service.create_or_link_oauth(
-            session, "google", "goog-123", "test@example.com",
+            session,
+            "google",
+            "goog-123",
+            "test@example.com",
             avatar_url="https://example.com/pic.jpg",
         )
 
@@ -119,7 +124,10 @@ class TestCreateOrLinkOAuth:
         session.execute = AsyncMock(side_effect=[result_oauth, result_user])
 
         await user_service.create_or_link_oauth(
-            session, "google", "goog-123", "test@example.com",
+            session,
+            "google",
+            "goog-123",
+            "test@example.com",
             avatar_url="https://example.com/new.jpg",
         )
 
@@ -142,8 +150,12 @@ class TestCreateOrLinkOAuth:
         session.execute = AsyncMock(side_effect=[result_no_oauth, result_user])
 
         returned = await user_service.create_or_link_oauth(
-            session, "github", "gh-456", "test@example.com",
-            access_token="tok", avatar_url="https://github.com/pic.jpg",
+            session,
+            "github",
+            "gh-456",
+            "test@example.com",
+            access_token="tok",
+            avatar_url="https://github.com/pic.jpg",
         )
 
         assert returned is user
@@ -172,9 +184,13 @@ class TestCreateOrLinkOAuth:
             side_effect=[result_no_oauth, result_no_user, result_username_free]
         )
 
-        returned = await user_service.create_or_link_oauth(
-            session, "google", "goog-789", "newuser@example.com",
-            access_token="tok", avatar_url="https://example.com/avatar.png",
+        await user_service.create_or_link_oauth(
+            session,
+            "google",
+            "goog-789",
+            "newuser@example.com",
+            access_token="tok",
+            avatar_url="https://example.com/avatar.png",
         )
 
         # User was added (flush creates it), then OAuthAccount was added
@@ -207,7 +223,10 @@ class TestCreateOrLinkOAuth:
         )
 
         await user_service.create_or_link_oauth(
-            session, "google", "goog-dup", "newuser@example.com",
+            session,
+            "google",
+            "goog-dup",
+            "newuser@example.com",
         )
 
         added_user = session.add.call_args_list[0][0][0]

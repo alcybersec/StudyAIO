@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.core.auth import hash_password
 from app.core.oauth import OAuthUserInfo
 from app.models.user import User
 
@@ -42,21 +41,20 @@ class TestOAuthRedirect:
 
     @pytest.mark.asyncio
     async def test_redirect_invalid_provider_returns_400(self, async_client):
-        response = await async_client.get(
-            "/api/auth/oauth/invalid", follow_redirects=False
-        )
+        response = await async_client.get("/api/auth/oauth/invalid", follow_redirects=False)
         assert response.status_code == 400
 
     @pytest.mark.asyncio
     async def test_redirect_google_returns_302(self, async_client):
         with (
             patch("app.api.auth.store_oauth_state", new_callable=AsyncMock),
-            patch("app.api.auth.build_authorize_url", return_value="https://accounts.google.com/o/oauth2/v2/auth?test=1"),
+            patch(
+                "app.api.auth.build_authorize_url",
+                return_value="https://accounts.google.com/o/oauth2/v2/auth?test=1",
+            ),
             patch("app.config.settings.google_client_id", "test-client-id"),
         ):
-            response = await async_client.get(
-                "/api/auth/oauth/google", follow_redirects=False
-            )
+            response = await async_client.get("/api/auth/oauth/google", follow_redirects=False)
         assert response.status_code == 302
         assert "accounts.google.com" in response.headers["location"]
 
@@ -64,12 +62,13 @@ class TestOAuthRedirect:
     async def test_redirect_github_returns_302(self, async_client):
         with (
             patch("app.api.auth.store_oauth_state", new_callable=AsyncMock),
-            patch("app.api.auth.build_authorize_url", return_value="https://github.com/login/oauth/authorize?test=1"),
+            patch(
+                "app.api.auth.build_authorize_url",
+                return_value="https://github.com/login/oauth/authorize?test=1",
+            ),
             patch("app.config.settings.github_client_id", "test-client-id"),
         ):
-            response = await async_client.get(
-                "/api/auth/oauth/github", follow_redirects=False
-            )
+            response = await async_client.get("/api/auth/oauth/github", follow_redirects=False)
         assert response.status_code == 302
         assert "github.com" in response.headers["location"]
 
@@ -77,11 +76,12 @@ class TestOAuthRedirect:
     async def test_redirect_unconfigured_provider_returns_400(self, async_client):
         with (
             patch("app.api.auth.store_oauth_state", new_callable=AsyncMock),
-            patch("app.api.auth.build_authorize_url", side_effect=ValueError("Google OAuth not configured")),
+            patch(
+                "app.api.auth.build_authorize_url",
+                side_effect=ValueError("Google OAuth not configured"),
+            ),
         ):
-            response = await async_client.get(
-                "/api/auth/oauth/google", follow_redirects=False
-            )
+            response = await async_client.get("/api/auth/oauth/google", follow_redirects=False)
         assert response.status_code == 400
 
     @pytest.mark.asyncio
@@ -89,12 +89,13 @@ class TestOAuthRedirect:
         mock_store = AsyncMock()
         with (
             patch("app.api.auth.store_oauth_state", mock_store),
-            patch("app.api.auth.build_authorize_url", return_value="https://github.com/login/oauth/authorize?test=1"),
+            patch(
+                "app.api.auth.build_authorize_url",
+                return_value="https://github.com/login/oauth/authorize?test=1",
+            ),
             patch("app.config.settings.github_client_id", "test-client-id"),
         ):
-            await async_client.get(
-                "/api/auth/oauth/github", follow_redirects=False
-            )
+            await async_client.get("/api/auth/oauth/github", follow_redirects=False)
         mock_store.assert_called_once()
         # First arg is state (random string), second is provider
         assert mock_store.call_args[0][1] == "github"
@@ -148,7 +149,11 @@ class TestOAuthCallback:
         )
         with (
             patch("app.api.auth.validate_oauth_state", new_callable=AsyncMock, return_value=True),
-            patch("app.api.auth.exchange_code_for_token", new_callable=AsyncMock, return_value={"access_token": "tok"}),
+            patch(
+                "app.api.auth.exchange_code_for_token",
+                new_callable=AsyncMock,
+                return_value={"access_token": "tok"},
+            ),
             patch("app.api.auth.fetch_userinfo", new_callable=AsyncMock, return_value=userinfo),
         ):
             response = await async_client.get(
@@ -168,9 +173,17 @@ class TestOAuthCallback:
         )
         with (
             patch("app.api.auth.validate_oauth_state", new_callable=AsyncMock, return_value=True),
-            patch("app.api.auth.exchange_code_for_token", new_callable=AsyncMock, return_value={"access_token": "tok"}),
+            patch(
+                "app.api.auth.exchange_code_for_token",
+                new_callable=AsyncMock,
+                return_value={"access_token": "tok"},
+            ),
             patch("app.api.auth.fetch_userinfo", new_callable=AsyncMock, return_value=userinfo),
-            patch("app.api.auth.user_service.create_or_link_oauth", new_callable=AsyncMock, return_value=user),
+            patch(
+                "app.api.auth.user_service.create_or_link_oauth",
+                new_callable=AsyncMock,
+                return_value=user,
+            ),
         ):
             response = await async_client.get(
                 "/api/auth/oauth/google/callback?code=abc&state=validstate",
@@ -184,7 +197,11 @@ class TestOAuthCallback:
     async def test_callback_exchange_failure_redirects_to_login(self, async_client, mock_session):
         with (
             patch("app.api.auth.validate_oauth_state", new_callable=AsyncMock, return_value=True),
-            patch("app.api.auth.exchange_code_for_token", new_callable=AsyncMock, side_effect=Exception("Token exchange failed")),
+            patch(
+                "app.api.auth.exchange_code_for_token",
+                new_callable=AsyncMock,
+                side_effect=Exception("Token exchange failed"),
+            ),
         ):
             response = await async_client.get(
                 "/api/auth/oauth/google/callback?code=abc&state=validstate",
@@ -205,7 +222,11 @@ class TestOAuthCallback:
         mock_create = AsyncMock(return_value=user)
         with (
             patch("app.api.auth.validate_oauth_state", new_callable=AsyncMock, return_value=True),
-            patch("app.api.auth.exchange_code_for_token", new_callable=AsyncMock, return_value={"access_token": "tok"}),
+            patch(
+                "app.api.auth.exchange_code_for_token",
+                new_callable=AsyncMock,
+                return_value={"access_token": "tok"},
+            ),
             patch("app.api.auth.fetch_userinfo", new_callable=AsyncMock, return_value=userinfo),
             patch("app.api.auth.user_service.create_or_link_oauth", mock_create),
         ):

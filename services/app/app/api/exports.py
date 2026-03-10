@@ -42,11 +42,11 @@ async def export_obsidian_vault(
     if weeks.strip():
         try:
             week_list = [int(w.strip()) for w in weeks.split(",") if w.strip()]
-        except ValueError:
+        except ValueError as exc:
             raise HTTPException(
                 status_code=400,
                 detail="Invalid weeks parameter. Use comma-separated integers.",
-            )
+            ) from exc
 
     result = await export_service.generate_obsidian_vault(
         session, course_code, week_list, user_id=user.id

@@ -15,17 +15,13 @@ class StudySession(Base):
     __tablename__ = "study_sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     exam_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("exams.id", ondelete="SET NULL"),
         nullable=True,
     )
-    course_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("courses.id"), nullable=False
-    )
+    course_id: Mapped[str] = mapped_column(String(36), ForeignKey("courses.id"), nullable=False)
     session_date: Mapped[date] = mapped_column(Date, nullable=False)
     cards_reviewed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     quiz_questions_answered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

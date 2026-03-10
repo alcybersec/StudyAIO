@@ -8,7 +8,6 @@ from app.core.exceptions import TelegramLinkError
 from app.models.telegram_link import TelegramLink
 from app.services.telegram_service import (
     generate_link_token,
-    get_link,
     handle_telegram_webhook,
     send_telegram_message,
     unlink,
@@ -40,9 +39,7 @@ class TestGenerateLinkToken:
     @pytest.mark.asyncio
     async def test_generate_token_existing_user(self) -> None:
         """generate_link_token updates existing link with new token."""
-        existing = TelegramLink(
-            id="link-1", user_id="user-1", chat_id=12345, verified=True
-        )
+        existing = TelegramLink(id="link-1", user_id="user-1", chat_id=12345, verified=True)
         session = _make_mock_session(link=existing)
         token = await generate_link_token(session, "user-1")
         assert isinstance(token, str)
@@ -58,9 +55,7 @@ class TestVerifyLink:
     @pytest.mark.asyncio
     async def test_verify_link_success(self) -> None:
         """verify_link sets chat_id and verified=True."""
-        existing = TelegramLink(
-            id="link-1", user_id="user-1", link_token="valid-token"
-        )
+        existing = TelegramLink(id="link-1", user_id="user-1", link_token="valid-token")
         session = _make_mock_session(link=existing)
         result = await verify_link(session, "valid-token", 99999, "testuser")
         assert result is True
@@ -132,9 +127,7 @@ class TestHandleTelegramWebhook:
     @pytest.mark.asyncio
     async def test_webhook_start_with_valid_token(self) -> None:
         """handle_telegram_webhook verifies link on /start <token>."""
-        existing = TelegramLink(
-            id="link-1", user_id="user-1", link_token="mytoken"
-        )
+        existing = TelegramLink(id="link-1", user_id="user-1", link_token="mytoken")
         session = _make_mock_session(link=existing)
 
         update = {

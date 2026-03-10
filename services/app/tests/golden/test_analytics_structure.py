@@ -269,10 +269,7 @@ class TestReadinessResponseStructure:
 
     def test_quiz_correct_not_more_than_total(self, sample_readiness_response):
         """Correct quiz answers cannot exceed total."""
-        assert (
-            sample_readiness_response["quiz_correct"]
-            <= sample_readiness_response["quiz_total"]
-        )
+        assert sample_readiness_response["quiz_correct"] <= sample_readiness_response["quiz_total"]
 
     def test_study_days_in_valid_range(self, sample_readiness_response):
         """Study days last week is between 0 and 7."""

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.agents.base import ConceptData, ConceptExtractionResult, ConceptRelationData
+from app.agents.base import ConceptData, ConceptExtractionResult
 
 
 class TestExtractAndSaveConcepts:
@@ -18,13 +18,19 @@ class TestExtractAndSaveConcepts:
         from app.services.concept_service import extract_and_save_concepts
 
         mock_agent = MagicMock()
-        mock_agent.extract_concepts = AsyncMock(return_value=ConceptExtractionResult(
-            concepts=[
-                ConceptData(name="Binary Search", description="Search algorithm", category="algorithm"),
-                ConceptData(name="Sorting", description="Ordering elements", category="algorithm"),
-            ],
-            relations=[],
-        ))
+        mock_agent.extract_concepts = AsyncMock(
+            return_value=ConceptExtractionResult(
+                concepts=[
+                    ConceptData(
+                        name="Binary Search", description="Search algorithm", category="algorithm"
+                    ),
+                    ConceptData(
+                        name="Sorting", description="Ordering elements", category="algorithm"
+                    ),
+                ],
+                relations=[],
+            )
+        )
         mock_get_agent.return_value = mock_agent
 
         mock_provider = MagicMock()
@@ -32,11 +38,13 @@ class TestExtractAndSaveConcepts:
         mock_embed.return_value = mock_provider
 
         # Mock empty existing concepts
-        mock_session.execute = AsyncMock(return_value=MagicMock(
-            all=MagicMock(return_value=[]),
-            scalar_one_or_none=MagicMock(return_value=None),
-            scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[]))),
-        ))
+        mock_session.execute = AsyncMock(
+            return_value=MagicMock(
+                all=MagicMock(return_value=[]),
+                scalar_one_or_none=MagicMock(return_value=None),
+                scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[]))),
+            )
+        )
         mock_session.flush = AsyncMock()
         mock_session.commit = AsyncMock()
         mock_session.add = MagicMock()
@@ -57,14 +65,19 @@ class TestExtractAndSaveConcepts:
     @pytest.mark.asyncio
     @patch("app.agents.embeddings.get_embedding_provider")
     @patch("app.agents.factory.get_agent")
-    async def test_passes_existing_concepts_to_agent(self, mock_get_agent, mock_embed, mock_session):
+    async def test_passes_existing_concepts_to_agent(
+        self, mock_get_agent, mock_embed, mock_session
+    ):
         """Existing concept names are passed to the agent."""
         from app.services.concept_service import extract_and_save_concepts
 
         mock_agent = MagicMock()
-        mock_agent.extract_concepts = AsyncMock(return_value=ConceptExtractionResult(
-            concepts=[], relations=[],
-        ))
+        mock_agent.extract_concepts = AsyncMock(
+            return_value=ConceptExtractionResult(
+                concepts=[],
+                relations=[],
+            )
+        )
         mock_get_agent.return_value = mock_agent
 
         mock_provider = MagicMock()
@@ -102,9 +115,11 @@ class TestExtractAndSaveConcepts:
         mock_agent.extract_concepts = AsyncMock(return_value=ConceptExtractionResult())
         mock_get_agent.return_value = mock_agent
 
-        mock_session.execute = AsyncMock(return_value=MagicMock(
-            all=MagicMock(return_value=[]),
-        ))
+        mock_session.execute = AsyncMock(
+            return_value=MagicMock(
+                all=MagicMock(return_value=[]),
+            )
+        )
         mock_session.flush = AsyncMock()
         mock_session.commit = AsyncMock()
 
@@ -128,6 +143,7 @@ class TestGetConcepts:
     async def test_returns_formatted_list(self, mock_session):
         """Returns properly formatted concept dicts."""
         from datetime import datetime
+
         from app.services.concept_service import get_concepts
 
         mock_concept = MagicMock()
@@ -226,6 +242,7 @@ class TestGetConceptDetail:
     async def test_returns_detail_with_relations(self, mock_session):
         """Returns concept detail with outgoing/incoming."""
         from datetime import datetime
+
         from app.services.concept_service import get_concept_detail
 
         mock_rel_out = MagicMock()

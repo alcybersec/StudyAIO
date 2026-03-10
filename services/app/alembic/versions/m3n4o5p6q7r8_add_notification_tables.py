@@ -28,7 +28,9 @@ def upgrade() -> None:
         sa.Column("enabled", sa.Boolean, server_default="false"),
         sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime, server_default=sa.func.now()),
-        sa.UniqueConstraint("user_id", "channel", "event_type", name="uq_notif_pref_user_channel_event"),
+        sa.UniqueConstraint(
+            "user_id", "channel", "event_type", name="uq_notif_pref_user_channel_event"
+        ),
     )
     op.create_index("ix_notification_preferences_user_id", "notification_preferences", ["user_id"])
 

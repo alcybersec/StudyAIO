@@ -15,9 +15,7 @@ class CalendarEvent(Base):
     __tablename__ = "calendar_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     calendar_sync_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("calendar_syncs.id", ondelete="CASCADE"), nullable=False
     )
@@ -34,7 +32,8 @@ class CalendarEvent(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "calendar_sync_id", "google_event_id",
+            "calendar_sync_id",
+            "google_event_id",
             name="uq_calendar_events_sync_google_event",
         ),
         Index("ix_calendar_events_user_id", "user_id"),

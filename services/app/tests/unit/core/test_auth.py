@@ -105,7 +105,9 @@ class TestJWT:
             patch("app.core.auth.settings") as mock_settings,
         ):
             mock_settings.jwt_algorithm = "HS256"
-            mock_settings.jwt_secret_key.get_secret_value.return_value = "completely-wrong-secret-key-value"
+            mock_settings.jwt_secret_key.get_secret_value.return_value = (
+                "completely-wrong-secret-key-value"
+            )
             decode_token(token)
 
     def test_token_contains_iat_and_exp(self):

@@ -57,9 +57,7 @@ def upgrade() -> None:
 
     # ── 3. Create default admin user if none exists ───────────────────
     conn = op.get_bind()
-    existing = conn.execute(
-        sa.text("SELECT id FROM users LIMIT 1")
-    ).fetchone()
+    existing = conn.execute(sa.text("SELECT id FROM users LIMIT 1")).fetchone()
 
     if existing:
         admin_id = existing[0]
@@ -131,9 +129,7 @@ def downgrade() -> None:
     # Restore original unique constraints
     op.drop_index("ix_lecture_artifacts_sha256", "lecture_artifacts")
     op.drop_constraint("uq_artifacts_sha256_user", "lecture_artifacts", type_="unique")
-    op.create_index(
-        "ix_lecture_artifacts_sha256", "lecture_artifacts", ["sha256"], unique=True
-    )
+    op.create_index("ix_lecture_artifacts_sha256", "lecture_artifacts", ["sha256"], unique=True)
 
     op.drop_constraint("uq_courses_code_user", "courses", type_="unique")
     op.create_unique_constraint("courses_code_key", "courses", ["code"])

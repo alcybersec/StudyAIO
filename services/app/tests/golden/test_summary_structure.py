@@ -15,7 +15,6 @@ import re
 
 import pytest
 
-
 # ── Section detection patterns ───────────────────────────────────────
 
 TITLE_PATTERN = re.compile(r"^# .+ — Week \d+: .+", re.MULTILINE)

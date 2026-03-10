@@ -1,7 +1,7 @@
 """Tests for exam service."""
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -9,11 +9,8 @@ from app.services.exam_service import (
     create_exam,
     delete_exam,
     get_exam,
-    get_exam_progress,
     get_weak_topics,
-    list_exams,
     record_quiz_attempt,
-    update_exam,
 )
 
 
@@ -236,9 +233,13 @@ class TestGetWeakTopics:
 
         # Quiz stats: week 1 has 50% accuracy
         mock_quiz = MagicMock()
-        mock_quiz.__iter__ = MagicMock(return_value=iter([
-            MagicMock(week=1, attempts=10, correct=5),
-        ]))
+        mock_quiz.__iter__ = MagicMock(
+            return_value=iter(
+                [
+                    MagicMock(week=1, attempts=10, correct=5),
+                ]
+            )
+        )
         # Ease stats: no flashcard data
         mock_ease = MagicMock()
         mock_ease.__iter__ = MagicMock(return_value=iter([]))

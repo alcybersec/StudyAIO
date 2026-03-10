@@ -235,9 +235,7 @@ class AgentAdapter(ABC):
         """
         ...
 
-    async def stream_answer(
-        self, question: str, context_chunks: list[dict]
-    ) -> AsyncIterator[str]:
+    async def stream_answer(self, question: str, context_chunks: list[dict]) -> AsyncIterator[str]:
         """Stream answer tokens for a question.
 
         Default implementation calls answer_question() and yields the full

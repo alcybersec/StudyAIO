@@ -150,9 +150,7 @@ class TestGetMessages:
             new_callable=AsyncMock,
             return_value=mock_msgs,
         ):
-            response = await async_client.get(
-                "/api/chat/sessions/session-001/messages"
-            )
+            response = await async_client.get("/api/chat/sessions/session-001/messages")
 
         assert response.status_code == 200
         data = response.json()
@@ -166,9 +164,7 @@ class TestGetMessages:
             new_callable=AsyncMock,
             side_effect=ValueError("Chat session not found"),
         ):
-            response = await async_client.get(
-                "/api/chat/sessions/bad-id/messages"
-            )
+            response = await async_client.get("/api/chat/sessions/bad-id/messages")
 
         assert response.status_code == 404
 

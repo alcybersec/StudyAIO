@@ -16,23 +16,15 @@ class Exam(Base):
     __tablename__ = "exams"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
-    course_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("courses.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(String(36), ForeignKey("courses.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     exam_date: Mapped[datetime] = mapped_column(nullable=False)
     weeks_scope: Mapped[list] = mapped_column(JSONB, nullable=False)
     target_mastery_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=80)
-    status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="active"
-    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="exams")

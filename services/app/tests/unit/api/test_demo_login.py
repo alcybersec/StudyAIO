@@ -1,7 +1,8 @@
 """Tests for the demo-login endpoint."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 
 class TestDemoLogin:
@@ -10,7 +11,9 @@ class TestDemoLogin:
     @pytest.mark.asyncio
     @patch("app.api.auth.settings")
     @patch("app.api.auth.user_service")
-    async def test_demo_login_success(self, mock_user_service, mock_settings, async_client, make_user):
+    async def test_demo_login_success(
+        self, mock_user_service, mock_settings, async_client, make_user
+    ):
         """When demo is enabled and user exists, should redirect with cookies."""
         mock_settings.demo_enabled = True
         mock_settings.jwt_access_token_expire_minutes = 15

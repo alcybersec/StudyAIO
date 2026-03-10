@@ -66,13 +66,13 @@ async def post_review(
 ) -> ReviewResponse:
     """Record a flashcard review."""
     # Verify flashcard exists
-    result = await session.execute(
-        select(Flashcard).where(Flashcard.id == body.flashcard_id)
-    )
+    result = await session.execute(select(Flashcard).where(Flashcard.id == body.flashcard_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Flashcard not found")
 
-    review = await srs_service.record_review(session, body.flashcard_id, body.quality, user_id=user.id)
+    review = await srs_service.record_review(
+        session, body.flashcard_id, body.quality, user_id=user.id
+    )
     await session.commit()
 
     # Award XP (best-effort)

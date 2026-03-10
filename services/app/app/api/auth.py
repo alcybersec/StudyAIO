@@ -111,9 +111,7 @@ async def register(
     session: AsyncSession = Depends(get_session),
 ) -> UserProfileResponse:
     """Register a new user account."""
-    user = await user_service.register_user(
-        session, body.email, body.username, body.password
-    )
+    user = await user_service.register_user(session, body.email, body.username, body.password)
     await session.commit()
     _set_auth_cookies(response, user)
     return UserProfileResponse.model_validate(user)
@@ -200,9 +198,7 @@ async def change_password(
     user: User = Depends(get_current_user),
 ) -> dict[str, str]:
     """Change password for the current user."""
-    await user_service.change_password(
-        session, user.id, body.old_password, body.new_password
-    )
+    await user_service.change_password(session, user.id, body.old_password, body.new_password)
     await session.commit()
     return {"detail": "Password changed"}
 
@@ -265,9 +261,7 @@ async def mfa_verify(
     user: User = Depends(get_current_user),
 ) -> dict:
     """Verify TOTP code and enable MFA. Returns backup codes."""
-    backup_codes = await user_service.enable_mfa(
-        session, user.id, body.totp_code, body.secret
-    )
+    backup_codes = await user_service.enable_mfa(session, user.id, body.totp_code, body.secret)
     await session.commit()
     return {"detail": "MFA enabled", "backup_codes": backup_codes}
 
@@ -299,7 +293,7 @@ async def oauth_redirect(provider: str) -> Response:
         await store_oauth_state(state, provider)
         url = build_authorize_url(provider, state)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     logger.info("oauth_redirect", provider=provider)
     return RedirectResponse(url=url, status_code=302)

@@ -136,33 +136,23 @@ async def get_system_metrics(session: AsyncSession) -> dict:
         Dict with total_users, total_artifacts, total_courses,
         pipeline_runs_24h, storage info.
     """
-    total_users = (
-        await session.execute(select(func.count(User.id)))
-    ).scalar_one()
+    total_users = (await session.execute(select(func.count(User.id)))).scalar_one()
 
-    total_artifacts = (
-        await session.execute(select(func.count(LectureArtifact.id)))
-    ).scalar_one()
+    total_artifacts = (await session.execute(select(func.count(LectureArtifact.id)))).scalar_one()
 
-    total_courses = (
-        await session.execute(select(func.count(Course.id)))
-    ).scalar_one()
+    total_courses = (await session.execute(select(func.count(Course.id)))).scalar_one()
 
     # Pipeline runs in the last 24 hours
     cutoff = datetime.utcnow() - timedelta(hours=24)
     pipeline_runs_24h = (
         await session.execute(
-            select(func.count(PipelineRun.id)).where(
-                PipelineRun.started_at >= cutoff
-            )
+            select(func.count(PipelineRun.id)).where(PipelineRun.started_at >= cutoff)
         )
     ).scalar_one()
 
     # Storage: total file sizes
     total_storage_bytes = (
-        await session.execute(
-            select(func.coalesce(func.sum(LectureArtifact.file_size_bytes), 0))
-        )
+        await session.execute(select(func.coalesce(func.sum(LectureArtifact.file_size_bytes), 0)))
     ).scalar_one()
 
     return {

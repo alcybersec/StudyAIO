@@ -19,7 +19,7 @@ class TestJWTSecretStartupCheck:
             mock_secret.get_secret_value.return_value = _DEFAULT_JWT_SECRET
 
             # Import and call the lifespan manually
-            from app.main import lifespan, app
+            from app.main import app, lifespan
 
             with pytest.raises(RuntimeError, match="JWT_SECRET_KEY is set to the default"):
                 import asyncio
@@ -39,9 +39,9 @@ class TestJWTSecretStartupCheck:
         ):
             mock_secret.get_secret_value.return_value = "a-real-production-secret-key-12345"
 
-            from app.main import lifespan, app
-
             import asyncio
+
+            from app.main import app, lifespan
 
             async def _run():
                 async with lifespan(app):
@@ -56,9 +56,9 @@ class TestJWTSecretStartupCheck:
             patch("app.main.settings.self_hosted", True),
             patch("app.main.configure_logging"),
         ):
-            from app.main import lifespan, app
-
             import asyncio
+
+            from app.main import app, lifespan
 
             async def _run():
                 async with lifespan(app):

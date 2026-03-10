@@ -44,9 +44,7 @@ async def upload_course_document(
     request: Request,
     file: UploadFile,
     course_code: str = Query(..., description="Course code to associate with"),
-    document_type: str = Query(
-        ..., description="Document type: outline, rubric, handbook, other"
-    ),
+    document_type: str = Query(..., description="Document type: outline, rubric, handbook, other"),
     user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> CourseDocumentResponse:
@@ -167,9 +165,7 @@ async def list_deadlines(
     session: AsyncSession = Depends(get_session),
 ) -> list[DeadlineResponse]:
     """List deadlines for a course."""
-    deadlines = await courseops_service.list_deadlines(
-        session, course_code, upcoming_only=upcoming
-    )
+    deadlines = await courseops_service.list_deadlines(session, course_code, upcoming_only=upcoming)
     return [DeadlineResponse.model_validate(d) for d in deadlines]
 
 
@@ -228,7 +224,9 @@ async def create_exam_from_deadline(
 ) -> dict:
     """Create an Exam entity from a deadline."""
     try:
-        exam = await courseops_service.create_exam_from_deadline(session, deadline_id, user_id=user.id)
+        exam = await courseops_service.create_exam_from_deadline(
+            session, deadline_id, user_id=user.id
+        )
     except CourseOpsError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

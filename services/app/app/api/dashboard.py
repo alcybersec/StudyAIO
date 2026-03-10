@@ -85,17 +85,20 @@ async def get_dashboard(
         course_lookup = {c.id: c.code for c in course_items}
         for exam in exams:
             from datetime import datetime
+
             days_remaining = max(0, (exam.exam_date - datetime.utcnow()).days)
-            active_exams.append(DashboardExamSummary(
-                exam_id=exam.id,
-                title=exam.title,
-                course_id=exam.course_id,
-                course_code=course_lookup.get(exam.course_id, ""),
-                exam_date=exam.exam_date.isoformat(),
-                days_remaining=days_remaining,
-                mastery_pct=0,  # lightweight — full progress via exam detail
-                target_mastery_pct=exam.target_mastery_pct,
-            ))
+            active_exams.append(
+                DashboardExamSummary(
+                    exam_id=exam.id,
+                    title=exam.title,
+                    course_id=exam.course_id,
+                    course_code=course_lookup.get(exam.course_id, ""),
+                    exam_date=exam.exam_date.isoformat(),
+                    days_remaining=days_remaining,
+                    mastery_pct=0,  # lightweight — full progress via exam detail
+                    target_mastery_pct=exam.target_mastery_pct,
+                )
+            )
     except Exception:
         logger.warning("active_exams_failed", exc_info=True)
 
@@ -110,7 +113,9 @@ async def get_dashboard(
     # Upcoming deadlines (best-effort)
     upcoming_deadlines = []
     try:
-        raw_deadlines = await courseops_service.get_upcoming_deadlines_all_courses(session, limit=5, user_id=user.id)
+        raw_deadlines = await courseops_service.get_upcoming_deadlines_all_courses(
+            session, limit=5, user_id=user.id
+        )
         upcoming_deadlines = [UpcomingDeadlineItem(**d) for d in raw_deadlines]
     except Exception:
         logger.warning("upcoming_deadlines_failed", exc_info=True)

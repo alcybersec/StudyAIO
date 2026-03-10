@@ -86,9 +86,7 @@ def run_pipeline(file_path: str, user_id: str | None = None) -> AsyncResult:
     ).apply_async()
 
 
-def resume_pipeline(
-    artifact_id: str, from_stage: str, user_id: str | None = None
-) -> AsyncResult:
+def resume_pipeline(artifact_id: str, from_stage: str, user_id: str | None = None) -> AsyncResult:
     """Resume pipeline from a given stage.
 
     Args:

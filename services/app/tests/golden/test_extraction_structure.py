@@ -7,12 +7,7 @@ Validates that extractors produce manifests with the correct schema:
 - page numbers are sequential starting from 1
 """
 
-from pathlib import Path
-
-import pytest
-
 from app.extractors.base import ExtractionResult, ImageInfo, PageContent
-
 
 # ── Schema validation helpers ────────────────────────────────────────
 
@@ -78,8 +73,7 @@ class TestExtractionResultManifest:
 
     def test_multi_page_manifest_sequential(self):
         pages = [
-            PageContent(page_number=i, text=f"Page {i} content", images=[])
-            for i in range(1, 6)
+            PageContent(page_number=i, text=f"Page {i} content", images=[]) for i in range(1, 6)
         ]
         result = ExtractionResult(pages=pages, metadata={"source_type": "pdf"})
         manifest = result.to_manifest()

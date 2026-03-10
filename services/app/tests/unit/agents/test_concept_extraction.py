@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.agents.base import ConceptData, ConceptExtractionResult, ConceptRelationData
+from app.agents.base import ConceptExtractionResult
 from app.agents.parsing import (
     VALID_CONCEPT_CATEGORIES,
     VALID_RELATION_TYPES,
@@ -97,11 +97,21 @@ class TestValidConstants:
 
     def test_valid_categories(self):
         """All expected categories are present."""
-        expected = {"theory", "algorithm", "data_structure", "pattern", "tool",
-                    "language", "protocol", "principle", "method", "general"}
-        assert VALID_CONCEPT_CATEGORIES == expected
+        expected = {
+            "theory",
+            "algorithm",
+            "data_structure",
+            "pattern",
+            "tool",
+            "language",
+            "protocol",
+            "principle",
+            "method",
+            "general",
+        }
+        assert expected == VALID_CONCEPT_CATEGORIES
 
     def test_valid_relation_types(self):
         """All expected relation types are present."""
         expected = {"prerequisite", "extends", "uses", "related_to", "part_of"}
-        assert VALID_RELATION_TYPES == expected
+        assert expected == VALID_RELATION_TYPES

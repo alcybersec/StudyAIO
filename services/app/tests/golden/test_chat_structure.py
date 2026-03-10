@@ -139,9 +139,7 @@ class TestSessionResponseStructure:
 
     def test_course_id_is_nullable(self, sample_session_list_response):
         """course_id can be None (not scoped to a course)."""
-        no_course = [
-            s for s in sample_session_list_response["sessions"] if s["course_id"] is None
-        ]
+        no_course = [s for s in sample_session_list_response["sessions"] if s["course_id"] is None]
         assert len(no_course) > 0, "Should have at least one session without course_id"
 
 

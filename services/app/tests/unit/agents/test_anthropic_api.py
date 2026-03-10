@@ -175,13 +175,15 @@ class TestClassifyLecture:
 
     async def test_parses_classification_response(self, adapter):
         """Successful classification returns ClassificationResult."""
-        response_json = json.dumps({
-            "course_code": "CSIT302",
-            "week": 5,
-            "title": "Network Security",
-            "confidence": 0.92,
-            "reasoning": "Found in header",
-        })
+        response_json = json.dumps(
+            {
+                "course_code": "CSIT302",
+                "week": 5,
+                "title": "Network Security",
+                "confidence": 0.92,
+                "reasoning": "Found in header",
+            }
+        )
 
         with patch.object(adapter, "_call_api", return_value=response_json):
             result = await adapter.classify_lecture(
@@ -241,20 +243,22 @@ class TestGenerateFlashcards:
 
     async def test_parses_flashcard_array(self, adapter):
         """Flashcard JSON array is parsed into FlashcardData list."""
-        response = json.dumps([
-            {
-                "front": "What is a firewall?",
-                "back": "A network security system",
-                "tags": ["security"],
-                "source_page_ref": 1,
-            },
-            {
-                "front": "What is IDS?",
-                "back": "Intrusion Detection System",
-                "tags": ["security"],
-                "source_page_ref": 2,
-            },
-        ])
+        response = json.dumps(
+            [
+                {
+                    "front": "What is a firewall?",
+                    "back": "A network security system",
+                    "tags": ["security"],
+                    "source_page_ref": 1,
+                },
+                {
+                    "front": "What is IDS?",
+                    "back": "Intrusion Detection System",
+                    "tags": ["security"],
+                    "source_page_ref": 2,
+                },
+            ]
+        )
 
         extraction = ExtractionData(
             pages=[{"page_number": 1, "text": "Content", "images": []}],
@@ -275,16 +279,18 @@ class TestGenerateQuiz:
 
     async def test_parses_quiz_array(self, adapter):
         """Quiz JSON array is parsed into QuizQuestionData list."""
-        response = json.dumps([
-            {
-                "question_type": "multiple_choice",
-                "question": "What is a firewall?",
-                "options": ["A. Router", "B. Security system", "C. Cable", "D. Switch"],
-                "correct_answer": "B",
-                "explanation": "Firewalls are security systems.",
-                "source_page_ref": 1,
-            },
-        ])
+        response = json.dumps(
+            [
+                {
+                    "question_type": "multiple_choice",
+                    "question": "What is a firewall?",
+                    "options": ["A. Router", "B. Security system", "C. Cable", "D. Switch"],
+                    "correct_answer": "B",
+                    "explanation": "Firewalls are security systems.",
+                    "source_page_ref": 1,
+                },
+            ]
+        )
 
         extraction = ExtractionData(
             pages=[{"page_number": 1, "text": "Content", "images": []}],
@@ -305,19 +311,21 @@ class TestAnswerQuestion:
 
     async def test_parses_answer_response(self, adapter):
         """Answer JSON is parsed into AnswerResult."""
-        response = json.dumps({
-            "answer": "A firewall is a network security system [1].",
-            "citations": [
-                {
-                    "ref": 1,
-                    "chunk_id": "abc_p1_c0",
-                    "text_snippet": "Firewalls are security systems",
-                    "course_code": "CSIT302",
-                    "week": 5,
-                    "page_ref": 1,
-                }
-            ],
-        })
+        response = json.dumps(
+            {
+                "answer": "A firewall is a network security system [1].",
+                "citations": [
+                    {
+                        "ref": 1,
+                        "chunk_id": "abc_p1_c0",
+                        "text_snippet": "Firewalls are security systems",
+                        "course_code": "CSIT302",
+                        "week": 5,
+                        "page_ref": 1,
+                    }
+                ],
+            }
+        )
 
         chunks = [
             {

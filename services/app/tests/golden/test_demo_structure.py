@@ -4,9 +4,6 @@ These validate the expected shape and contents of the demo account
 data seeded by scripts/seed_demo.py.
 """
 
-import pytest
-
-
 DEMO_USER_ID = "00000000-0000-0000-0000-000000000002"
 
 

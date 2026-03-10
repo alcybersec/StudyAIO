@@ -46,6 +46,7 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
     else:
         # S3: download to temp file
         import tempfile
+
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=Path(key).suffix)
         tmp.close()
         path = Path(tmp.name)

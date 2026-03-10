@@ -14,8 +14,6 @@ from app.agents.base import (
     SummaryResult,
 )
 from app.agents.ollama_adapter import (
-    _DEFAULT_NUM_PREDICT,
-    _SUMMARY_NUM_PREDICT,
     OllamaAdapter,
 )
 from app.core.exceptions import AgentError
@@ -132,13 +130,15 @@ class TestClassifyLecture:
 
     async def test_parses_classification_response(self, adapter):
         """Successful classification returns ClassificationResult."""
-        response_json = json.dumps({
-            "course_code": "CSIT302",
-            "week": 5,
-            "title": "Network Security",
-            "confidence": 0.92,
-            "reasoning": "Found in header",
-        })
+        response_json = json.dumps(
+            {
+                "course_code": "CSIT302",
+                "week": 5,
+                "title": "Network Security",
+                "confidence": 0.92,
+                "reasoning": "Found in header",
+            }
+        )
 
         with patch.object(adapter, "_call_api", return_value=response_json):
             result = await adapter.classify_lecture(
@@ -181,9 +181,11 @@ class TestGenerateFlashcards:
 
     async def test_parses_flashcard_array(self, adapter):
         """Flashcard JSON array is parsed into FlashcardData list."""
-        response = json.dumps([
-            {"front": "Q1", "back": "A1", "tags": ["t1"], "source_page_ref": 1},
-        ])
+        response = json.dumps(
+            [
+                {"front": "Q1", "back": "A1", "tags": ["t1"], "source_page_ref": 1},
+            ]
+        )
 
         extraction = ExtractionData(
             pages=[{"page_number": 1, "text": "Content", "images": []}],
@@ -203,16 +205,18 @@ class TestGenerateQuiz:
 
     async def test_parses_quiz_array(self, adapter):
         """Quiz JSON array is parsed into QuizQuestionData list."""
-        response = json.dumps([
-            {
-                "question_type": "multiple_choice",
-                "question": "What is a firewall?",
-                "options": ["A", "B", "C", "D"],
-                "correct_answer": "B",
-                "explanation": "Correct.",
-                "source_page_ref": 1,
-            },
-        ])
+        response = json.dumps(
+            [
+                {
+                    "question_type": "multiple_choice",
+                    "question": "What is a firewall?",
+                    "options": ["A", "B", "C", "D"],
+                    "correct_answer": "B",
+                    "explanation": "Correct.",
+                    "source_page_ref": 1,
+                },
+            ]
+        )
 
         extraction = ExtractionData(
             pages=[{"page_number": 1, "text": "Content", "images": []}],
@@ -231,10 +235,21 @@ class TestAnswerQuestion:
 
     async def test_parses_answer_response(self, adapter):
         """Answer JSON is parsed into AnswerResult."""
-        response = json.dumps({
-            "answer": "A firewall is a security system [1].",
-            "citations": [{"ref": 1, "chunk_id": "c1", "text_snippet": "...", "course_code": "CSIT302", "week": 5, "page_ref": 1}],
-        })
+        response = json.dumps(
+            {
+                "answer": "A firewall is a security system [1].",
+                "citations": [
+                    {
+                        "ref": 1,
+                        "chunk_id": "c1",
+                        "text_snippet": "...",
+                        "course_code": "CSIT302",
+                        "week": 5,
+                        "page_ref": 1,
+                    }
+                ],
+            }
+        )
 
         with patch.object(adapter, "_call_api", return_value=response):
             result = await adapter.answer_question("What is a firewall?", [])
@@ -248,12 +263,18 @@ class TestExtractCourseOps:
 
     async def test_parses_course_ops_response(self, adapter):
         """CourseOps JSON is parsed into CourseOpsResult."""
-        response = json.dumps({
-            "assessments": [{"title": "Final Exam", "assessment_type": "exam", "weight_pct": 40.0}],
-            "deadlines": [{"title": "A1 Due", "due_date": "2026-04-15", "deadline_type": "assignment"}],
-            "course_info": {"course_name": "SE"},
-            "confidence": 0.85,
-        })
+        response = json.dumps(
+            {
+                "assessments": [
+                    {"title": "Final Exam", "assessment_type": "exam", "weight_pct": 40.0}
+                ],
+                "deadlines": [
+                    {"title": "A1 Due", "due_date": "2026-04-15", "deadline_type": "assignment"}
+                ],
+                "course_info": {"course_name": "SE"},
+                "confidence": 0.85,
+            }
+        )
 
         with patch.object(adapter, "_call_api", return_value=response):
             result = await adapter.extract_course_ops("doc text", "CSIT302", "outline")

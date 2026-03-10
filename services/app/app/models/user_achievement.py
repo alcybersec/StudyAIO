@@ -15,9 +15,7 @@ class UserAchievement(Base):
     __tablename__ = "user_achievements"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     achievement_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("achievements.id"), nullable=False
     )

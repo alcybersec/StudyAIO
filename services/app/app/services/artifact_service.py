@@ -39,9 +39,7 @@ async def check_duplicate(
     return result.scalar_one_or_none()
 
 
-async def ingest_file(
-    session: AsyncSession, source_path: str, user_id: str
-) -> LectureArtifact:
+async def ingest_file(session: AsyncSession, source_path: str, user_id: str) -> LectureArtifact:
     """Ingest a file into the system.
 
     Computes SHA-256 for dedup, copies to uploads via storage backend,

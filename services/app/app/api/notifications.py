@@ -43,9 +43,7 @@ async def get_preferences(
         await session.commit()
 
     items = [
-        NotificationPreferenceItem(
-            channel=p.channel, event_type=p.event_type, enabled=p.enabled
-        )
+        NotificationPreferenceItem(channel=p.channel, event_type=p.event_type, enabled=p.enabled)
         for p in prefs
     ]
     return NotificationPreferencesResponse(preferences=items)
@@ -66,9 +64,7 @@ async def update_preferences(
     await session.commit()
 
     items = [
-        NotificationPreferenceItem(
-            channel=p.channel, event_type=p.event_type, enabled=p.enabled
-        )
+        NotificationPreferenceItem(channel=p.channel, event_type=p.event_type, enabled=p.enabled)
         for p in prefs
     ]
     return NotificationPreferencesResponse(preferences=items)
@@ -91,7 +87,11 @@ async def generate_telegram_link(
 
     # Extract bot username from token (format: <id>:<secret>)
     # We need the bot username for the deep link — use a placeholder if not derivable
-    bot_username = settings.telegram_webhook_url.split("/")[-1] if settings.telegram_webhook_url else "StudyAIOBot"
+    bot_username = (
+        settings.telegram_webhook_url.split("/")[-1]
+        if settings.telegram_webhook_url
+        else "StudyAIOBot"
+    )
 
     deep_link = f"https://t.me/{bot_username}?start={token}"
 
@@ -234,7 +234,9 @@ async def test_notification(
         return TestNotificationResponse(
             success=sent > 0,
             channel="push",
-            message=f"Test push sent to {sent} device(s)" if sent > 0 else "No active push subscriptions",
+            message=f"Test push sent to {sent} device(s)"
+            if sent > 0
+            else "No active push subscriptions",
         )
 
     else:

@@ -7,7 +7,6 @@ from pathlib import Path
 import structlog
 from sqlalchemy import select
 
-from app.config import settings
 from app.core.database import async_session_factory, run_async
 from app.core.exceptions import ExtractionError
 from app.core.storage import LocalStorageBackend, get_storage, normalize_storage_key

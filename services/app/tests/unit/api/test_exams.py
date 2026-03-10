@@ -1,6 +1,6 @@
 """Tests for the exam API endpoints."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

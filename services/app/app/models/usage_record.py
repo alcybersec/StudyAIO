@@ -15,18 +15,14 @@ class UsageRecord(Base):
     __tablename__ = "usage_records"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     record_date: Mapped[date] = mapped_column(Date, nullable=False)
     ai_calls_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ai_tokens_input: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ai_tokens_output: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     uploads_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     user: Mapped["User"] = relationship()

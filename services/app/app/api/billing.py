@@ -133,9 +133,7 @@ async def stripe_webhook(
         raise HTTPException(status_code=500, detail="Webhook secret not configured")
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, webhook_secret
-        )
+        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except stripe.error.SignatureVerificationError:
         logger.warning("webhook_signature_invalid")
         raise HTTPException(status_code=400, detail="Invalid signature") from None
@@ -144,8 +142,6 @@ async def stripe_webhook(
 
     logger.info("webhook_received", event_type=event["type"], event_id=event["id"])
 
-    await billing_service.handle_webhook_event(
-        session, event["type"], event["data"]
-    )
+    await billing_service.handle_webhook_event(session, event["type"], event["data"])
 
     return {"status": "ok"}

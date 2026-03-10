@@ -5,7 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.core.database import async_session_factory, run_async
-from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.extraction import Extraction
 from app.services.summary_service import merge_extractions
@@ -14,9 +13,7 @@ from app.worker import celery_app
 logger = structlog.get_logger()
 
 
-async def _extract_concepts_for_artifact(
-    artifact_id: str, user_id: str | None = None
-) -> dict:
+async def _extract_concepts_for_artifact(artifact_id: str, user_id: str | None = None) -> dict:
     """Extract concepts from a single artifact.
 
     Args:

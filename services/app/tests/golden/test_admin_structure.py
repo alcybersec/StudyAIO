@@ -16,7 +16,6 @@ from app.api.admin import (
     UserUpdateRequest,
 )
 
-
 # -- Sample data fixtures ---------------------------------------------------
 
 
@@ -83,8 +82,14 @@ class TestUserResponseStructure:
     def test_has_required_fields(self, sample_user_response) -> None:
         """UserResponse has all required fields."""
         required = {
-            "id", "email", "username", "role", "tier",
-            "is_active", "created_at", "last_login_at",
+            "id",
+            "email",
+            "username",
+            "role",
+            "tier",
+            "is_active",
+            "created_at",
+            "last_login_at",
         }
         missing = required - sample_user_response.keys()
         assert not missing, f"Missing fields: {missing}"
@@ -132,8 +137,12 @@ class TestSystemMetricsResponseStructure:
     def test_has_required_fields(self, sample_system_metrics) -> None:
         """SystemMetrics has all required fields."""
         required = {
-            "total_users", "total_artifacts", "total_courses",
-            "pipeline_runs_24h", "total_storage_bytes", "total_storage_mb",
+            "total_users",
+            "total_artifacts",
+            "total_courses",
+            "pipeline_runs_24h",
+            "total_storage_bytes",
+            "total_storage_mb",
         }
         missing = required - sample_system_metrics.keys()
         assert not missing, f"Missing fields: {missing}"
@@ -151,8 +160,11 @@ class TestSystemMetricsResponseStructure:
     def test_counts_are_non_negative_integers(self, sample_system_metrics) -> None:
         """All count fields are non-negative integers."""
         int_fields = [
-            "total_users", "total_artifacts", "total_courses",
-            "pipeline_runs_24h", "total_storage_bytes",
+            "total_users",
+            "total_artifacts",
+            "total_courses",
+            "pipeline_runs_24h",
+            "total_storage_bytes",
         ]
         for field in int_fields:
             value = sample_system_metrics[field]
@@ -166,9 +178,7 @@ class TestSystemMetricsResponseStructure:
 
     def test_storage_mb_matches_bytes(self, sample_system_metrics) -> None:
         """Storage MB is consistent with bytes."""
-        expected_mb = round(
-            sample_system_metrics["total_storage_bytes"] / (1024 * 1024), 2
-        )
+        expected_mb = round(sample_system_metrics["total_storage_bytes"] / (1024 * 1024), 2)
         assert sample_system_metrics["total_storage_mb"] == expected_mb
 
 
@@ -198,9 +208,7 @@ class TestUserListResponseStructure:
 
     def test_total_matches_or_exceeds_users_length(self, sample_user_list_response) -> None:
         """total >= len(users) (total is the unpaginated count)."""
-        assert sample_user_list_response["total"] >= len(
-            sample_user_list_response["users"]
-        )
+        assert sample_user_list_response["total"] >= len(sample_user_list_response["users"])
 
     def test_offset_is_non_negative(self, sample_user_list_response) -> None:
         """offset is non-negative."""

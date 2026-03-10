@@ -19,18 +19,14 @@ class Subscription(Base):
         String(36), ForeignKey("users.id"), nullable=False, unique=True
     )
     stripe_customer_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    stripe_subscription_id: Mapped[str | None] = mapped_column(
-        String(255), nullable=True
-    )
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     plan: Mapped[str] = mapped_column(String(20), nullable=False, default="free")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="inactive")
     current_period_start: Mapped[datetime | None] = mapped_column(nullable=True)
     current_period_end: Mapped[datetime | None] = mapped_column(nullable=True)
     cancel_at_period_end: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     user: Mapped["User"] = relationship()

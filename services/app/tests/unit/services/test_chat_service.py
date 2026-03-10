@@ -277,9 +277,7 @@ class TestSendMessage:
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
         ):
-            await send_message(
-                session, "session-001", "user-001", "Explain TCP handshake"
-            )
+            await send_message(session, "session-001", "user-001", "Explain TCP handshake")
 
         assert chat_session.title == "Explain TCP handshake"
 

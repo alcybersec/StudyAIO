@@ -11,7 +11,6 @@ from app.config import settings
 from app.core.auth import ACCESS_TOKEN_COOKIE, decode_token
 from app.core.database import get_session
 from app.core.exceptions import AuthenticationError, AuthorizationError
-from app.core.utils import generate_id
 from app.models.user import User
 from app.services import user_service
 
@@ -80,16 +79,12 @@ async def _get_or_create_default_user(session: AsyncSession) -> User:
         # Merge cached user into current session to avoid DetachedInstanceError
         return await session.merge(_default_user_cache, load=False)
 
-    result = await session.execute(
-        select(User).where(User.id == DEFAULT_ADMIN_ID)
-    )
+    result = await session.execute(select(User).where(User.id == DEFAULT_ADMIN_ID))
     user = result.scalar_one_or_none()
 
     if not user:
         # First admin user — find any existing admin, or create one
-        result = await session.execute(
-            select(User).where(User.role == "admin").limit(1)
-        )
+        result = await session.execute(select(User).where(User.role == "admin").limit(1))
         user = result.scalar_one_or_none()
 
         if not user:

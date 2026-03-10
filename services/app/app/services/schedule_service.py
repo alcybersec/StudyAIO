@@ -59,7 +59,7 @@ async def generate_study_schedule(
         return None
 
     now = datetime.utcnow()
-    days_remaining = max(0, (exam.exam_date - now).days)
+    max(0, (exam.exam_date - now).days)
 
     # Total due cards in scope
     due_count_result = await session.execute(
@@ -109,14 +109,16 @@ async def generate_study_schedule(
         else:
             focus = list(exam.weeks_scope[:2]) if exam.weeks_scope else []
 
-        schedule.append({
-            "date": plan_date.isoformat(),
-            "days_until_exam": days_until_exam,
-            "priority": priority_label,
-            "card_target": card_target,
-            "quiz_target": quiz_target,
-            "focus_weeks": focus,
-        })
+        schedule.append(
+            {
+                "date": plan_date.isoformat(),
+                "days_until_exam": days_until_exam,
+                "priority": priority_label,
+                "card_target": card_target,
+                "quiz_target": quiz_target,
+                "focus_weeks": focus,
+            }
+        )
 
     return schedule
 

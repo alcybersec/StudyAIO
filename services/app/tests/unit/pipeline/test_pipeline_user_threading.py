@@ -1,11 +1,8 @@
 """Tests for pipeline user_id threading through all stages."""
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from app.pipeline.orchestrator import resolve_pipeline_input
-
 
 USER_ID = "user-pipeline-001"
 
@@ -48,8 +45,10 @@ class TestPipelineStagesThreadUserId:
         input_dict = {"artifact_id": "art-001", "user_id": USER_ID, "status": "ingested"}
         expected_result = {"artifact_id": "art-001", "user_id": USER_ID, "status": "classified"}
 
-        with patch("app.pipeline.classify.run_async", return_value=expected_result) as mock_run, \
-             patch("app.pipeline.classify.publish_pipeline_event_sync"):
+        with (
+            patch("app.pipeline.classify.run_async", return_value=expected_result) as mock_run,
+            patch("app.pipeline.classify.publish_pipeline_event_sync"),
+        ):
             result = classify_artifact(input_dict)
 
         assert result["user_id"] == USER_ID
@@ -63,8 +62,10 @@ class TestPipelineStagesThreadUserId:
         input_dict = {"artifact_id": "art-001", "user_id": USER_ID, "status": "classified"}
         expected_result = {"artifact_id": "art-001", "user_id": USER_ID, "status": "extracted"}
 
-        with patch("app.pipeline.extract.run_async", return_value=expected_result) as mock_run, \
-             patch("app.pipeline.extract.publish_pipeline_event_sync"):
+        with (
+            patch("app.pipeline.extract.run_async", return_value=expected_result) as mock_run,
+            patch("app.pipeline.extract.publish_pipeline_event_sync"),
+        ):
             result = extract_artifact(input_dict)
 
         assert result["user_id"] == USER_ID
@@ -77,8 +78,10 @@ class TestPipelineStagesThreadUserId:
         input_dict = {"artifact_id": "art-001", "user_id": USER_ID, "status": "extracted"}
         expected_result = {"artifact_id": "art-001", "user_id": USER_ID, "status": "summarized"}
 
-        with patch("app.pipeline.summarize.run_async", return_value=expected_result) as mock_run, \
-             patch("app.pipeline.summarize.publish_pipeline_event_sync"):
+        with (
+            patch("app.pipeline.summarize.run_async", return_value=expected_result) as mock_run,
+            patch("app.pipeline.summarize.publish_pipeline_event_sync"),
+        ):
             result = summarize_artifact(input_dict)
 
         assert result["user_id"] == USER_ID
@@ -91,8 +94,10 @@ class TestPipelineStagesThreadUserId:
         input_dict = {"artifact_id": "art-001", "user_id": USER_ID, "status": "summarized"}
         expected_result = {"artifact_id": "art-001", "user_id": USER_ID, "status": "indexed"}
 
-        with patch("app.pipeline.index.run_async", return_value=expected_result) as mock_run, \
-             patch("app.pipeline.index.publish_pipeline_event_sync"):
+        with (
+            patch("app.pipeline.index.run_async", return_value=expected_result) as mock_run,
+            patch("app.pipeline.index.publish_pipeline_event_sync"),
+        ):
             result = index_artifact(input_dict)
 
         assert result["user_id"] == USER_ID
@@ -105,8 +110,10 @@ class TestPipelineStagesThreadUserId:
         input_dict = {"artifact_id": "art-001", "user_id": USER_ID, "status": "indexed"}
         expected_result = {"artifact_id": "art-001", "user_id": USER_ID, "status": "processed"}
 
-        with patch("app.pipeline.assets.run_async", return_value=expected_result) as mock_run, \
-             patch("app.pipeline.assets.publish_pipeline_event_sync"):
+        with (
+            patch("app.pipeline.assets.run_async", return_value=expected_result) as mock_run,
+            patch("app.pipeline.assets.publish_pipeline_event_sync"),
+        ):
             result = generate_assets(input_dict)
 
         assert result["user_id"] == USER_ID

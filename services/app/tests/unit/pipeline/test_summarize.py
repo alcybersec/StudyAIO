@@ -99,7 +99,9 @@ class TestSummarizeStage:
         summary_record.id = "summary-001"
         summary_record.version = 1
         mock_summary_svc.create_or_update_summary = AsyncMock(return_value=summary_record)
-        mock_summary_svc.build_summary_storage_key.return_value = "summaries/CSIT302/CSIT302_Week5.md"
+        mock_summary_svc.build_summary_storage_key.return_value = (
+            "summaries/CSIT302/CSIT302_Week5.md"
+        )
 
         # Mock agent
         agent = AsyncMock()

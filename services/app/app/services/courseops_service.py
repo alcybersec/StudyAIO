@@ -65,7 +65,9 @@ async def upload_course_document(
         )
     )
     if existing.scalar_one_or_none():
-        raise CourseOpsError(f"Document with SHA-256 {sha256[:16]}... already uploaded for {course_code}")
+        raise CourseOpsError(
+            f"Document with SHA-256 {sha256[:16]}... already uploaded for {course_code}"
+        )
 
     doc = CourseDocument(
         id=generate_id(),
@@ -264,9 +266,7 @@ async def list_assessments(
     Returns:
         List of Assessment objects.
     """
-    result = await session.execute(
-        select(Course).where(Course.code == course_code)
-    )
+    result = await session.execute(select(Course).where(Course.code == course_code))
     course = result.scalar_one_or_none()
     if not course:
         return []
@@ -294,9 +294,7 @@ async def list_deadlines(
     Returns:
         List of Deadline objects.
     """
-    result = await session.execute(
-        select(Course).where(Course.code == course_code)
-    )
+    result = await session.execute(select(Course).where(Course.code == course_code))
     course = result.scalar_one_or_none()
     if not course:
         return []
@@ -464,12 +462,14 @@ async def get_upcoming_deadlines_all_courses(
 
     deadlines = []
     for deadline, course_code in result.all():
-        deadlines.append({
-            "id": deadline.id,
-            "title": deadline.title,
-            "due_date": deadline.due_date.isoformat(),
-            "deadline_type": deadline.deadline_type,
-            "course_code": course_code,
-            "is_confirmed": deadline.is_confirmed,
-        })
+        deadlines.append(
+            {
+                "id": deadline.id,
+                "title": deadline.title,
+                "due_date": deadline.due_date.isoformat(),
+                "deadline_type": deadline.deadline_type,
+                "course_code": course_code,
+                "is_confirmed": deadline.is_confirmed,
+            }
+        )
     return deadlines

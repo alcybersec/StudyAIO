@@ -67,10 +67,13 @@ class TestGetCurrentUser:
         with patch("app.core.auth.settings") as mock_settings:
             mock_settings.jwt_access_token_expire_minutes = 0
             mock_settings.jwt_algorithm = "HS256"
-            mock_settings.jwt_secret_key.get_secret_value.return_value = "test-secret-key-value-for-testing"
+            mock_settings.jwt_secret_key.get_secret_value.return_value = (
+                "test-secret-key-value-for-testing"
+            )
             token = create_access_token("user-001", "user", "free")
 
         import time
+
         time.sleep(1)
 
         request = _make_request_with_cookie(token)
@@ -78,7 +81,9 @@ class TestGetCurrentUser:
 
         with patch("app.core.auth.settings") as mock_settings:
             mock_settings.jwt_algorithm = "HS256"
-            mock_settings.jwt_secret_key.get_secret_value.return_value = "test-secret-key-value-for-testing"
+            mock_settings.jwt_secret_key.get_secret_value.return_value = (
+                "test-secret-key-value-for-testing"
+            )
             with pytest.raises(AuthenticationError, match="expired"):
                 await get_current_user(request, session)
 

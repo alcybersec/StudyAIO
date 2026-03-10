@@ -32,12 +32,14 @@ def _yaml_frontmatter(metadata: dict) -> str:
 
 def _generate_index_md(course: Course, weeks: list[int]) -> str:
     """Generate the course index file with links to all weeks."""
-    frontmatter = _yaml_frontmatter({
-        "type": "index",
-        "course": course.code,
-        "name": course.name or course.code,
-        "generated": datetime.now(UTC).strftime("%Y-%m-%d"),
-    })
+    frontmatter = _yaml_frontmatter(
+        {
+            "type": "index",
+            "course": course.code,
+            "name": course.name or course.code,
+            "generated": datetime.now(UTC).strftime("%Y-%m-%d"),
+        }
+    )
 
     lines = [
         frontmatter,
@@ -69,13 +71,15 @@ def _generate_week_md(
     summary: Summary | None,
 ) -> str:
     """Generate a week summary file with frontmatter and wiki-links."""
-    frontmatter = _yaml_frontmatter({
-        "type": "summary",
-        "course": course_code,
-        "week": week,
-        "tags": [course_code, f"week-{week}"],
-        "generated": datetime.now(UTC).strftime("%Y-%m-%d"),
-    })
+    frontmatter = _yaml_frontmatter(
+        {
+            "type": "summary",
+            "course": course_code,
+            "week": week,
+            "tags": [course_code, f"week-{week}"],
+            "generated": datetime.now(UTC).strftime("%Y-%m-%d"),
+        }
+    )
 
     lines = [frontmatter, ""]
 
@@ -105,13 +109,15 @@ def _generate_flashcards_md(
     flashcards: list[Flashcard],
 ) -> str:
     """Generate a flashcards file using Obsidian callout blocks."""
-    frontmatter = _yaml_frontmatter({
-        "type": "flashcards",
-        "course": course_code,
-        "week": week,
-        "count": len(flashcards),
-        "tags": [course_code, f"week-{week}", "flashcards"],
-    })
+    frontmatter = _yaml_frontmatter(
+        {
+            "type": "flashcards",
+            "course": course_code,
+            "week": week,
+            "count": len(flashcards),
+            "tags": [course_code, f"week-{week}", "flashcards"],
+        }
+    )
 
     lines = [
         frontmatter,
@@ -142,13 +148,15 @@ def _generate_quizzes_md(
     quizzes: list[QuizQuestion],
 ) -> str:
     """Generate a quizzes file with collapsible answers."""
-    frontmatter = _yaml_frontmatter({
-        "type": "quiz",
-        "course": course_code,
-        "week": week,
-        "count": len(quizzes),
-        "tags": [course_code, f"week-{week}", "quiz"],
-    })
+    frontmatter = _yaml_frontmatter(
+        {
+            "type": "quiz",
+            "course": course_code,
+            "week": week,
+            "count": len(quizzes),
+            "tags": [course_code, f"week-{week}", "quiz"],
+        }
+    )
 
     lines = [
         frontmatter,
@@ -237,11 +245,9 @@ async def generate_obsidian_vault(
         quizzes_by_week.setdefault(qq.week, []).append(qq)
 
     # Determine all weeks
-    all_weeks = sorted(set(
-        list(summaries.keys())
-        + list(flashcards_by_week.keys())
-        + list(quizzes_by_week.keys())
-    ))
+    all_weeks = sorted(
+        set(list(summaries.keys()) + list(flashcards_by_week.keys()) + list(quizzes_by_week.keys()))
+    )
 
     if not all_weeks:
         all_weeks = weeks or []

@@ -53,14 +53,13 @@ async def billing_client(mock_session, free_user):
 
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("app.config.settings.data_dir", tmpdir):
-            with patch("app.config.settings.self_hosted", False):
-                async with httpx.AsyncClient(
-                    transport=httpx.ASGITransport(app=app),
-                    base_url="http://test",
-                ) as client:
-                    yield client
+    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+        with patch("app.config.settings.self_hosted", False):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                yield client
 
     app.dependency_overrides.clear()
 
@@ -85,14 +84,13 @@ async def billing_client_pro(mock_session, pro_user):
 
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("app.config.settings.data_dir", tmpdir):
-            with patch("app.config.settings.self_hosted", False):
-                async with httpx.AsyncClient(
-                    transport=httpx.ASGITransport(app=app),
-                    base_url="http://test",
-                ) as client:
-                    yield client
+    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+        with patch("app.config.settings.self_hosted", False):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                yield client
 
     app.dependency_overrides.clear()
 
@@ -117,14 +115,13 @@ async def billing_client_selfhosted(mock_session, free_user):
 
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("app.config.settings.data_dir", tmpdir):
-            with patch("app.config.settings.self_hosted", True):
-                async with httpx.AsyncClient(
-                    transport=httpx.ASGITransport(app=app),
-                    base_url="http://test",
-                ) as client:
-                    yield client
+    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+        with patch("app.config.settings.self_hosted", True):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                yield client
 
     app.dependency_overrides.clear()
 
@@ -239,7 +236,9 @@ class TestGetBillingOverview:
     @pytest.mark.asyncio
     @patch("app.api.billing.quota_service")
     @patch("app.api.billing.billing_service")
-    async def test_no_limits_when_no_subscription(self, mock_billing, mock_quota, billing_client_pro):
+    async def test_no_limits_when_no_subscription(
+        self, mock_billing, mock_quota, billing_client_pro
+    ):
         """Pro users see no limits."""
         mock_billing.get_subscription = AsyncMock(return_value=None)
 
@@ -266,9 +265,7 @@ class TestQuotaExceededHandler:
         # Patch an endpoint to raise QuotaExceededError
         with patch(
             "app.api.billing.billing_service.create_checkout_session",
-            side_effect=QuotaExceededError(
-                resource="uploads", limit=5, period="month"
-            ),
+            side_effect=QuotaExceededError(resource="uploads", limit=5, period="month"),
         ):
             resp = await billing_client.post(
                 "/api/billing/checkout",

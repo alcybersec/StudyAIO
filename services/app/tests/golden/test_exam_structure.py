@@ -8,7 +8,6 @@ Validates that exam-related API responses conform to expected schemas:
 
 import pytest
 
-
 # ── Sample data fixtures ────────────────────────────────────────────
 
 
@@ -121,11 +120,22 @@ class TestExamProgressStructure:
 
     def test_has_all_required_fields(self, sample_exam_progress):
         required = {
-            "exam_id", "title", "course_id", "exam_date", "status",
-            "days_remaining", "mastery_pct", "target_mastery_pct",
-            "quiz_accuracy", "quiz_total", "quiz_correct",
-            "flashcard_total", "flashcard_mastered",
-            "weak_weeks", "session_count", "weeks_scope",
+            "exam_id",
+            "title",
+            "course_id",
+            "exam_date",
+            "status",
+            "days_remaining",
+            "mastery_pct",
+            "target_mastery_pct",
+            "quiz_accuracy",
+            "quiz_total",
+            "quiz_correct",
+            "flashcard_total",
+            "flashcard_mastered",
+            "weak_weeks",
+            "session_count",
+            "weeks_scope",
         }
         missing = required - sample_exam_progress.keys()
         assert not missing, f"Missing fields: {missing}"
@@ -169,6 +179,7 @@ class TestExamProgressStructure:
 
     def test_exam_date_is_iso_format(self, sample_exam_progress):
         from datetime import datetime
+
         datetime.fromisoformat(sample_exam_progress["exam_date"])  # should not raise
 
 
@@ -179,7 +190,14 @@ class TestDailyPlanStructure:
     """Validate daily study plan structure."""
 
     def test_has_all_required_fields(self, sample_daily_plan_list):
-        required = {"date", "days_until_exam", "priority", "card_target", "quiz_target", "focus_weeks"}
+        required = {
+            "date",
+            "days_until_exam",
+            "priority",
+            "card_target",
+            "quiz_target",
+            "focus_weeks",
+        }
         for i, plan in enumerate(sample_daily_plan_list):
             missing = required - plan.keys()
             assert not missing, f"Plan {i} missing fields: {missing}"
@@ -200,7 +218,7 @@ class TestDailyPlanStructure:
             assert plan["quiz_target"] > 0, f"Plan {i} quiz_target must be > 0"
 
     def test_focus_weeks_is_list_of_ints(self, sample_daily_plan_list):
-        for i, plan in enumerate(sample_daily_plan_list):
+        for _i, plan in enumerate(sample_daily_plan_list):
             assert isinstance(plan["focus_weeks"], list)
             for w in plan["focus_weeks"]:
                 assert isinstance(w, int)
@@ -221,7 +239,14 @@ class TestWeakTopicStructure:
     """Validate weak topic analysis structure."""
 
     def test_has_all_required_fields(self, sample_weak_topic_list):
-        required = {"week", "quiz_accuracy", "quiz_attempts", "avg_ease", "reasons", "weakness_score"}
+        required = {
+            "week",
+            "quiz_accuracy",
+            "quiz_attempts",
+            "avg_ease",
+            "reasons",
+            "weakness_score",
+        }
         for i, topic in enumerate(sample_weak_topic_list):
             missing = required - topic.keys()
             assert not missing, f"Topic {i} missing fields: {missing}"
@@ -235,14 +260,16 @@ class TestWeakTopicStructure:
                 assert r in valid, f"Topic {i} has invalid reason: {r}"
 
     def test_weakness_score_is_positive(self, sample_weak_topic_list):
-        for i, topic in enumerate(sample_weak_topic_list):
+        for _i, topic in enumerate(sample_weak_topic_list):
             assert isinstance(topic["weakness_score"], (int, float))
             assert topic["weakness_score"] > 0
 
     def test_sorted_by_weakness_descending(self, sample_weak_topic_list):
         """Weak topics should be sorted weakest-first."""
         scores = [t["weakness_score"] for t in sample_weak_topic_list]
-        assert scores == sorted(scores, reverse=True), "Topics should be sorted by weakness_score desc"
+        assert scores == sorted(scores, reverse=True), (
+            "Topics should be sorted by weakness_score desc"
+        )
 
     def test_quiz_accuracy_nullable(self, sample_weak_topic_list):
         """Quiz accuracy can be None for unstudied weeks."""

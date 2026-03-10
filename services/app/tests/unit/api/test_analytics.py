@@ -100,9 +100,7 @@ class TestGetRetention:
             new_callable=AsyncMock,
             return_value=[],
         ) as mock_retention:
-            response = await async_client.get(
-                "/api/analytics/retention?course_code=CSIT302"
-            )
+            response = await async_client.get("/api/analytics/retention?course_code=CSIT302")
 
         assert response.status_code == 200
         mock_retention.assert_called_once()
@@ -146,9 +144,7 @@ class TestGetMastery:
             new_callable=AsyncMock,
             return_value=[],
         ) as mock_mastery:
-            response = await async_client.get(
-                "/api/analytics/mastery?course_code=CSIT302"
-            )
+            response = await async_client.get("/api/analytics/mastery?course_code=CSIT302")
 
         assert response.status_code == 200
         mock_mastery.assert_called_once()
@@ -167,9 +163,7 @@ class TestGetReadiness:
             new_callable=AsyncMock,
             return_value=None,
         ):
-            response = await async_client.get(
-                "/api/analytics/readiness/nonexistent"
-            )
+            response = await async_client.get("/api/analytics/readiness/nonexistent")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()

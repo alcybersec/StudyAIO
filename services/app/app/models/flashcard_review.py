@@ -15,16 +15,16 @@ class FlashcardReview(Base):
     __tablename__ = "flashcard_reviews"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     flashcard_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("flashcards.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     ease_factor: Mapped[float] = mapped_column(Float, nullable=False, default=2.5)
     interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     repetition_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    next_review_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    next_review_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
     last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)

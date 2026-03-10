@@ -28,9 +28,7 @@ class User(Base):
     backup_codes: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships — auth
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
@@ -47,9 +45,7 @@ class User(Base):
     study_sessions: Mapped[list["StudySession"]] = relationship(back_populates="user")
     flashcard_reviews: Mapped[list["FlashcardReview"]] = relationship(back_populates="user")
     course_documents: Mapped[list["CourseDocument"]] = relationship(back_populates="user")
-    settings: Mapped["UserSettings | None"] = relationship(
-        back_populates="user", uselist=False
-    )
+    settings: Mapped["UserSettings | None"] = relationship(back_populates="user", uselist=False)
 
     # Relationships — gamification
     user_xp: Mapped["UserXP | None"] = relationship(uselist=False)

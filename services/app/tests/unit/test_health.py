@@ -24,8 +24,12 @@ class TestHealthEndpoints:
     async def test_readiness_returns_ok_when_healthy(self, async_client):
         """GET /health/ready returns 200 when DB and Redis are reachable."""
         with (
-            patch("app.core.database.check_db_connectivity", new_callable=AsyncMock, return_value=True),
-            patch("app.core.cache.check_redis_connectivity", new_callable=AsyncMock, return_value=True),
+            patch(
+                "app.core.database.check_db_connectivity", new_callable=AsyncMock, return_value=True
+            ),
+            patch(
+                "app.core.cache.check_redis_connectivity", new_callable=AsyncMock, return_value=True
+            ),
         ):
             response = await async_client.get("/health/ready")
 
@@ -38,8 +42,14 @@ class TestHealthEndpoints:
     async def test_readiness_returns_503_when_db_down(self, async_client):
         """GET /health/ready returns 503 when database is unreachable."""
         with (
-            patch("app.core.database.check_db_connectivity", new_callable=AsyncMock, return_value=False),
-            patch("app.core.cache.check_redis_connectivity", new_callable=AsyncMock, return_value=True),
+            patch(
+                "app.core.database.check_db_connectivity",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "app.core.cache.check_redis_connectivity", new_callable=AsyncMock, return_value=True
+            ),
         ):
             response = await async_client.get("/health/ready")
 
@@ -52,8 +62,14 @@ class TestHealthEndpoints:
     async def test_readiness_returns_503_when_redis_down(self, async_client):
         """GET /health/ready returns 503 when Redis is unreachable."""
         with (
-            patch("app.core.database.check_db_connectivity", new_callable=AsyncMock, return_value=True),
-            patch("app.core.cache.check_redis_connectivity", new_callable=AsyncMock, return_value=False),
+            patch(
+                "app.core.database.check_db_connectivity", new_callable=AsyncMock, return_value=True
+            ),
+            patch(
+                "app.core.cache.check_redis_connectivity",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
             response = await async_client.get("/health/ready")
 
@@ -66,8 +82,16 @@ class TestHealthEndpoints:
     async def test_readiness_returns_503_when_both_down(self, async_client):
         """GET /health/ready returns 503 when both DB and Redis are unreachable."""
         with (
-            patch("app.core.database.check_db_connectivity", new_callable=AsyncMock, return_value=False),
-            patch("app.core.cache.check_redis_connectivity", new_callable=AsyncMock, return_value=False),
+            patch(
+                "app.core.database.check_db_connectivity",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "app.core.cache.check_redis_connectivity",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
             response = await async_client.get("/health/ready")
 

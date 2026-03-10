@@ -190,9 +190,7 @@ async def _get_or_create_user_settings(session: AsyncSession, user_id: str) -> U
     Returns:
         UserSettings instance.
     """
-    result = await session.execute(
-        select(UserSettings).where(UserSettings.user_id == user_id)
-    )
+    result = await session.execute(select(UserSettings).where(UserSettings.user_id == user_id))
     user_settings = result.scalar_one_or_none()
     if user_settings:
         return user_settings
@@ -281,9 +279,7 @@ async def update_user_settings(
     return await get_user_settings(session, user_id)
 
 
-async def get_effective_setting_async(
-    session: AsyncSession, user_id: str, key: str
-) -> Any:
+async def get_effective_setting_async(session: AsyncSession, user_id: str, key: str) -> Any:
     """Get the effective value of a single setting for a user.
 
     Args:
@@ -299,6 +295,7 @@ async def get_effective_setting_async(
 
 
 # ── Sync fallback for pipeline consumers ──────────────────────────────
+
 
 def get_effective_setting(key: str) -> Any:
     """Get the effective value of a setting using env defaults only.
@@ -319,6 +316,7 @@ def get_effective_setting(key: str) -> Any:
 # ── Backward compatibility ────────────────────────────────────────────
 # These sync functions are kept for existing code that hasn't been
 # migrated to async per-user settings yet.
+
 
 def get_all_settings() -> dict[str, Any]:
     """Get merged settings using env defaults only (sync, no user context).

@@ -124,7 +124,9 @@ class Settings(BaseSettings):
     google_calendar_scopes: str = "https://www.googleapis.com/auth/calendar"
     github_client_id: str = ""
     github_client_secret: SecretStr = SecretStr("")
-    oauth_redirect_base_url: str = ""  # e.g. "https://app.studyaio.com" — defaults to http://localhost:8000
+    oauth_redirect_base_url: str = (
+        ""  # e.g. "https://app.studyaio.com" — defaults to http://localhost:8000
+    )
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

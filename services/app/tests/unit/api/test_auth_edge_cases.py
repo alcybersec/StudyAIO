@@ -42,7 +42,9 @@ class TestMFALogin:
     async def test_login_mfa_enabled_no_code_returns_403(self, async_client, mock_session):
         user = _make_db_user(mfa_enabled=True, mfa_secret="JBSWY3DPEHPK3PXP")
 
-        with patch("app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user):
+        with patch(
+            "app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user
+        ):
             response = await async_client.post(
                 "/api/auth/login",
                 json={"email": "test@example.com", "password": "TestPass1!"},
@@ -55,7 +57,11 @@ class TestMFALogin:
         user = _make_db_user(mfa_enabled=True, mfa_secret="JBSWY3DPEHPK3PXP")
 
         with (
-            patch("app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user),
+            patch(
+                "app.api.auth.user_service.authenticate_user",
+                new_callable=AsyncMock,
+                return_value=user,
+            ),
             patch("app.api.auth.verify_totp", return_value=False),
         ):
             response = await async_client.post(
@@ -74,7 +80,11 @@ class TestMFALogin:
         user = _make_db_user(mfa_enabled=True, mfa_secret="JBSWY3DPEHPK3PXP")
 
         with (
-            patch("app.api.auth.user_service.authenticate_user", new_callable=AsyncMock, return_value=user),
+            patch(
+                "app.api.auth.user_service.authenticate_user",
+                new_callable=AsyncMock,
+                return_value=user,
+            ),
             patch("app.api.auth.verify_totp", return_value=True),
         ):
             response = await async_client.post(
@@ -138,7 +148,9 @@ class TestPasswordValidation:
         mock_session.execute.return_value = result_none
 
         user = _make_db_user(email="a@b.com", username="usr")
-        with patch("app.api.auth.user_service.register_user", new_callable=AsyncMock, return_value=user):
+        with patch(
+            "app.api.auth.user_service.register_user", new_callable=AsyncMock, return_value=user
+        ):
             response = await async_client.post(
                 "/api/auth/register",
                 json={"email": "a@b.com", "username": "usr", "password": "Exactly8"},

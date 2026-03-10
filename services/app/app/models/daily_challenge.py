@@ -22,6 +22,4 @@ class DailyChallenge(Base):
     xp_reward: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
-    __table_args__ = (
-        UniqueConstraint("challenge_date", name="uq_daily_challenge_date"),
-    )
+    __table_args__ = (UniqueConstraint("challenge_date", name="uq_daily_challenge_date"),)

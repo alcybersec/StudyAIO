@@ -76,6 +76,7 @@ async def list_pending_reviews(
     if user_id:
         # Scope via artifact's user_id
         from app.models.artifact import LectureArtifact
+
         query = query.join(
             LectureArtifact,
             ReviewItem.entity_id == LectureArtifact.id,
@@ -163,9 +164,7 @@ async def dismiss_review_item(session: AsyncSession, review_id: str) -> ReviewIt
     return item
 
 
-async def count_pending_reviews(
-    session: AsyncSession, user_id: str | None = None
-) -> int:
+async def count_pending_reviews(session: AsyncSession, user_id: str | None = None) -> int:
     """Count pending review items.
 
     Args:
@@ -177,6 +176,7 @@ async def count_pending_reviews(
     query = select(func.count(ReviewItem.id)).where(ReviewItem.status == "pending")
     if user_id:
         from app.models.artifact import LectureArtifact
+
         query = query.join(
             LectureArtifact,
             ReviewItem.entity_id == LectureArtifact.id,

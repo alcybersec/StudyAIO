@@ -44,8 +44,10 @@ class TestGetUserSettings:
         mock_session.execute = AsyncMock(return_value=mock_result)
 
         with patch.object(
-            settings_service, "_get_or_create_user_settings",
-            new_callable=AsyncMock, return_value=mock_user_settings,
+            settings_service,
+            "_get_or_create_user_settings",
+            new_callable=AsyncMock,
+            return_value=mock_user_settings,
         ):
             result = await settings_service.get_user_settings(mock_session, USER_ID)
 
@@ -59,8 +61,10 @@ class TestGetUserSettings:
         mock_user_settings.settings_json = {"claude_model": "haiku", "flashcard_count_per_week": 25}
 
         with patch.object(
-            settings_service, "_get_or_create_user_settings",
-            new_callable=AsyncMock, return_value=mock_user_settings,
+            settings_service,
+            "_get_or_create_user_settings",
+            new_callable=AsyncMock,
+            return_value=mock_user_settings,
         ):
             result = await settings_service.get_user_settings(mock_session, USER_ID)
 
@@ -74,8 +78,10 @@ class TestGetUserSettings:
         mock_user_settings.theme = "dark"
 
         with patch.object(
-            settings_service, "_get_or_create_user_settings",
-            new_callable=AsyncMock, return_value=mock_user_settings,
+            settings_service,
+            "_get_or_create_user_settings",
+            new_callable=AsyncMock,
+            return_value=mock_user_settings,
         ):
             result = await settings_service.get_user_settings(mock_session, USER_ID)
 
@@ -88,12 +94,19 @@ class TestUpdateUserSettings:
 
     async def test_validates_and_updates(self, mock_session, mock_user_settings):
         """Valid updates are persisted to settings_json."""
-        with patch.object(
-            settings_service, "_get_or_create_user_settings",
-            new_callable=AsyncMock, return_value=mock_user_settings,
-        ), patch.object(
-            settings_service, "get_user_settings",
-            new_callable=AsyncMock, return_value={"claude_model": "sonnet"},
+        with (
+            patch.object(
+                settings_service,
+                "_get_or_create_user_settings",
+                new_callable=AsyncMock,
+                return_value=mock_user_settings,
+            ),
+            patch.object(
+                settings_service,
+                "get_user_settings",
+                new_callable=AsyncMock,
+                return_value={"claude_model": "sonnet"},
+            ),
         ):
             result = await settings_service.update_user_settings(
                 mock_session, USER_ID, {"claude_model": "sonnet"}
@@ -104,28 +117,36 @@ class TestUpdateUserSettings:
 
     async def test_theme_update(self, mock_session, mock_user_settings):
         """Theme is updated directly on UserSettings, not in settings_json."""
-        with patch.object(
-            settings_service, "_get_or_create_user_settings",
-            new_callable=AsyncMock, return_value=mock_user_settings,
-        ), patch.object(
-            settings_service, "get_user_settings",
-            new_callable=AsyncMock, return_value={"theme": "dark"},
+        with (
+            patch.object(
+                settings_service,
+                "_get_or_create_user_settings",
+                new_callable=AsyncMock,
+                return_value=mock_user_settings,
+            ),
+            patch.object(
+                settings_service,
+                "get_user_settings",
+                new_callable=AsyncMock,
+                return_value={"theme": "dark"},
+            ),
         ):
-            await settings_service.update_user_settings(
-                mock_session, USER_ID, {"theme": "dark"}
-            )
+            await settings_service.update_user_settings(mock_session, USER_ID, {"theme": "dark"})
 
         assert mock_user_settings.theme == "dark"
 
     async def test_invalid_theme_raises(self, mock_session, mock_user_settings):
         """Invalid theme value raises ValueError."""
-        with patch.object(
-            settings_service, "_get_or_create_user_settings",
-            new_callable=AsyncMock, return_value=mock_user_settings,
-        ), pytest.raises(ValueError, match="theme must be one of"):
-            await settings_service.update_user_settings(
-                mock_session, USER_ID, {"theme": "invalid"}
-            )
+        with (
+            patch.object(
+                settings_service,
+                "_get_or_create_user_settings",
+                new_callable=AsyncMock,
+                return_value=mock_user_settings,
+            ),
+            pytest.raises(ValueError, match="theme must be one of"),
+        ):
+            await settings_service.update_user_settings(mock_session, USER_ID, {"theme": "invalid"})
 
     async def test_invalid_setting_raises(self, mock_session, mock_user_settings):
         """Invalid setting key raises ValueError before persisting."""
@@ -142,7 +163,8 @@ class TestGetEffectiveSettingAsync:
     async def test_returns_value_from_user_settings(self, mock_session):
         """Returns user-specific override when set."""
         with patch.object(
-            settings_service, "get_user_settings",
+            settings_service,
+            "get_user_settings",
             new_callable=AsyncMock,
             return_value={"claude_model": "haiku", "chunk_size_tokens": 500},
         ):

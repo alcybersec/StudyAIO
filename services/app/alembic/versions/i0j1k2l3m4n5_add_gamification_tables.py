@@ -140,9 +140,7 @@ def upgrade() -> None:
         ),
     )
 
-    op.create_unique_constraint(
-        "uq_daily_challenge_date", "daily_challenges", ["challenge_date"]
-    )
+    op.create_unique_constraint("uq_daily_challenge_date", "daily_challenges", ["challenge_date"])
 
     # -- user_daily_challenges --
     op.create_table(
@@ -173,9 +171,7 @@ def upgrade() -> None:
     op.create_unique_constraint(
         "uq_user_daily_challenge", "user_daily_challenges", ["user_id", "daily_challenge_id"]
     )
-    op.create_index(
-        "ix_user_daily_challenges_user_id", "user_daily_challenges", ["user_id"]
-    )
+    op.create_index("ix_user_daily_challenges_user_id", "user_daily_challenges", ["user_id"])
 
 
 def downgrade() -> None:

@@ -35,8 +35,11 @@ class TestGetPreferences:
     async def test_returns_preferences(self) -> None:
         """get_preferences returns list of preference records."""
         pref = NotificationPreference(
-            id="p1", user_id="user-1", channel="email",
-            event_type="cards_due", enabled=True,
+            id="p1",
+            user_id="user-1",
+            channel="email",
+            event_type="cards_due",
+            enabled=True,
         )
         session = _make_mock_session(prefs=[pref])
         result = await get_preferences(session, "user-1")
@@ -62,7 +65,8 @@ class TestUpdatePreferences:
         session.execute.side_effect = [result_none, result_empty]
 
         await update_preferences(
-            session, "user-1",
+            session,
+            "user-1",
             [{"channel": "email", "event_type": "cards_due", "enabled": True}],
         )
         session.add.assert_called_once()
@@ -83,10 +87,15 @@ class TestSeedDefaultPreferences:
     @pytest.mark.asyncio
     async def test_no_op_when_prefs_exist(self) -> None:
         """seed_default_preferences returns existing prefs without adding."""
-        existing = [NotificationPreference(
-            id="p1", user_id="user-1", channel="email",
-            event_type="cards_due", enabled=True,
-        )]
+        existing = [
+            NotificationPreference(
+                id="p1",
+                user_id="user-1",
+                channel="email",
+                event_type="cards_due",
+                enabled=True,
+            )
+        ]
         session = _make_mock_session(prefs=existing)
         result = await seed_default_preferences(session, "user-1")
         assert len(result) == 1
@@ -109,8 +118,11 @@ class TestNotify:
     async def test_dispatch_to_email(self) -> None:
         """notify dispatches to email when preference is enabled."""
         pref = NotificationPreference(
-            id="p1", user_id="user-1", channel="email",
-            event_type="cards_due", enabled=True,
+            id="p1",
+            user_id="user-1",
+            channel="email",
+            event_type="cards_due",
+            enabled=True,
         )
         session = AsyncMock()
 
@@ -141,11 +153,17 @@ class TestNotify:
         from app.models.telegram_link import TelegramLink
 
         pref = NotificationPreference(
-            id="p1", user_id="user-1", channel="telegram",
-            event_type="cards_due", enabled=True,
+            id="p1",
+            user_id="user-1",
+            channel="telegram",
+            event_type="cards_due",
+            enabled=True,
         )
         link = TelegramLink(
-            id="l1", user_id="user-1", chat_id=12345, verified=True,
+            id="l1",
+            user_id="user-1",
+            chat_id=12345,
+            verified=True,
         )
 
         session = AsyncMock()
@@ -164,7 +182,9 @@ class TestNotify:
 
         with (
             patch("app.services.notification_service.settings") as mock_settings,
-            patch("app.services.telegram_service.send_cards_due", new_callable=AsyncMock) as mock_send,
+            patch(
+                "app.services.telegram_service.send_cards_due", new_callable=AsyncMock
+            ) as mock_send,
         ):
             mock_settings.notifications_enabled = True
             mock_send.return_value = True
@@ -175,8 +195,11 @@ class TestNotify:
     async def test_best_effort_on_failure(self) -> None:
         """notify catches exceptions and returns False for failed channels."""
         pref = NotificationPreference(
-            id="p1", user_id="user-1", channel="email",
-            event_type="cards_due", enabled=True,
+            id="p1",
+            user_id="user-1",
+            channel="email",
+            event_type="cards_due",
+            enabled=True,
         )
         session = AsyncMock()
 

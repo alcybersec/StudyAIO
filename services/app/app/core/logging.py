@@ -23,11 +23,7 @@ def configure_logging(log_level: str = "INFO") -> None:
     """Configure structlog with JSON renderer in production, pretty in dev."""
     use_json = _should_use_json()
 
-    renderer = (
-        structlog.processors.JSONRenderer()
-        if use_json
-        else structlog.dev.ConsoleRenderer()
-    )
+    renderer = structlog.processors.JSONRenderer() if use_json else structlog.dev.ConsoleRenderer()
 
     structlog.configure(
         processors=[

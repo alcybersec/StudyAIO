@@ -4,6 +4,7 @@ Provides a unified interface for all file I/O in the application.
 Use `get_storage()` to obtain the configured singleton.
 """
 
+import contextlib
 import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -76,6 +77,7 @@ class StorageBackend(ABC):
         if loop and loop.is_running():
             # We're inside an event loop already — schedule via run_async
             from app.core.database import run_async
+
             run_async(self.put(key, data))
         else:
             asyncio.run(self.put(key, data))
@@ -91,6 +93,7 @@ class StorageBackend(ABC):
 
         if loop and loop.is_running():
             from app.core.database import run_async
+
             run_async(self.put_file(key, source_path))
         else:
             asyncio.run(self.put_file(key, source_path))
@@ -106,6 +109,7 @@ class StorageBackend(ABC):
 
         if loop and loop.is_running():
             from app.core.database import run_async
+
             run_async(self.get_to_file(key, dest))
         else:
             asyncio.run(self.get_to_file(key, dest))
@@ -121,6 +125,7 @@ class StorageBackend(ABC):
 
         if loop and loop.is_running():
             from app.core.database import run_async
+
             return run_async(self.exists(key))
         else:
             return asyncio.run(self.exists(key))
@@ -129,6 +134,7 @@ class StorageBackend(ABC):
 # ======================================================================
 # Local filesystem backend
 # ======================================================================
+
 
 class LocalStorageBackend(StorageBackend):
     """Store files under a local directory (``settings.data_dir``)."""
@@ -185,6 +191,7 @@ class LocalStorageBackend(StorageBackend):
 # ======================================================================
 # S3-compatible backend
 # ======================================================================
+
 
 class S3StorageBackend(StorageBackend):
     """Store files in an S3-compatible bucket (AWS, MinIO, etc.)."""
@@ -252,13 +259,11 @@ class S3StorageBackend(StorageBackend):
             return False
 
     async def delete(self, key: str) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._get_client().delete_object(
                 Bucket=settings.s3_bucket,
                 Key=self._full_key(key),
             )
-        except Exception:
-            pass
 
     def get_url(self, key: str) -> str:
         if settings.cdn_base_url:
@@ -278,6 +283,7 @@ class S3StorageBackend(StorageBackend):
 # ======================================================================
 # Singleton accessor
 # ======================================================================
+
 
 def get_storage() -> StorageBackend:
     """Return the configured storage backend singleton."""
@@ -306,5 +312,5 @@ def normalize_storage_key(path: str) -> str:
     """
     data_prefix = settings.data_dir.rstrip("/") + "/"
     if path.startswith(data_prefix):
-        return path[len(data_prefix):]
+        return path[len(data_prefix) :]
     return path

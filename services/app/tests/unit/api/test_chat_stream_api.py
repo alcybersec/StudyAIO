@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -32,6 +32,7 @@ def _reset_sse_app_status():
     """Reset sse_starlette AppStatus to avoid event loop binding issues between tests."""
     try:
         from sse_starlette.sse import AppStatus
+
         AppStatus.should_exit_event = asyncio.Event()
     except Exception:
         pass
@@ -76,9 +77,7 @@ class TestStreamEndpoint:
         assert "event: token" in body or "event:token" in body
         assert "event: done" in body or "event:done" in body
 
-    async def test_stream_endpoint_not_found_session(
-        self, async_client, mock_session
-    ) -> None:
+    async def test_stream_endpoint_not_found_session(self, async_client, mock_session) -> None:
         """Streaming endpoint handles session not found gracefully via SSE error event."""
         _reset_sse_app_status()
 
@@ -100,9 +99,7 @@ class TestStreamEndpoint:
         assert "error" in body
         assert "not found" in body.lower()
 
-    async def test_stream_endpoint_empty_content_returns_422(
-        self, async_client
-    ) -> None:
+    async def test_stream_endpoint_empty_content_returns_422(self, async_client) -> None:
         """Empty content returns validation error."""
         response = await async_client.post(
             "/api/chat/sessions/session-001/messages/stream",

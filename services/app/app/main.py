@@ -28,9 +28,9 @@ from app.api import (
     dashboard_router,
     exams_router,
     exports_router,
+    files_router,
     gamification_router,
     notifications_router,
-    files_router,
     qa_router,
     review_items_router,
     settings_router,
@@ -79,7 +79,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         if settings.cookie_secure:
-            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=63072000; includeSubDomains; preload"
+            )
         return response
 
 
@@ -115,11 +117,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level)
 
     # Refuse to start with default JWT secret in SaaS mode
-    if not settings.self_hosted and settings.jwt_secret_key.get_secret_value() == _DEFAULT_JWT_SECRET:
+    if (
+        not settings.self_hosted
+        and settings.jwt_secret_key.get_secret_value() == _DEFAULT_JWT_SECRET
+    ):
         raise RuntimeError(
             "FATAL: JWT_SECRET_KEY is set to the default value. "
             "You MUST set a unique, random JWT_SECRET_KEY in production (SaaS mode). "
-            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))"'
         )
 
     logger.info("studyaio_starting", data_dir=settings.data_dir)
@@ -130,6 +135,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # Prometheus metrics (conditional)
 if settings.prometheus_enabled:
     from prometheus_fastapi_instrumentator import Instrumentator
+
     _instrumentator = Instrumentator()
 else:
     _instrumentator = None
@@ -159,15 +165,33 @@ app = FastAPI(
         {"name": "study", "description": "Spaced repetition study sessions"},
         {"name": "settings", "description": "Application settings management"},
         {"name": "exports", "description": "Data export (Obsidian vault, etc.)"},
-        {"name": "courseops", "description": "Course documents, assessments, deadlines, and calendar exports"},
-        {"name": "auth", "description": "Authentication, registration, MFA, and session management"},
+        {
+            "name": "courseops",
+            "description": "Course documents, assessments, deadlines, and calendar exports",
+        },
+        {
+            "name": "auth",
+            "description": "Authentication, registration, MFA, and session management",
+        },
         {"name": "admin", "description": "User management and system metrics (admin only)"},
-        {"name": "analytics", "description": "Learning analytics, heatmaps, retention, and exam readiness"},
+        {
+            "name": "analytics",
+            "description": "Learning analytics, heatmaps, retention, and exam readiness",
+        },
         {"name": "chat", "description": "Persistent AI study companion chat sessions"},
-        {"name": "gamification", "description": "XP, levels, achievements, daily challenges, leaderboard"},
-        {"name": "concepts", "description": "Knowledge graph: concept extraction, visualization, and relationships"},
+        {
+            "name": "gamification",
+            "description": "XP, levels, achievements, daily challenges, leaderboard",
+        },
+        {
+            "name": "concepts",
+            "description": "Knowledge graph: concept extraction, visualization, and relationships",
+        },
         {"name": "billing", "description": "Stripe billing, subscriptions, and usage quotas"},
-        {"name": "notifications", "description": "Email/Telegram notifications, preferences, and Telegram linking"},
+        {
+            "name": "notifications",
+            "description": "Email/Telegram notifications, preferences, and Telegram linking",
+        },
         {"name": "calendar", "description": "Google Calendar bidirectional sync"},
     ],
 )

@@ -15,12 +15,8 @@ class CourseDocument(Base):
     __tablename__ = "course_documents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id"), nullable=False
-    )
-    course_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("courses.id"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(String(36), ForeignKey("courses.id"), nullable=False)
     document_type: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # "outline", "rubric", "handbook", "other"
@@ -35,16 +31,12 @@ class CourseDocument(Base):
     )  # "pending", "processing", "processed", "failed"
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="course_documents")
     course: Mapped["Course"] = relationship(back_populates="course_documents")
-    assessments: Mapped[list["Assessment"]] = relationship(
-        back_populates="source_document"
-    )
+    assessments: Mapped[list["Assessment"]] = relationship(back_populates="source_document")
     deadlines: Mapped[list["Deadline"]] = relationship(back_populates="source_document")
 
     __table_args__ = (

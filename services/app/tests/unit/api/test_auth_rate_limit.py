@@ -23,7 +23,7 @@ class TestAuthRateLimit:
                     "/api/auth/login",
                     json={"email": "test@example.com", "password": "wrong"},
                 )
-                assert response.status_code == 401, f"Request {i+1} should be 401"
+                assert response.status_code == 401, f"Request {i + 1} should be 401"
 
             # 6th attempt should be rate limited
             response = await async_client.post(
@@ -49,7 +49,7 @@ class TestAuthRateLimit:
                     },
                 )
                 # We don't care about exact status here, just that it's not 429 yet
-                assert response.status_code != 429, f"Request {i+1} should not be 429 yet"
+                assert response.status_code != 429, f"Request {i + 1} should not be 429 yet"
 
             # 4th attempt should be rate limited
             response = await async_client.post(
@@ -68,7 +68,7 @@ class TestAuthRateLimit:
             "app.api.auth.user_service.request_password_reset",
             new_callable=AsyncMock,
         ):
-            for i in range(3):
+            for _i in range(3):
                 response = await async_client.post(
                     "/api/auth/forgot-password",
                     json={"email": "test@example.com"},

@@ -165,9 +165,9 @@ class TestGetRetentionData:
         # 2 retained (ease>=2.0), 1 not
         mock_result = MagicMock()
         rows = [
-            (5, 2.5, "CSIT302"),   # retained, bucket 7
-            (5, 2.1, "CSIT302"),   # retained, bucket 7
-            (5, 1.5, "CSIT302"),   # not retained, bucket 7
+            (5, 2.5, "CSIT302"),  # retained, bucket 7
+            (5, 2.1, "CSIT302"),  # retained, bucket 7
+            (5, 1.5, "CSIT302"),  # not retained, bucket 7
             (25, 2.0, "CSIT302"),  # retained, bucket 30
         ]
         mock_result.all.return_value = rows
@@ -240,9 +240,7 @@ class TestGetMasteryBreakdown:
         mock_result.__iter__ = MagicMock(return_value=iter([]))
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await get_mastery_breakdown(
-            session, "user-001", course_code="CSIT302"
-        )
+        result = await get_mastery_breakdown(session, "user-001", course_code="CSIT302")
 
         assert result == []
         # Verify execute was called (query was built with filter)
