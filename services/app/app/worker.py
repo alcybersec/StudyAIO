@@ -19,6 +19,7 @@ celery_app = Celery(
         "app.pipeline.courseops_task",
         "app.pipeline.notification_tasks",
         "app.pipeline.calendar_task",
+        "app.pipeline.backup_task",
     ],
 )
 
@@ -31,6 +32,7 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    worker_max_tasks_per_child=100,
     beat_schedule={
         "daily-card-reminders": {
             "task": "app.pipeline.notification_tasks.send_daily_reminders",
@@ -43,6 +45,10 @@ celery_app.conf.update(
         "calendar-sync": {
             "task": "app.pipeline.calendar_task.sync_all_calendars",
             "schedule": crontab(minute="*/15"),
+        },
+        "daily-backup": {
+            "task": "app.pipeline.backup_task.run_backup",
+            "schedule": crontab(hour=settings.backup_schedule_hour, minute=0),
         },
     },
 )

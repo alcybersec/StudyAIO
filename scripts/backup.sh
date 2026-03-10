@@ -39,6 +39,15 @@ else
 fi
 ok "Database dump: $DB_DUMP ($(du -h "$DB_DUMP" | cut -f1))"
 
+# Verify the dump is valid
+info "Verifying dump integrity..."
+if gunzip -t "$DB_DUMP" 2>/dev/null; then
+    ok "Dump integrity verified (gzip valid)"
+else
+    err "Dump integrity check failed — file may be corrupted"
+    exit 1
+fi
+
 # ── Data directory archive ─────────────────────────────────────────
 
 DATA_DIR="${DATA_DIR:-./data}"

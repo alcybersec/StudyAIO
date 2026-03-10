@@ -94,7 +94,7 @@ async def get_auth_config() -> AuthConfigResponse:
 
 
 @router.post("/register", status_code=201)
-@limiter.limit(lambda: "10/minute")
+@limiter.limit(lambda: "3/minute")
 async def register(
     request: Request,
     body: RegisterRequest,
@@ -199,7 +199,7 @@ async def change_password(
 
 
 @router.post("/forgot-password", status_code=202)
-@limiter.limit(lambda: "5/minute")
+@limiter.limit(lambda: "3/minute")
 async def forgot_password(
     request: Request,
     body: ForgotPasswordRequest,
@@ -212,7 +212,9 @@ async def forgot_password(
 
 
 @router.post("/reset-password")
+@limiter.limit(lambda: "3/minute")
 async def reset_password(
+    request: Request,
     body: ResetPasswordRequest,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:

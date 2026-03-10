@@ -5,9 +5,30 @@ import sys
 
 import structlog
 
+from app.config import settings
+
+
+def _should_use_json() -> bool:
+    """Determine if JSON renderer should be used based on config."""
+    fmt = settings.log_format.lower()
+    if fmt == "json":
+        return True
+    if fmt == "console":
+        return False
+    # "auto" — use JSON if not running in a terminal (e.g. Docker/CI)
+    return not sys.stderr.isatty()
+
 
 def configure_logging(log_level: str = "INFO") -> None:
-    """Configure structlog for JSON logging in production, pretty in dev."""
+    """Configure structlog with JSON renderer in production, pretty in dev."""
+    use_json = _should_use_json()
+
+    renderer = (
+        structlog.processors.JSONRenderer()
+        if use_json
+        else structlog.dev.ConsoleRenderer()
+    )
+
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
@@ -18,7 +39,7 @@ def configure_logging(log_level: str = "INFO") -> None:
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.UnicodeDecoder(),
-            structlog.dev.ConsoleRenderer(),
+            renderer,
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,

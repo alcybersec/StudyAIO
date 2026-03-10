@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://studyaio:studyaio@db:5432/studyaio"
     database_url_sync: str = "postgresql://studyaio:studyaio@db:5432/studyaio"
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_recycle: int = 1800  # 30 minutes
 
     # Redis
     redis_url: str = "redis://redis:6379/0"
@@ -29,6 +32,7 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+    log_format: str = "auto"  # "auto", "json", or "console"
 
     # Claude Code
     claude_code_path: str = "claude"
@@ -70,8 +74,16 @@ class Settings(BaseSettings):
     rate_limit_uploads: str = "10/minute"
     rate_limit_qa: str = "20/minute"
 
+    # OpenAPI
+    openapi_enabled: bool = True
+
     # Observability
     prometheus_enabled: bool = False
+
+    # Backup
+    backup_enabled: bool = False
+    backup_schedule_hour: int = 2  # Hour of day (UTC) for daily backup
+    backup_retention: int = 7
 
     # Demo mode
     demo_enabled: bool = False
