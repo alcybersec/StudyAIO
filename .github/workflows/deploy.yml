@@ -31,6 +31,9 @@ jobs:
     name: Build API Image
     runs-on: [self-hosted, homelab]
     steps:
+      - name: Fix workspace permissions
+        run: sudo chown -R $(id -u):$(id -g) "${{ github.workspace }}" || true
+
       - uses: actions/checkout@v4
 
       - name: Log in to GHCR
@@ -63,6 +66,9 @@ jobs:
     name: Build UI Image
     runs-on: [self-hosted, homelab]
     steps:
+      - name: Fix workspace permissions
+        run: sudo chown -R $(id -u):$(id -g) "${{ github.workspace }}" || true
+
       - uses: actions/checkout@v4
 
       - name: Log in to GHCR
