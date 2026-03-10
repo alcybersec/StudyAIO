@@ -1,11 +1,16 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useMemo, type FormEvent } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { OAuthButtons } from '../components/auth/OAuthButtons'
 import { ApiError } from '../api/client'
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  oauth_failed: 'Sign-in with your provider failed. Please try again.',
+}
+
 export function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login, authConfig } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -13,6 +18,11 @@ export function LoginPage() {
   const [showMFA, setShowMFA] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const oauthError = useMemo(() => {
+    const errKey = searchParams.get('error')
+    return errKey ? OAUTH_ERROR_MESSAGES[errKey] ?? 'Authentication failed. Please try again.' : null
+  }, [searchParams])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -93,7 +103,7 @@ export function LoginPage() {
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
-      <OAuthButtons providers={authConfig?.oauth_providers ?? []} />
+      <OAuthButtons providers={authConfig?.oauth_providers ?? []} error={oauthError} />
       <div className="mt-4 text-center text-sm text-text-muted space-y-1">
         <p>
           <Link to="/forgot-password" className="text-primary hover:underline">

@@ -416,6 +416,7 @@ async def create_or_link_oauth(
     email: str,
     access_token: str | None = None,
     refresh_token: str | None = None,
+    avatar_url: str | None = None,
 ) -> User:
     """Find or create a user via OAuth, linking the OAuth account.
 
@@ -426,6 +427,7 @@ async def create_or_link_oauth(
         email: Email from the provider.
         access_token: Provider access token.
         refresh_token: Provider refresh token.
+        avatar_url: Profile picture URL from the provider.
 
     Returns:
         The existing or newly created User.
@@ -452,6 +454,8 @@ async def create_or_link_oauth(
         user = await get_user_by_id(session, existing_oauth.user_id)
         if user:
             user.last_login_at = datetime.now(UTC)
+            if avatar_url and not user.avatar_url:
+                user.avatar_url = avatar_url
         await session.flush()
         return user
 
@@ -478,10 +482,13 @@ async def create_or_link_oauth(
             role="user",
             tier="free",
             email_verified=True,  # OAuth emails are pre-verified
+            avatar_url=avatar_url,
         )
         session.add(user)
         await session.flush()
         logger.info("user_created_via_oauth", user_id=user.id, provider=provider)
+    elif avatar_url and not user.avatar_url:
+        user.avatar_url = avatar_url
 
     # Link OAuth account
     oauth_account = OAuthAccount(
