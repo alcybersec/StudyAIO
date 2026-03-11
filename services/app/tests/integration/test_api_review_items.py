@@ -3,6 +3,7 @@
 import pytest
 
 from app.core.utils import generate_id
+from app.models.artifact import LectureArtifact
 from app.models.review_item import ReviewItem
 
 
@@ -16,13 +17,27 @@ class TestReviewItemsEndpoints:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_create_and_list(self, integration_client, db_session):
+    async def test_create_and_list(self, integration_client, db_session, test_user_id):
         """Review items created in DB appear in GET /api/review-items."""
+        # Create a real artifact so the user_id JOIN in list_pending_reviews works
+        artifact = LectureArtifact(
+            id=generate_id(),
+            user_id=test_user_id,
+            original_filename="review_test.pdf",
+            file_path="/data/uploads/review_test.pdf",
+            file_type="pdf",
+            sha256="aa" * 32,
+            file_size_bytes=512,
+            status="ingested",
+        )
+        db_session.add(artifact)
+        await db_session.flush()
+
         item = ReviewItem(
             id=generate_id(),
             review_type="classification_course",
             entity_type="lecture_artifact",
-            entity_id=generate_id(),
+            entity_id=artifact.id,
             payload_json={"filename": "test.pdf"},
             suggested_values={"course_code": "CSIT302"},
             status="pending",
