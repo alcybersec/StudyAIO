@@ -1,7 +1,6 @@
 """Tests for agent factory with per-user settings."""
 
 import json
-
 from unittest.mock import patch
 
 from app.agents.factory import get_agent
