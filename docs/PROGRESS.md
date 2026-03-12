@@ -1,7 +1,7 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** Milestone 30 — Final Polish, E2E Tests, Launch Prep (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M27 ✅, M28 ✅, Gap Fill ✅, M29 ✅, M30 ✅
+> **Current Milestone:** Per-User AI Credentials (Complete)
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M27 ✅, M28 ✅, Gap Fill ✅, M29 ✅, M30 ✅, Per-User Credentials ✅
 
 ---
 
@@ -389,6 +389,18 @@
 | OA.6 | OAuth Tests | ✅ Done | 40 new tests: `test_oauth.py` (20 — state, config, URLs, userinfo), `test_auth_oauth.py` (13 — redirect, callback endpoints), `test_user_service_oauth.py` (7 — service logic). All pass, no regressions. |
 
 **Tests:** 993 unit + 232 golden + 34 E2E = ~1259 total tests (40 new).
+
+## Per-User AI Credentials
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| PU.1 | settings_service: claude_cli_credentials key + get_user_agent_config() | ✅ Done | New ALLOWED_KEY with JSON validation (claudeAiOauth.accessToken/refreshToken). _AGENT_CONFIG_KEYS set. Async helper returns AI-related settings or None. |
+| PU.2 | Agent factory user-aware | ✅ Done | get_agent(user_settings=dict) routes credentials to adapter constructors. Parses CLI credentials JSON for ClaudeCodeAdapter. Falls back to system defaults. |
+| PU.3 | ClaudeCodeAdapter per-user credential files | ✅ Done | Temp dir with .credentials.json, CLAUDE_CONFIG_DIR env var on subprocess. Reads back refreshed tokens. Cleans up in finally block. |
+| PU.4 | Pipeline stages fetch per-user settings | ✅ Done | classify, summarize, assets, courseops_task, concept_service, qa, chat_service — all lazy-import get_user_agent_config before get_agent(). Credential refresh persisted after CLI calls. |
+| PU.5 | POST /settings/test-ai endpoint | ✅ Done | Validates user's AI credentials via classify_lecture test prompt. Returns status/backend/message or 502 on failure. TestAIResponse schema. |
+| PU.6 | Frontend credential input UI | ✅ Done | SettingsPage: CLI credentials textarea with status badges, Anthropic API key field, Test Connection button with result display. TypeScript types updated. |
+| PU.7 | Unit tests | ✅ Done | 29 new tests (factory routing, credential validation, temp file flow, test-ai endpoint). Fixed 7 existing tests (chat_service, chat_streaming, assets). 1021 unit + 285 golden = 1306 total. |
 
 ## Issues & Blockers
 

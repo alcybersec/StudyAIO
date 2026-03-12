@@ -1,6 +1,11 @@
 """Claude Code CLI adapter — calls `claude -p` via subprocess."""
 
 import asyncio
+import json
+import os
+import stat
+import tempfile
+from typing import Any
 
 import structlog
 
@@ -31,14 +36,29 @@ class ClaudeCodeAdapter(AgentAdapter):
 
     Uses `claude -p <prompt>` to run prompts. Parses JSON responses
     from Claude for structured output.
+
+    When credentials_json is provided, creates a temporary config directory
+    with the credential file so the CLI uses per-user auth. After each call,
+    reads back the credential file in case the CLI refreshed tokens.
     """
 
-    def __init__(self, cli_path: str = "", model: str = ""):
+    def __init__(
+        self,
+        cli_path: str = "",
+        model: str = "",
+        credentials_json: dict[str, Any] | None = None,
+    ):
         self._cli_path = cli_path or get_effective_setting("claude_code_path")
         self._model = model or get_effective_setting("claude_model")
+        self._credentials_json = credentials_json
+        self.refreshed_credentials: dict[str, Any] | None = None
 
     async def _run_claude_code(self, prompt: str, timeout: int = _DEFAULT_TIMEOUT) -> str:
         """Execute claude CLI with the given prompt and return output.
+
+        If per-user credentials are configured, writes them to a temp
+        directory and sets CLAUDE_CONFIG_DIR for the subprocess. Reads
+        back credentials afterward (CLI may refresh expired tokens).
 
         Args:
             prompt: The full prompt text to send.
@@ -55,13 +75,33 @@ class ClaudeCodeAdapter(AgentAdapter):
             "claude_code_call",
             prompt_length=len(prompt),
             model=self._model,
+            has_user_credentials=self._credentials_json is not None,
         )
 
+        env = None
+        temp_dir = None
+
         try:
+            # Set up per-user credentials if provided
+            if self._credentials_json:
+                temp_dir = tempfile.mkdtemp(prefix="claude_creds_")
+                creds_path = os.path.join(temp_dir, ".credentials.json")
+                with open(creds_path, "w") as f:
+                    json.dump(self._credentials_json, f)
+                # Restrictive permissions: owner read/write only
+                os.chmod(creds_path, stat.S_IRUSR | stat.S_IWUSR)
+
+                env = {**os.environ, "CLAUDE_CONFIG_DIR": temp_dir}
+                logger.info(
+                    "claude_code_using_user_credentials",
+                    config_dir=temp_dir,
+                )
+
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=env,
             )
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
         except TimeoutError:
@@ -72,6 +112,28 @@ class ClaudeCodeAdapter(AgentAdapter):
                 f"Claude Code CLI not found at '{self._cli_path}'. "
                 "Ensure it is installed and accessible."
             ) from None
+        finally:
+            # Read back possibly-refreshed credentials before cleanup
+            if temp_dir:
+                try:
+                    creds_path = os.path.join(temp_dir, ".credentials.json")
+                    if os.path.exists(creds_path):
+                        with open(creds_path) as f:
+                            refreshed = json.load(f)
+                        # Only store if different from original
+                        if refreshed != self._credentials_json:
+                            self.refreshed_credentials = refreshed
+                            logger.info("claude_code_credentials_refreshed")
+                except Exception:
+                    logger.warning("claude_code_credentials_readback_failed", exc_info=True)
+
+                # Clean up temp dir
+                try:
+                    import shutil
+
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception:
+                    pass
 
         if process.returncode != 0:
             error_text = stderr.decode().strip() if stderr else "Unknown error"

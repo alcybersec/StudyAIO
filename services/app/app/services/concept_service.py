@@ -49,8 +49,10 @@ async def extract_and_save_concepts(
 
     # Call AI agent (lazy import to avoid circular deps)
     from app.agents.factory import get_agent
+    from app.services.settings_service import get_user_agent_config
 
-    agent = get_agent()
+    user_agent_config = await get_user_agent_config(session, user_id)
+    agent = get_agent(user_settings=user_agent_config)
     ai_result: ConceptExtractionResult = await agent.extract_concepts(
         text=extraction_text,
         existing_concepts=existing_names if existing_names else None,

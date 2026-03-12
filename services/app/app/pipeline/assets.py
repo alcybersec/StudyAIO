@@ -1,5 +1,6 @@
 """Pipeline stage 5: Assets — generate flashcards and quiz questions."""
 
+import json
 from datetime import datetime
 
 import structlog
@@ -95,8 +96,13 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
             summary = summary_result.scalar_one_or_none()
             summary_md = summary.content_md if summary else ""
 
-            # Generate flashcards
-            agent = get_agent()
+            # Get per-user AI settings
+            from app.services.settings_service import get_user_agent_config
+
+            user_agent_config = await get_user_agent_config(
+                session, user_id or artifact.user_id
+            )
+            agent = get_agent(user_settings=user_agent_config)
             flashcard_data = await agent.generate_flashcards(
                 summary=summary_md,
                 extraction=extraction_data,
@@ -125,6 +131,19 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
                 artifact_id=artifact_id,
                 questions=quiz_data,
             )
+
+            # Persist refreshed CLI credentials if applicable
+            if hasattr(agent, "refreshed_credentials") and agent.refreshed_credentials:
+                try:
+                    from app.services.settings_service import update_user_settings
+
+                    await update_user_settings(
+                        session,
+                        user_id or artifact.user_id,
+                        {"claude_cli_credentials": json.dumps(agent.refreshed_credentials)},
+                    )
+                except Exception:
+                    logger.warning("credential_refresh_persist_failed", exc_info=True)
 
             # Extract concepts (best-effort — won't break pipeline)
             try:

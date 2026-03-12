@@ -78,8 +78,11 @@ async def ask_question(
             chunks_searched=0,
         )
 
-    # Call agent to generate answer with citations
-    agent = get_agent()
+    # Call agent with per-user settings
+    from app.services.settings_service import get_user_agent_config
+
+    user_agent_config = await get_user_agent_config(session, user.id)
+    agent = get_agent(user_settings=user_agent_config)
     try:
         answer_result = await agent.answer_question(body.question, chunks)
     except NotImplementedError:

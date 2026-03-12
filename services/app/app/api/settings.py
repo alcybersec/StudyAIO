@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_or_default
-from app.api.schemas import SettingsResponse, SettingsUpdateRequest
+from app.api.schemas import SettingsResponse, SettingsUpdateRequest, TestAIResponse
 from app.core.database import get_session
 from app.models.user import User
 from app.services import settings_service
@@ -52,3 +52,48 @@ async def update_settings(
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     return SettingsResponse(**result)
+
+
+@router.post(
+    "/settings/test-ai",
+    response_model=TestAIResponse,
+    summary="Test AI connection",
+    description="Tests the AI connection using the current user's saved settings. Sends a minimal prompt to verify credentials work.",
+)
+async def test_ai_connection(
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> TestAIResponse:
+    """Test AI connection with the user's current settings."""
+    from app.agents.factory import get_agent
+    from app.services.settings_service import get_user_agent_config
+
+    user_agent_config = await get_user_agent_config(session, user.id)
+    agent = get_agent(user_settings=user_agent_config)
+
+    # Determine the backend name for the response
+    if user_agent_config:
+        backend = user_agent_config.get(
+            "agent_backend",
+            settings_service.get_effective_setting("agent_backend"),
+        )
+    else:
+        backend = settings_service.get_effective_setting("agent_backend")
+
+    try:
+        result = await agent.classify_lecture(
+            text_preview="This is a test prompt. Respond with a valid JSON classification.",
+            filename="test.pdf",
+            known_courses=["TEST101"],
+        )
+        return TestAIResponse(
+            status="ok",
+            backend=backend,
+            message=f"Connection successful (confidence: {result.confidence})",
+        )
+    except Exception as e:
+        logger.warning("test_ai_failed", error=str(e), backend=backend)
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI connection failed ({backend}): {e}",
+        ) from e

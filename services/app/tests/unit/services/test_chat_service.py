@@ -232,6 +232,11 @@ class TestSendMessage:
                 return_value=mock_chunks,
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
+            patch(
+                "app.services.settings_service.get_user_agent_config",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             user_msg, assistant_msg = await send_message(
                 session, "session-001", "user-001", "What is a firewall?"
@@ -276,6 +281,11 @@ class TestSendMessage:
                 return_value=[],
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
+            patch(
+                "app.services.settings_service.get_user_agent_config",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             await send_message(session, "session-001", "user-001", "Explain TCP handshake")
 
@@ -324,6 +334,11 @@ class TestSendMessage:
                 return_value=[],
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
+            patch(
+                "app.services.settings_service.get_user_agent_config",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             user_msg, assistant_msg = await send_message(
                 session, "session-001", "user-001", "Help me"
@@ -362,6 +377,11 @@ class TestSendMessage:
                 return_value=mock_provider,
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
+            patch(
+                "app.services.settings_service.get_user_agent_config",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             user_msg, assistant_msg = await send_message(
                 session, "session-001", "user-001", "What is recursion?"

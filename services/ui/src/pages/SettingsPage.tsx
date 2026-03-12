@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { settingsApi } from '../api/endpoints'
 import { BillingSection } from '../components/billing/BillingSection'
 import { CalendarSyncSection } from '../components/calendar/CalendarSyncSection'
 import { NotificationsSection } from '../components/notifications/NotificationsSection'
@@ -20,6 +21,8 @@ export function SettingsPage() {
   const { replay: replayTour } = useTour()
   const [form, setForm] = useState<Settings | null>(null)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [testingAi, setTestingAi] = useState(false)
+  const [testResult, setTestResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   useEffect(() => {
     if (settings && !form) {
@@ -47,8 +50,28 @@ export function SettingsPage() {
     if (settings) {
       setForm(settings)
       setFeedback(null)
+      setTestResult(null)
     }
   }
+
+  const handleTestAi = async () => {
+    setTestingAi(true)
+    setTestResult(null)
+    try {
+      const result = await settingsApi.testAi()
+      setTestResult({
+        type: 'success',
+        message: `${result.backend}: ${result.message}`,
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Connection test failed'
+      setTestResult({ type: 'error', message })
+    } finally {
+      setTestingAi(false)
+    }
+  }
+
+  const hasCliCredentials = !!(form.claude_cli_credentials && form.claude_cli_credentials.trim())
 
   const hasChanges = settings && JSON.stringify(form) !== JSON.stringify(settings)
 
@@ -173,6 +196,34 @@ export function SettingsPage() {
                     <option value="haiku">Haiku</option>
                   </select>
                 </div>
+                <div>
+                  <label htmlFor="claude_cli_credentials" className={labelClass}>
+                    Claude CLI Credentials
+                    {hasCliCredentials && (
+                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300">
+                        Configured
+                      </span>
+                    )}
+                    {!hasCliCredentials && (
+                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-300">
+                        Using system default
+                      </span>
+                    )}
+                  </label>
+                  <textarea
+                    id="claude_cli_credentials"
+                    value={form.claude_cli_credentials || ''}
+                    onChange={(e) => setForm({ ...form, claude_cli_credentials: e.target.value })}
+                    placeholder='Paste contents of ~/.claude/.credentials.json'
+                    rows={4}
+                    className={`${inputClass} font-mono text-xs`}
+                  />
+                  <p className={hintClass}>
+                    To use your own Claude Max subscription: run <code className="px-1 py-0.5 bg-surface-alt rounded text-xs">claude login</code> on
+                    your computer, then paste the contents of <code className="px-1 py-0.5 bg-surface-alt rounded text-xs">~/.claude/.credentials.json</code>.
+                    Leave empty to use the system default credentials.
+                  </p>
+                </div>
               </>
             )}
 
@@ -264,6 +315,26 @@ export function SettingsPage() {
                 </div>
               </>
             )}
+
+            {/* Test Connection */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleTestAi}
+                disabled={testingAi || hasChanges === true}
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-border text-text hover:bg-surface-alt disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+              >
+                {testingAi ? 'Testing...' : 'Test Connection'}
+              </button>
+              {hasChanges && (
+                <span className="text-xs text-text-muted">Save settings first to test</span>
+              )}
+              {testResult && (
+                <span className={`text-sm ${testResult.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {testResult.message}
+                </span>
+              )}
+            </div>
 
             <div>
               <label htmlFor="classification_confidence_threshold" className={labelClass}>

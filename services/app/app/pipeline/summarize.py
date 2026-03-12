@@ -1,5 +1,6 @@
 """Pipeline stage 3: Summarize — generate weekly markdown summaries."""
 
+import json
 from datetime import datetime
 
 import structlog
@@ -92,9 +93,27 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
             )
             existing_md = existing.content_md if existing else None
 
-            # Call AI agent to generate summary
-            agent = get_agent()
+            # Call AI agent with per-user settings
+            from app.services.settings_service import get_user_agent_config
+
+            user_agent_config = await get_user_agent_config(
+                session, user_id or artifact.user_id
+            )
+            agent = get_agent(user_settings=user_agent_config)
             summary_result = await agent.generate_summary(extraction_data, existing_md)
+
+            # Persist refreshed CLI credentials if applicable
+            if hasattr(agent, "refreshed_credentials") and agent.refreshed_credentials:
+                try:
+                    from app.services.settings_service import update_user_settings
+
+                    await update_user_settings(
+                        session,
+                        user_id or artifact.user_id,
+                        {"claude_cli_credentials": json.dumps(agent.refreshed_credentials)},
+                    )
+                except Exception:
+                    logger.warning("credential_refresh_persist_failed", exc_info=True)
 
             # Write summary to storage
             storage = get_storage()

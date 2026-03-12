@@ -167,6 +167,7 @@ export interface Settings {
   claude_model: string
   agent_backend: string
   anthropic_api_key: string
+  claude_cli_credentials: string
   openai_api_key: string
   openai_model: string
   ollama_base_url: string
@@ -178,6 +179,12 @@ export interface Settings {
   chunk_size_tokens: number
   chunk_overlap_tokens: number
   dashboard_layout: Record<string, unknown> | null
+}
+
+export interface TestAIResponse {
+  status: string
+  backend: string
+  message: string
 }
 
 export type SettingsUpdate = Partial<Settings>

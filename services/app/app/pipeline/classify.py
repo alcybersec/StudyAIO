@@ -1,5 +1,6 @@
 """Pipeline stage 1: Classify — identify course, week, and title."""
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -170,13 +171,31 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
             # Get known courses
             known_courses = await _get_known_courses(session)
 
-            # Call AI agent
-            agent = get_agent()
+            # Call AI agent with per-user settings
+            from app.services.settings_service import get_user_agent_config
+
+            user_agent_config = await get_user_agent_config(
+                session, user_id or artifact.user_id
+            )
+            agent = get_agent(user_settings=user_agent_config)
             classification = await agent.classify_lecture(
                 text_preview=text_preview,
                 filename=artifact.original_filename,
                 known_courses=known_courses,
             )
+
+            # Persist refreshed CLI credentials if applicable
+            if hasattr(agent, "refreshed_credentials") and agent.refreshed_credentials:
+                try:
+                    from app.services.settings_service import update_user_settings
+
+                    await update_user_settings(
+                        session,
+                        user_id or artifact.user_id,
+                        {"claude_cli_credentials": json.dumps(agent.refreshed_credentials)},
+                    )
+                except Exception:
+                    logger.warning("credential_refresh_persist_failed", exc_info=True)
 
             logger.info(
                 "classification_result",
