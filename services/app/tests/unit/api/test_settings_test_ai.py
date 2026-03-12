@@ -50,9 +50,7 @@ class TestTestAIEndpoint:
     async def test_test_ai_failure_returns_502(self, async_client):
         """Failed AI test returns 502."""
         mock_agent = MagicMock()
-        mock_agent.classify_lecture = AsyncMock(
-            side_effect=Exception("Connection refused")
-        )
+        mock_agent.classify_lecture = AsyncMock(side_effect=Exception("Connection refused"))
 
         with (
             patch(

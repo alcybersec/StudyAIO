@@ -82,7 +82,9 @@ async def _process_document(document_id: str) -> dict:
             from app.services.settings_service import get_user_agent_config
 
             owner_user_id = getattr(doc, "user_id", None) or getattr(course, "user_id", "")
-            user_agent_config = await get_user_agent_config(session, owner_user_id) if owner_user_id else None
+            user_agent_config = (
+                await get_user_agent_config(session, owner_user_id) if owner_user_id else None
+            )
             agent = get_agent(user_settings=user_agent_config)
             ai_result = await agent.extract_course_ops(
                 document_text=extracted_text,

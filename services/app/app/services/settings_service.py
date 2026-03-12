@@ -334,9 +334,7 @@ _AGENT_CONFIG_KEYS = {
 }
 
 
-async def get_user_agent_config(
-    session: AsyncSession, user_id: str
-) -> dict[str, Any] | None:
+async def get_user_agent_config(session: AsyncSession, user_id: str) -> dict[str, Any] | None:
     """Get AI-related settings for a user, returning None if no overrides.
 
     Used by pipeline stages and API endpoints to pass per-user credentials
@@ -349,9 +347,7 @@ async def get_user_agent_config(
     Returns:
         Dict of AI-related settings if user has overrides, None otherwise.
     """
-    result = await session.execute(
-        select(UserSettings).where(UserSettings.user_id == user_id)
-    )
+    result = await session.execute(select(UserSettings).where(UserSettings.user_id == user_id))
     user_settings = result.scalar_one_or_none()
     if not user_settings:
         return None
