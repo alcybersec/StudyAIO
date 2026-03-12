@@ -174,9 +174,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
             # Call AI agent with per-user settings
             from app.services.settings_service import get_user_agent_config
 
-            user_agent_config = await get_user_agent_config(
-                session, user_id or artifact.user_id
-            )
+            user_agent_config = await get_user_agent_config(session, user_id or artifact.user_id)
             agent = get_agent(user_settings=user_agent_config)
             classification = await agent.classify_lecture(
                 text_preview=text_preview,

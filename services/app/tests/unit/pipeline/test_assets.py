@@ -58,7 +58,11 @@ class TestAssetsStage:
 
     @patch("app.pipeline.assets.asset_service")
     @patch("app.pipeline.assets.get_agent")
-    @patch("app.services.settings_service.get_user_agent_config", new_callable=AsyncMock, return_value=None)
+    @patch(
+        "app.services.settings_service.get_user_agent_config",
+        new_callable=AsyncMock,
+        return_value=None,
+    )
     @patch("app.pipeline.assets.async_session_factory")
     @pytest.mark.asyncio
     async def test_generate_assets_success(

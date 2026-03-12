@@ -12,12 +12,14 @@ class TestCliCredentialsValidation:
 
     def test_valid_credentials_accepted(self):
         """Valid JSON with required fields is accepted."""
-        creds = json.dumps({
-            "claudeAiOauth": {
-                "accessToken": "my-token",
-                "refreshToken": "my-refresh",
+        creds = json.dumps(
+            {
+                "claudeAiOauth": {
+                    "accessToken": "my-token",
+                    "refreshToken": "my-refresh",
+                }
             }
-        })
+        )
         result = settings_service.validate_setting("claude_cli_credentials", creds)
         assert result == creds
 
@@ -48,21 +50,25 @@ class TestCliCredentialsValidation:
 
     def test_missing_access_token_raises(self):
         """Missing accessToken is rejected."""
-        creds = json.dumps({
-            "claudeAiOauth": {
-                "refreshToken": "my-refresh",
+        creds = json.dumps(
+            {
+                "claudeAiOauth": {
+                    "refreshToken": "my-refresh",
+                }
             }
-        })
+        )
         with pytest.raises(ValueError, match="accessToken"):
             settings_service.validate_setting("claude_cli_credentials", creds)
 
     def test_missing_refresh_token_raises(self):
         """Missing refreshToken is rejected."""
-        creds = json.dumps({
-            "claudeAiOauth": {
-                "accessToken": "my-token",
+        creds = json.dumps(
+            {
+                "claudeAiOauth": {
+                    "accessToken": "my-token",
+                }
             }
-        })
+        )
         with pytest.raises(ValueError, match="refreshToken"):
             settings_service.validate_setting("claude_cli_credentials", creds)
 
