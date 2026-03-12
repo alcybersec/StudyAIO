@@ -31,6 +31,7 @@ import type {
   SendMessageResponse,
   Settings,
   SettingsUpdate,
+  TestAIResponse,
   StreakInfo,
   StudyHistoryDay,
   StudyStats,
@@ -79,6 +80,7 @@ export const qaApi = {
 export const settingsApi = {
   get: () => api.get<Settings>('/settings'),
   update: (updates: SettingsUpdate) => api.put<Settings>('/settings', updates),
+  testAi: () => api.post<TestAIResponse>('/settings/test-ai', {}),
 }
 
 export const examsApi = {

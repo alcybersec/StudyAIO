@@ -202,8 +202,11 @@ async def send_message(
         logger.warning("chat_rag_search_failed", error=str(e))
         # Continue without RAG context — still useful for general conversation
 
-    # 4. Call agent with context-enhanced question
-    agent = get_agent()
+    # 4. Call agent with per-user settings
+    from app.services.settings_service import get_user_agent_config
+
+    user_agent_config = await get_user_agent_config(session, user_id)
+    agent = get_agent(user_settings=user_agent_config)
     try:
         context_question = _build_contextual_question(content, history[:-1], chunks)
         answer_result = await agent.answer_question(context_question, chunks)
@@ -327,8 +330,11 @@ async def stream_message(
         "data": {"id": user_msg.id},
     }
 
-    # Stream tokens from agent
-    agent = get_agent()
+    # Stream tokens from agent with per-user settings
+    from app.services.settings_service import get_user_agent_config
+
+    user_agent_config = await get_user_agent_config(session, user_id)
+    agent = get_agent(user_settings=user_agent_config)
     full_text = ""
     try:
         context_question = _build_contextual_question(content, history[:-1], chunks)

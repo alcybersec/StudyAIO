@@ -58,10 +58,11 @@ class TestAssetsStage:
 
     @patch("app.pipeline.assets.asset_service")
     @patch("app.pipeline.assets.get_agent")
+    @patch("app.services.settings_service.get_user_agent_config", new_callable=AsyncMock, return_value=None)
     @patch("app.pipeline.assets.async_session_factory")
     @pytest.mark.asyncio
     async def test_generate_assets_success(
-        self, mock_session_factory, mock_get_agent, mock_asset_svc
+        self, mock_session_factory, _mock_user_config, mock_get_agent, mock_asset_svc
     ):
         """Successful asset generation creates flashcards and quizzes."""
         from app.pipeline.assets import _generate_assets

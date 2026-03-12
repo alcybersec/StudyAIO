@@ -306,6 +306,7 @@ class SettingsResponse(BaseModel):
     claude_model: str
     agent_backend: str
     anthropic_api_key: str
+    claude_cli_credentials: str = ""
     classification_confidence_threshold: float
     flashcard_count_per_week: int
     quiz_question_count_per_week: int
@@ -323,6 +324,7 @@ class SettingsUpdateRequest(BaseModel):
     claude_model: str | None = None
     agent_backend: str | None = None
     anthropic_api_key: str | None = None
+    claude_cli_credentials: str | None = None
     classification_confidence_threshold: float | None = None
     flashcard_count_per_week: int | None = None
     quiz_question_count_per_week: int | None = None
@@ -331,6 +333,14 @@ class SettingsUpdateRequest(BaseModel):
     max_upload_size_mb: int | None = None
     theme: str | None = None
     dashboard_layout: dict | None = None
+
+
+class TestAIResponse(BaseModel):
+    """Response from the test-ai endpoint."""
+
+    status: str
+    backend: str
+    message: str = ""
 
 
 class BatchUploadFileResult(BaseModel):

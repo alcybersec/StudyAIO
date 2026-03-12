@@ -9,6 +9,7 @@ MOCK_SETTINGS = {
     "claude_model": "opus",
     "agent_backend": "claude_code",
     "anthropic_api_key": "",
+    "claude_cli_credentials": "",
     "classification_confidence_threshold": 0.7,
     "flashcard_count_per_week": 15,
     "quiz_question_count_per_week": 8,

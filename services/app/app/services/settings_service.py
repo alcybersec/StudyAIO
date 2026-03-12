@@ -8,6 +8,7 @@ For pipeline tasks (synchronous context without a DB session),
 `get_effective_setting()` falls back to env defaults only.
 """
 
+import json
 from datetime import datetime
 from typing import Any
 
@@ -32,6 +33,7 @@ ALLOWED_KEYS = {
     "ollama_base_url",
     "ollama_model",
     "embedding_backend",
+    "claude_cli_credentials",
     "classification_confidence_threshold",
     "flashcard_count_per_week",
     "quiz_question_count_per_week",
@@ -50,6 +52,7 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
     "claude_model": (str, None, None),
     "agent_backend": (str, None, None),
     "anthropic_api_key": (str, None, None),
+    "claude_cli_credentials": (str, None, None),
     "openai_api_key": (str, None, None),
     "openai_model": (str, None, None),
     "ollama_base_url": (str, None, None),
@@ -112,6 +115,26 @@ def validate_setting(key: str, value: Any) -> Any:
         if value not in VALID_BACKENDS:
             raise ValueError(
                 f"agent_backend must be one of {sorted(VALID_BACKENDS)}, got '{value}'"
+            )
+        return value
+
+    if key == "claude_cli_credentials":
+        if not isinstance(value, str):
+            raise ValueError("claude_cli_credentials must be a JSON string")
+        value = value.strip()
+        if not value:
+            return ""  # Allow clearing
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"claude_cli_credentials must be valid JSON: {e}") from e
+        if not isinstance(parsed, dict):
+            raise ValueError("claude_cli_credentials must be a JSON object")
+        oauth = parsed.get("claudeAiOauth", {})
+        if not oauth.get("accessToken") or not oauth.get("refreshToken"):
+            raise ValueError(
+                "claude_cli_credentials must contain claudeAiOauth.accessToken "
+                "and claudeAiOauth.refreshToken"
             )
         return value
 
@@ -292,6 +315,59 @@ async def get_effective_setting_async(session: AsyncSession, user_id: str, key: 
     """
     all_settings = await get_user_settings(session, user_id)
     return all_settings.get(key, getattr(settings, key, None))
+
+
+# ── User agent config helper ──────────────────────────────────────────
+
+
+# Keys relevant to AI agent configuration
+_AGENT_CONFIG_KEYS = {
+    "agent_backend",
+    "claude_code_path",
+    "claude_model",
+    "anthropic_api_key",
+    "openai_api_key",
+    "openai_model",
+    "ollama_base_url",
+    "ollama_model",
+    "claude_cli_credentials",
+}
+
+
+async def get_user_agent_config(
+    session: AsyncSession, user_id: str
+) -> dict[str, Any] | None:
+    """Get AI-related settings for a user, returning None if no overrides.
+
+    Used by pipeline stages and API endpoints to pass per-user credentials
+    to the agent factory.
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
+
+    Returns:
+        Dict of AI-related settings if user has overrides, None otherwise.
+    """
+    result = await session.execute(
+        select(UserSettings).where(UserSettings.user_id == user_id)
+    )
+    user_settings = result.scalar_one_or_none()
+    if not user_settings:
+        return None
+
+    overrides = user_settings.settings_json or {}
+    # Check if user has any AI-related overrides
+    has_ai_overrides = any(k in overrides for k in _AGENT_CONFIG_KEYS)
+    if not has_ai_overrides:
+        return None
+
+    # Build config with defaults + user overrides for agent keys only
+    defaults = _defaults()
+    config: dict[str, Any] = {}
+    for key in _AGENT_CONFIG_KEYS:
+        config[key] = overrides.get(key, defaults.get(key, ""))
+    return config
 
 
 # ── Sync fallback for pipeline consumers ──────────────────────────────
