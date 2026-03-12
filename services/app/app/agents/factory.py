@@ -63,12 +63,11 @@ def get_agent(user_settings: dict[str, Any] | None = None) -> AgentAdapter:
         credentials_json = None
         creds_str = user_settings.get("claude_cli_credentials", "")
         if creds_str:
+            import contextlib
             import json
 
-            try:
+            with contextlib.suppress(json.JSONDecodeError, TypeError):
                 credentials_json = json.loads(creds_str)
-            except (json.JSONDecodeError, TypeError):
-                pass
 
         return ClaudeCodeAdapter(
             cli_path=user_settings.get("claude_code_path", ""),
