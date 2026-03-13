@@ -22,8 +22,14 @@ class TelegramLink(Base):
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     verified: Mapped[bool] = mapped_column(default=False)
     link_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
     __table_args__ = (
         Index("ix_telegram_links_user_id", "user_id", unique=True),

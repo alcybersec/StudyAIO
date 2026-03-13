@@ -19,7 +19,9 @@ class AnalyticsSnapshot(Base):
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     metrics_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "snapshot_date", name="uq_analytics_snapshot_user_date"),

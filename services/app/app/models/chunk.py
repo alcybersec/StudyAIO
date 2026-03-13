@@ -24,7 +24,9 @@ class Chunk(Base):
     page_ref: Mapped[int] = mapped_column(Integer, nullable=False)
     slide_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     embedding = mapped_column(Vector(384), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     # Relationships
     artifact: Mapped["LectureArtifact"] = relationship(back_populates="chunks")

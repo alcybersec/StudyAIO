@@ -269,9 +269,7 @@ class TestPasswordReset:
 
     @pytest.mark.asyncio
     async def test_reset_with_expired_token(self):
-        link = _make_magic_link(
-            expires_at=datetime.now(UTC) - timedelta(hours=1)
-        )
+        link = _make_magic_link(expires_at=datetime.now(UTC) - timedelta(hours=1))
         session = _mock_session_returning(link)
 
         with pytest.raises(AuthenticationError, match="expired"):

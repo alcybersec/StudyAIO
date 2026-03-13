@@ -30,8 +30,14 @@ class Concept(Base):
     source_weeks: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     mention_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     embedding: Mapped[list | None] = mapped_column(Vector(384), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
     # Relationships
     outgoing_relations = relationship(

@@ -19,8 +19,14 @@ class PushSubscription(Base):
     endpoint: Mapped[str] = mapped_column(String(512), nullable=False)
     p256dh: Mapped[str] = mapped_column(String(256), nullable=False)
     auth: Mapped[str] = mapped_column(String(256), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "endpoint", name="uq_push_subscriptions_user_endpoint"),

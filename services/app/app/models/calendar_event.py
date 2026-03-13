@@ -25,7 +25,9 @@ class CalendarEvent(Base):
     )  # "deadline", "exam", "class_schedule"
     entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
     last_synced_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     # Relationships
     calendar_sync: Mapped["CalendarSync"] = relationship(back_populates="events")
