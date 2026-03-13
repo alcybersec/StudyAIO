@@ -42,7 +42,7 @@ def _make_magic_link(**overrides) -> MagicLink:
         "user_id": "user-001",
         "token": "test-token-abc",
         "link_type": "password_reset",
-        "expires_at": datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+        "expires_at": datetime.now(UTC) + timedelta(hours=1),
         "used_at": None,
     }
     defaults.update(overrides)
@@ -270,7 +270,7 @@ class TestPasswordReset:
     @pytest.mark.asyncio
     async def test_reset_with_expired_token(self):
         link = _make_magic_link(
-            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+            expires_at=datetime.now(UTC) - timedelta(hours=1)
         )
         session = _mock_session_returning(link)
 
