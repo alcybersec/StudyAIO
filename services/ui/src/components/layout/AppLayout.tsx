@@ -16,9 +16,10 @@ import { MobileNav } from './MobileNav'
 export function AppLayout() {
   const { isDemo } = useAuth()
   const location = useLocation()
+  const isFullBleed = location.pathname === '/chat' || location.pathname.startsWith('/chat/')
 
   return (
-    <div className="min-h-screen bg-surface-alt flex flex-col">
+    <div className="h-screen bg-surface-alt flex flex-col overflow-hidden">
       {/* Skip to main content (accessibility) */}
       <a
         href="#main-content"
@@ -30,7 +31,7 @@ export function AppLayout() {
       {/* Demo account banner */}
       {isDemo && <DemoBanner />}
 
-      <div className="flex flex-1">
+      <div className="flex flex-1 min-h-0">
       {/* Offline status banner */}
       <OfflineBanner />
 
@@ -38,23 +39,38 @@ export function AppLayout() {
       <Sidebar />
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {/* Mobile top header — logo only */}
-        <header className="lg:hidden flex items-center h-14 px-4 bg-surface border-b border-border sticky top-0 z-40">
+        <header className="lg:hidden flex items-center h-14 px-4 bg-surface border-b border-border shrink-0">
           <Link to="/" className="text-lg font-bold text-primary">
             StudyAIO
           </Link>
         </header>
 
-        <main id="main-content" className="flex-1 px-4 sm:px-6 lg:px-8 py-6 pb-20 lg:pb-6 max-w-6xl w-full mx-auto">
+        <main
+          id="main-content"
+          className={
+            isFullBleed
+              ? 'flex-1 flex flex-col min-h-0 pb-14 lg:pb-0'
+              : 'flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 pb-20 lg:pb-6'
+          }
+        >
           <ErrorBoundary>
-            <AnimatePresence mode="wait">
-              <PageTransition key={location.pathname}>
-                <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." />}>
-                  <Outlet />
-                </Suspense>
-              </PageTransition>
-            </AnimatePresence>
+            {isFullBleed ? (
+              <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." />}>
+                <Outlet />
+              </Suspense>
+            ) : (
+              <div className="max-w-6xl w-full mx-auto">
+                <AnimatePresence mode="wait">
+                  <PageTransition key={location.pathname}>
+                    <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." />}>
+                      <Outlet />
+                    </Suspense>
+                  </PageTransition>
+                </AnimatePresence>
+              </div>
+            )}
           </ErrorBoundary>
         </main>
       </div>

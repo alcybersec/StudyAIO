@@ -36,7 +36,7 @@ export function ChatPage() {
   }, [sessions, selectedSessionId, setSearchParams])
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] lg:h-[calc(100vh-0px)]">
+    <div className="flex flex-col flex-1 min-h-0">
       {sessionsError && (
         <div className="px-4 pt-2">
           <ErrorBanner message="Failed to load chat sessions." onRetry={() => refetchSessions()} />
