@@ -132,6 +132,9 @@ jobs:
             docker tag "${API_IMAGE}" "ghcr.io/${GHCR_OWNER}/studyaio-api:latest"
             docker tag "${UI_IMAGE}" "ghcr.io/${GHCR_OWNER}/studyaio-ui:latest"
 
+            # Stop Traefik if left over from previous config
+            docker rm -f studyaio-traefik-1 2>/dev/null || true
+
             # Restart services
             docker compose -f docker-compose.yml \
               -f docker-compose.selfhosted.yml \
