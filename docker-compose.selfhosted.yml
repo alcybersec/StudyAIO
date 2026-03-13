@@ -28,6 +28,7 @@ services:
       - letsencrypt:/letsencrypt
 
   ui:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-ui:${IMAGE_TAG:-latest}
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -38,6 +39,7 @@ services:
     ports: !override []
 
   api:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     stop_grace_period: 35s
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --timeout-graceful-shutdown 30
@@ -54,6 +56,7 @@ services:
     ports: !override []
 
   worker:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=4
     volumes: !override
@@ -63,6 +66,7 @@ services:
       - ${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json:/root/.claude/settings.json:ro
 
   beat:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
 
   db:
