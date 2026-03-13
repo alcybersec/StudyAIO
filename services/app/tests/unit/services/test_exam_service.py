@@ -1,6 +1,6 @@
 """Tests for exam service."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -33,7 +33,7 @@ class TestCreateExam:
             session,
             course_code="CSIT302",
             title="Midterm",
-            exam_date=datetime.utcnow() + timedelta(days=14),
+            exam_date=datetime.now(UTC) + timedelta(days=14),
             weeks_scope=[1, 2, 3, 4],
         )
 
@@ -57,7 +57,7 @@ class TestCreateExam:
                 session,
                 course_code="FAKE",
                 title="Test",
-                exam_date=datetime.utcnow() + timedelta(days=7),
+                exam_date=datetime.now(UTC) + timedelta(days=7),
                 weeks_scope=[1],
             )
 
@@ -76,7 +76,7 @@ class TestCreateExam:
                 session,
                 course_code="CSIT302",
                 title="Past Exam",
-                exam_date=datetime.utcnow() - timedelta(days=1),
+                exam_date=datetime.now(UTC) - timedelta(days=1),
                 weeks_scope=[1],
             )
 
@@ -96,7 +96,7 @@ class TestCreateExam:
             session,
             course_code="CSIT302",
             title="Final",
-            exam_date=datetime.utcnow() + timedelta(days=30),
+            exam_date=datetime.now(UTC) + timedelta(days=30),
             weeks_scope=[1, 2, 3],
             target_mastery_pct=90,
         )
@@ -113,7 +113,7 @@ class TestGetExam:
         session = AsyncMock()
         mock_exam = MagicMock()
         mock_exam.status = "active"
-        mock_exam.exam_date = datetime.utcnow() + timedelta(days=7)
+        mock_exam.exam_date = datetime.now(UTC) + timedelta(days=7)
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_exam
         session.execute = AsyncMock(return_value=mock_result)
@@ -128,7 +128,7 @@ class TestGetExam:
         session = AsyncMock()
         mock_exam = MagicMock()
         mock_exam.status = "active"
-        mock_exam.exam_date = datetime.utcnow() - timedelta(days=1)
+        mock_exam.exam_date = datetime.now(UTC) - timedelta(days=1)
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_exam
         session.execute = AsyncMock(return_value=mock_result)
@@ -158,7 +158,7 @@ class TestDeleteExam:
         session = AsyncMock()
         mock_exam = MagicMock()
         mock_exam.status = "active"
-        mock_exam.exam_date = datetime.utcnow() + timedelta(days=7)
+        mock_exam.exam_date = datetime.now(UTC) + timedelta(days=7)
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_exam
         session.execute = AsyncMock(return_value=mock_result)

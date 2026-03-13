@@ -1,8 +1,8 @@
 """UserDailyChallenge model — tracks user progress on daily challenges."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -20,8 +20,8 @@ class UserDailyChallenge(Base):
         String(36), ForeignKey("daily_challenges.id"), nullable=False
     )
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         UniqueConstraint("user_id", "daily_challenge_id", name="uq_user_daily_challenge"),

@@ -1,8 +1,8 @@
 """Exam model."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import ForeignKey, Index, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,12 +19,12 @@ class Exam(Base):
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     course_id: Mapped[str] = mapped_column(String(36), ForeignKey("courses.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    exam_date: Mapped[datetime] = mapped_column(nullable=False)
+    exam_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     weeks_scope: Mapped[list] = mapped_column(JSONB, nullable=False)
     target_mastery_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=80)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="exams")

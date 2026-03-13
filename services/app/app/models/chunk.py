@@ -1,9 +1,9 @@
 """Chunk model with pgvector embedding."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -24,7 +24,7 @@ class Chunk(Base):
     page_ref: Mapped[int] = mapped_column(Integer, nullable=False)
     slide_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     embedding = mapped_column(Vector(384), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     # Relationships
     artifact: Mapped["LectureArtifact"] = relationship(back_populates="chunks")

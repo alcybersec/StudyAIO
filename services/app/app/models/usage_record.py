@@ -1,8 +1,8 @@
 """UsageRecord model for tracking daily resource consumption."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -21,8 +21,8 @@ class UsageRecord(Base):
     ai_tokens_input: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ai_tokens_output: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     uploads_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     # Relationships
     user: Mapped["User"] = relationship()

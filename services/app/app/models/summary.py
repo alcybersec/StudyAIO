@@ -1,8 +1,8 @@
 """Summary model."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,8 +22,8 @@ class Summary(Base):
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     source_artifacts: Mapped[dict] = mapped_column(JSONB, nullable=False, default=list)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="summaries")

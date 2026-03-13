@@ -1,7 +1,7 @@
 """Pipeline stage 2: Extract — full content extraction with images."""
 
 import tempfile
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -56,7 +56,7 @@ async def _extract(artifact_id: str, user_id: str | None = None) -> dict:
             artifact_id=artifact_id,
             stage="extract",
             status="running",
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(UTC),
         )
         session.add(run)
         await session.flush()
@@ -120,7 +120,7 @@ async def _extract(artifact_id: str, user_id: str | None = None) -> dict:
 
             # Update pipeline run
             run.status = "completed"
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             if run.started_at:
                 delta = run.completed_at - run.started_at
                 run.duration_ms = int(delta.total_seconds() * 1000)
@@ -146,7 +146,7 @@ async def _extract(artifact_id: str, user_id: str | None = None) -> dict:
         except ExtractionError as e:
             run.status = "failed"
             run.error_message = str(e)
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             artifact.status = "failed"
             await session.commit()
             raise
@@ -154,7 +154,7 @@ async def _extract(artifact_id: str, user_id: str | None = None) -> dict:
         except Exception as e:
             run.status = "failed"
             run.error_message = str(e)
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             artifact.status = "failed"
             await session.commit()
             raise ExtractionError(f"Extraction failed: {e}") from e

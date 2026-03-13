@@ -1,6 +1,6 @@
 """XP and leveling service."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
@@ -125,7 +125,7 @@ async def award_xp(
     user_xp.total_xp += amount
     old_level = user_xp.level
     user_xp.level = calculate_level(user_xp.total_xp)
-    user_xp.updated_at = datetime.utcnow()
+    user_xp.updated_at = datetime.now(UTC)
     await session.flush()
 
     if user_xp.level > old_level:

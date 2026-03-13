@@ -1,6 +1,6 @@
 """Tests for schedule service."""
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -65,7 +65,7 @@ class TestGenerateStudySchedule:
         mock_exam = MagicMock()
         mock_exam.id = "exam-001"
         mock_exam.course_id = "course-001"
-        mock_exam.exam_date = datetime.utcnow() + timedelta(days=10)
+        mock_exam.exam_date = datetime.now(UTC) + timedelta(days=10)
         mock_exam.weeks_scope = [1, 2, 3, 4]
 
         mock_exam_result = MagicMock()
@@ -99,7 +99,7 @@ class TestGenerateStudySchedule:
         mock_exam = MagicMock()
         mock_exam.id = "exam-001"
         mock_exam.course_id = "course-001"
-        mock_exam.exam_date = datetime.utcnow() + timedelta(days=2)
+        mock_exam.exam_date = datetime.now(UTC) + timedelta(days=2)
         mock_exam.weeks_scope = [1, 2]
 
         mock_exam_result = MagicMock()

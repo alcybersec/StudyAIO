@@ -1,6 +1,6 @@
 """CourseOps service — upload, extract, and manage course documents, assessments, and deadlines."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import structlog
 from sqlalchemy import select
@@ -346,7 +346,7 @@ async def update_deadline(
     if is_confirmed is not None:
         deadline.is_confirmed = is_confirmed
 
-    deadline.updated_at = datetime.utcnow()
+    deadline.updated_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(deadline)
     return deadline
@@ -422,7 +422,7 @@ async def create_exam_from_deadline(
 
     # Mark deadline as confirmed
     deadline.is_confirmed = True
-    deadline.updated_at = datetime.utcnow()
+    deadline.updated_at = datetime.now(UTC)
 
     await session.commit()
     await session.refresh(exam)

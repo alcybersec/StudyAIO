@@ -1,7 +1,7 @@
 """Pipeline stage 1: Classify — identify course, week, and title."""
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -155,7 +155,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
             artifact_id=artifact_id,
             stage="classify",
             status="running",
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(UTC),
         )
         session.add(run)
         await session.flush()
@@ -216,7 +216,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
                 artifact.status = "classified"
 
                 run.status = "completed"
-                run.completed_at = datetime.utcnow()
+                run.completed_at = datetime.now(UTC)
                 if run.started_at:
                     delta = run.completed_at - run.started_at
                     run.duration_ms = int(delta.total_seconds() * 1000)
@@ -273,7 +273,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
 
                 artifact.status = "waiting_review"
                 run.status = "waiting_review"
-                run.completed_at = datetime.utcnow()
+                run.completed_at = datetime.now(UTC)
                 if run.started_at:
                     delta = run.completed_at - run.started_at
                     run.duration_ms = int(delta.total_seconds() * 1000)
@@ -291,7 +291,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
         except (ClassificationError, AgentError) as e:
             run.status = "failed"
             run.error_message = str(e)
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             artifact.status = "failed"
             await session.commit()
             raise
@@ -299,7 +299,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
         except Exception as e:
             run.status = "failed"
             run.error_message = str(e)
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             artifact.status = "failed"
             await session.commit()
             raise ClassificationError(f"Classification failed: {e}") from e

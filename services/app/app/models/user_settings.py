@@ -1,8 +1,8 @@
 """UserSettings model — per-user configuration stored in DB."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,8 +22,8 @@ class UserSettings(Base):
     settings_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     dashboard_layout: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     theme: Mapped[str] = mapped_column(String(20), nullable=False, default="system")
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="settings")

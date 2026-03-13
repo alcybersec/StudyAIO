@@ -1,8 +1,8 @@
 """OAuth account model."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import ForeignKey, Index, String
+from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -22,7 +22,7 @@ class OAuthAccount(Base):
     provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
     access_token: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     refresh_token: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="oauth_accounts")

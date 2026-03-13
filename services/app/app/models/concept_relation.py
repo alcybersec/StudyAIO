@@ -1,8 +1,8 @@
 """ConceptRelation model — an edge in the knowledge graph."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -26,7 +26,7 @@ class ConceptRelation(Base):
     source_artifact_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("lecture_artifacts.id"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     # Relationships
     source_concept = relationship(

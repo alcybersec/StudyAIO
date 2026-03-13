@@ -1,7 +1,7 @@
 """Pipeline stage 5: Assets — generate flashcards and quiz questions."""
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
@@ -68,7 +68,7 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
             artifact_id=artifact_id,
             stage="assets",
             status="running",
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(UTC),
         )
         session.add(run)
         await session.flush()
@@ -180,7 +180,7 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
 
             # Update pipeline run
             run.status = "completed"
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             if run.started_at:
                 delta = run.completed_at - run.started_at
                 run.duration_ms = int(delta.total_seconds() * 1000)
@@ -207,7 +207,7 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
         except (AssetGenerationError, AgentError) as e:
             run.status = "failed"
             run.error_message = str(e)
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             artifact.status = "failed"
             await session.commit()
             raise
@@ -215,7 +215,7 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
         except Exception as e:
             run.status = "failed"
             run.error_message = str(e)
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             artifact.status = "failed"
             await session.commit()
             raise AssetGenerationError(f"Asset generation failed: {e}") from e

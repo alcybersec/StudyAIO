@@ -1,8 +1,8 @@
 """StudySession model."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, ForeignKey, Index, Integer, String
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -27,7 +27,7 @@ class StudySession(Base):
     quiz_questions_answered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     quiz_correct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="study_sessions")

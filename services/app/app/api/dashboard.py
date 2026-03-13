@@ -84,9 +84,9 @@ async def get_dashboard(
         # Need course codes — build a lookup from course_items
         course_lookup = {c.id: c.code for c in course_items}
         for exam in exams:
-            from datetime import datetime
+            from datetime import UTC, datetime
 
-            days_remaining = max(0, (exam.exam_date - datetime.utcnow()).days)
+            days_remaining = max(0, (exam.exam_date - datetime.now(UTC)).days)
             active_exams.append(
                 DashboardExamSummary(
                     exam_id=exam.id,

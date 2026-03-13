@@ -1,6 +1,6 @@
 """Business logic for lecture artifact management."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -112,7 +112,7 @@ async def ingest_file(session: AsyncSession, source_path: str, user_id: str) -> 
         sha256=sha256,
         file_size_bytes=file_size,
         status="ingested",
-        pipeline_started_at=datetime.utcnow(),
+        pipeline_started_at=datetime.now(UTC),
     )
     session.add(artifact)
     await session.commit()

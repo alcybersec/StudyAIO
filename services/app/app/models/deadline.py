@@ -1,8 +1,8 @@
 """Deadline model — due dates extracted from course documents."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, Date, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -29,8 +29,8 @@ class Deadline(Base):
     )  # "exam", "assignment", "quiz", "project", "lab", "presentation", "other"
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="deadlines")

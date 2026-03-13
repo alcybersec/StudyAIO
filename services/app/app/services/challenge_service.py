@@ -1,6 +1,6 @@
 """Daily challenge service."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import structlog
 from sqlalchemy import select
@@ -163,7 +163,7 @@ async def update_challenge_progress(
 
     # Check completion
     if user_challenge.progress >= challenge.target:
-        user_challenge.completed_at = datetime.utcnow()
+        user_challenge.completed_at = datetime.now(UTC)
 
         # Award challenge XP
         from app.services import xp_service
