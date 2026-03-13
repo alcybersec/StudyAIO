@@ -117,7 +117,7 @@ jobs:
             cd ${{ vars.DEPLOY_DIR || '~/studyaio' }}
 
             export GHCR_OWNER="${{ github.repository_owner }}"
-            export IMAGE_TAG="${{ github.sha }}"
+            export IMAGE_TAG="$(echo '${{ github.sha }}' | cut -c1-7)"
             export API_IMAGE="ghcr.io/${GHCR_OWNER}/studyaio-api:${IMAGE_TAG}"
             export UI_IMAGE="ghcr.io/${GHCR_OWNER}/studyaio-ui:${IMAGE_TAG}"
 
