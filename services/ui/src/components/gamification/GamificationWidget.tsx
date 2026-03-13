@@ -8,7 +8,7 @@ interface GamificationWidgetProps {
 
 export function GamificationWidget({ gamification }: GamificationWidgetProps) {
   return (
-    <div className="h-full overflow-auto space-y-4">
+    <div className="space-y-4">
       <div className="rounded-lg border border-border bg-surface p-4">
         <h3 className="text-sm font-semibold text-text mb-3 flex items-center gap-1.5">
           <span>{'\u26A1'}</span> Your Progress
