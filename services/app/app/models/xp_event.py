@@ -20,7 +20,9 @@ class XPEvent(Base):
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     xp_amount: Mapped[int] = mapped_column(Integer, nullable=False)
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     __table_args__ = (
         Index("ix_xp_events_user_id", "user_id"),

@@ -26,7 +26,9 @@ class Flashcard(Base):
     )
     source_page_ref: Mapped[int] = mapped_column(Integer, nullable=False)
     generation_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="flashcards")

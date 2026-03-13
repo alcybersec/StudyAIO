@@ -23,7 +23,9 @@ class ChatMessage(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     citations_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     # Relationships
     session: Mapped["ChatSession"] = relationship(back_populates="messages")

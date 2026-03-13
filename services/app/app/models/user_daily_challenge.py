@@ -21,7 +21,9 @@ class UserDailyChallenge(Base):
     )
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "daily_challenge_id", name="uq_user_daily_challenge"),

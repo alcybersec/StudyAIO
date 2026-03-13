@@ -22,7 +22,9 @@ class OAuthAccount(Base):
     provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
     access_token: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     refresh_token: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="oauth_accounts")
