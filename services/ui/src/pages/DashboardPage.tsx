@@ -87,6 +87,18 @@ export function DashboardPage() {
 
   // Filter to only visible widgets that have content
   const activeWidgets = visibleWidgets.filter((w) => isVisible(w.key) && widgetContent[w.key] !== null)
+  const activeKeys = new Set(activeWidgets.map((w) => w.key))
+
+  // Filter layouts to only include active widgets so compaction fills gaps
+  const filteredLayouts = useMemo(() => {
+    const result: Record<string, unknown[]> = {}
+    for (const [bp, items] of Object.entries(layouts)) {
+      if (Array.isArray(items)) {
+        result[bp] = items.filter((item: { i: string }) => activeKeys.has(item.i))
+      }
+    }
+    return result as typeof layouts
+  }, [layouts, activeKeys]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div ref={containerRef}>
@@ -106,7 +118,7 @@ export function DashboardPage() {
       <ResponsiveGridLayout
         className="layout"
         width={width ?? 1200}
-        layouts={layouts}
+        layouts={filteredLayouts}
         breakpoints={{ lg: 1024, sm: 0 }}
         cols={{ lg: 12, sm: 12 }}
         rowHeight={30}
@@ -126,7 +138,7 @@ export function DashboardPage() {
             <div className="drag-handle absolute top-0 left-0 right-0 h-6 cursor-grab active:cursor-grabbing z-10 opacity-0 group-hover:opacity-100 transition-opacity hidden lg:flex items-center justify-center">
               <div className="w-8 h-1 rounded-full bg-border" />
             </div>
-            <div className="h-full overflow-auto">{widgetContent[w.key]}</div>
+            <div className="h-full">{widgetContent[w.key]}</div>
           </div>
         ))}
       </ResponsiveGridLayout>
