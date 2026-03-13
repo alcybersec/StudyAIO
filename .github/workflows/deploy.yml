@@ -116,27 +116,37 @@ jobs:
             set -e
             cd ${{ vars.DEPLOY_DIR || '~/studyaio' }}
 
+            export GHCR_OWNER="${{ github.repository_owner }}"
+            export IMAGE_TAG="${{ github.sha }}"
+            export API_IMAGE="ghcr.io/${GHCR_OWNER}/studyaio-api:${IMAGE_TAG}"
+            export UI_IMAGE="ghcr.io/${GHCR_OWNER}/studyaio-ui:${IMAGE_TAG}"
+
             # Log in to GHCR to pull private images
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${GHCR_OWNER}" --password-stdin
 
             # Pull latest images
-            docker compose -f docker-compose.yml \
-              -f docker-compose.selfhosted.yml \
-              -f docker-compose.production.yml \
-              pull api ui
+            docker pull "${API_IMAGE}"
+            docker pull "${UI_IMAGE}"
 
-            # Restart services (zero-downtime: api/worker restart while db/redis stay up)
+            # Tag as latest so compose uses them
+            docker tag "${API_IMAGE}" "ghcr.io/${GHCR_OWNER}/studyaio-api:latest"
+            docker tag "${UI_IMAGE}" "ghcr.io/${GHCR_OWNER}/studyaio-ui:latest"
+
+            # Restart services
             docker compose -f docker-compose.yml \
               -f docker-compose.selfhosted.yml \
-              -f docker-compose.production.yml \
               up -d --no-build --remove-orphans
 
             # Run any pending migrations
-            docker compose exec -T api alembic upgrade head
+            docker compose -f docker-compose.yml \
+              -f docker-compose.selfhosted.yml \
+              exec -T api alembic upgrade head
 
             # Verify health
             sleep 5
-            docker compose exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
+            docker compose -f docker-compose.yml \
+              -f docker-compose.selfhosted.yml \
+              exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
             echo "Deployment successful"
 
   deploy-ecs:
