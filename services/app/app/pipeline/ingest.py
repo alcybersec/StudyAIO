@@ -1,6 +1,6 @@
 """Pipeline stage 0: Ingest — receive file, hash, dedup, create artifact."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 
@@ -24,7 +24,7 @@ async def _ingest(file_path: str, user_id: str | None = None) -> dict:
             artifact_id="pending",  # will be updated after artifact creation
             stage="ingest",
             status="running",
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(UTC),
         )
 
         try:
@@ -33,7 +33,7 @@ async def _ingest(file_path: str, user_id: str | None = None) -> dict:
             # Update pipeline run with real artifact_id
             run.artifact_id = artifact.id
             run.status = "completed"
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             if run.started_at:
                 delta = run.completed_at - run.started_at
                 run.duration_ms = int(delta.total_seconds() * 1000)

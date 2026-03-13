@@ -1,6 +1,6 @@
 """Tests for the SM-2 spaced repetition service."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -161,7 +161,7 @@ class TestGetStudyStats:
     async def test_returns_correct_bucket_counts(self):
         """Stats correctly bucket cards into new/learning/mastered."""
         session = AsyncMock()
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         # Total: 5 cards
         mock_total = MagicMock()

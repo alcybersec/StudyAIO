@@ -1,8 +1,8 @@
 """DailyChallenge model — one challenge per day."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, Integer, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -20,6 +20,6 @@ class DailyChallenge(Base):
     target: Mapped[int] = mapped_column(Integer, nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
     xp_reward: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (UniqueConstraint("challenge_date", name="uq_daily_challenge_date"),)

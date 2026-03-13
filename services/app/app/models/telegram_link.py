@@ -1,8 +1,8 @@
 """TelegramLink model for linking Telegram accounts to users."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, ForeignKey, Index, String
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -22,8 +22,8 @@ class TelegramLink(Base):
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     verified: Mapped[bool] = mapped_column(default=False)
     link_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     __table_args__ = (
         Index("ix_telegram_links_user_id", "user_id", unique=True),

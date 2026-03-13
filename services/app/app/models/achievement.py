@@ -1,8 +1,8 @@
 """Achievement model — defines available achievements."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import Integer, String
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,4 +23,4 @@ class Achievement(Base):
     category: Mapped[str] = mapped_column(String(50), nullable=False, default="milestone")
     xp_reward: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     criteria_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

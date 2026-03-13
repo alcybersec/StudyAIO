@@ -1,6 +1,6 @@
 """Tests for DB-backed per-user settings (async functions)."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,7 +26,7 @@ def mock_user_settings():
     us.settings_json = {}
     us.theme = "system"
     us.dashboard_layout = None
-    us.updated_at = datetime.utcnow()
+    us.updated_at = datetime.now(UTC)
     return us
 
 

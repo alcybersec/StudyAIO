@@ -1,6 +1,6 @@
 """Business logic for Exam CRUD, quiz attempts, weak topics, and progress."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import case, func, select
@@ -51,9 +51,9 @@ async def create_exam(
     if not course:
         raise ValueError(f"Course '{course_code}' not found")
 
-    # Compare as naive datetimes (strip tzinfo if present)
-    naive_exam_date = exam_date.replace(tzinfo=None) if exam_date.tzinfo else exam_date
-    if naive_exam_date < datetime.utcnow():
+    # Ensure tz-aware for comparison
+    aware_exam_date = exam_date if exam_date.tzinfo else exam_date.replace(tzinfo=UTC)
+    if aware_exam_date < datetime.now(UTC):
         raise ValueError("Exam date must be in the future")
 
     exam = Exam(
@@ -61,7 +61,7 @@ async def create_exam(
         user_id=user_id or course.user_id,
         course_id=course.id,
         title=title,
-        exam_date=naive_exam_date,
+        exam_date=aware_exam_date,
         weeks_scope=weeks_scope,
         target_mastery_pct=target_mastery_pct,
         status="active",
@@ -89,7 +89,7 @@ async def get_exam(session: AsyncSession, exam_id: str, user_id: str | None = No
         query = query.where(Exam.user_id == user_id)
     result = await session.execute(query)
     exam = result.scalar_one_or_none()
-    if exam and exam.status == "active" and exam.exam_date < datetime.utcnow():
+    if exam and exam.status == "active" and exam.exam_date < datetime.now(UTC):
         exam.status = "completed"
         await session.flush()
         logger.info("exam_auto_completed", exam_id=exam.id)
@@ -125,7 +125,7 @@ async def list_exams(
     exams = list(result.scalars().all())
 
     # Auto-complete past active exams
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     for exam in exams:
         if exam.status == "active" and exam.exam_date < now:
             exam.status = "completed"
@@ -158,7 +158,7 @@ async def update_exam(
     for key, value in kwargs.items():
         if key in allowed:
             setattr(exam, key, value)
-    exam.updated_at = datetime.utcnow()
+    exam.updated_at = datetime.now(UTC)
     await session.flush()
     return exam
 
@@ -177,7 +177,7 @@ async def delete_exam(session: AsyncSession, exam_id: str) -> bool:
     if not exam:
         return False
     exam.status = "archived"
-    exam.updated_at = datetime.utcnow()
+    exam.updated_at = datetime.now(UTC)
     await session.flush()
     logger.info("exam_archived", exam_id=exam.id)
     return True
@@ -325,7 +325,7 @@ async def get_exam_progress(
     if not exam:
         return None
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     days_remaining = max(0, (exam.exam_date - now).days)
 
     # Quiz accuracy across exam scope

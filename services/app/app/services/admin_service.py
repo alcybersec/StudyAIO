@@ -1,6 +1,6 @@
 """Admin service — user management and system metrics."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import func, select
@@ -103,7 +103,7 @@ async def update_user(
     if is_active is not None:
         user.is_active = is_active
 
-    user.updated_at = datetime.utcnow()
+    user.updated_at = datetime.now(UTC)
     await session.commit()
 
     logger.info(
@@ -143,7 +143,7 @@ async def get_system_metrics(session: AsyncSession) -> dict:
     total_courses = (await session.execute(select(func.count(Course.id)))).scalar_one()
 
     # Pipeline runs in the last 24 hours
-    cutoff = datetime.utcnow() - timedelta(hours=24)
+    cutoff = datetime.now(UTC) - timedelta(hours=24)
     pipeline_runs_24h = (
         await session.execute(
             select(func.count(PipelineRun.id)).where(PipelineRun.started_at >= cutoff)

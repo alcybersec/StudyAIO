@@ -1,7 +1,7 @@
 """SM-2 spaced repetition algorithm and study session queries."""
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import func, select
@@ -99,7 +99,7 @@ async def get_due_cards(
     Returns:
         List of Flashcard objects due for review.
     """
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     query = (
         select(Flashcard)
@@ -142,7 +142,7 @@ async def record_review(
     Returns:
         Updated FlashcardReview record.
     """
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     # Find existing review
     result = await session.execute(
@@ -205,7 +205,7 @@ async def get_study_stats(
     Returns:
         StudyStats with total, due_today, mastered, learning, new counts.
     """
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     # Base query for total flashcards in scope
     base = select(Flashcard).join(Course, Flashcard.course_id == Course.id)
@@ -279,7 +279,7 @@ async def get_per_course_due_counts(
     Returns:
         List of dicts with course_code and due_count.
     """
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     # New cards (no review record) per course
     new_query = (

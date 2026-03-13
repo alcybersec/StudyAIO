@@ -1,8 +1,8 @@
 """CourseDocument model — uploaded course outlines, rubrics, etc."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, ForeignKey, Index, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -30,8 +30,8 @@ class CourseDocument(Base):
         String(20), nullable=False, default="pending"
     )  # "pending", "processing", "processed", "failed"
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="course_documents")

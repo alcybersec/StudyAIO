@@ -1,7 +1,7 @@
 """Google Calendar bidirectional sync service."""
 
 import hashlib
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import func, select
@@ -395,7 +395,7 @@ async def push_events(
             except Exception as e:
                 logger.warning("gcal_push_exam_create_failed", exam_id=exam.id, error=str(e))
 
-    cal_sync.last_synced_at = datetime.utcnow()
+    cal_sync.last_synced_at = datetime.now(UTC)
     await session.flush()
 
     logger.info("gcal_push_complete", user_id=user_id, sync_id=sync_id, changes=changes)
@@ -450,7 +450,7 @@ async def pull_events(
         if cal_sync.sync_token:
             kwargs["syncToken"] = cal_sync.sync_token
         else:
-            kwargs["timeMin"] = datetime.utcnow().isoformat() + "Z"
+            kwargs["timeMin"] = datetime.now(UTC).isoformat() + "Z"
 
         events_result = service.events().list(**kwargs).execute()
     except Exception as e:
@@ -503,7 +503,7 @@ async def pull_events(
         session.add(cal_event)
         imported += 1
 
-    cal_sync.last_synced_at = datetime.utcnow()
+    cal_sync.last_synced_at = datetime.now(UTC)
     await session.flush()
 
     logger.info("gcal_pull_complete", user_id=user_id, sync_id=sync_id, imported=imported)

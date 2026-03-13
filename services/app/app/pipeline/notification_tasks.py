@@ -1,6 +1,6 @@
 """Celery Beat scheduled notification tasks."""
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import structlog
 from sqlalchemy import func, select
@@ -39,7 +39,7 @@ async def _send_daily_reminders() -> int:
         if not user_ids:
             return 0
 
-        today = datetime.utcnow()
+        today = datetime.now(UTC)
 
         for user_id in user_ids:
             try:
@@ -83,7 +83,7 @@ async def _send_weekly_digest() -> int:
     from app.services import notification_service
 
     notified = 0
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_ago = datetime.now(UTC) - timedelta(days=7)
 
     async with async_session_factory() as session:
         # Find users with weekly_digest enabled

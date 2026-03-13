@@ -1,8 +1,8 @@
 """LectureArtifact model."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -27,10 +27,10 @@ class LectureArtifact(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ingested")
-    pipeline_started_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    pipeline_completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    pipeline_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pipeline_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="artifacts")

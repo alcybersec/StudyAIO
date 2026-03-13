@@ -1,6 +1,6 @@
 """Adaptive study schedule generation based on exam proximity."""
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import structlog
 from sqlalchemy import func, select
@@ -58,7 +58,7 @@ async def generate_study_schedule(
     if not exam:
         return None
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     max(0, (exam.exam_date - now).days)
 
     # Total due cards in scope

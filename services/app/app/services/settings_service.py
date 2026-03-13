@@ -9,7 +9,7 @@ For pipeline tasks (synchronous context without a DB session),
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -295,7 +295,7 @@ async def update_user_settings(
     if dashboard_layout is not None:
         user_settings.dashboard_layout = dashboard_layout
 
-    user_settings.updated_at = datetime.utcnow()
+    user_settings.updated_at = datetime.now(UTC)
     await session.commit()
     logger.info("user_settings_updated", user_id=user_id, keys=list(updates.keys()))
 

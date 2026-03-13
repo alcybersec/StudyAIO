@@ -1,6 +1,6 @@
 """Business logic for Summary management."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -124,7 +124,7 @@ async def create_or_update_summary(
         existing.file_path = file_path
         existing.version = existing.version + 1
         existing.source_artifacts = merged_sources
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = datetime.now(UTC)
 
         await session.flush()
         logger.info(

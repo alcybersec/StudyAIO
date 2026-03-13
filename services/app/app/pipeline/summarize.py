@@ -1,7 +1,7 @@
 """Pipeline stage 3: Summarize — generate weekly markdown summaries."""
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
@@ -65,7 +65,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
             artifact_id=artifact_id,
             stage="summarize",
             status="running",
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(UTC),
         )
         session.add(run)
         await session.flush()
@@ -136,7 +136,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
 
             # Update pipeline run
             run.status = "completed"
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             if run.started_at:
                 delta = run.completed_at - run.started_at
                 run.duration_ms = int(delta.total_seconds() * 1000)
@@ -165,7 +165,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
         except (SummarizationError, AgentError) as e:
             run.status = "failed"
             run.error_message = str(e)
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             artifact.status = "failed"
             await session.commit()
             raise
@@ -173,7 +173,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
         except Exception as e:
             run.status = "failed"
             run.error_message = str(e)
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(UTC)
             artifact.status = "failed"
             await session.commit()
             raise SummarizationError(f"Summarization failed: {e}") from e

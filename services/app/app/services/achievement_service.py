@@ -1,6 +1,6 @@
 """Achievement checking and management service."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import func, select
@@ -91,7 +91,7 @@ async def check_achievements(
                 id=generate_id(),
                 user_id=user_id,
                 achievement_id=achievement.id,
-                earned_at=datetime.utcnow(),
+                earned_at=datetime.now(UTC),
                 notified=False,
             )
             session.add(ua)

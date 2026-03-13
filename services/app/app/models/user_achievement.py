@@ -1,8 +1,8 @@
 """UserAchievement model — tracks which achievements a user has earned."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -19,7 +19,7 @@ class UserAchievement(Base):
     achievement_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("achievements.id"), nullable=False
     )
-    earned_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    earned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     notified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (

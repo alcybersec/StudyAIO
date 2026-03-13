@@ -1,8 +1,8 @@
 """ReviewItem model."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import Index, String, text
+from sqlalchemy import DateTime, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,8 +23,8 @@ class ReviewItem(Base):
     suggested_values: Mapped[dict] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     resolution_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    resolved_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index(

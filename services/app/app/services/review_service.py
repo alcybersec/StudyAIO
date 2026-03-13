@@ -1,6 +1,6 @@
 """Business logic for Review Item management."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import func, select
@@ -41,7 +41,7 @@ async def create_review_item(
         payload_json=payload,
         suggested_values=suggested_values,
         status="pending",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
     session.add(review)
     await session.flush()
@@ -125,7 +125,7 @@ async def resolve_review_item(
 
     item.status = "resolved"
     item.resolution_json = resolution
-    item.resolved_at = datetime.utcnow()
+    item.resolved_at = datetime.now(UTC)
     await session.flush()
 
     logger.info(
@@ -157,7 +157,7 @@ async def dismiss_review_item(session: AsyncSession, review_id: str) -> ReviewIt
         raise ValueError(f"ReviewItem {review_id} is already {item.status}")
 
     item.status = "dismissed"
-    item.resolved_at = datetime.utcnow()
+    item.resolved_at = datetime.now(UTC)
     await session.flush()
 
     logger.info("review_item_dismissed", review_id=review_id)
