@@ -105,6 +105,9 @@ jobs:
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
       && vars.DEPLOY_TARGET == 'selfhosted'
     steps:
+      - name: Fix workspace permissions
+        run: docker run --rm -v "${{ github.workspace }}:/__w" alpine chown -R $(id -u):$(id -g) /__w || true
+
       - uses: actions/checkout@v4
 
       - name: Copy compose files to server
