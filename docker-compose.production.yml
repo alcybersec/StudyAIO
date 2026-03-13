@@ -1,0 +1,26 @@
+# Production overrides — use pre-built GHCR images instead of local builds.
+#
+# Usage (with self-hosted):
+#   docker compose -f docker-compose.yml \
+#     -f docker-compose.selfhosted.yml \
+#     -f docker-compose.production.yml up -d
+#
+# Set GHCR_OWNER to your GitHub username/org (default: alcybersec).
+# Set IMAGE_TAG to pin a version (default: latest).
+
+services:
+  ui:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-ui:${IMAGE_TAG:-latest}
+    build: !reset null
+
+  api:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
+    build: !reset null
+
+  worker:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
+    build: !reset null
+
+  beat:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
+    build: !reset null
