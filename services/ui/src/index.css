@@ -68,3 +68,16 @@
 .safe-area-pb {
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
+
+/* React Grid Layout overrides */
+.react-grid-item {
+  transition: none !important;
+}
+.react-grid-item > .react-resizable-handle {
+  display: none;
+}
+.react-grid-item.react-grid-placeholder {
+  background: var(--theme-primary) !important;
+  opacity: 0.1 !important;
+  border-radius: 0.75rem !important;
+}
