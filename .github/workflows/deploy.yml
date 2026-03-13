@@ -97,11 +97,55 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+  deploy-selfhosted:
+    name: Deploy to Self-Hosted Server
+    needs: [build-api, build-ui]
+    runs-on: [self-hosted, homelab]
+    if: |
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+      && vars.DEPLOY_TARGET == 'selfhosted'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ vars.DEPLOY_SSH_PORT || '22' }}
+          script: |
+            set -e
+            cd ${{ vars.DEPLOY_DIR || '~/studyaio' }}
+
+            # Log in to GHCR to pull private images
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+
+            # Pull latest images
+            docker compose -f docker-compose.yml \
+              -f docker-compose.selfhosted.yml \
+              -f docker-compose.production.yml \
+              pull api ui
+
+            # Restart services (zero-downtime: api/worker restart while db/redis stay up)
+            docker compose -f docker-compose.yml \
+              -f docker-compose.selfhosted.yml \
+              -f docker-compose.production.yml \
+              up -d --no-build --remove-orphans
+
+            # Run any pending migrations
+            docker compose exec -T api alembic upgrade head
+
+            # Verify health
+            sleep 5
+            docker compose exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
+            echo "Deployment successful"
+
   deploy-ecs:
     name: Deploy to ECS
     needs: [build-api, build-ui]
     runs-on: [self-hosted, homelab]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    if: |
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+      && vars.DEPLOY_TARGET == 'ecs'
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
