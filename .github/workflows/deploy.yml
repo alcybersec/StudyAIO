@@ -105,6 +105,18 @@ jobs:
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
       && vars.DEPLOY_TARGET == 'selfhosted'
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy compose files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ vars.DEPLOY_SSH_PORT || '22' }}
+          source: "docker-compose.yml,docker-compose.selfhosted.yml"
+          target: ${{ vars.DEPLOY_DIR || '~/studyaio' }}
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -132,7 +144,7 @@ jobs:
             docker tag "${API_IMAGE}" "ghcr.io/${GHCR_OWNER}/studyaio-api:latest"
             docker tag "${UI_IMAGE}" "ghcr.io/${GHCR_OWNER}/studyaio-ui:latest"
 
-            # Stop Traefik if left over from previous config
+            # Remove Traefik if left over from previous config
             docker rm -f studyaio-traefik-1 2>/dev/null || true
 
             # Restart services

@@ -30,6 +30,7 @@ services:
   beat:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    command: celery -A app.worker:celery_app beat --loglevel=info -s /tmp/celerybeat-schedule
 
   db:
     restart: unless-stopped
