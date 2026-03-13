@@ -281,18 +281,13 @@ async def reset_password_with_token(
     if link.used_at is not None:
         raise AuthenticationError("Reset token already used")
 
-    now = datetime.now(UTC)
-    expires_naive = (
-        link.expires_at.replace(tzinfo=None) if link.expires_at.tzinfo else link.expires_at
-    )
-    now_naive = now.replace(tzinfo=None)
-    if now_naive > expires_naive:
+    if datetime.now(UTC) > link.expires_at:
         raise AuthenticationError("Reset token has expired")
 
     _validate_password(new_password)
 
     # Mark token as used
-    link.used_at = now
+    link.used_at = datetime.now(UTC)
 
     # Update password
     user = await get_user_by_id(session, link.user_id)
@@ -326,15 +321,10 @@ async def verify_email_token(session: AsyncSession, token: str) -> None:
     if link.used_at is not None:
         raise AuthenticationError("Verification token already used")
 
-    now = datetime.now(UTC)
-    expires_naive = (
-        link.expires_at.replace(tzinfo=None) if link.expires_at.tzinfo else link.expires_at
-    )
-    now_naive = now.replace(tzinfo=None)
-    if now_naive > expires_naive:
+    if datetime.now(UTC) > link.expires_at:
         raise AuthenticationError("Verification token has expired")
 
-    link.used_at = now
+    link.used_at = datetime.now(UTC)
 
     user = await get_user_by_id(session, link.user_id)
     if user:

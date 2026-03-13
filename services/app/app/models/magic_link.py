@@ -1,8 +1,8 @@
 """Magic link model for passwordless auth and password resets."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import ForeignKey, Index, String
+from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -20,9 +20,11 @@ class MagicLink(Base):
     )
     token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     link_type: Mapped[str] = mapped_column(String(30), nullable=False, default="password_reset")
-    expires_at: Mapped[datetime] = mapped_column(nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="magic_links")
