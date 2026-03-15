@@ -10,8 +10,13 @@ Validates that admin-related data conforms to expected schemas:
 import pytest
 
 from app.api.admin import (
+    PipelineFailure,
+    PipelineStageBreakdown,
+    SubscriptionSection,
     SystemMetricsResponse,
+    UserDetailResponse,
     UserListResponse,
+    UserProfileSection,
     UserResponse,
     UserUpdateRequest,
 )
@@ -259,23 +264,6 @@ class TestUserUpdateRequestStructure:
 
 
 # -- UserDetailResponse structure ----------------------------------------------
-
-from app.api.admin import (
-    ChatSection,
-    ContentSection,
-    GamificationSection,
-    PipelineFailure,
-    PipelineSection,
-    PipelineStageBreakdown,
-    StorageSection,
-    StudySection,
-    SubscriptionSection,
-    UsagePeriod,
-    UsageSection,
-    UserDetailResponse,
-    UserProfileSection,
-)
-
 
 @pytest.fixture
 def sample_user_profile():

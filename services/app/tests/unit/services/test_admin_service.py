@@ -218,7 +218,6 @@ class TestGetUserDetails:
 
         # Track execute calls to intercept storage queries
         call_count = 0
-        original_execute = mock_session.execute
 
         async def execute_side_effect(*args, **kwargs):
             nonlocal call_count
