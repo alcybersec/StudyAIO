@@ -26,7 +26,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (settings && !form) {
-      setForm(settings) // eslint-disable-line react-hooks/set-state-in-effect
+      setForm(settings)
     }
   }, [settings, form])
 

@@ -90,7 +90,7 @@ export function DashboardPage() {
   const activeKeys = new Set(activeWidgets.map((w) => w.key))
 
   // Filter layouts to only include active widgets and re-compact vertically
-  const filteredLayouts = useMemo(() => {
+  const filteredLayouts = (() => {
     const result: Record<string, unknown[]> = {}
     for (const [bp, items] of Object.entries(layouts)) {
       if (Array.isArray(items)) {
@@ -116,7 +116,7 @@ export function DashboardPage() {
       }
     }
     return result as typeof layouts
-  }, [layouts, activeKeys]) // eslint-disable-line react-hooks/exhaustive-deps
+  })()
 
   return (
     <div ref={containerRef}>
