@@ -57,7 +57,7 @@ export function RetentionCurve() {
 
       {!isLoading && points.length > 0 && (
         <div className="rounded-lg border border-border bg-surface p-4">
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={260}>
             <LineChart data={points} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis
