@@ -28,7 +28,7 @@ export function AnalyticsPage() {
       />
 
       <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
-        <Tabs.List className="flex border-b border-border mb-6 gap-1 overflow-x-auto">
+        <Tabs.List className="flex border-b border-border mb-6 gap-1">
           {TABS.map((tab) => (
             <Tabs.Trigger
               key={tab}
