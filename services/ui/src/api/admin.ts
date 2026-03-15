@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { AdminUser, AdminUserList, AdminUserUpdate, SystemMetrics } from '../types'
+import type { AdminUser, AdminUserDetail, AdminUserList, AdminUserUpdate, SystemMetrics } from '../types'
 
 export const adminApi = {
   listUsers(params?: {
@@ -25,5 +25,9 @@ export const adminApi = {
 
   getMetrics(): Promise<SystemMetrics> {
     return api.get<SystemMetrics>('/admin/metrics')
+  },
+
+  getUserDetails(userId: string): Promise<AdminUserDetail> {
+    return api.get<AdminUserDetail>(`/admin/users/${userId}/details`)
   },
 }

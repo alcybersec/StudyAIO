@@ -815,6 +815,117 @@ export interface SystemMetrics {
   total_storage_mb: number
 }
 
+// ── Admin User Detail ─────────────────────────────────────────
+
+export interface AdminUserProfile {
+  id: string
+  email: string
+  username: string | null
+  role: string
+  tier: string
+  is_active: boolean
+  email_verified: boolean
+  mfa_enabled: boolean
+  avatar_url: string | null
+  last_login_at: string | null
+  created_at: string | null
+}
+
+export interface AdminSubscriptionSection {
+  plan: string
+  status: string
+  current_period_start: string | null
+  current_period_end: string | null
+  cancel_at_period_end: boolean
+}
+
+export interface AdminStorageSection {
+  total_bytes: number
+  total_mb: number
+  total_files: number
+  status_breakdown: Record<string, number>
+}
+
+export interface AdminUsagePeriod {
+  ai_calls: number
+  tokens_input: number
+  tokens_output: number
+  uploads: number
+}
+
+export interface AdminUsageSection {
+  today: AdminUsagePeriod
+  last_30_days: AdminUsagePeriod
+}
+
+export interface AdminPipelineStage {
+  stage: string
+  total: number
+  success: number
+  failed: number
+}
+
+export interface AdminPipelineFailure {
+  stage: string
+  error_message: string | null
+  started_at: string | null
+}
+
+export interface AdminPipelineSection {
+  total_runs: number
+  success_count: number
+  failed_count: number
+  avg_duration_ms: number
+  stages: AdminPipelineStage[]
+  recent_failures: AdminPipelineFailure[]
+}
+
+export interface AdminStudySection {
+  total_sessions: number
+  cards_reviewed: number
+  quiz_questions_answered: number
+  quiz_correct: number
+  quiz_accuracy_pct: number
+  total_study_hours: number
+}
+
+export interface AdminCourseBreakdown {
+  code: string
+  name: string | null
+  artifact_count: number
+}
+
+export interface AdminContentSection {
+  courses_count: number
+  artifacts_count: number
+  exams_count: number
+  per_course: AdminCourseBreakdown[]
+}
+
+export interface AdminGamificationSection {
+  total_xp: number
+  level: number
+  achievements_count: number
+}
+
+export interface AdminChatSection {
+  total_sessions: number
+  total_messages: number
+  total_tokens: number
+}
+
+export interface AdminUserDetail {
+  profile: AdminUserProfile
+  subscription: AdminSubscriptionSection | null
+  storage: AdminStorageSection | null
+  usage: AdminUsageSection | null
+  pipeline: AdminPipelineSection | null
+  study: AdminStudySection | null
+  content: AdminContentSection | null
+  gamification: AdminGamificationSection | null
+  chat: AdminChatSection | null
+}
+
 // ── Calendar Sync ──────────────────────────────────────────────
 
 export interface CalendarSyncInfo {

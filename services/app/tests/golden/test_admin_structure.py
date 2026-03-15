@@ -256,3 +256,234 @@ class TestUserUpdateRequestStructure:
         assert model.role == "user"
         assert model.tier == "pro"
         assert model.is_active is True
+
+
+# -- UserDetailResponse structure ----------------------------------------------
+
+from app.api.admin import (
+    ChatSection,
+    ContentSection,
+    GamificationSection,
+    PipelineFailure,
+    PipelineSection,
+    PipelineStageBreakdown,
+    StorageSection,
+    StudySection,
+    SubscriptionSection,
+    UsagePeriod,
+    UsageSection,
+    UserDetailResponse,
+    UserProfileSection,
+)
+
+
+@pytest.fixture
+def sample_user_profile():
+    """A realistic user profile section."""
+    return {
+        "id": "user-001",
+        "email": "alice@example.com",
+        "username": "alice",
+        "role": "user",
+        "tier": "free",
+        "is_active": True,
+        "email_verified": True,
+        "mfa_enabled": False,
+        "avatar_url": None,
+        "last_login_at": "2026-03-01T08:30:00",
+        "created_at": "2026-01-15T10:00:00",
+    }
+
+
+@pytest.fixture
+def sample_full_user_detail(sample_user_profile):
+    """A complete user detail response with all sections."""
+    return {
+        "profile": sample_user_profile,
+        "subscription": {
+            "plan": "pro",
+            "status": "active",
+            "current_period_start": "2026-03-01T00:00:00",
+            "current_period_end": "2026-04-01T00:00:00",
+            "cancel_at_period_end": False,
+        },
+        "storage": {
+            "total_bytes": 10485760,
+            "total_mb": 10.0,
+            "total_files": 15,
+            "status_breakdown": {"processed": 12, "ingested": 3},
+        },
+        "usage": {
+            "today": {"ai_calls": 5, "tokens_input": 2000, "tokens_output": 1000, "uploads": 2},
+            "last_30_days": {"ai_calls": 100, "tokens_input": 50000, "tokens_output": 25000, "uploads": 20},
+        },
+        "pipeline": {
+            "total_runs": 30,
+            "success_count": 28,
+            "failed_count": 2,
+            "avg_duration_ms": 4500,
+            "stages": [
+                {"stage": "ingest", "total": 10, "success": 10, "failed": 0},
+                {"stage": "classify", "total": 10, "success": 9, "failed": 1},
+            ],
+            "recent_failures": [
+                {"stage": "classify", "error_message": "Timeout", "started_at": "2026-03-10T10:00:00"},
+            ],
+        },
+        "study": {
+            "total_sessions": 25,
+            "cards_reviewed": 500,
+            "quiz_questions_answered": 150,
+            "quiz_correct": 120,
+            "quiz_accuracy_pct": 80.0,
+            "total_study_hours": 20.5,
+        },
+        "content": {
+            "courses_count": 3,
+            "artifacts_count": 15,
+            "exams_count": 4,
+            "per_course": [
+                {"code": "CSIT302", "name": "Cybersecurity", "artifact_count": 8},
+                {"code": "CSIT314", "name": "Software Dev", "artifact_count": 7},
+            ],
+        },
+        "gamification": {"total_xp": 2500, "level": 7, "achievements_count": 12},
+        "chat": {"total_sessions": 15, "total_messages": 80, "total_tokens": 40000},
+    }
+
+
+class TestUserDetailResponseStructure:
+    """Validate UserDetailResponse schema structure."""
+
+    def test_has_all_section_keys(self, sample_full_user_detail) -> None:
+        """UserDetailResponse has all 9 section keys."""
+        expected = {
+            "profile", "subscription", "storage", "usage",
+            "pipeline", "study", "content", "gamification", "chat",
+        }
+        assert set(sample_full_user_detail.keys()) == expected
+
+    def test_pydantic_model_accepts_full_data(self, sample_full_user_detail) -> None:
+        """UserDetailResponse Pydantic model accepts complete data."""
+        model = UserDetailResponse(**sample_full_user_detail)
+        assert model.profile.id == "user-001"
+        assert model.subscription is not None
+        assert model.subscription.plan == "pro"
+        assert model.storage is not None
+        assert model.storage.total_files == 15
+        assert model.pipeline is not None
+        assert model.pipeline.total_runs == 30
+
+    def test_pydantic_model_accepts_null_sections(self, sample_user_profile) -> None:
+        """UserDetailResponse accepts None for all optional sections."""
+        data = {"profile": sample_user_profile}
+        model = UserDetailResponse(**data)
+        assert model.profile.id == "user-001"
+        assert model.subscription is None
+        assert model.storage is None
+        assert model.usage is None
+        assert model.pipeline is None
+        assert model.study is None
+        assert model.content is None
+        assert model.gamification is None
+        assert model.chat is None
+
+
+class TestUserProfileSectionStructure:
+    """Validate UserProfileSection schema."""
+
+    def test_has_required_fields(self, sample_user_profile) -> None:
+        """Profile has all required fields."""
+        required = {
+            "id", "email", "username", "role", "tier", "is_active",
+            "email_verified", "mfa_enabled", "avatar_url",
+            "last_login_at", "created_at",
+        }
+        missing = required - sample_user_profile.keys()
+        assert not missing, f"Missing fields: {missing}"
+
+    def test_pydantic_model_accepts_valid_data(self, sample_user_profile) -> None:
+        """UserProfileSection Pydantic model works."""
+        model = UserProfileSection(**sample_user_profile)
+        assert model.email == "alice@example.com"
+        assert model.email_verified is True
+        assert model.mfa_enabled is False
+
+
+class TestSubscriptionSectionStructure:
+    """Validate SubscriptionSection schema."""
+
+    def test_has_required_fields(self, sample_full_user_detail) -> None:
+        """Subscription has all required fields."""
+        sub = sample_full_user_detail["subscription"]
+        required = {"plan", "status", "current_period_start", "current_period_end", "cancel_at_period_end"}
+        missing = required - sub.keys()
+        assert not missing, f"Missing fields: {missing}"
+
+    def test_pydantic_model_accepts_valid_data(self, sample_full_user_detail) -> None:
+        """SubscriptionSection Pydantic model works."""
+        model = SubscriptionSection(**sample_full_user_detail["subscription"])
+        assert model.plan == "pro"
+        assert model.cancel_at_period_end is False
+
+
+class TestStorageSectionStructure:
+    """Validate StorageSection schema."""
+
+    def test_has_required_fields(self, sample_full_user_detail) -> None:
+        """Storage has all required fields."""
+        storage = sample_full_user_detail["storage"]
+        required = {"total_bytes", "total_mb", "total_files", "status_breakdown"}
+        missing = required - storage.keys()
+        assert not missing, f"Missing fields: {missing}"
+
+    def test_status_breakdown_is_dict(self, sample_full_user_detail) -> None:
+        """status_breakdown is a dict of string to int."""
+        breakdown = sample_full_user_detail["storage"]["status_breakdown"]
+        assert isinstance(breakdown, dict)
+        for k, v in breakdown.items():
+            assert isinstance(k, str)
+            assert isinstance(v, int)
+
+
+class TestPipelineSectionStructure:
+    """Validate PipelineSection schema."""
+
+    def test_has_required_fields(self, sample_full_user_detail) -> None:
+        """Pipeline has all required fields."""
+        pipeline = sample_full_user_detail["pipeline"]
+        required = {"total_runs", "success_count", "failed_count", "avg_duration_ms", "stages", "recent_failures"}
+        missing = required - pipeline.keys()
+        assert not missing, f"Missing fields: {missing}"
+
+    def test_stage_breakdown_structure(self, sample_full_user_detail) -> None:
+        """Each stage entry has stage/total/success/failed."""
+        for stage in sample_full_user_detail["pipeline"]["stages"]:
+            model = PipelineStageBreakdown(**stage)
+            assert model.stage
+            assert model.total >= 0
+
+    def test_failure_structure(self, sample_full_user_detail) -> None:
+        """Each failure entry has stage/error_message/started_at."""
+        for failure in sample_full_user_detail["pipeline"]["recent_failures"]:
+            model = PipelineFailure(**failure)
+            assert model.stage
+
+
+class TestStudySectionStructure:
+    """Validate StudySection schema."""
+
+    def test_has_required_fields(self, sample_full_user_detail) -> None:
+        """Study has all required fields."""
+        study = sample_full_user_detail["study"]
+        required = {
+            "total_sessions", "cards_reviewed", "quiz_questions_answered",
+            "quiz_correct", "quiz_accuracy_pct", "total_study_hours",
+        }
+        missing = required - study.keys()
+        assert not missing, f"Missing fields: {missing}"
+
+    def test_quiz_accuracy_is_percentage(self, sample_full_user_detail) -> None:
+        """quiz_accuracy_pct is between 0 and 100."""
+        pct = sample_full_user_detail["study"]["quiz_accuracy_pct"]
+        assert 0 <= pct <= 100
