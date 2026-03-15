@@ -89,12 +89,30 @@ export function DashboardPage() {
   const activeWidgets = visibleWidgets.filter((w) => isVisible(w.key) && widgetContent[w.key] !== null)
   const activeKeys = new Set(activeWidgets.map((w) => w.key))
 
-  // Filter layouts to only include active widgets so compaction fills gaps
+  // Filter layouts to only include active widgets and re-compact vertically
   const filteredLayouts = useMemo(() => {
     const result: Record<string, unknown[]> = {}
     for (const [bp, items] of Object.entries(layouts)) {
       if (Array.isArray(items)) {
-        result[bp] = items.filter((item: { i: string }) => activeKeys.has(item.i))
+        const filtered = items
+          .filter((item: { i: string }) => activeKeys.has(item.i))
+          .sort((a: { y: number; x: number }, b: { y: number; x: number }) => a.y - b.y || a.x - b.x)
+
+        // Re-compact: for each item, find the earliest y it can fit without overlapping
+        const placed: { x: number; y: number; w: number; h: number }[] = []
+        result[bp] = filtered.map((item: { i: string; x: number; y: number; w: number; h: number }) => {
+          let newY = 0
+          // Find the lowest y where this item fits
+          for (const p of placed) {
+            // Check if they overlap on x-axis
+            if (item.x < p.x + p.w && item.x + item.w > p.x) {
+              newY = Math.max(newY, p.y + p.h)
+            }
+          }
+          const compacted = { ...item, y: newY }
+          placed.push(compacted)
+          return compacted
+        })
       }
     }
     return result as typeof layouts
