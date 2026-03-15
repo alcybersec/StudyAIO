@@ -10,6 +10,7 @@ import { LoadingSpinner } from './components/ui/LoadingSpinner'
 
 // Lazy-loaded page components (route-level code splitting)
 const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })))
+const AdminUserDetailPage = lazy(() => import('./pages/AdminUserDetailPage').then(m => ({ default: m.AdminUserDetailPage })))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })))
 const ChatPage = lazy(() => import('./pages/ChatPage').then(m => ({ default: m.ChatPage })))
 const CoursePage = lazy(() => import('./pages/CoursePage').then(m => ({ default: m.CoursePage })))
@@ -98,6 +99,7 @@ export const router = createBrowserRouter([
               { path: '/knowledge', element: <KnowledgeGraphPage /> },
               { path: '/achievements', element: <AchievementsPage /> },
               { path: '/admin', element: <AdminPage /> },
+              { path: '/admin/users/:userId', element: <AdminUserDetailPage /> },
               { path: '/settings', element: <SettingsPage /> },
               { path: '/profile', element: <ProfilePage /> },
               { path: '*', element: <NotFoundPage /> },

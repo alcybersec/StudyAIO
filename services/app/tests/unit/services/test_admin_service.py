@@ -25,6 +25,9 @@ def _make_user_model(
     role="user",
     tier="free",
     is_active=True,
+    email_verified=False,
+    mfa_enabled=False,
+    avatar_url=None,
 ):
     """Create a mock User model object."""
     user = MagicMock()
@@ -34,6 +37,9 @@ def _make_user_model(
     user.role = role
     user.tier = tier
     user.is_active = is_active
+    user.email_verified = email_verified
+    user.mfa_enabled = mfa_enabled
+    user.avatar_url = avatar_url
     user.created_at = datetime(2025, 1, 15, 10, 0, 0)
     user.last_login_at = datetime(2025, 6, 1, 12, 0, 0)
     user.updated_at = datetime(2025, 6, 1, 12, 0, 0)
@@ -155,3 +161,143 @@ class TestGetSystemMetrics:
         assert metrics["pipeline_runs_24h"] == 7
         assert metrics["total_storage_bytes"] == 1024 * 1024 * 100
         assert metrics["total_storage_mb"] == 100.0
+
+
+@pytest.mark.asyncio
+class TestGetUserDetails:
+    """Tests for get_user_details()."""
+
+    async def test_nonexistent_user_returns_none(self, mock_session):
+        """get_user_details returns None when user doesn't exist."""
+        mock_session.get = AsyncMock(return_value=None)
+
+        result = await admin_service.get_user_details(mock_session, "nonexistent")
+        assert result is None
+
+    async def test_returns_profile_section(self, mock_session):
+        """get_user_details returns profile data for existing user."""
+        user = _make_user_model()
+        mock_session.get = AsyncMock(return_value=user)
+
+        result = await admin_service.get_user_details(mock_session, "user-001")
+        assert result is not None
+        assert result["profile"]["id"] == "user-001"
+        assert result["profile"]["email"] == "test@example.com"
+        assert result["profile"]["username"] == "testuser"
+        assert result["profile"]["role"] == "user"
+        assert result["profile"]["tier"] == "free"
+        assert result["profile"]["is_active"] is True
+
+    async def test_returns_all_nine_sections(self, mock_session):
+        """get_user_details returns all 9 section keys."""
+        user = _make_user_model()
+        mock_session.get = AsyncMock(return_value=user)
+
+        result = await admin_service.get_user_details(mock_session, "user-001")
+        assert result is not None
+        expected_keys = {
+            "profile", "subscription", "storage", "usage",
+            "pipeline", "study", "content", "gamification", "chat",
+        }
+        assert set(result.keys()) == expected_keys
+
+    async def test_subscription_section_returns_none_when_no_subscription(self, mock_session):
+        """Subscription is None when user has no subscription record."""
+        user = _make_user_model()
+        mock_session.get = AsyncMock(return_value=user)
+
+        # Default mock_session.execute returns empty scalars
+        result = await admin_service.get_user_details(mock_session, "user-001")
+        assert result is not None
+        assert result["subscription"] is None
+
+    async def test_storage_aggregation_correctness(self, mock_session):
+        """Storage section correctly aggregates file size and counts."""
+        user = _make_user_model()
+        mock_session.get = AsyncMock(return_value=user)
+
+        # Track execute calls to intercept storage queries
+        call_count = 0
+        original_execute = mock_session.execute
+
+        async def execute_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+
+            # Call 1: subscription query (return empty)
+            if call_count == 1:
+                r = MagicMock()
+                r.scalars.return_value.first.return_value = None
+                return r
+
+            # Call 2: storage totals (SUM bytes, COUNT files)
+            if call_count == 2:
+                r = MagicMock()
+                r.one.return_value = (5242880, 10)  # 5MB, 10 files
+                return r
+
+            # Call 3: storage status breakdown
+            if call_count == 3:
+                r = MagicMock()
+                r.all.return_value = [("processed", 8), ("ingested", 2)]
+                return r
+
+            # Default fallback for remaining calls
+            r = MagicMock()
+            r.scalars.return_value.first.return_value = None
+            r.scalar_one.return_value = 0
+            r.one.return_value = (0, 0, 0, 0)
+            r.all.return_value = []
+            return r
+
+        mock_session.execute = AsyncMock(side_effect=execute_side_effect)
+
+        result = await admin_service.get_user_details(mock_session, "user-001")
+        assert result is not None
+        assert result["storage"] is not None
+        assert result["storage"]["total_bytes"] == 5242880
+        assert result["storage"]["total_mb"] == 5.0
+        assert result["storage"]["total_files"] == 10
+        assert result["storage"]["status_breakdown"]["processed"] == 8
+        assert result["storage"]["status_breakdown"]["ingested"] == 2
+
+    async def test_section_returns_none_on_query_error(self, mock_session):
+        """Sections return None when their queries raise exceptions."""
+        user = _make_user_model()
+        mock_session.get = AsyncMock(return_value=user)
+
+        # Make all execute calls raise to test best-effort pattern
+        mock_session.execute = AsyncMock(side_effect=Exception("db error"))
+
+        result = await admin_service.get_user_details(mock_session, "user-001")
+        assert result is not None
+        # Profile should still be present (doesn't use execute)
+        assert result["profile"]["id"] == "user-001"
+        # All other sections should be None due to errors
+        assert result["subscription"] is None
+        assert result["storage"] is None
+        assert result["usage"] is None
+        assert result["pipeline"] is None
+        assert result["study"] is None
+        assert result["content"] is None
+        assert result["gamification"] is None
+        assert result["chat"] is None
+
+    async def test_profile_includes_security_fields(self, mock_session):
+        """Profile section includes email_verified and mfa_enabled."""
+        user = _make_user_model(email_verified=True, mfa_enabled=True)
+        mock_session.get = AsyncMock(return_value=user)
+
+        result = await admin_service.get_user_details(mock_session, "user-001")
+        assert result is not None
+        assert result["profile"]["email_verified"] is True
+        assert result["profile"]["mfa_enabled"] is True
+
+    async def test_profile_includes_avatar_url(self, mock_session):
+        """Profile section includes avatar_url when set."""
+        user = _make_user_model(avatar_url="https://example.com/avatar.png")
+        mock_session.get = AsyncMock(return_value=user)
+
+        result = await admin_service.get_user_details(mock_session, "user-001")
+        assert result is not None
+        assert result["profile"]["avatar_url"] == "https://example.com/avatar.png"

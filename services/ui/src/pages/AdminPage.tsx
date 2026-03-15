@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAdminUsers, useSystemMetrics, useUpdateAdminUser } from '../hooks/useApi'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import type { AdminUser } from '../types'
@@ -13,14 +14,19 @@ function MetricCard({ label, value }: { label: string; value: string | number })
 }
 
 function UserRow({ user, onUpdate }: { user: AdminUser; onUpdate: (id: string, field: string, value: string | boolean) => void }) {
+  const navigate = useNavigate()
   return (
-    <tr className="border-b border-border last:border-b-0 hover:bg-surface-alt/50 transition-colors">
+    <tr
+      className="border-b border-border last:border-b-0 hover:bg-surface-alt/50 transition-colors cursor-pointer"
+      onClick={() => navigate(`/admin/users/${user.id}`)}
+    >
       <td className="px-4 py-3 text-sm text-text">{user.email}</td>
       <td className="px-4 py-3 text-sm text-text">{user.username ?? '—'}</td>
       <td className="px-4 py-3">
         <select
           value={user.role}
           onChange={(e) => onUpdate(user.id, 'role', e.target.value)}
+          onClick={(e) => e.stopPropagation()}
           className="text-xs px-2 py-1 rounded-md bg-surface border border-border text-text"
         >
           <option value="user">user</option>
@@ -32,6 +38,7 @@ function UserRow({ user, onUpdate }: { user: AdminUser; onUpdate: (id: string, f
         <select
           value={user.tier}
           onChange={(e) => onUpdate(user.id, 'tier', e.target.value)}
+          onClick={(e) => e.stopPropagation()}
           className="text-xs px-2 py-1 rounded-md bg-surface border border-border text-text"
         >
           <option value="free">free</option>
@@ -40,7 +47,7 @@ function UserRow({ user, onUpdate }: { user: AdminUser; onUpdate: (id: string, f
       </td>
       <td className="px-4 py-3 text-center">
         <button
-          onClick={() => onUpdate(user.id, 'is_active', !user.is_active)}
+          onClick={(e) => { e.stopPropagation(); onUpdate(user.id, 'is_active', !user.is_active) }}
           className={`text-xs px-2 py-0.5 rounded-full font-medium ${
             user.is_active
               ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_role
+from app.core.cache import DASHBOARD_TTL_SECONDS, cache_get, cache_set
 from app.core.database import get_session
 from app.models.user import User
 from app.services import admin_service
@@ -57,6 +58,146 @@ class SystemMetricsResponse(BaseModel):
     pipeline_runs_24h: int
     total_storage_bytes: int
     total_storage_mb: float
+
+
+# ── User Detail Schemas ──────────────────────────────────────────
+
+
+class UserProfileSection(BaseModel):
+    """User profile data (always present)."""
+
+    id: str
+    email: str
+    username: str | None
+    role: str
+    tier: str
+    is_active: bool
+    email_verified: bool
+    mfa_enabled: bool
+    avatar_url: str | None
+    last_login_at: str | None
+    created_at: str | None
+
+
+class SubscriptionSection(BaseModel):
+    """User subscription info."""
+
+    plan: str
+    status: str
+    current_period_start: str | None
+    current_period_end: str | None
+    cancel_at_period_end: bool
+
+
+class StorageSection(BaseModel):
+    """User storage usage."""
+
+    total_bytes: int
+    total_mb: float
+    total_files: int
+    status_breakdown: dict[str, int]
+
+
+class UsagePeriod(BaseModel):
+    """Usage metrics for a time period."""
+
+    ai_calls: int
+    tokens_input: int
+    tokens_output: int
+    uploads: int
+
+
+class UsageSection(BaseModel):
+    """User API/AI usage."""
+
+    today: UsagePeriod
+    last_30_days: UsagePeriod
+
+
+class PipelineStageBreakdown(BaseModel):
+    """Pipeline stats for a single stage."""
+
+    stage: str
+    total: int
+    success: int
+    failed: int
+
+
+class PipelineFailure(BaseModel):
+    """Recent pipeline failure."""
+
+    stage: str
+    error_message: str | None
+    started_at: str | None
+
+
+class PipelineSection(BaseModel):
+    """User pipeline health."""
+
+    total_runs: int
+    success_count: int
+    failed_count: int
+    avg_duration_ms: int
+    stages: list[PipelineStageBreakdown]
+    recent_failures: list[PipelineFailure]
+
+
+class StudySection(BaseModel):
+    """User study activity."""
+
+    total_sessions: int
+    cards_reviewed: int
+    quiz_questions_answered: int
+    quiz_correct: int
+    quiz_accuracy_pct: float
+    total_study_hours: float
+
+
+class CourseBreakdown(BaseModel):
+    """Per-course content breakdown."""
+
+    code: str
+    name: str | None
+    artifact_count: int
+
+
+class ContentSection(BaseModel):
+    """User content overview."""
+
+    courses_count: int
+    artifacts_count: int
+    exams_count: int
+    per_course: list[CourseBreakdown]
+
+
+class GamificationSection(BaseModel):
+    """User gamification stats."""
+
+    total_xp: int
+    level: int
+    achievements_count: int
+
+
+class ChatSection(BaseModel):
+    """User chat usage."""
+
+    total_sessions: int
+    total_messages: int
+    total_tokens: int
+
+
+class UserDetailResponse(BaseModel):
+    """Comprehensive user detail for admin view."""
+
+    profile: UserProfileSection
+    subscription: SubscriptionSection | None = None
+    storage: StorageSection | None = None
+    usage: UsageSection | None = None
+    pipeline: PipelineSection | None = None
+    study: StudySection | None = None
+    content: ContentSection | None = None
+    gamification: GamificationSection | None = None
+    chat: ChatSection | None = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────
@@ -126,3 +267,29 @@ async def get_system_metrics(
     """Get aggregate system metrics (admin only)."""
     metrics = await admin_service.get_system_metrics(session)
     return SystemMetricsResponse(**metrics)
+
+
+@router.get(
+    "/admin/users/{user_id}/details",
+    response_model=UserDetailResponse,
+    summary="User details",
+    description="Get comprehensive details for a single user. Admin only.",
+)
+async def get_user_details(
+    user_id: str,
+    _admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> UserDetailResponse:
+    """Get comprehensive user details (admin only)."""
+    cache_key = f"cache:admin:user_detail:{user_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return UserDetailResponse(**cached)
+
+    result = await admin_service.get_user_details(session, user_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    response = UserDetailResponse(**result)
+    await cache_set(cache_key, response.model_dump(mode="json"), ttl=DASHBOARD_TTL_SECONDS)
+    return response

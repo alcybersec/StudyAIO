@@ -534,3 +534,11 @@ export function useSystemMetrics() {
     queryFn: adminApi.getMetrics,
   })
 }
+
+export function useAdminUserDetail(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'users', userId, 'details'],
+    queryFn: () => adminApi.getUserDetails(userId!),
+    enabled: !!userId,
+  })
+}
