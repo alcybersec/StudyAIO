@@ -61,7 +61,7 @@ export function AppLayout() {
                 <Outlet />
               </Suspense>
             ) : (
-              <div className="max-w-6xl w-full mx-auto">
+              <div className="w-full">
                 <AnimatePresence mode="wait">
                   <PageTransition key={location.pathname}>
                     <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." />}>
