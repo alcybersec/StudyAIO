@@ -196,8 +196,15 @@ class TestGetUserDetails:
         result = await admin_service.get_user_details(mock_session, "user-001")
         assert result is not None
         expected_keys = {
-            "profile", "subscription", "storage", "usage",
-            "pipeline", "study", "content", "gamification", "chat",
+            "profile",
+            "subscription",
+            "storage",
+            "usage",
+            "pipeline",
+            "study",
+            "content",
+            "gamification",
+            "chat",
         }
         assert set(result.keys()) == expected_keys
 
