@@ -69,7 +69,7 @@ export function MasteryBreakdown() {
 
       {!isLoading && chartData.length > 0 && (
         <div className="rounded-lg border border-border bg-surface p-4">
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={260}>
             <BarChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis
