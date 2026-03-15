@@ -257,7 +257,12 @@ def _sample_user_detail():
         },
         "usage": {
             "today": {"ai_calls": 3, "tokens_input": 1500, "tokens_output": 800, "uploads": 1},
-            "last_30_days": {"ai_calls": 50, "tokens_input": 30000, "tokens_output": 15000, "uploads": 10},
+            "last_30_days": {
+                "ai_calls": 50,
+                "tokens_input": 30000,
+                "tokens_output": 15000,
+                "uploads": 10,
+            },
         },
         "pipeline": {
             "total_runs": 20,
@@ -269,7 +274,11 @@ def _sample_user_detail():
                 {"stage": "classify", "total": 5, "success": 4, "failed": 1},
             ],
             "recent_failures": [
-                {"stage": "classify", "error_message": "Timeout", "started_at": "2026-03-10T10:00:00"},
+                {
+                    "stage": "classify",
+                    "error_message": "Timeout",
+                    "started_at": "2026-03-10T10:00:00",
+                },
             ],
         },
         "study": {
@@ -300,17 +309,21 @@ class TestAdminUserDetails:
 
     async def test_get_user_details_success(self, admin_client):
         """Admin can get user details."""
-        with patch(
-            "app.api.admin.cache_get",
-            new_callable=AsyncMock,
-            return_value=None,
-        ), patch(
-            "app.api.admin.cache_set",
-            new_callable=AsyncMock,
-        ), patch(
-            "app.api.admin.admin_service.get_user_details",
-            new_callable=AsyncMock,
-            return_value=_sample_user_detail(),
+        with (
+            patch(
+                "app.api.admin.cache_get",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "app.api.admin.cache_set",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.api.admin.admin_service.get_user_details",
+                new_callable=AsyncMock,
+                return_value=_sample_user_detail(),
+            ),
         ):
             response = await admin_client.get("/api/admin/users/u-1/details")
 
@@ -328,14 +341,17 @@ class TestAdminUserDetails:
 
     async def test_get_user_details_not_found(self, admin_client):
         """Admin gets 404 for nonexistent user."""
-        with patch(
-            "app.api.admin.cache_get",
-            new_callable=AsyncMock,
-            return_value=None,
-        ), patch(
-            "app.api.admin.admin_service.get_user_details",
-            new_callable=AsyncMock,
-            return_value=None,
+        with (
+            patch(
+                "app.api.admin.cache_get",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "app.api.admin.admin_service.get_user_details",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             response = await admin_client.get("/api/admin/users/nonexistent/details")
 
@@ -349,14 +365,17 @@ class TestAdminUserDetails:
     async def test_get_user_details_cache_hit(self, admin_client):
         """Cached response is returned without calling the service."""
         cached_data = _sample_user_detail()
-        with patch(
-            "app.api.admin.cache_get",
-            new_callable=AsyncMock,
-            return_value=cached_data,
-        ) as mock_cache, patch(
-            "app.api.admin.admin_service.get_user_details",
-            new_callable=AsyncMock,
-        ) as mock_service:
+        with (
+            patch(
+                "app.api.admin.cache_get",
+                new_callable=AsyncMock,
+                return_value=cached_data,
+            ) as mock_cache,
+            patch(
+                "app.api.admin.admin_service.get_user_details",
+                new_callable=AsyncMock,
+            ) as mock_service,
+        ):
             response = await admin_client.get("/api/admin/users/u-1/details")
 
         assert response.status_code == 200
@@ -376,17 +395,21 @@ class TestAdminUserDetails:
             "gamification": None,
             "chat": None,
         }
-        with patch(
-            "app.api.admin.cache_get",
-            new_callable=AsyncMock,
-            return_value=None,
-        ), patch(
-            "app.api.admin.cache_set",
-            new_callable=AsyncMock,
-        ), patch(
-            "app.api.admin.admin_service.get_user_details",
-            new_callable=AsyncMock,
-            return_value=minimal,
+        with (
+            patch(
+                "app.api.admin.cache_get",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "app.api.admin.cache_set",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.api.admin.admin_service.get_user_details",
+                new_callable=AsyncMock,
+                return_value=minimal,
+            ),
         ):
             response = await admin_client.get("/api/admin/users/u-1/details")
 

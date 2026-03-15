@@ -265,6 +265,7 @@ class TestUserUpdateRequestStructure:
 
 # -- UserDetailResponse structure ----------------------------------------------
 
+
 @pytest.fixture
 def sample_user_profile():
     """A realistic user profile section."""
@@ -303,7 +304,12 @@ def sample_full_user_detail(sample_user_profile):
         },
         "usage": {
             "today": {"ai_calls": 5, "tokens_input": 2000, "tokens_output": 1000, "uploads": 2},
-            "last_30_days": {"ai_calls": 100, "tokens_input": 50000, "tokens_output": 25000, "uploads": 20},
+            "last_30_days": {
+                "ai_calls": 100,
+                "tokens_input": 50000,
+                "tokens_output": 25000,
+                "uploads": 20,
+            },
         },
         "pipeline": {
             "total_runs": 30,
@@ -315,7 +321,11 @@ def sample_full_user_detail(sample_user_profile):
                 {"stage": "classify", "total": 10, "success": 9, "failed": 1},
             ],
             "recent_failures": [
-                {"stage": "classify", "error_message": "Timeout", "started_at": "2026-03-10T10:00:00"},
+                {
+                    "stage": "classify",
+                    "error_message": "Timeout",
+                    "started_at": "2026-03-10T10:00:00",
+                },
             ],
         },
         "study": {
@@ -346,8 +356,15 @@ class TestUserDetailResponseStructure:
     def test_has_all_section_keys(self, sample_full_user_detail) -> None:
         """UserDetailResponse has all 9 section keys."""
         expected = {
-            "profile", "subscription", "storage", "usage",
-            "pipeline", "study", "content", "gamification", "chat",
+            "profile",
+            "subscription",
+            "storage",
+            "usage",
+            "pipeline",
+            "study",
+            "content",
+            "gamification",
+            "chat",
         }
         assert set(sample_full_user_detail.keys()) == expected
 
@@ -383,9 +400,17 @@ class TestUserProfileSectionStructure:
     def test_has_required_fields(self, sample_user_profile) -> None:
         """Profile has all required fields."""
         required = {
-            "id", "email", "username", "role", "tier", "is_active",
-            "email_verified", "mfa_enabled", "avatar_url",
-            "last_login_at", "created_at",
+            "id",
+            "email",
+            "username",
+            "role",
+            "tier",
+            "is_active",
+            "email_verified",
+            "mfa_enabled",
+            "avatar_url",
+            "last_login_at",
+            "created_at",
         }
         missing = required - sample_user_profile.keys()
         assert not missing, f"Missing fields: {missing}"
@@ -404,7 +429,13 @@ class TestSubscriptionSectionStructure:
     def test_has_required_fields(self, sample_full_user_detail) -> None:
         """Subscription has all required fields."""
         sub = sample_full_user_detail["subscription"]
-        required = {"plan", "status", "current_period_start", "current_period_end", "cancel_at_period_end"}
+        required = {
+            "plan",
+            "status",
+            "current_period_start",
+            "current_period_end",
+            "cancel_at_period_end",
+        }
         missing = required - sub.keys()
         assert not missing, f"Missing fields: {missing}"
 
@@ -440,7 +471,14 @@ class TestPipelineSectionStructure:
     def test_has_required_fields(self, sample_full_user_detail) -> None:
         """Pipeline has all required fields."""
         pipeline = sample_full_user_detail["pipeline"]
-        required = {"total_runs", "success_count", "failed_count", "avg_duration_ms", "stages", "recent_failures"}
+        required = {
+            "total_runs",
+            "success_count",
+            "failed_count",
+            "avg_duration_ms",
+            "stages",
+            "recent_failures",
+        }
         missing = required - pipeline.keys()
         assert not missing, f"Missing fields: {missing}"
 
@@ -465,8 +503,12 @@ class TestStudySectionStructure:
         """Study has all required fields."""
         study = sample_full_user_detail["study"]
         required = {
-            "total_sessions", "cards_reviewed", "quiz_questions_answered",
-            "quiz_correct", "quiz_accuracy_pct", "total_study_hours",
+            "total_sessions",
+            "cards_reviewed",
+            "quiz_questions_answered",
+            "quiz_correct",
+            "quiz_accuracy_pct",
+            "total_study_hours",
         }
         missing = required - study.keys()
         assert not missing, f"Missing fields: {missing}"

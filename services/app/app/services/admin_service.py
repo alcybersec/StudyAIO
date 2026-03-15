@@ -208,16 +208,18 @@ async def get_user_details(session: AsyncSession, user_id: str) -> dict | None:
     # Subscription (best-effort)
     subscription = None
     try:
-        result = await session.execute(
-            select(Subscription).where(Subscription.user_id == user_id)
-        )
+        result = await session.execute(select(Subscription).where(Subscription.user_id == user_id))
         sub = result.scalars().first()
         if sub:
             subscription = {
                 "plan": sub.plan,
                 "status": sub.status,
-                "current_period_start": sub.current_period_start.isoformat() if sub.current_period_start else None,
-                "current_period_end": sub.current_period_end.isoformat() if sub.current_period_end else None,
+                "current_period_start": sub.current_period_start.isoformat()
+                if sub.current_period_start
+                else None,
+                "current_period_end": sub.current_period_end.isoformat()
+                if sub.current_period_end
+                else None,
                 "cancel_at_period_end": sub.cancel_at_period_end,
             }
     except Exception:
@@ -395,7 +397,9 @@ async def get_user_details(session: AsyncSession, user_id: str) -> dict | None:
             "cards_reviewed": s_row[0],
             "quiz_questions_answered": quiz_answered,
             "quiz_correct": quiz_correct,
-            "quiz_accuracy_pct": round(quiz_correct / quiz_answered * 100, 1) if quiz_answered > 0 else 0.0,
+            "quiz_accuracy_pct": round(quiz_correct / quiz_answered * 100, 1)
+            if quiz_answered > 0
+            else 0.0,
             "total_study_hours": round(duration_secs / 3600, 1),
         }
     except Exception:
@@ -405,9 +409,7 @@ async def get_user_details(session: AsyncSession, user_id: str) -> dict | None:
     content = None
     try:
         courses_count = (
-            await session.execute(
-                select(func.count(Course.id)).where(Course.user_id == user_id)
-            )
+            await session.execute(select(func.count(Course.id)).where(Course.user_id == user_id))
         ).scalar_one()
 
         artifacts_count = (
@@ -417,9 +419,7 @@ async def get_user_details(session: AsyncSession, user_id: str) -> dict | None:
         ).scalar_one()
 
         exams_count = (
-            await session.execute(
-                select(func.count(Exam.id)).where(Exam.user_id == user_id)
-            )
+            await session.execute(select(func.count(Exam.id)).where(Exam.user_id == user_id))
         ).scalar_one()
 
         # Per-course breakdown
@@ -450,9 +450,7 @@ async def get_user_details(session: AsyncSession, user_id: str) -> dict | None:
     # Gamification (best-effort)
     gamification = None
     try:
-        xp_result = await session.execute(
-            select(UserXP).where(UserXP.user_id == user_id)
-        )
+        xp_result = await session.execute(select(UserXP).where(UserXP.user_id == user_id))
         xp = xp_result.scalars().first()
 
         achievements_count = (
