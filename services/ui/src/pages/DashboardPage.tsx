@@ -133,33 +133,43 @@ export function DashboardPage() {
 
       <ReviewAlert count={data.pending_review_count} />
 
-      <ResponsiveGridLayout
-        className="layout"
-        width={width ?? 1200}
-        layouts={filteredLayouts}
-        breakpoints={{ lg: 1024, sm: 0 }}
-        cols={{ lg: 12, sm: 12 }}
-        rowHeight={30}
-        onLayoutChange={onLayoutChange}
-        dragConfig={{
-          enabled: window.innerWidth >= 1024,
-          handle: '.drag-handle',
-        }}
-        resizeConfig={{
-          enabled: window.innerWidth >= 1024,
-        }}
-        containerPadding={[0, 0] as const}
-        margin={[16, 16] as const}
-      >
-        {activeWidgets.map((w) => (
-          <div key={w.key} className="relative group overflow-hidden rounded-lg">
-            <div className="drag-handle absolute top-0 left-0 right-0 h-6 cursor-grab active:cursor-grabbing z-10 opacity-0 group-hover:opacity-100 transition-opacity hidden lg:flex items-center justify-center">
-              <div className="w-8 h-1 rounded-full bg-border" />
+      {/* On narrow viewports, stack widgets naturally for auto-sizing (no fixed grid heights).
+          On wide viewports, use the draggable grid layout. */}
+      {(width ?? 1200) < 1024 ? (
+        <div className="flex flex-col gap-4">
+          {activeWidgets.map((w) => (
+            <div key={w.key}>{widgetContent[w.key]}</div>
+          ))}
+        </div>
+      ) : (
+        <ResponsiveGridLayout
+          className="layout"
+          width={width ?? 1200}
+          layouts={filteredLayouts}
+          breakpoints={{ lg: 1024, sm: 0 }}
+          cols={{ lg: 12, sm: 12 }}
+          rowHeight={30}
+          onLayoutChange={onLayoutChange}
+          dragConfig={{
+            enabled: true,
+            handle: '.drag-handle',
+          }}
+          resizeConfig={{
+            enabled: true,
+          }}
+          containerPadding={[0, 0] as const}
+          margin={[16, 16] as const}
+        >
+          {activeWidgets.map((w) => (
+            <div key={w.key} className="relative group overflow-hidden rounded-lg">
+              <div className="drag-handle absolute top-0 left-0 right-0 h-6 cursor-grab active:cursor-grabbing z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="w-8 h-1 rounded-full bg-border" />
+              </div>
+              <div className="h-full">{widgetContent[w.key]}</div>
             </div>
-            <div className="h-full">{widgetContent[w.key]}</div>
-          </div>
-        ))}
-      </ResponsiveGridLayout>
+          ))}
+        </ResponsiveGridLayout>
+      )}
 
       <DashboardCustomizer
         open={customizerOpen}
