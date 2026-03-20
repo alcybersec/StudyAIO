@@ -72,6 +72,7 @@
 /* React Grid Layout overrides */
 .react-grid-item {
   transition: none !important;
+  overflow: hidden !important;
 }
 .react-grid-item > .react-resizable-handle {
   display: none;

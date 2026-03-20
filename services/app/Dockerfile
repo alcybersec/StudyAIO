@@ -22,6 +22,7 @@ WORKDIR /app
 # Only runtime C libs (no compiler, no headers)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder

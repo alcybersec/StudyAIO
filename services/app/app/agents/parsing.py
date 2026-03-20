@@ -247,21 +247,32 @@ def build_extraction_text(extraction: ExtractionData) -> str:
 
 
 def collect_image_references(extraction: ExtractionData) -> list[str]:
-    """Gather image filenames from extraction pages.
+    """Gather image filenames with page context from extraction pages.
+
+    Returns each image as a string with filename and surrounding text context
+    so the AI can correctly identify what each image depicts.
 
     Args:
         extraction: Extraction data with pages.
 
     Returns:
-        List of image filenames.
+        List of image reference strings with context.
     """
     images: list[str] = []
     for page in extraction.pages:
-        page_images = page.get("images", []) if isinstance(page, dict) else page.images
+        page_dict = page if isinstance(page, dict) else page.__dict__
+        page_num = page_dict.get("page_number", "?")
+        page_text = page_dict.get("text", "")
+        # Extract a short context snippet (first 150 chars of page text)
+        context = page_text[:150].replace("\n", " ").strip()
+        if len(page_text) > 150:
+            context += "..."
+
+        page_images = page_dict.get("images", [])
         for img in page_images:
             filename = img.get("filename", "") if isinstance(img, dict) else img.filename
             if filename:
-                images.append(filename)
+                images.append(f"{filename} (page {page_num}: {context})")
     return images
 
 

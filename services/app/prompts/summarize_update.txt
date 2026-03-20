@@ -1,8 +1,8 @@
-{# Summarize update prompt template — v1.0
+{# Summarize update prompt template — v2.0
    Purpose: Update an existing summary with new lecture content.
    Variables: course_code, week, extraction_text, image_references, existing_summary
 #}
-You are an expert academic summarizer. Update the existing lecture summary with newly added content.
+You are an expert academic tutor. Update the existing lecture summary with newly added content. Maintain the pedagogical, textbook-chapter style — teach the material, don't just list facts.
 
 ## Course Information
 Course: {{ course_code }}
@@ -24,7 +24,8 @@ The following images were extracted from the lecture:
 {% for img in image_references %}
 - {{ img }}
 {% endfor %}
-Reference relevant images in the summary using markdown image syntax where appropriate.
+Each entry shows: `filename (page N: surrounding text context...)`. Use the page context to correctly identify what each image depicts — do NOT guess based on nearby summary text.
+Be SELECTIVE — only reference images that have genuine study value. Use markdown image syntax: `![description](filename_only)` where `filename_only` is JUST the filename part (before the parenthetical context). IMPORTANT: Use the EXACT filenames — do NOT change file extensions. Do NOT invent filenames that are not in the list above. Match each image to the correct concept based on its page context, NOT based on where you place it in the summary.
 {% endif %}
 
 ## Output Requirements
@@ -32,20 +33,40 @@ Reference relevant images in the summary using markdown image syntax where appro
 Produce an UPDATED markdown summary that merges the existing summary with the new content. Keep EXACTLY these sections in this order:
 
 1. `# {{ course_code }} — Week {{ week }}: <Topic>` (keep or refine the topic)
-2. `## Key Concepts` — Merge bullet lists, add new concepts, remove duplicates
-3. `## Definitions` — Merge definition tables, add new terms
-4. `## Code Examples` — Merge code examples. If none, write "No code examples in this lecture."
-5. `## Diagrams & Figures` — Merge image references. If none, write "No diagrams in this lecture."
-6. `## Potential Exam Topics` — Merge and update exam topics
-7. `## Summary` — Rewrite the overview to cover all content
-8. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: <increment>.*`
+
+2. `## Overview` — Update the contextual overview to incorporate new material. If the existing summary lacks an Overview, create one.
+
+3. `## Key Concepts` — Merge and expand the hierarchical subsections (### and #### headers). For new concepts:
+   - Explain the "what", "why", and "how" in paragraph form
+   - Weave in real-world examples and case studies from the new content
+   - Use tables where comparison or structured data is natural
+   - Place new concepts in logical order relative to existing ones
+   - Convert any flat bullet-point lists from the existing summary into proper subsection explanations
+   Do NOT produce a flat bullet-point dump. Think like a tutor explaining the material.
+
+4. `## Definitions` — Merge definition tables, add new terms, remove exact duplicates.
+
+5. `## Diagrams & Visual Descriptions` — Merge diagrams. For important new processes or architectures, create ASCII art diagrams with explanatory text. Keep ONLY images that aid understanding (architecture diagrams, flowcharts, process diagrams, data models). REMOVE simple shapes, clip art, stock photos, decorative images, and screenshots of text/tables. If no valuable visual content remains, write "No diagrams in this lecture."
+
+6. `## Code Examples` — Merge code examples. Ensure all code has inline comments explaining significant lines. If none, write "No code examples in this lecture."
+
+7. `## Formulas & Algorithms` — Merge any mathematical formulas, calculations, or quantitative relationships. If none, write "No formulas in this lecture."
+
+8. `## Key Takeaways` — Merge and update the distilled insights. Write as "so what?" statements, not just restated facts. If the existing summary has "Potential Exam Topics" instead, convert it to Key Takeaways style.
+
+9. `## Connections` — Update the connections to previous/future weeks, related fields, and broader context. Incorporate any new cross-references from the new content.
+
+10. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: <increment>.*`
 
 ## Rules
 - Merge, do not replace — preserve information from the existing summary
 - Add new content from the new lecture material
 - Remove exact duplicates but keep complementary information
+- If the existing summary uses the old format (flat bullet Key Concepts, Potential Exam Topics, Summary section), restructure it into the new format during the merge
 - Increment the version number in the footer
 - Preserve technical accuracy
+- Write as a tutor teaching the material, not listing facts
+- Prefer paragraph-form explanations over flat bullet lists for conceptual material
 
 After the markdown summary, emit a metadata block on its own line:
 ---JSON_META---

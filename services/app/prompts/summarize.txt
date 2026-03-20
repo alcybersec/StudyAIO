@@ -1,8 +1,8 @@
-{# Summarize prompt template — v1.0
-   Purpose: Generate a comprehensive lecture summary in markdown format.
+{# Summarize prompt template — v2.0
+   Purpose: Generate a comprehensive, pedagogically-structured lecture summary.
    Variables: course_code, week, extraction_text, image_references
 #}
-You are an expert academic summarizer. Generate a comprehensive study summary from the following lecture content.
+You are an expert academic tutor. Generate a comprehensive study summary that teaches the material — not just lists it. Structure the summary like a well-written textbook chapter: introduce concepts with context, explain them in depth with real-world examples, and build understanding progressively.
 
 ## Course Information
 Course: {{ course_code }}
@@ -19,7 +19,8 @@ The following images were extracted from the lecture:
 {% for img in image_references %}
 - {{ img }}
 {% endfor %}
-Reference relevant images in the summary using markdown image syntax where appropriate.
+Each entry shows: `filename (page N: surrounding text context...)`. Use the page context to correctly identify what each image depicts — do NOT guess based on nearby summary text.
+Be SELECTIVE — only reference images that have genuine study value. Use markdown image syntax: `![description](filename_only)` where `filename_only` is JUST the filename part (before the parenthetical context). IMPORTANT: Use the EXACT filenames — do NOT change file extensions. Do NOT invent filenames that are not in the list above. Match each image to the correct concept based on its page context, NOT based on where you place it in the summary.
 {% endif %}
 
 ## Output Requirements
@@ -27,20 +28,41 @@ Reference relevant images in the summary using markdown image syntax where appro
 Generate a complete markdown summary with EXACTLY these sections in this order:
 
 1. `# {{ course_code }} — Week {{ week }}: <Topic>` (determine the topic from the content)
-2. `## Key Concepts` — Bullet list of the most important concepts covered
-3. `## Definitions` — Markdown table with columns: Term | Definition
-4. `## Code Examples` — Include any code examples from the lecture with explanations. If none, write "No code examples in this lecture."
-5. `## Diagrams & Figures` — Reference extracted images with captions. If none, write "No diagrams in this lecture."
-6. `## Potential Exam Topics` — Bullet list of likely exam questions or topics
-7. `## Summary` — 2-3 paragraph overview of the entire lecture content
-8. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: 1.*`
+
+2. `## Overview` — 1-2 paragraphs that contextualize the topic: what it is, why it matters, and how it fits into the broader subject. Set the stage before diving into details.
+
+3. `## Key Concepts` — This is the core of the summary and should be the longest section. Organize concepts into hierarchical subsections using `###` and `####` headers that reflect the logical structure of the material. For each concept:
+   - Explain the "what", "why", and "how" — not just definitions
+   - Write in paragraph form with supporting details
+   - Weave in real-world examples, case studies, and scenarios from the lecture
+   - Use tables where comparison or structured data is natural (e.g. tool comparisons, attack type vs. defense)
+   - Use bullet lists only for genuinely list-like content (tool names, enumerated steps, short items)
+   - Build concepts progressively — introduce foundations before advanced topics
+   Do NOT produce a flat bullet-point dump. Think like a tutor explaining the material to a student.
+
+4. `## Definitions` — Markdown table with columns: Term | Definition. Include all key terms. This supplements the Key Concepts section — terms should already be explained in context above.
+
+5. `## Diagrams & Visual Descriptions` — For important processes, architectures, or relationships from the lecture, create ASCII art diagrams with explanatory text (e.g. network topologies, attack flows, process pipelines, memory layouts). Also reference extracted images ONLY if they aid understanding (architecture diagrams, flowcharts, process diagrams, data models). SKIP simple shapes, clip art, stock photos, decorative images, and screenshots of text/tables. If no valuable visual content exists, write "No diagrams in this lecture."
+
+6. `## Code Examples` — Include code examples from the lecture with inline comments explaining each significant line or block. Add a brief note about when and why each example is relevant. If none, write "No code examples in this lecture."
+
+7. `## Formulas & Algorithms` — Include any mathematical formulas, calculations, algorithms, or quantitative relationships from the lecture. Use code blocks or LaTeX notation ($...$). If none, write "No formulas in this lecture."
+
+8. `## Key Takeaways` — Bullet list of the most important lessons and insights from the lecture. Write as distilled "so what?" statements that capture why each point matters — not just restating facts.
+
+9. `## Connections` — 2-4 paragraphs linking this week's material to previous/future weeks, related fields, and broader industry context. How does this build on prior knowledge? What does it set up for later topics?
+
+10. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: 1.*`
 
 ## Rules
-- Be thorough but concise
+- Write as a tutor teaching the material, not a transcription service listing facts
+- Explain concepts in depth with context and examples — avoid shallow bullet-point dumps
+- Organize Key Concepts hierarchically (### and ####) to reflect the logical structure of the lecture
+- Be thorough on important concepts, brief on minor ones — match depth to significance
 - Use proper markdown formatting
-- Include ALL key definitions and concepts
-- Preserve technical accuracy
-- Do not invent information not present in the lecture content
+- Include ALL key definitions and concepts from the lecture
+- Preserve technical accuracy — do not invent information not present in the lecture content
+- Prefer paragraph-form explanations over flat bullet lists for conceptual material
 
 After the markdown summary, emit a metadata block on its own line:
 ---JSON_META---

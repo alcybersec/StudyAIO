@@ -30,7 +30,7 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
   }
 
   return (
-    <Card padding={false}>
+    <Card padding={false} className="h-full">
       <div className="px-6 pt-5 pb-2">
         <h2 className="text-sm font-semibold text-text">Recent Activity</h2>
       </div>
