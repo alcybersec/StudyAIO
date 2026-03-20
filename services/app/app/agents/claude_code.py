@@ -136,7 +136,9 @@ class ClaudeCodeAdapter(AgentAdapter):
                     pass
 
         if process.returncode != 0:
-            error_text = stderr.decode().strip() if stderr else (stdout.decode().strip() or "Unknown error")
+            error_text = (
+                stderr.decode().strip() if stderr else (stdout.decode().strip() or "Unknown error")
+            )
             raise AgentError(f"Claude Code failed (exit {process.returncode}): {error_text}")
 
         result = stdout.decode().strip()
