@@ -257,7 +257,10 @@ class TestCollectImageReferences:
 
         result = collect_image_references(extraction)
 
-        assert result == ["img1.png", "img2.jpg"]
+        assert result == [
+            "img1.png (page 1: Content)",
+            "img2.jpg (page 1: Content)",
+        ]
 
     def test_empty_images(self):
         """No images returns empty list."""

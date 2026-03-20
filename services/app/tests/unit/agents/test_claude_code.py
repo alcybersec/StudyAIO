@@ -209,7 +209,7 @@ class TestGenerateSummary:
         assert "Updated" in result.content_md or "IDS" in result.content_md
         # Verify it used the longer summary timeout
         call_kwargs = mock_run.call_args
-        assert call_kwargs.kwargs.get("timeout", 120) == 300
+        assert call_kwargs.kwargs.get("timeout", 120) == 600
 
 
 class TestBuildExtractionText:
@@ -268,7 +268,10 @@ class TestCollectImageReferences:
 
         result = collect_image_references(extraction)
 
-        assert result == ["img1.png", "img2.jpg"]
+        assert result == [
+            "img1.png (page 1: Content)",
+            "img2.jpg (page 1: Content)",
+        ]
 
     def test_empty_images(self):
         """No images returns empty list."""
