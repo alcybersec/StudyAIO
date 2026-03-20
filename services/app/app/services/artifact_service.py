@@ -1,7 +1,6 @@
 """Business logic for lecture artifact management."""
 
 from datetime import UTC, datetime
-from pathlib import Path
 
 import structlog
 from sqlalchemy import select
