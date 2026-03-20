@@ -291,4 +291,4 @@ class TestCollectImageReferences:
 
         result = collect_image_references(extraction)
 
-        assert result == ["real.png"]
+        assert result == ["real.png (page 1: Content)"]
