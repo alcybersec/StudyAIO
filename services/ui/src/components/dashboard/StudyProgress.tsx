@@ -11,7 +11,7 @@ export function StudyProgress({ stats }: StudyProgressProps) {
     : 0
 
   return (
-    <section className="bg-surface rounded-xl border border-border p-5">
+    <section className="bg-surface rounded-xl border border-border p-5 h-full">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-semibold text-text">Study Progress</h2>
         <Link

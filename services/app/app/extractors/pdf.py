@@ -1,5 +1,6 @@
 """PDF extractor using PyMuPDF (fitz)."""
 
+import hashlib
 from pathlib import Path
 
 import fitz
@@ -15,12 +16,20 @@ from app.extractors.base import (
 
 logger = structlog.get_logger()
 
+# Images smaller than this (bytes) AND both dimensions below _MIN_DIM
+# are likely icons/logos — skip them.
+_MIN_SIZE_BYTES = 5_000
+_MIN_DIM = 200
+
 
 class PdfExtractor(BaseExtractor):
     """Extracts text and images from PDF files using PyMuPDF."""
 
     def extract(self, file_path: Path, output_dir: Path) -> ExtractionResult:
         """Extract text and images from a PDF file.
+
+        Deduplicates images by content hash and filters out small
+        icons/logos that appear on many pages (e.g. university watermarks).
 
         Args:
             file_path: Path to the PDF file.
@@ -42,6 +51,9 @@ class PdfExtractor(BaseExtractor):
 
         pages: list[PageContent] = []
         total_images = 0
+        seen_hashes: dict[str, str] = {}  # hash -> filename (first occurrence)
+        skipped_dupes = 0
+        skipped_small = 0
 
         try:
             for page_idx in range(len(doc)):
@@ -56,7 +68,26 @@ class PdfExtractor(BaseExtractor):
                         base_image = doc.extract_image(xref)
                         image_bytes = base_image["image"]
                         image_ext = base_image["ext"]
+                        width = base_image.get("width", 0)
+                        height = base_image.get("height", 0)
+
+                        # Skip tiny images (icons, bullets, logos)
+                        if (
+                            len(image_bytes) < _MIN_SIZE_BYTES
+                            and width < _MIN_DIM
+                            and height < _MIN_DIM
+                        ):
+                            skipped_small += 1
+                            continue
+
+                        # Deduplicate by content hash
+                        img_hash = hashlib.md5(image_bytes).hexdigest()
+                        if img_hash in seen_hashes:
+                            skipped_dupes += 1
+                            continue
+
                         filename = f"page{page_number}_img{img_idx + 1}.{image_ext}"
+                        seen_hashes[img_hash] = filename
                         image_path = images_dir / filename
                         image_path.write_bytes(image_bytes)
 
@@ -87,11 +118,13 @@ class PdfExtractor(BaseExtractor):
             file=file_path.name,
             pages=len(pages),
             images=total_images,
+            skipped_dupes=skipped_dupes,
+            skipped_small=skipped_small,
         )
 
         return ExtractionResult(
             pages=pages,
-            metadata={"extractor_version": "1.0", "source_type": "pdf"},
+            metadata={"extractor_version": "1.1", "source_type": "pdf"},
             image_count=total_images,
             page_count=len(pages),
         )

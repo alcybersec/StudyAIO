@@ -28,7 +28,7 @@ logger = structlog.get_logger()
 
 # Timeout for Claude Code CLI calls (seconds)
 _DEFAULT_TIMEOUT = 120
-_SUMMARY_TIMEOUT = 300
+_SUMMARY_TIMEOUT = 600
 
 
 class ClaudeCodeAdapter(AgentAdapter):
@@ -136,7 +136,7 @@ class ClaudeCodeAdapter(AgentAdapter):
                     pass
 
         if process.returncode != 0:
-            error_text = stderr.decode().strip() if stderr else "Unknown error"
+            error_text = stderr.decode().strip() if stderr else (stdout.decode().strip() or "Unknown error")
             raise AgentError(f"Claude Code failed (exit {process.returncode}): {error_text}")
 
         result = stdout.decode().strip()

@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Badge } from '../ui'
@@ -10,6 +11,25 @@ interface SummaryTabProps {
 }
 
 export function SummaryTab({ summary, artifactId }: SummaryTabProps) {
+  const sourceArtifacts = summary?.source_artifacts ?? []
+
+  const handleImgError = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
+      const img = e.currentTarget
+      const triedIdx = parseInt(img.dataset.aidIdx ?? '0', 10)
+      const filename = img.dataset.filename ?? ''
+      const nextIdx = triedIdx + 1
+      if (nextIdx < sourceArtifacts.length && filename) {
+        img.dataset.aidIdx = String(nextIdx)
+        img.src = `/api/files/extractions/${sourceArtifacts[nextIdx]}/images/${filename}`
+      } else {
+        // All artifacts tried — hide broken image
+        img.style.display = 'none'
+      }
+    },
+    [sourceArtifacts],
+  )
+
   if (!summary) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -39,13 +59,24 @@ export function SummaryTab({ summary, artifactId }: SummaryTabProps) {
           components={{
             img: ({ src, alt, ...props }) => {
               let resolvedSrc = src
+              const filename = src ?? ''
               if (src && !src.startsWith('http') && !src.startsWith('/api/')) {
-                const aid = artifactId ?? summary?.source_artifacts?.[0]
+                const aid = artifactId ?? sourceArtifacts[0]
                 resolvedSrc = aid
                   ? `/api/files/extractions/${aid}/images/${src}`
                   : `/api/files/${src}`
               }
-              return <img src={resolvedSrc} alt={alt ?? ''} className="rounded-lg max-w-full" {...props} />
+              return (
+                <img
+                  src={resolvedSrc}
+                  alt={alt ?? ''}
+                  className="rounded-lg max-w-full"
+                  data-filename={filename}
+                  data-aid-idx="0"
+                  onError={handleImgError}
+                  {...props}
+                />
+              )
             },
           }}
         >

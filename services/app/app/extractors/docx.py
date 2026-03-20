@@ -1,5 +1,6 @@
 """DOCX extractor using python-docx."""
 
+import hashlib
 from pathlib import Path
 
 import docx
@@ -14,6 +15,8 @@ from app.extractors.base import (
 )
 
 logger = structlog.get_logger()
+
+_MIN_SIZE_BYTES = 5_000
 
 # DOCX doesn't have native page breaks that are easy to detect.
 # We treat the whole document as page 1 unless we find page-break markers,
@@ -50,11 +53,20 @@ class DocxExtractor(BaseExtractor):
 
         # Extract images from the document's relationships
         total_images = 0
+        skipped_small = 0
+        seen_hashes: set[str] = set()
         image_filenames: list[str] = []
         for rel in document.part.rels.values():
             if "image" in rel.reltype:
                 try:
                     image_data = rel.target_part.blob
+                    if len(image_data) < _MIN_SIZE_BYTES:
+                        skipped_small += 1
+                        continue
+                    img_hash = hashlib.md5(image_data).hexdigest()
+                    if img_hash in seen_hashes:
+                        continue
+                    seen_hashes.add(img_hash)
                     content_type = rel.target_part.content_type
                     ext = content_type.split("/")[-1].replace("jpeg", "jpg")
                     total_images += 1
@@ -105,6 +117,7 @@ class DocxExtractor(BaseExtractor):
             file=file_path.name,
             sections=len(pages),
             images=total_images,
+            skipped_small=skipped_small,
         )
 
         return ExtractionResult(

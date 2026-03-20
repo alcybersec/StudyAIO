@@ -34,7 +34,7 @@ export function QuickUpload() {
   }, [handleFile])
 
   return (
-    <Card>
+    <Card className="h-full">
       <h2 className="text-sm font-semibold text-text mb-3">Quick Upload</h2>
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}

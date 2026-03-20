@@ -27,6 +27,7 @@ services:
       - ./services/app/tests:/app/tests
       - ./services/app/pytest.ini:/app/pytest.ini
       - ./data:/app/data
+      - ${CLAUDE_CLI_PATH:-~/.local/bin/claude}:/usr/local/bin/claude:ro
     env_file:
       - .env
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

@@ -307,6 +307,7 @@ class SettingsResponse(BaseModel):
     agent_backend: str
     anthropic_api_key: str
     claude_cli_credentials: str = ""
+    embedding_backend: str = "sentence_transformers"
     classification_confidence_threshold: float
     flashcard_count_per_week: int
     quiz_question_count_per_week: int
@@ -325,6 +326,7 @@ class SettingsUpdateRequest(BaseModel):
     agent_backend: str | None = None
     anthropic_api_key: str | None = None
     claude_cli_credentials: str | None = None
+    embedding_backend: str | None = None
     classification_confidence_threshold: float | None = None
     flashcard_count_per_week: int | None = None
     quiz_question_count_per_week: int | None = None

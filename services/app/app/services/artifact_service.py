@@ -58,7 +58,8 @@ async def ingest_file(session: AsyncSession, source_path: str, user_id: str) -> 
         ValueError: If file type is not supported.
         FileNotFoundError: If source file doesn't exist.
     """
-    path = Path(source_path)
+    storage = get_storage()
+    path = storage.resolve_path(source_path)
     if not path.exists():
         raise FileNotFoundError(f"Source file not found: {source_path}")
 
