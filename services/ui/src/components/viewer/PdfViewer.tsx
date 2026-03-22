@@ -8,6 +8,9 @@ import { LoadingSpinner } from '../ui'
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
 
+// Stable reference — avoid re-creating on every render
+const PDF_OPTIONS = { withCredentials: true }
+
 interface PdfViewerProps {
   fileUrl: string
   targetPage?: number
@@ -135,6 +138,7 @@ export function PdfViewer({ fileUrl, targetPage, navToken, onPageChange, onTotal
     <div ref={containerRef} className="overflow-y-auto h-full bg-gray-100">
       <Document
         file={fileUrl}
+        options={PDF_OPTIONS}
         onLoadSuccess={onDocumentLoadSuccess}
         loading={<LoadingSpinner label="Loading PDF..." />}
         error={
