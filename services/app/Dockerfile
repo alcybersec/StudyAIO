@@ -20,9 +20,13 @@ FROM python:3.12-slim AS runtime
 WORKDIR /app
 
 # Only runtime C libs (no compiler, no headers)
+# nodejs + npm needed for Claude Code CLI
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     nodejs \
+    npm \
+    && npm install -g @anthropic-ai/claude-code \
+    && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
