@@ -43,6 +43,27 @@ def _session_to_response(chat_session) -> dict:
     }
 
 
+async def _resolve_scope_course(
+    session: AsyncSession,
+    user: User,
+    course_code: str | None,
+) -> str | None:
+    """Resolve an optional per-message course_code scope to a course_id.
+
+    Raises:
+        HTTPException: 404 if the course code doesn't exist for this user.
+    """
+    if not course_code:
+        return None
+    result = await session.execute(
+        select(Course).where(Course.code == course_code, Course.user_id == user.id)
+    )
+    course = result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail=f"Course '{course_code}' not found")
+    return course.id
+
+
 def _message_to_response(msg) -> dict:
     """Convert ChatMessage ORM object to response dict."""
     return {
@@ -154,12 +175,16 @@ async def send_message(
     # Check AI quota (free tier: 20/day)
     await quota_service.check_ai_quota(session, user.id, user.tier)
 
+    scope_course_id = await _resolve_scope_course(session, user, body.course_code)
+
     try:
         user_msg, assistant_msg = await chat_service.send_message(
             session=session,
             session_id=session_id,
             user_id=user.id,
             content=body.content,
+            course_id=scope_course_id,
+            week=body.week,
         )
     except ValueError:
         raise HTTPException(status_code=404, detail="Chat session not found") from None
@@ -198,6 +223,8 @@ async def stream_message(
     # Check AI quota
     await quota_service.check_ai_quota(session, user.id, user.tier)
 
+    scope_course_id = await _resolve_scope_course(session, user, body.course_code)
+
     async def event_generator():
         try:
             async for event in chat_service.stream_message(
@@ -205,6 +232,8 @@ async def stream_message(
                 session_id=session_id,
                 user_id=user.id,
                 content=body.content,
+                course_id=scope_course_id,
+                week=body.week,
             ):
                 event_type = event["event"]
                 data = event["data"]
