@@ -10,6 +10,7 @@ from app.core.exceptions import DuplicateFileError
 from app.core.storage import get_storage
 from app.core.utils import compute_sha256, generate_id, sanitize_filename
 from app.models.artifact import LectureArtifact
+from app.models.course import Course
 
 logger = structlog.get_logger()
 
@@ -216,6 +217,152 @@ async def get_artifact(
         query = query.where(LectureArtifact.user_id == user_id)
     result = await session.execute(query)
     return result.scalar_one_or_none()
+
+
+async def apply_classification(
+    session: AsyncSession,
+    artifact: LectureArtifact,
+    course_code: str | None = None,
+    week: int | None = None,
+    title: str | None = None,
+    user_id: str | None = None,
+) -> Course | None:
+    """Apply classification fields to an artifact (shared move logic).
+
+    Used by review-item resolution and reclassification. Resolves the
+    course by code (optionally scoped to a user) and updates the artifact's
+    course/week/title in place.
+
+    Args:
+        session: Database session.
+        artifact: The artifact to update.
+        course_code: Target course code (skipped if not found).
+        week: Target week number.
+        title: New display title.
+        user_id: If provided, the course lookup is scoped to this user.
+
+    Returns:
+        The resolved Course, or None if course_code was absent/not found.
+    """
+    course = None
+    if course_code:
+        query = select(Course).where(Course.code == course_code)
+        if user_id is not None:
+            query = query.where(Course.user_id == user_id)
+        result = await session.execute(query)
+        course = result.scalar_one_or_none()
+        if course:
+            artifact.course_id = course.id
+
+    if week is not None:
+        artifact.week = week
+    if title is not None:
+        artifact.title = title
+
+    return course
+
+
+# Statuses in which an artifact may be reclassified (not mid-pipeline)
+RECLASSIFIABLE_STATUSES = {"processed", "failed", "waiting_review"}
+
+
+async def reclassify(
+    session: AsyncSession,
+    artifact_id: str,
+    user_id: str,
+    course_code: str,
+    week: int,
+) -> dict:
+    """Move an artifact (and its flashcards/quiz questions) to another course/week.
+
+    Transactional: updates the artifact plus child asset FKs. Chunks follow
+    the artifact automatically (they reference artifact_id only). The caller
+    is responsible for re-enqueueing summarize for both affected weeks.
+
+    Args:
+        session: Database session.
+        artifact_id: Artifact UUID.
+        user_id: Requesting user UUID (tenant isolation).
+        course_code: Target course code (must exist for this user).
+        week: Target week number.
+
+    Returns:
+        Dict with artifact, old_course_id, old_week, and source_artifact_id
+        (a remaining artifact in the source week to regenerate its summary,
+        or None if the source week is now empty).
+
+    Raises:
+        LookupError: If the artifact is not found for this user.
+        ArtifactBusyError: If the artifact is still mid-pipeline.
+        ValueError: If the target course is not found for this user.
+    """
+    from sqlalchemy import update
+
+    from app.core.exceptions import ArtifactBusyError
+    from app.models.flashcard import Flashcard
+    from app.models.quiz import QuizQuestion
+
+    artifact = await get_artifact(session, artifact_id, user_id=user_id)
+    if not artifact:
+        raise LookupError(f"Artifact {artifact_id} not found")
+
+    if artifact.status not in RECLASSIFIABLE_STATUSES:
+        raise ArtifactBusyError(
+            f"Artifact {artifact_id} is still processing (status: {artifact.status})"
+        )
+
+    old_course_id = artifact.course_id
+    old_week = artifact.week
+
+    course = await apply_classification(
+        session, artifact, course_code=course_code, week=week, user_id=user_id
+    )
+    if not course:
+        raise ValueError(f"Course '{course_code}' not found")
+
+    # Move child assets to the target course/week
+    await session.execute(
+        update(Flashcard)
+        .where(Flashcard.source_artifact_id == artifact_id)
+        .values(course_id=course.id, week=week)
+    )
+    await session.execute(
+        update(QuizQuestion)
+        .where(QuizQuestion.source_artifact_id == artifact_id)
+        .values(course_id=course.id, week=week)
+    )
+
+    # Find a remaining artifact in the source week for summary regeneration
+    source_artifact_id = None
+    if old_course_id and old_week is not None:
+        remaining = await session.execute(
+            select(LectureArtifact.id)
+            .where(
+                LectureArtifact.course_id == old_course_id,
+                LectureArtifact.week == old_week,
+                LectureArtifact.id != artifact_id,
+            )
+            .limit(1)
+        )
+        source_artifact_id = remaining.scalar_one_or_none()
+
+    await session.flush()
+
+    logger.info(
+        "artifact_reclassified",
+        artifact_id=artifact_id,
+        old_course_id=old_course_id,
+        old_week=old_week,
+        new_course_id=course.id,
+        new_week=week,
+    )
+
+    return {
+        "artifact": artifact,
+        "old_course_id": old_course_id,
+        "old_week": old_week,
+        "source_artifact_id": source_artifact_id,
+    }
 
 
 async def list_artifacts(

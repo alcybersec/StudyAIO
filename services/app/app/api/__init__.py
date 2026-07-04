@@ -2,6 +2,7 @@
 
 from app.api.admin import router as admin_router
 from app.api.analytics import router as analytics_router
+from app.api.artifacts import router as artifacts_router
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
 from app.api.billing import router as billing_router
@@ -27,6 +28,7 @@ from app.api.uploads import router as uploads_router
 
 __all__ = [
     "admin_router",
+    "artifacts_router",
     "analytics_router",
     "assets_router",
     "auth_router",
