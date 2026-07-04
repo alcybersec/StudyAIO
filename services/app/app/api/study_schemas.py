@@ -121,3 +121,25 @@ class TimedPlanResponse(BaseModel):
     estimated_quiz_minutes: int
     course_code: str | None
     exam_id: str | None
+
+
+class PlanItem(BaseModel):
+    """A single planned study item for a day."""
+
+    course_code: str
+    kind: str  # "cards" | "quiz" | "mock"
+    target: int
+    done: int
+
+
+class PlanDay(BaseModel):
+    """One day of the weekly study plan."""
+
+    day: str
+    items: list[PlanItem]
+
+
+class WeekPlanResponse(BaseModel):
+    """The 7-day study plan."""
+
+    days: list[PlanDay]
