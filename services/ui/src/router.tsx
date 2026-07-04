@@ -6,6 +6,7 @@ import { AppLayout } from './components/layout/AppLayout'
 import { AuthLayout } from './components/layout/AuthLayout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { PublicOnlyRoute } from './components/auth/PublicOnlyRoute'
+import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import { LoadingSpinner } from './components/ui/LoadingSpinner'
 
 // Lazy-loaded page components (route-level code splitting)
@@ -64,6 +65,7 @@ export const router = createBrowserRouter([
             children: [
               {
                 element: <SuspenseOutlet />,
+                errorElement: <RouteErrorBoundary />,
                 children: [
                   { path: '/login', element: <LoginPage /> },
                   { path: '/register', element: <RegisterPage /> },
@@ -81,7 +83,13 @@ export const router = createBrowserRouter([
         children: [
           {
             element: <AppLayout />,
+            errorElement: <RouteErrorBoundary />,
             children: [
+              {
+                // Pathless wrapper: errors from any page render the boundary
+                // inside AppLayout's Outlet, keeping the shell nav alive.
+                errorElement: <RouteErrorBoundary />,
+                children: [
               { path: '/', element: <DashboardPage /> },
               { path: '/courses/:courseCode', element: <CoursePage /> },
               { path: '/courses/:courseCode/weeks/:weekNumber', element: <WeekViewPage /> },
@@ -103,6 +111,8 @@ export const router = createBrowserRouter([
               { path: '/settings', element: <SettingsPage /> },
               { path: '/profile', element: <ProfilePage /> },
               { path: '*', element: <NotFoundPage /> },
+                ],
+              },
             ],
           },
         ],
