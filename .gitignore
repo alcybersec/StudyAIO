@@ -59,3 +59,6 @@ services/app/alembic/versions/__pycache__/
 
 # Superpowers brainstorming sessions
 .superpowers/
+
+# agent worktrees
+.claude/worktrees/

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { chatApi } from '../api/endpoints'
+import type { MessageScope } from '../types'
 
 export type ChatConnectionState = 'idle' | 'streaming' | 'interrupted' | 'error'
 
@@ -27,6 +28,7 @@ export function useStreamingChat(sessionId: string) {
   const abortRef = useRef<AbortController | null>(null)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastContentRef = useRef<string | null>(null)
+  const lastScopeRef = useRef<MessageScope | undefined>(undefined)
   const queryClient = useQueryClient()
 
   useEffect(
@@ -43,7 +45,7 @@ export function useStreamingChat(sessionId: string) {
   }, [queryClient, sessionId])
 
   const runStream = useCallback(
-    async (content: string, attempt: number): Promise<void> => {
+    async (content: string, scope: MessageScope | undefined, attempt: number): Promise<void> => {
       setState((s) => ({
         ...s,
         isStreaming: true,
@@ -56,7 +58,7 @@ export function useStreamingChat(sessionId: string) {
       abortRef.current = new AbortController()
 
       try {
-        const response = await chatApi.streamMessage(sessionId, content)
+        const response = await chatApi.streamMessage(sessionId, content, scope)
 
         if (!response.ok) {
           // The server rejected the request — retrying won't change that
@@ -143,7 +145,7 @@ export function useStreamingChat(sessionId: string) {
           }))
           retryTimerRef.current = setTimeout(() => {
             retryTimerRef.current = null
-            void runStream(content, attempt + 1)
+            void runStream(content, scope, attempt + 1)
           }, BASE_BACKOFF_MS * 2 ** attempt)
           return
         }
@@ -162,10 +164,11 @@ export function useStreamingChat(sessionId: string) {
   )
 
   const sendStreaming = useCallback(
-    async (content: string) => {
+    async (content: string, scope?: MessageScope) => {
       lastContentRef.current = content
+      lastScopeRef.current = scope
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
-      await runStream(content, 0)
+      await runStream(content, scope, 0)
     },
     [runStream],
   )
@@ -174,7 +177,7 @@ export function useStreamingChat(sessionId: string) {
   const resume = useCallback(async () => {
     if (!lastContentRef.current) return
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
-    await runStream(lastContentRef.current, 0)
+    await runStream(lastContentRef.current, lastScopeRef.current, 0)
   }, [runStream])
 
   const abort = useCallback(() => {
