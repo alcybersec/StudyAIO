@@ -17,6 +17,7 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 from app.api import (
     admin_router,
     analytics_router,
+    artifacts_router,
     assets_router,
     auth_router,
     billing_router,
@@ -30,9 +31,11 @@ from app.api import (
     exports_router,
     files_router,
     gamification_router,
+    notifications_inbox_router,
     notifications_router,
     qa_router,
     review_items_router,
+    search_router,
     settings_router,
     study_router,
     summaries_router,
@@ -159,6 +162,10 @@ app = FastAPI(
             "description": "Human review inbox for low-confidence classifications",
         },
         {"name": "files", "description": "Serve files from data directories"},
+        {
+            "name": "search",
+            "description": "Global search across courses, summaries, flashcards, and chats",
+        },
         {"name": "qa", "description": "Question & Answer with citation support"},
         {"name": "assets", "description": "Flashcards and quiz questions"},
         {"name": "exams", "description": "Exam management, scheduling, and progress"},
@@ -226,8 +233,10 @@ app.add_middleware(
 app.include_router(dashboard_router, prefix="/api", tags=["dashboard"])
 app.include_router(courses_router, prefix="/api", tags=["courses"])
 app.include_router(uploads_router, prefix="/api", tags=["uploads"])
+app.include_router(artifacts_router, prefix="/api", tags=["uploads"])
 app.include_router(summaries_router, prefix="/api", tags=["summaries"])
 app.include_router(review_items_router, prefix="/api", tags=["review-items"])
+app.include_router(search_router, prefix="/api", tags=["search"])
 app.include_router(files_router, prefix="/api", tags=["files"])
 app.include_router(qa_router, prefix="/api", tags=["qa"])
 app.include_router(assets_router, prefix="/api", tags=["assets"])
@@ -244,6 +253,7 @@ app.include_router(gamification_router, prefix="/api", tags=["gamification"])
 app.include_router(concepts_router, prefix="/api", tags=["concepts"])
 app.include_router(billing_router, prefix="/api", tags=["billing"])
 app.include_router(notifications_router, prefix="/api", tags=["notifications"])
+app.include_router(notifications_inbox_router, prefix="/api", tags=["notifications"])
 app.include_router(calendar_sync_router, prefix="/api", tags=["calendar"])
 
 # Instrument with Prometheus if enabled

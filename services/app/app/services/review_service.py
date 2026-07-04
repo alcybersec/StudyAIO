@@ -54,6 +54,29 @@ async def create_review_item(
         entity_id=entity_id,
     )
 
+    # Emit inbox notification to the artifact owner (best-effort)
+    try:
+        if entity_type == "lecture_artifact":
+            from app.models.artifact import LectureArtifact
+            from app.services import notification_service
+
+            result = await session.execute(
+                select(LectureArtifact).where(LectureArtifact.id == entity_id)
+            )
+            artifact = result.scalar_one_or_none()
+            if artifact:
+                filename = artifact.original_filename or entity_id
+                await notification_service.notify_inbox(
+                    session,
+                    artifact.user_id,
+                    kind="review",
+                    title=f"Review needed: {filename}",
+                    body="A file needs your review before processing can continue.",
+                    href="/review",
+                )
+    except Exception:
+        logger.warning("review_inbox_notification_failed", review_id=review.id, exc_info=True)
+
     return review
 
 

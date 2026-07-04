@@ -34,6 +34,10 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=100,
     beat_schedule={
+        "daily-deadline-reminders": {
+            "task": "app.pipeline.notification_tasks.send_deadline_reminders",
+            "schedule": crontab(hour=8, minute=30),
+        },
         "daily-card-reminders": {
             "task": "app.pipeline.notification_tasks.send_daily_reminders",
             "schedule": crontab(hour=8, minute=0),
