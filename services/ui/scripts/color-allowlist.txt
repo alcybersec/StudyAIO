@@ -39,10 +39,8 @@ services/ui/src/components/study/ExamDetailInline.tsx
 services/ui/src/components/study/ExamsTab.tsx
 services/ui/src/components/study/RatingButtons.tsx
 services/ui/src/components/study/SessionSummary.tsx
-services/ui/src/components/study/TimedStudyTab.tsx
 services/ui/src/components/ui/ConnectionBanner.tsx
 services/ui/src/components/ui/ErrorBanner.tsx
-services/ui/src/components/ui/OfflineBanner.tsx
 services/ui/src/components/ui/Sheet.tsx
 services/ui/src/components/upload/FileQueue.tsx
 services/ui/src/components/upload/PipelineProgress.tsx

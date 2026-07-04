@@ -34,7 +34,7 @@ export function ResetPasswordPage() {
       await authApi.resetPassword({ token, new_password: password })
       setSuccess(true)
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Reset failed')
+      setError(err instanceof ApiError ? err.message : 'Reset failed')
     } finally {
       setLoading(false)
     }

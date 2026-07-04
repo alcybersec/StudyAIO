@@ -6,7 +6,8 @@ import { ErrorBoundary } from '../ErrorBoundary'
 import { DemoBanner } from '../demo/DemoBanner'
 import { OnboardingTour } from '../tour/OnboardingTour'
 import { Toaster } from '../ui/Toast'
-import { OfflineBanner } from '../ui/OfflineBanner'
+import { ConnectionStatus } from '../ui/ConnectionStatus'
+import { SyncChip } from '../ui/SyncChip'
 import { PWAUpdateNotify } from '../pwa/PWAUpdateNotify'
 import { PageTransition } from '../ui/PageTransition'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
@@ -32,9 +33,6 @@ export function AppLayout() {
       {isDemo && <DemoBanner />}
 
       <div className="flex flex-1 min-h-0">
-      {/* Offline status banner */}
-      <OfflineBanner />
-
       {/* Desktop sidebar */}
       <Sidebar />
 
@@ -46,6 +44,10 @@ export function AppLayout() {
             StudyAIO
           </Link>
         </header>
+
+        {/* connectivity + sync slot */}
+        <ConnectionStatus />
+        <SyncChip floating />
 
         <main
           id="main-content"
