@@ -6,6 +6,7 @@ import { Foundations } from './screens/Foundations'
 import { ShellNav } from './screens/ShellNav'
 import { CommandPalette } from './screens/CommandPalette'
 import { Home } from './screens/Home'
+import { CoursePage } from './screens/CoursePage'
 import { StudyHub } from './screens/StudyHub'
 import { WeekView } from './screens/WeekView'
 import { PipelineConsole } from './screens/PipelineConsole'
@@ -25,6 +26,7 @@ const SCREENS: Screen[] = [
   { id: 'shell', title: 'Shell & navigation', group: 'System', component: ShellNav },
   { id: 'palette', title: '⌘K palette', group: 'System', component: CommandPalette },
   { id: 'home', title: 'Home', group: 'Screens', component: Home, simAware: true },
+  { id: 'course', title: 'Course page', group: 'Screens', component: CoursePage, simAware: true },
   { id: 'study', title: 'Study Hub', group: 'Screens', component: StudyHub, simAware: true },
   { id: 'week', title: 'Week view', group: 'Screens', component: WeekView, simAware: true },
   { id: 'pipeline', title: 'Upload · pipeline console', group: 'Screens', component: PipelineConsole, simAware: true },
