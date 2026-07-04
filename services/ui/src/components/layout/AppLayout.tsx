@@ -7,6 +7,7 @@ import { DemoBanner } from '../demo/DemoBanner'
 import { OnboardingTour } from '../tour/OnboardingTour'
 import { Toaster } from '../ui/Toast'
 import { OfflineBanner } from '../ui/OfflineBanner'
+import { SyncChip } from '../ui/SyncChip'
 import { PWAUpdateNotify } from '../pwa/PWAUpdateNotify'
 import { PageTransition } from '../ui/PageTransition'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
@@ -46,6 +47,9 @@ export function AppLayout() {
             StudyAIO
           </Link>
         </header>
+
+        {/* connectivity + sync slot */}
+        <SyncChip floating />
 
         <main
           id="main-content"
