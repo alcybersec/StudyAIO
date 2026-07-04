@@ -18,6 +18,7 @@ from app.api.gamification import router as gamification_router
 from app.api.notifications import router as notifications_router
 from app.api.qa import router as qa_router
 from app.api.review_items import router as review_items_router
+from app.api.search import router as search_router
 from app.api.settings import router as settings_router
 from app.api.study import router as study_router
 from app.api.summaries import router as summaries_router
@@ -42,6 +43,7 @@ __all__ = [
     "files_router",
     "qa_router",
     "review_items_router",
+    "search_router",
     "settings_router",
     "study_router",
     "summaries_router",

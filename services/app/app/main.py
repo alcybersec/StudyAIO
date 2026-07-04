@@ -33,6 +33,7 @@ from app.api import (
     notifications_router,
     qa_router,
     review_items_router,
+    search_router,
     settings_router,
     study_router,
     summaries_router,
@@ -159,6 +160,7 @@ app = FastAPI(
             "description": "Human review inbox for low-confidence classifications",
         },
         {"name": "files", "description": "Serve files from data directories"},
+        {"name": "search", "description": "Global search across courses, summaries, flashcards, and chats"},
         {"name": "qa", "description": "Question & Answer with citation support"},
         {"name": "assets", "description": "Flashcards and quiz questions"},
         {"name": "exams", "description": "Exam management, scheduling, and progress"},
@@ -228,6 +230,7 @@ app.include_router(courses_router, prefix="/api", tags=["courses"])
 app.include_router(uploads_router, prefix="/api", tags=["uploads"])
 app.include_router(summaries_router, prefix="/api", tags=["summaries"])
 app.include_router(review_items_router, prefix="/api", tags=["review-items"])
+app.include_router(search_router, prefix="/api", tags=["search"])
 app.include_router(files_router, prefix="/api", tags=["files"])
 app.include_router(qa_router, prefix="/api", tags=["qa"])
 app.include_router(assets_router, prefix="/api", tags=["assets"])
