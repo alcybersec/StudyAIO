@@ -1,25 +1,57 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { chatApi } from '../api/endpoints'
+
+export type ChatConnectionState = 'idle' | 'streaming' | 'interrupted' | 'error'
 
 interface StreamingState {
   isStreaming: boolean
   streamingText: string
   error: string | null
+  connectionState: ChatConnectionState
+  /** 1-based attempt number while auto-retrying, 0 otherwise. */
+  retryAttempt: number
 }
+
+const MAX_AUTO_RETRIES = 3
+const BASE_BACKOFF_MS = 1_000
 
 export function useStreamingChat(sessionId: string) {
   const [state, setState] = useState<StreamingState>({
     isStreaming: false,
     streamingText: '',
     error: null,
+    connectionState: 'idle',
+    retryAttempt: 0,
   })
   const abortRef = useRef<AbortController | null>(null)
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastContentRef = useRef<string | null>(null)
   const queryClient = useQueryClient()
 
-  const sendStreaming = useCallback(
-    async (content: string) => {
-      setState({ isStreaming: true, streamingText: '', error: null })
+  useEffect(
+    () => () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+      abortRef.current?.abort()
+    },
+    [],
+  )
+
+  const invalidateMessages = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['chat', 'messages', sessionId] })
+    queryClient.invalidateQueries({ queryKey: ['chat', 'sessions'] })
+  }, [queryClient, sessionId])
+
+  const runStream = useCallback(
+    async (content: string, attempt: number): Promise<void> => {
+      setState((s) => ({
+        ...s,
+        isStreaming: true,
+        streamingText: attempt === 0 ? '' : s.streamingText,
+        error: null,
+        connectionState: 'streaming',
+        retryAttempt: attempt,
+      }))
 
       abortRef.current = new AbortController()
 
@@ -27,8 +59,15 @@ export function useStreamingChat(sessionId: string) {
         const response = await chatApi.streamMessage(sessionId, content)
 
         if (!response.ok) {
+          // The server rejected the request — retrying won't change that
           const body = await response.json().catch(() => ({ detail: response.statusText }))
-          throw new Error(body.detail || 'Stream request failed')
+          setState((s) => ({
+            ...s,
+            isStreaming: false,
+            error: body.detail || 'Stream request failed',
+            connectionState: 'error',
+          }))
+          return
         }
 
         const reader = response.body?.getReader()
@@ -77,30 +116,79 @@ export function useStreamingChat(sessionId: string) {
         }
 
         // Invalidate cache to pick up the saved messages
-        queryClient.invalidateQueries({ queryKey: ['chat', 'messages', sessionId] })
-        queryClient.invalidateQueries({ queryKey: ['chat', 'sessions'] })
+        invalidateMessages()
+        setState((s) => ({
+          ...s,
+          isStreaming: false,
+          error: null,
+          connectionState: 'idle',
+          retryAttempt: 0,
+        }))
       } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
+        if ((err as Error).name === 'AbortError') {
+          setState((s) => ({ ...s, isStreaming: false, connectionState: 'idle', retryAttempt: 0 }))
+          return
+        }
+
+        // The stream dropped mid-flight (network/proxy). Refresh whatever the
+        // server persisted so far, then auto-retry with backoff.
+        invalidateMessages()
+
+        if (attempt < MAX_AUTO_RETRIES) {
           setState((s) => ({
             ...s,
-            error: (err as Error).message || 'Streaming failed',
+            isStreaming: true,
+            connectionState: 'interrupted',
+            retryAttempt: attempt + 1,
           }))
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null
+            void runStream(content, attempt + 1)
+          }, BASE_BACKOFF_MS * 2 ** attempt)
+          return
         }
+
+        setState((s) => ({
+          ...s,
+          isStreaming: false,
+          error: (err as Error).message || 'Streaming failed',
+          connectionState: 'error',
+        }))
       } finally {
-        setState((s) => ({ ...s, isStreaming: false }))
         abortRef.current = null
       }
     },
-    [sessionId, queryClient],
+    [sessionId, invalidateMessages],
   )
 
+  const sendStreaming = useCallback(
+    async (content: string) => {
+      lastContentRef.current = content
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+      await runStream(content, 0)
+    },
+    [runStream],
+  )
+
+  /** Manually retry the interrupted stream (after auto-retries are exhausted). */
+  const resume = useCallback(async () => {
+    if (!lastContentRef.current) return
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+    await runStream(lastContentRef.current, 0)
+  }, [runStream])
+
   const abort = useCallback(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
     abortRef.current?.abort()
   }, [])
 
   return {
     ...state,
     sendStreaming,
+    resume,
     abort,
   }
 }
