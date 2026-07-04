@@ -12,7 +12,7 @@ import { LoadingSpinner } from './components/ui/LoadingSpinner'
 const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })))
 const AdminUserDetailPage = lazy(() => import('./pages/AdminUserDetailPage').then(m => ({ default: m.AdminUserDetailPage })))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })))
-const ChatPage = lazy(() => import('./pages/ChatPage').then(m => ({ default: m.ChatPage })))
+const AskPage = lazy(() => import('./pages/AskPage').then(m => ({ default: m.AskPage })))
 const CoursePage = lazy(() => import('./pages/CoursePage').then(m => ({ default: m.CoursePage })))
 const CourseOpsPage = lazy(() => import('./pages/CourseOpsPage').then(m => ({ default: m.CourseOpsPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -95,7 +95,7 @@ export const router = createBrowserRouter([
               { path: '/review', element: <ReviewInboxPage /> },
               { path: '/analytics', element: <AnalyticsPage /> },
               { path: '/study', element: <StudyHubPage /> },
-              { path: '/ask', element: <ChatPage />, handle: { fullBleed: true } satisfies AppRouteHandle },
+              { path: '/ask', element: <AskPage />, handle: { fullBleed: true } satisfies AppRouteHandle },
               // Merged surfaces redirect into Ask
               { path: '/qa', element: <Navigate to="/ask" replace /> },
               { path: '/chat', element: <Navigate to="/ask" replace /> },

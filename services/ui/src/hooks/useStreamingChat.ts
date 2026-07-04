@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { chatApi } from '../api/endpoints'
+import type { MessageScope } from '../types'
 
 interface StreamingState {
   isStreaming: boolean
@@ -18,13 +19,13 @@ export function useStreamingChat(sessionId: string) {
   const queryClient = useQueryClient()
 
   const sendStreaming = useCallback(
-    async (content: string) => {
+    async (content: string, scope?: MessageScope) => {
       setState({ isStreaming: true, streamingText: '', error: null })
 
       abortRef.current = new AbortController()
 
       try {
-        const response = await chatApi.streamMessage(sessionId, content)
+        const response = await chatApi.streamMessage(sessionId, content, scope)
 
         if (!response.ok) {
           const body = await response.json().catch(() => ({ detail: response.statusText }))

@@ -156,12 +156,6 @@ export interface QAResponse {
   chunks_searched: number
 }
 
-export interface QAExchange {
-  question: string
-  response: QAResponse
-  timestamp: string
-}
-
 export interface Settings {
   claude_code_path: string
   claude_model: string
@@ -519,6 +513,14 @@ export interface CreateSessionRequest {
 
 export interface SendMessageRequest {
   content: string
+  course_code?: string | null
+  week?: number | null
+}
+
+/** Per-message RAG scope (chips on the Ask composer). */
+export interface MessageScope {
+  courseCode?: string | null
+  week?: number | null
 }
 
 export interface SendMessageResponse {
