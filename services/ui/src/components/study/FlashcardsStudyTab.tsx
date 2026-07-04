@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useStudyDue, useRecordReview, useExamDetail } from '../../hooks/useApi'
 import { examsApi } from '../../api/endpoints'
+import { writeQueue } from '../../lib/writeQueue'
 import { LoadingSpinner, EmptyState } from '../ui'
 import { StudySetup } from './StudySetup'
 import { StudyCard } from './StudyCard'
@@ -69,12 +70,19 @@ export function FlashcardsStudyTab() {
           } else {
             if (examId) {
               const duration = Math.round((Date.now() - startTime.current) / 1000)
-              examsApi.recordSession(examId, {
+              const session = {
                 cards_reviewed: totalReviewed + 1,
                 quiz_questions_answered: 0,
                 quiz_correct: 0,
                 duration_seconds: duration,
-              }).catch(() => {})
+              }
+              examsApi.recordSession(examId, session).catch(() => {
+                void writeQueue.enqueue({
+                  url: `/api/exams/${examId}/sessions`,
+                  method: 'POST',
+                  body: JSON.stringify(session),
+                })
+              })
             }
             setPhase('done')
           }

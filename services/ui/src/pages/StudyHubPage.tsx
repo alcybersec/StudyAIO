@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import * as Tabs from '@radix-ui/react-tabs'
 import { PageHeader } from '../components/ui'
+import { SyncChip } from '../components/ui/SyncChip'
 import { FlashcardsStudyTab } from '../components/study/FlashcardsStudyTab'
 import { TimedStudyTab } from '../components/study/TimedStudyTab'
 import { ExamsTab } from '../components/study/ExamsTab'
@@ -49,6 +50,7 @@ export function StudyHubPage() {
       <PageHeader
         title="Study"
         subtitle="Flashcards, timed sessions, exams, and progress tracking"
+        actions={<SyncChip />}
       />
 
       <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
