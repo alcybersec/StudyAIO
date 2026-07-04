@@ -3,12 +3,14 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  FolderInput,
   PanelRightClose,
   PanelRightOpen,
+  X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
-import { Badge, Button, Card, EmptyState, ErrorState, SectionLabel, Skeleton, SkeletonRows } from '../ui'
+import { Badge, Button, Card, EmptyState, ErrorState, FakeSelect, Input, SectionLabel, Skeleton, SkeletonRows } from '../ui'
 import { PageShell } from './shared'
 import { useSim } from '../lib/sim'
 import { flashcards } from '../lib/mock'
@@ -199,12 +201,48 @@ function PdfViewer() {
   )
 }
 
+/* ------------------------------------------------------- Reclassify panel */
+
+function ReclassifyPanel({ onClose }: { onClose: () => void }) {
+  return (
+    <Card className="mb-4 border-peri/30">
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <p className="text-sm font-semibold flex items-center gap-2">
+            <FolderInput size={14} className="text-peri-fg" /> Reclassify this week's material
+          </p>
+          <p className="text-xs text-text-muted mt-1">
+            Applies to <span className="font-mono">week9_forensics.pdf</span> — currently{' '}
+            <Badge tone="muted">CSIT302 · Week 9</Badge>
+          </p>
+        </div>
+        <button onClick={onClose} className="text-text-faint hover:text-text-muted cursor-pointer p-1" aria-label="Close">
+          <X size={14} />
+        </button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-3 items-end max-w-lg">
+        <FakeSelect label="Move to course" value="CSCI368 — Network Security" />
+        <Input id="rw" label="Week" defaultValue="7" />
+        <div className="flex gap-2">
+          <Button size="md">Move</Button>
+          <Button size="md" variant="ghost" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+      <p className="text-[11px] text-text-faint mt-3">
+        The summary, flashcards and quiz move with the file. If the destination week already has a summary, it's
+        re-generated as a new version merging both sources — nothing is overwritten silently.
+      </p>
+    </Card>
+  )
+}
+
 /* ------------------------------------------------------------------ Screen */
 
 export function WeekView() {
   const { sim } = useSim()
   const [tab, setTab] = useState<Tab>('summary')
   const [viewerOpen, setViewerOpen] = useState(true)
+  const [reclassifyOpen, setReclassifyOpen] = useState(true)
 
   const content =
     sim === 'loading' ? (
@@ -239,13 +277,19 @@ export function WeekView() {
         </span>
       }
       actions={
-        <Button variant="ghost" size="sm" onClick={() => setViewerOpen((v) => !v)} aria-pressed={viewerOpen}>
-          {viewerOpen ? <PanelRightClose size={13} /> : <PanelRightOpen size={13} />}
-          {viewerOpen ? 'Hide original' : 'Show original'}
-        </Button>
+        <>
+          <Button variant="ghost" size="sm" onClick={() => setReclassifyOpen((v) => !v)} aria-pressed={reclassifyOpen}>
+            <FolderInput size={13} /> Reclassify
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setViewerOpen((v) => !v)} aria-pressed={viewerOpen}>
+            {viewerOpen ? <PanelRightClose size={13} /> : <PanelRightOpen size={13} />}
+            {viewerOpen ? 'Hide original' : 'Show original'}
+          </Button>
+        </>
       }
       wide
     >
+      {reclassifyOpen && sim !== 'loading' && <ReclassifyPanel onClose={() => setReclassifyOpen(false)} />}
       <div className={`grid grid-cols-1 gap-4 ${viewerOpen ? 'lg:grid-cols-[1fr_minmax(320px,42%)]' : ''}`}>
         {/* left: tabbed content — its own isolated region */}
         <Card>
