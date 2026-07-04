@@ -1,8 +1,12 @@
-import { Suspense } from 'react'
+import { Suspense, useState } from 'react'
 import { Link, Outlet, useLocation, useMatches } from 'react-router-dom'
 import { AnimatePresence } from 'motion/react'
 import { useAuth } from '../../hooks/useAuth'
+import { useShortcuts } from '../../hooks/useShortcuts'
+import { openCommandPalette } from '../../lib/commandPalette'
 import type { AppRouteHandle } from '../../router'
+import { CommandPalette } from '../CommandPalette'
+import { ShortcutOverlay } from '../ShortcutOverlay'
 import { ErrorBoundary } from '../ErrorBoundary'
 import { DemoBanner } from '../demo/DemoBanner'
 import { OnboardingTour } from '../tour/OnboardingTour'
@@ -18,6 +22,11 @@ export function AppLayout() {
   const { isDemo } = useAuth()
   const location = useLocation()
   const matches = useMatches()
+  const [shortcutOverlayOpen, setShortcutOverlayOpen] = useState(false)
+  useShortcuts({
+    onOpenPalette: openCommandPalette,
+    onOpenOverlay: () => setShortcutOverlayOpen(true),
+  })
   const isFullBleed = matches.some(
     (match) => (match.handle as AppRouteHandle | undefined)?.fullBleed === true,
   )
@@ -81,6 +90,10 @@ export function AppLayout() {
 
         {/* Mobile bottom tabs */}
         <MobileNav />
+
+        {/* ⌘K palette + keyboard shortcut overlay */}
+        <CommandPalette />
+        <ShortcutOverlay open={shortcutOverlayOpen} onOpenChange={setShortcutOverlayOpen} />
 
         {/* Global toast notifications */}
         <Toaster />
