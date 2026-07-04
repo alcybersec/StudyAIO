@@ -24,7 +24,6 @@ services/ui/src/components/gamification/AchievementUnlock.tsx
 services/ui/src/components/gamification/DailyChallenges.tsx
 services/ui/src/components/gamification/LevelDisplay.tsx
 services/ui/src/components/gamification/XPBar.tsx
-services/ui/src/components/layout/Sidebar.tsx
 services/ui/src/components/notifications/NotificationsSection.tsx
 services/ui/src/components/notifications/PushNotificationToggle.tsx
 services/ui/src/components/notifications/TelegramLinkCard.tsx
