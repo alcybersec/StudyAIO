@@ -33,11 +33,11 @@ export function LoginPage() {
       await login({ email, password, totp_code: showMFA ? totpCode : undefined })
       navigate('/')
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403 && err.detail.toLowerCase().includes('mfa')) {
+      if (err instanceof ApiError && err.status === 403 && err.message.toLowerCase().includes('mfa')) {
         setShowMFA(true)
         setError('Enter your MFA code to continue')
       } else if (err instanceof ApiError) {
-        setError(err.detail)
+        setError(err.message)
       } else {
         setError('Login failed')
       }
