@@ -162,7 +162,10 @@ app = FastAPI(
             "description": "Human review inbox for low-confidence classifications",
         },
         {"name": "files", "description": "Serve files from data directories"},
-        {"name": "search", "description": "Global search across courses, summaries, flashcards, and chats"},
+        {
+            "name": "search",
+            "description": "Global search across courses, summaries, flashcards, and chats",
+        },
         {"name": "qa", "description": "Question & Answer with citation support"},
         {"name": "assets", "description": "Flashcards and quiz questions"},
         {"name": "exams", "description": "Exam management, scheduling, and progress"},
