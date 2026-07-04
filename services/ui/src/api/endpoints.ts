@@ -42,6 +42,7 @@ import type {
   UploadResult,
   WeakTopic,
   WeekDetail,
+  WeekPlan,
 } from '../types'
 
 export const dashboardApi = {
@@ -141,6 +142,7 @@ export const studyApi = {
     if (courseId) params.set('course_id', courseId)
     return api.get<StreakInfo>(`/study/streak?${params}`)
   },
+  getPlan: () => api.get<WeekPlan>('/study/plan'),
 }
 
 export const exportApi = {
