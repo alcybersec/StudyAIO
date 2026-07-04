@@ -45,8 +45,6 @@ services/ui/src/components/viewer/FileViewerToolbar.tsx
 services/ui/src/components/viewer/FileViewer.tsx
 services/ui/src/components/viewer/PdfViewer.tsx
 services/ui/src/components/week/ArtifactList.tsx
-services/ui/src/components/week/FlashcardsTab.tsx
-services/ui/src/components/week/QuizTab.tsx
 services/ui/src/components/week/SummaryTab.tsx
 services/ui/src/pages/AchievementsPage.tsx
 services/ui/src/pages/AdminPage.tsx
