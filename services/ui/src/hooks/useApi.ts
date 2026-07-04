@@ -536,3 +536,51 @@ export function useAdminUserDetail(userId: string | undefined) {
     enabled: !!userId,
   })
 }
+
+// ── Course management (E7) ─────────────────────────────────────
+
+export function useRenameCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ courseCode, data }: { courseCode: string; data: import('../types').CourseUpdatePayload }) =>
+      coursesApi.rename(courseCode, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useArchiveCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (courseCode: string) => coursesApi.archive(courseCode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useDeleteCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (courseCode: string) => coursesApi.remove(courseCode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useMergeCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ courseCode, into }: { courseCode: string; into: string }) =>
+      coursesApi.merge(courseCode, into),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}

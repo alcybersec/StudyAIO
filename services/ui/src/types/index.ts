@@ -967,3 +967,27 @@ export interface ExamReadinessData {
   quiz_correct: number
   study_days_last_week: number
 }
+
+// ── Course management (E7) ─────────────────────────────────────
+
+export interface CourseUpdatePayload {
+  new_code?: string
+  name?: string
+}
+
+export interface CourseArchiveResult {
+  code: string
+  archived: boolean
+}
+
+export interface CourseDeleteResult {
+  code: string
+  deleted: boolean
+  counts: Record<string, number>
+}
+
+export interface CourseMergeResult {
+  moved_summaries: number
+  conflict_weeks: number[]
+  review_items_created: number
+}
