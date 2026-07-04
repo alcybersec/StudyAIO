@@ -128,6 +128,76 @@ async def ingest_file(session: AsyncSession, source_path: str, user_id: str) -> 
     return artifact
 
 
+async def ingest_text_capture(
+    session: AsyncSession,
+    text: str,
+    title: str | None,
+    user_id: str,
+) -> LectureArtifact:
+    """Ingest a quick text capture as a mini artifact.
+
+    Stores the text as a .txt blob, dedupes on the SHA-256 of the text,
+    and creates a LectureArtifact with source_type="capture".
+
+    Args:
+        session: Database session.
+        text: Captured text content.
+        title: Optional display title (used for the filename).
+        user_id: Owner user UUID.
+
+    Returns:
+        Created LectureArtifact.
+
+    Raises:
+        DuplicateFileError: If the same text was already captured by this user.
+    """
+    import hashlib
+
+    content = text.encode("utf-8")
+    sha256 = hashlib.sha256(content).hexdigest()
+
+    existing = await check_duplicate(session, sha256, user_id)
+    if existing:
+        logger.info("capture_duplicate_detected", existing_id=existing.id)
+        raise DuplicateFileError(sha256=sha256, existing_artifact_id=existing.id)
+
+    display_title = (title or "Quick capture").strip() or "Quick capture"
+    original_filename = f"{display_title}.txt"
+    safe_name = sanitize_filename(original_filename) or "capture.txt"
+
+    artifact_id = generate_id()
+    storage_key = f"uploads/{artifact_id}_{safe_name}"
+
+    storage = get_storage()
+    await storage.ensure_dir("uploads")
+    await storage.put(storage_key, content)
+
+    artifact = LectureArtifact(
+        id=artifact_id,
+        user_id=user_id,
+        title=display_title,
+        original_filename=original_filename,
+        file_path=storage_key,
+        file_type="txt",
+        source_type="capture",
+        sha256=sha256,
+        file_size_bytes=len(content),
+        status="ingested",
+        pipeline_started_at=datetime.now(UTC),
+    )
+    session.add(artifact)
+    await session.commit()
+    await session.refresh(artifact)
+
+    logger.info(
+        "capture_artifact_created",
+        artifact_id=artifact.id,
+        title=display_title,
+        size=len(content),
+    )
+    return artifact
+
+
 async def get_artifact(
     session: AsyncSession, artifact_id: str, user_id: str | None = None
 ) -> LectureArtifact | None:

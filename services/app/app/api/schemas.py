@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # ── Course ────────────────────────────────────────────────────────
 
@@ -74,6 +74,24 @@ class UploadResponse(BaseModel):
     filename: str
     status: str
     pipeline_task_id: str | None = None
+
+
+class CaptureRequest(BaseModel):
+    """Request body for quick capture (text or URL, not both)."""
+
+    text: str | None = Field(None, description="Raw text to capture")
+    url: str | None = Field(None, description="URL to fetch and capture as text")
+    title: str | None = Field(None, max_length=200, description="Optional display title")
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> "CaptureRequest":
+        has_text = bool(self.text and self.text.strip())
+        has_url = bool(self.url and self.url.strip())
+        if has_text and has_url:
+            raise ValueError("Provide either text or url, not both")
+        if not has_text and not has_url:
+            raise ValueError("Provide text or url")
+        return self
 
 
 # ── Summary ───────────────────────────────────────────────────────

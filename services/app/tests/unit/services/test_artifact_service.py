@@ -82,3 +82,70 @@ class TestIngestFile:
         assert result.user_id == TEST_USER_ID
         mock_session.add.assert_called_once()
         mock_session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+class TestIngestTextCapture:
+    """Tests for ingest_text_capture."""
+
+    async def test_creates_capture_artifact(self, mock_session, tmp_path):
+        """Text capture creates a txt artifact with source_type='capture'."""
+        from unittest.mock import patch
+
+        from app.core.storage import reset_storage
+
+        # No duplicate
+        dup_result = MagicMock()
+        dup_result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = dup_result
+
+        with patch("app.config.settings.data_dir", str(tmp_path)):
+            reset_storage()
+            try:
+                artifact = await artifact_service.ingest_text_capture(
+                    mock_session,
+                    text="Some captured notes",
+                    title="My notes",
+                    user_id=TEST_USER_ID,
+                )
+            finally:
+                reset_storage()
+
+        assert artifact.source_type == "capture"
+        assert artifact.file_type == "txt"
+        assert artifact.user_id == TEST_USER_ID
+        assert artifact.original_filename.endswith(".txt")
+        assert "My notes" in artifact.original_filename
+        mock_session.add.assert_called_once()
+        # The stored file exists under uploads/
+        stored = list((tmp_path / "uploads").glob("*.txt"))
+        assert len(stored) == 1
+        assert stored[0].read_text() == "Some captured notes"
+
+    async def test_duplicate_capture_raises(self, mock_session, tmp_path):
+        """The same text captured twice raises DuplicateFileError."""
+        from unittest.mock import patch
+
+        from app.core.exceptions import DuplicateFileError
+        from app.core.storage import reset_storage
+
+        existing = MagicMock()
+        existing.id = "art-existing"
+        dup_result = MagicMock()
+        dup_result.scalar_one_or_none.return_value = existing
+        mock_session.execute.return_value = dup_result
+
+        with patch("app.config.settings.data_dir", str(tmp_path)):
+            reset_storage()
+            try:
+                with pytest.raises(DuplicateFileError) as exc_info:
+                    await artifact_service.ingest_text_capture(
+                        mock_session,
+                        text="Same text",
+                        title=None,
+                        user_id=TEST_USER_ID,
+                    )
+            finally:
+                reset_storage()
+
+        assert exc_info.value.existing_artifact_id == "art-existing"
