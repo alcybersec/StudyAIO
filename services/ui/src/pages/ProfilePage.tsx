@@ -28,7 +28,7 @@ export function ProfilePage() {
       })
       setProfileMsg('Profile updated')
     } catch (err) {
-      setProfileMsg(err instanceof ApiError ? err.detail : 'Update failed')
+      setProfileMsg(err instanceof ApiError ? err.message : 'Update failed')
     }
   }
 
@@ -56,7 +56,7 @@ export function ProfilePage() {
       setNewPassword('')
       setConfirmPassword('')
     } catch (err) {
-      setPasswordError(err instanceof ApiError ? err.detail : 'Change failed')
+      setPasswordError(err instanceof ApiError ? err.message : 'Change failed')
     }
   }
 
