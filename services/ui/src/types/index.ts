@@ -967,3 +967,22 @@ export interface ExamReadinessData {
   quiz_correct: number
   study_days_last_week: number
 }
+
+// ── Weekly study plan ───────────────────────────────────────────
+
+export interface StudyPlanItem {
+  course_code: string
+  kind: 'cards' | 'quiz' | 'mock'
+  target: number
+  done: number
+}
+
+export interface StudyPlanDay {
+  /** ISO date (YYYY-MM-DD). */
+  day: string
+  items: StudyPlanItem[]
+}
+
+export interface WeekPlan {
+  days: StudyPlanDay[]
+}
