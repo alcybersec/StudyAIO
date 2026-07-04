@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { WifiOff } from 'lucide-react'
 import { useChatMessages } from '../../hooks/useApi'
 import { useStreamingChat } from '../../hooks/useStreamingChat'
 import { ChatMessage } from './ChatMessage'
@@ -12,7 +13,8 @@ interface ChatWindowProps {
 export function ChatWindow({ sessionId }: ChatWindowProps) {
   const { data: messagesData, isLoading } = useChatMessages(sessionId)
   const messages = messagesData?.messages ?? []
-  const { isStreaming, streamingText, error, sendStreaming } = useStreamingChat(sessionId)
+  const { isStreaming, streamingText, error, connectionState, retryAttempt, sendStreaming, resume } =
+    useStreamingChat(sessionId)
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -54,10 +56,31 @@ export function ChatWindow({ sessionId }: ChatWindowProps) {
         )}
       </div>
 
-      {/* Error display */}
-      {error && (
-        <div className="mx-3 sm:mx-6 mb-2 px-3 py-2 rounded-lg bg-danger/10 text-danger text-sm">
-          Failed to send: {error}
+      {/* Interrupted stream — auto-retrying */}
+      {connectionState === 'interrupted' && (
+        <div
+          role="alert"
+          className="mx-3 sm:mx-6 mb-2 flex items-center gap-2.5 border border-amber/25 bg-amber-soft rounded-lg px-3.5 py-2.5 text-xs text-amber-fg"
+        >
+          <WifiOff size={13} aria-hidden />
+          Stream interrupted — reconnecting (attempt {retryAttempt})…
+        </div>
+      )}
+
+      {/* Error display — retries exhausted or request rejected */}
+      {connectionState === 'error' && error && (
+        <div
+          role="alert"
+          className="mx-3 sm:mx-6 mb-2 flex items-center gap-2.5 border border-red/25 bg-red-soft rounded-lg px-3.5 py-2.5 text-xs text-red-fg"
+        >
+          <WifiOff size={13} aria-hidden />
+          <span className="flex-1">Connection lost: {error}</span>
+          <button
+            onClick={() => resume()}
+            className="shrink-0 px-2.5 py-1 rounded-md border border-red/30 font-medium hover:bg-red/15 transition-colors"
+          >
+            Resume now
+          </button>
         </div>
       )}
 
