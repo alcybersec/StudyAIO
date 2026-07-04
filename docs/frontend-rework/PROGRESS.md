@@ -5,10 +5,10 @@ Integration branch: `frontend-rework`. Streams merge here in dependency order; `
 | Stream | Branch | Status | Merged | Notes |
 |---|---|---|---|---|
 | A — Design system, tokens, vitest | `fr/design-system` | ✅ done | be70598 | 14 commits, 52 vitest tests, color guard live |
-| B — Error layer | `fr/error-layer` | 🟡 in progress | — | |
+| B — Error layer | `fr/error-layer` | ✅ done | merged | 53 tests (105 total); silent study-write drops eliminated |
 | C — Shell, IA, ⌘K, Ask merge | `fr/shell-ia` | 🟡 in progress | — | merges after B (AppLayout slot) |
 | D1–D11 — Screen redesigns | `fr/screens-*` | ⬜ pending A+B+C | — | D2←E3, D3←E6, D4←E7, D8←E5 |
-| E — Backend features (TDD) | `fr/features-backend` | 🟡 in progress | — | E1–E7 |
+| E — Backend features (TDD) | `fr/features-backend` | ✅ done | b860a85 | +96 tests (1130 local), 7 endpoint groups, 4 migrations; container suite run pending |
 | F — Hardening, E2E, final merge | `fr/hardening` | ⬜ pending all | — | |
 
 ## Log
