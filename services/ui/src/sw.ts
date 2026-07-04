@@ -170,50 +170,52 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     (async () => {
       try {
         const response = await fetch(request.clone())
-        return response
+        // Server errors (5xx) fall through to the queue — study writes are never lost
+        if (response.status < 500) return response
       } catch {
-        // Network failed — queue the mutation
-        const body = await request.text()
-        await enqueue({
-          url: request.url,
-          method: request.method,
-          body,
-          timestamp: Date.now(),
-        })
+        // Network failed — fall through to queue the mutation
+      }
 
-        // Notify clients about pending count
-        const count = await getPendingCount()
-        const clients = await self.clients.matchAll()
-        for (const client of clients) {
-          client.postMessage({ type: 'PENDING_COUNT', count })
+      const body = await request.text()
+      await enqueue({
+        url: request.url,
+        method: request.method,
+        body,
+        timestamp: Date.now(),
+      })
+
+      // Notify clients about pending count
+      const count = await getPendingCount()
+      const clients = await self.clients.matchAll()
+      for (const client of clients) {
+        client.postMessage({ type: 'PENDING_COUNT', count })
+      }
+
+      // Return synthetic response
+      if (isReview) {
+        const parsed = JSON.parse(body)
+        const synthetic = {
+          id: crypto.randomUUID(),
+          flashcard_id: parsed.flashcard_id,
+          ease_factor: 2.5,
+          interval_days: 1,
+          repetition_count: 0,
+          next_review_at: new Date(
+            Date.now() + 24 * 60 * 60 * 1000
+          ).toISOString(),
+          last_reviewed_at: new Date().toISOString(),
         }
-
-        // Return synthetic response
-        if (isReview) {
-          const parsed = JSON.parse(body)
-          const synthetic = {
-            id: crypto.randomUUID(),
-            flashcard_id: parsed.flashcard_id,
-            ease_factor: 2.5,
-            interval_days: 1,
-            repetition_count: 0,
-            next_review_at: new Date(
-              Date.now() + 24 * 60 * 60 * 1000
-            ).toISOString(),
-            last_reviewed_at: new Date().toISOString(),
-          }
-          return new Response(JSON.stringify(synthetic), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          })
-        }
-
-        // Quiz attempt — return simple success
-        return new Response(JSON.stringify({ status: 'queued_offline' }), {
+        return new Response(JSON.stringify(synthetic), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
       }
+
+      // Quiz attempt — return simple success
+      return new Response(JSON.stringify({ status: 'queued_offline' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
     })()
   )
 })
