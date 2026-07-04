@@ -18,7 +18,7 @@ export function EmptyState({ icon = '\u{1F4DA}', title, description, actionLabel
       {actionLabel && actionTo && (
         <Link
           to={actionTo}
-          className="inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors"
+          className="inline-flex items-center px-4 py-2 bg-sage text-on-accent text-sm font-medium rounded-lg hover:bg-sage-hover transition-colors"
         >
           {actionLabel}
         </Link>
@@ -26,7 +26,7 @@ export function EmptyState({ icon = '\u{1F4DA}', title, description, actionLabel
       {actionLabel && onAction && !actionTo && (
         <button
           onClick={onAction}
-          className="inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors"
+          className="inline-flex items-center px-4 py-2 bg-sage text-on-accent text-sm font-medium rounded-lg hover:bg-sage-hover transition-colors"
         >
           {actionLabel}
         </button>
