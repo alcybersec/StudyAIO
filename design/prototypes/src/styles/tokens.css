@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+   StudyAIO rework tokens — "Nordic Calm, dark-anchored"
+   Dark is the design target: warm-tinted charcoal, muted earth accents.
+   Light is the derived paper twin.
+--------------------------------------------------------------------------- */
+
+@theme inline {
+  --color-surface-0: var(--t-surface-0);
+  --color-surface-1: var(--t-surface-1);
+  --color-surface-2: var(--t-surface-2);
+  --color-border: var(--t-border);
+  --color-border-strong: var(--t-border-strong);
+  --color-text: var(--t-text);
+  --color-text-muted: var(--t-text-muted);
+  --color-text-faint: var(--t-text-faint);
+
+  --color-sage: var(--t-sage);
+  --color-sage-hover: var(--t-sage-hover);
+  --color-sage-soft: var(--t-sage-soft);
+  --color-sage-fg: var(--t-sage-fg);
+
+  --color-amber: var(--t-amber);
+  --color-amber-soft: var(--t-amber-soft);
+  --color-amber-fg: var(--t-amber-fg);
+
+  --color-red: var(--t-red);
+  --color-red-soft: var(--t-red-soft);
+  --color-red-fg: var(--t-red-fg);
+
+  --color-peri: var(--t-peri);
+  --color-peri-soft: var(--t-peri-soft);
+  --color-peri-fg: var(--t-peri-fg);
+
+  --color-on-accent: var(--t-on-accent);
+
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* -------- dark (anchor) -------- */
+.dark {
+  --t-surface-0: #191817;
+  --t-surface-1: #201f1e;
+  --t-surface-2: #282624;
+  --t-border: #33302d;
+  --t-border-strong: #423e3a;
+  --t-text: #e9e7e3;
+  --t-text-muted: #a5a19a;
+  --t-text-faint: #736f69;
+
+  --t-sage: #4a8265;
+  --t-sage-hover: #578f72;
+  --t-sage-soft: rgba(127, 169, 143, 0.14);
+  --t-sage-fg: #93bfa4;
+
+  --t-amber: #c77b32;
+  --t-amber-soft: rgba(217, 154, 98, 0.14);
+  --t-amber-fg: #dfa06a;
+
+  --t-red: #b0554d;
+  --t-red-soft: rgba(215, 138, 131, 0.13);
+  --t-red-fg: #d98d86;
+
+  --t-peri: #6d77cd;
+  --t-peri-soft: rgba(154, 163, 236, 0.13);
+  --t-peri-fg: #a3abee;
+
+  --t-on-accent: #f7f7f5;
+}
+
+/* -------- light (derived paper twin) -------- */
+:root {
+  --t-surface-0: #f7f7f5;
+  --t-surface-1: #fdfdfc;
+  --t-surface-2: #f1f0ee;
+  --t-border: #e9e7e3;
+  --t-border-strong: #d9d6d0;
+  --t-text: #37352f;
+  --t-text-muted: #787571;
+  --t-text-faint: #a3a09b;
+
+  --t-sage: #448361;
+  --t-sage-hover: #3a7154;
+  --t-sage-soft: rgba(68, 131, 97, 0.1);
+  --t-sage-fg: #3a7154;
+
+  --t-amber: #c17322;
+  --t-amber-soft: rgba(217, 115, 13, 0.1);
+  --t-amber-fg: #a96312;
+
+  --t-red: #c4554d;
+  --t-red-soft: rgba(196, 85, 77, 0.09);
+  --t-red-fg: #b04840;
+
+  --t-peri: #5f6ac4;
+  --t-peri-soft: rgba(110, 121, 214, 0.1);
+  --t-peri-fg: #545eb4;
+
+  --t-on-accent: #fdfdfc;
+}
+
+/* -------- base -------- */
+body {
+  background: var(--t-surface-0);
+  color: var(--t-text);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* visible keyboard focus, invisible mouse focus */
+:focus-visible {
+  outline: 2px solid var(--t-peri);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* keyboard hint chips — part of the power-tool identity */
+kbd {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--t-text-muted);
+  background: var(--t-surface-2);
+  border: 1px solid var(--t-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 5px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--t-border-strong) transparent;
+}
+
+::selection {
+  background: var(--t-peri-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
