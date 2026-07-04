@@ -17,6 +17,7 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 from app.api import (
     admin_router,
     analytics_router,
+    artifacts_router,
     assets_router,
     auth_router,
     billing_router,
@@ -229,6 +230,7 @@ app.add_middleware(
 app.include_router(dashboard_router, prefix="/api", tags=["dashboard"])
 app.include_router(courses_router, prefix="/api", tags=["courses"])
 app.include_router(uploads_router, prefix="/api", tags=["uploads"])
+app.include_router(artifacts_router, prefix="/api", tags=["uploads"])
 app.include_router(summaries_router, prefix="/api", tags=["summaries"])
 app.include_router(review_items_router, prefix="/api", tags=["review-items"])
 app.include_router(search_router, prefix="/api", tags=["search"])
