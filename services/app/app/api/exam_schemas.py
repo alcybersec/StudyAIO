@@ -116,3 +116,22 @@ class StudyHistoryDayResponse(BaseModel):
     quiz_correct: int
     duration_seconds: int
     session_count: int
+
+
+class ReadinessTopicRow(BaseModel):
+    """A single topic (week) row in the readiness drill-down."""
+
+    topic: str
+    week: int
+    accuracy: float | None = None
+    weight: float
+    card_count: int
+
+
+class ReadinessDetailResponse(BaseModel):
+    """Topic-level readiness breakdown for an exam."""
+
+    exam_id: str
+    title: str
+    overall: int
+    topics: list[ReadinessTopicRow]
