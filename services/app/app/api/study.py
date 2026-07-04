@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user_or_default
 from app.api.study_schemas import (
     DueCardResponse,
+    PlanDay,
+    PlanItem,
     QuizAttemptRequest,
     QuizAttemptResponse,
     ReviewRequest,
@@ -16,6 +18,7 @@ from app.api.study_schemas import (
     StudyStatsResponse,
     TimedPlanRequest,
     TimedPlanResponse,
+    WeekPlanResponse,
 )
 from app.core.database import get_session
 from app.models.flashcard import Flashcard
@@ -26,6 +29,7 @@ from app.services import (
     exam_service,
     srs_service,
     streak_service,
+    study_service,
     timed_session_service,
     xp_service,
 )
@@ -191,4 +195,29 @@ async def generate_timed_plan(
         estimated_quiz_minutes=plan.estimated_quiz_minutes,
         course_code=plan.course_code,
         exam_id=plan.exam_id,
+    )
+
+
+@router.get(
+    "/study/plan",
+    response_model=WeekPlanResponse,
+    summary="Get the weekly study plan",
+    description="Returns a 7-day plan of card/quiz/mock targets per course, "
+    "scheduled from active exam dates and readiness, with done counts from "
+    "this week's study sessions.",
+)
+async def get_week_plan(
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> WeekPlanResponse:
+    """Get the weekly study plan for the current user."""
+    plan = await study_service.build_week_plan(session, user.id)
+    return WeekPlanResponse(
+        days=[
+            PlanDay(
+                day=day["day"],
+                items=[PlanItem(**item) for item in day["items"]],
+            )
+            for day in plan
+        ]
     )
