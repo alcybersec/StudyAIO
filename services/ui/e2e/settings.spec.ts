@@ -64,7 +64,7 @@ test.describe('Settings Page', () => {
     await expect(page.locator('html')).toHaveClass(/dark/, { timeout: 5_000 })
 
     // Verify localStorage was updated
-    const storedTheme = await page.evaluate(() => localStorage.getItem('theme'))
+    const storedTheme = await page.evaluate(() => localStorage.getItem('studyaio-theme'))
     expect(storedTheme).toBe('dark')
 
     // Reload and verify dark mode persists
