@@ -44,3 +44,44 @@ class TestTelegramLink:
         assert link.username == "testuser"
         assert link.verified is True
         assert link.link_token == "abc123token"
+
+
+class TestNotification:
+    """Tests for the inbox Notification model."""
+
+    def test_create_notification(self) -> None:
+        """Notification can be instantiated with required fields."""
+        from app.models.notification import Notification
+
+        notification = Notification(
+            id="notif-1",
+            user_id="user-1",
+            kind="pipeline",
+            title="lecture.pdf processed",
+            body="12 flashcards and 6 quiz questions generated.",
+            href="/courses/CSIT302/weeks/5",
+        )
+        assert notification.user_id == "user-1"
+        assert notification.kind == "pipeline"
+        assert notification.title == "lecture.pdf processed"
+        assert notification.href == "/courses/CSIT302/weeks/5"
+        assert notification.read_at is None
+
+    def test_notification_tablename(self) -> None:
+        """Notification has correct table name."""
+        from app.models.notification import Notification
+
+        assert Notification.__tablename__ == "notifications"
+
+    def test_notification_optional_fields(self) -> None:
+        """body and href are optional."""
+        from app.models.notification import Notification
+
+        notification = Notification(
+            id="notif-2",
+            user_id="user-1",
+            kind="review",
+            title="Review needed",
+        )
+        assert notification.body is None
+        assert notification.href is None

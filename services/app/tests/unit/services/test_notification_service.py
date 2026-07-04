@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.models.notification_preference import NotificationPreference
+from app.services import notification_service
 from app.services.notification_service import (
     CHANNELS,
     EVENT_TYPES,
@@ -221,3 +222,110 @@ class TestNotify:
             mock_send.side_effect = RuntimeError("SMTP down")
             result = await notify(session, "user-1", "cards_due", due_count=5)
             assert result.get("email") is False
+
+
+@pytest.mark.asyncio
+class TestInboxNotifications:
+    """Tests for the in-app notification inbox."""
+
+    async def test_create_inbox_notification_adds_row(self, mock_session):
+        """create_inbox_notification persists a Notification with all fields."""
+        from app.models.notification import Notification
+
+        result = await notification_service.create_inbox_notification(
+            mock_session,
+            user_id="user-001",
+            kind="pipeline",
+            title="lecture.pdf processed",
+            body="Ready to study.",
+            href="/courses/CSIT302/weeks/5",
+        )
+
+        assert isinstance(result, Notification)
+        assert result.user_id == "user-001"
+        assert result.kind == "pipeline"
+        assert result.read_at is None
+        mock_session.add.assert_called_once()
+        mock_session.flush.assert_awaited()
+
+    async def test_notify_inbox_swallows_errors(self, mock_session):
+        """notify_inbox never raises — best-effort like the XP pattern."""
+        mock_session.flush.side_effect = RuntimeError("db down")
+
+        result = await notification_service.notify_inbox(
+            mock_session,
+            user_id="user-001",
+            kind="review",
+            title="Review needed",
+        )
+        assert result is None
+
+    async def test_mark_notifications_read_returns_updated_count(self, mock_session):
+        """mark_notifications_read updates only unread rows and reports count."""
+        update_result = MagicMock()
+        update_result.rowcount = 2
+        mock_session.execute = AsyncMock(return_value=update_result)
+
+        updated = await notification_service.mark_notifications_read(
+            mock_session, "user-001", ["n1", "n2"]
+        )
+        assert updated == 2
+
+    async def test_mark_notifications_read_idempotent(self, mock_session):
+        """Marking already-read notifications again updates nothing."""
+        update_result = MagicMock()
+        update_result.rowcount = 0
+        mock_session.execute = AsyncMock(return_value=update_result)
+
+        updated = await notification_service.mark_notifications_read(
+            mock_session, "user-001", ["n1", "n2"]
+        )
+        assert updated == 0
+
+    async def test_mark_notifications_read_empty_ids(self, mock_session):
+        """Empty id list is a no-op."""
+        updated = await notification_service.mark_notifications_read(
+            mock_session, "user-001", []
+        )
+        assert updated == 0
+        mock_session.execute.assert_not_called()
+
+    async def test_count_unread_notifications(self, mock_session):
+        """count_unread_notifications returns the scalar count."""
+        count_result = MagicMock()
+        count_result.scalar_one.return_value = 3
+        mock_session.execute = AsyncMock(return_value=count_result)
+
+        count = await notification_service.count_unread_notifications(
+            mock_session, "user-001"
+        )
+        assert count == 3
+
+
+@pytest.mark.asyncio
+class TestPipelineCompleteEmitsInbox:
+    """Assets-stage completion creates a kind='pipeline' inbox notification."""
+
+    async def test_notify_pipeline_complete_creates_inbox_row(self, mock_session):
+        """notify_pipeline_complete adds a Notification even when channels are off."""
+        from app.models.notification import Notification
+
+        with patch("app.services.notification_service.settings") as mock_settings:
+            mock_settings.notifications_enabled = False
+
+            await notification_service.notify_pipeline_complete(
+                mock_session,
+                user_id="user-001",
+                filename="lecture.pdf",
+                course_code="CSIT302",
+                week=5,
+                flashcard_count=12,
+                quiz_count=6,
+            )
+
+        added = [c.args[0] for c in mock_session.add.call_args_list]
+        notifications = [n for n in added if isinstance(n, Notification)]
+        assert len(notifications) == 1
+        assert notifications[0].kind == "pipeline"
+        assert "lecture.pdf" in notifications[0].title
+        assert notifications[0].href == "/courses/CSIT302/weeks/5"
