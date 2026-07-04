@@ -24,7 +24,6 @@ services/ui/src/components/gamification/AchievementUnlock.tsx
 services/ui/src/components/gamification/DailyChallenges.tsx
 services/ui/src/components/gamification/LevelDisplay.tsx
 services/ui/src/components/gamification/XPBar.tsx
-services/ui/src/components/layout/Sidebar.tsx
 services/ui/src/components/notifications/NotificationsSection.tsx
 services/ui/src/components/notifications/PushNotificationToggle.tsx
 services/ui/src/components/notifications/TelegramLinkCard.tsx
@@ -58,7 +57,6 @@ services/ui/src/pages/CourseOpsPage.tsx
 services/ui/src/pages/DashboardPage.tsx
 services/ui/src/pages/ForgotPasswordPage.tsx
 services/ui/src/pages/NotFoundPage.tsx
-services/ui/src/pages/QAPage.tsx
 services/ui/src/pages/ResetPasswordPage.tsx
 services/ui/src/pages/ReviewInboxPage.tsx
 services/ui/src/pages/SettingsPage.tsx

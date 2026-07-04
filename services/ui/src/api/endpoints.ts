@@ -19,6 +19,7 @@ import type {
   Flashcard,
   HeatmapDay,
   MasteryWeek,
+  MessageScope,
   PipelineRun,
   QARequest,
   QAResponse,
@@ -186,15 +187,23 @@ export const chatApi = {
     api.get<{ sessions: ChatSession[] }>(`/chat/sessions?limit=${limit}`),
   getMessages: (sessionId: string, limit = 100, offset = 0) =>
     api.get<{ messages: ChatMessage[] }>(`/chat/sessions/${sessionId}/messages?limit=${limit}&offset=${offset}`),
-  sendMessage: (sessionId: string, content: string) =>
-    api.post<SendMessageResponse>(`/chat/sessions/${sessionId}/messages`, { content }),
+  sendMessage: (sessionId: string, content: string, scope?: MessageScope) =>
+    api.post<SendMessageResponse>(`/chat/sessions/${sessionId}/messages`, {
+      content,
+      course_code: scope?.courseCode ?? null,
+      week: scope?.week ?? null,
+    }),
   deleteSession: (sessionId: string) =>
     api.delete(`/chat/sessions/${sessionId}`),
-  streamMessage: (sessionId: string, content: string) =>
+  streamMessage: (sessionId: string, content: string, scope?: MessageScope) =>
     fetch(`/api/chat/sessions/${sessionId}/messages/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({
+        content,
+        course_code: scope?.courseCode ?? null,
+        week: scope?.week ?? null,
+      }),
     }),
 }
 

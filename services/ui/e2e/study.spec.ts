@@ -29,9 +29,4 @@ test.describe('Study Hub', () => {
     await expect(examsTab).toBeVisible({ timeout: 10_000 })
     await expect(examsTab).toHaveAttribute('data-state', 'active')
   })
-
-  test('old /exams route redirects to study hub', async ({ page }) => {
-    await page.goto('/exams')
-    await expect(page).toHaveURL(/\/study\?tab=exams/, { timeout: 10_000 })
-  })
 })

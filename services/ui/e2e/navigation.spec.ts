@@ -36,8 +36,13 @@ test.describe('Navigation', () => {
     await page.locator('nav.lg\\:hidden a[href="/study"]').click()
     await expect(page).toHaveURL('/study', { timeout: 10_000 })
 
-    // Click Upload tab
-    await page.locator('nav.lg\\:hidden a[href="/upload"]').click()
+    // Click Ask tab
+    await page.locator('nav.lg\\:hidden a[href="/ask"]').click()
+    await expect(page).toHaveURL('/ask', { timeout: 10_000 })
+
+    // Upload lives inside the Library sheet
+    await page.locator('nav.lg\\:hidden button[aria-label="Library"]').click()
+    await page.getByRole('link', { name: /upload/i }).click()
     await expect(page).toHaveURL('/upload', { timeout: 10_000 })
   })
 

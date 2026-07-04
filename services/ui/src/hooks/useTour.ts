@@ -26,14 +26,9 @@ export const TOUR_STEPS: TourStep[] = [
     description: 'Flashcards with spaced repetition, timed study sessions, quizzes, and exam prep — all in one place.',
   },
   {
-    target: 'chat',
-    title: 'AI Chat',
-    description: 'Ask questions about your lectures. The AI uses your materials to give accurate, cited answers.',
-  },
-  {
-    target: 'qa',
-    title: 'Quick Q&A',
-    description: 'Get instant answers from your lecture content with source citations.',
+    target: 'ask',
+    title: 'Ask',
+    description: 'Ask questions about your lectures. The AI uses your materials to give accurate, cited answers — scope to a course or week for sharper retrieval.',
   },
   {
     target: 'knowledge',
