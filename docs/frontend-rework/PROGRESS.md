@@ -4,9 +4,9 @@ Integration branch: `frontend-rework`. Streams merge here in dependency order; `
 
 | Stream | Branch | Status | Merged | Notes |
 |---|---|---|---|---|
-| A — Design system, tokens, vitest | `fr/design-system` | 🟡 in progress | — | critical path |
-| B — Error layer | `fr/error-layer` | ⬜ pending A | — | |
-| C — Shell, IA, ⌘K, Ask merge | `fr/shell-ia` | ⬜ pending A | — | includes backend QA-history migration (TDD) |
+| A — Design system, tokens, vitest | `fr/design-system` | ✅ done | be70598 | 14 commits, 52 vitest tests, color guard live |
+| B — Error layer | `fr/error-layer` | 🟡 in progress | — | |
+| C — Shell, IA, ⌘K, Ask merge | `fr/shell-ia` | 🟡 in progress | — | merges after B (AppLayout slot) |
 | D1–D11 — Screen redesigns | `fr/screens-*` | ⬜ pending A+B+C | — | D2←E3, D3←E6, D4←E7, D8←E5 |
 | E — Backend features (TDD) | `fr/features-backend` | 🟡 in progress | — | E1–E7 |
 | F — Hardening, E2E, final merge | `fr/hardening` | ⬜ pending all | — | |
