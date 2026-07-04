@@ -6,11 +6,9 @@ services/ui/src/components/billing/UpgradePrompt.tsx
 services/ui/src/components/calendar/CalendarSyncSection.tsx
 services/ui/src/components/concepts/ConceptDetail.tsx
 services/ui/src/components/concepts/ConceptList.tsx
-services/ui/src/components/course/ExportButton.tsx
 services/ui/src/components/courseops/AssessmentTable.tsx
 services/ui/src/components/courseops/DeadlineTimeline.tsx
 services/ui/src/components/courseops/DocumentUpload.tsx
-services/ui/src/components/course/WeekRow.tsx
 services/ui/src/components/dashboard/ExamCountdown.tsx
 services/ui/src/components/dashboard/QuickUpload.tsx
 services/ui/src/components/dashboard/ReviewAlert.tsx

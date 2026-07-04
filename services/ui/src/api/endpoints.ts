@@ -5,9 +5,14 @@ import type {
   BatchUploadResponse,
   ChatMessage,
   ChatSession,
+  Course,
+  CourseArchiveResult,
+  CourseDeleteResult,
   CourseDetail,
   CourseDocument,
   CourseListItem,
+  CourseMergeResult,
+  CourseUpdatePayload,
   CreateSessionRequest,
   DailyPlan,
   DashboardData,
@@ -53,6 +58,18 @@ export const coursesApi = {
   detail: (courseCode: string) => api.get<CourseDetail>(`/courses/${courseCode}`),
   week: (courseCode: string, week: number) =>
     api.get<WeekDetail>(`/courses/${courseCode}/weeks/${week}`),
+  rename: (courseCode: string, data: CourseUpdatePayload) =>
+    api.patch<Course>(`/courses/${courseCode}`, data),
+  archive: (courseCode: string) =>
+    api.post<CourseArchiveResult>(`/courses/${courseCode}/archive`),
+  merge: (courseCode: string, into: string) =>
+    api.post<CourseMergeResult>(`/courses/${courseCode}/merge`, { into }),
+  /** Type-to-confirm delete: the API requires an X-Confirm header matching the code (428 otherwise). */
+  remove: (courseCode: string) =>
+    api.request<CourseDeleteResult>(`/courses/${courseCode}`, {
+      method: 'DELETE',
+      headers: { 'X-Confirm': courseCode },
+    }),
 }
 
 export const summariesApi = {
