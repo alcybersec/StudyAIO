@@ -26,9 +26,31 @@ function applyTheme(theme: Theme) {
 let currentTheme: Theme = getStoredTheme()
 const listeners = new Set<() => void>()
 
+// OS-preference listener lives with the store: attached when the first
+// consumer subscribes, detached when the last one unsubscribes (no leak).
+// The MediaQueryList is cached — browsers may return a fresh object per
+// matchMedia() call, and removeEventListener must target the same instance.
+let mediaQuery: MediaQueryList | null = null
+function getMediaQuery(): MediaQueryList {
+  if (!mediaQuery) mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+  return mediaQuery
+}
+
+function handleMediaChange() {
+  if (currentTheme === 'system') applyTheme('system')
+}
+
 function subscribe(cb: () => void) {
+  if (listeners.size === 0) {
+    getMediaQuery().addEventListener('change', handleMediaChange)
+  }
   listeners.add(cb)
-  return () => { listeners.delete(cb) }
+  return () => {
+    listeners.delete(cb)
+    if (listeners.size === 0) {
+      getMediaQuery().removeEventListener('change', handleMediaChange)
+    }
+  }
 }
 function getSnapshot() { return currentTheme }
 
@@ -39,12 +61,9 @@ function setTheme(next: Theme) {
   listeners.forEach(cb => cb())
 }
 
-// Apply on load + listen to OS changes
+// Apply on load
 if (typeof window !== 'undefined') {
   applyTheme(currentTheme)
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (currentTheme === 'system') applyTheme('system')
-  })
 }
 
 export function useTheme() {
