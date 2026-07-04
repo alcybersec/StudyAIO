@@ -56,9 +56,15 @@ class ChatMessagesResponse(BaseModel):
 
 
 class SendMessageRequest(BaseModel):
-    """Request body for sending a message in a chat session."""
+    """Request body for sending a message in a chat session.
+
+    Optional per-message scope chips (course/week) narrow RAG retrieval
+    for this message without changing the session's own course scope.
+    """
 
     content: str = Field(..., min_length=1, max_length=5000)
+    course_code: str | None = None
+    week: int | None = Field(default=None, ge=1)
 
 
 class SendMessageResponse(BaseModel):

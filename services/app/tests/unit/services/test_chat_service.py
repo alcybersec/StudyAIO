@@ -392,6 +392,126 @@ class TestSendMessage:
         mock_agent.answer_question.assert_called_once()
 
 
+# ── send_message / stream_message scoping ─────────────────────────
+
+
+def _rag_patches(mock_agent, search_mock):
+    """Common patch set for RAG orchestration tests."""
+    mock_provider = MagicMock()
+    mock_provider.embed_texts.return_value = [[0.1] * 384]
+    return (
+        patch(
+            "app.services.chat_service.get_embedding_provider",
+            return_value=mock_provider,
+        ),
+        patch(
+            "app.services.chat_service.search_service.search_chunks",
+            search_mock,
+        ),
+        patch("app.services.chat_service.get_agent", return_value=mock_agent),
+        patch(
+            "app.services.settings_service.get_user_agent_config",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+    )
+
+
+class TestSendMessageScoping:
+    """Per-message course/week scope narrows RAG retrieval."""
+
+    def _session_mock(self, chat_session):
+        session = AsyncMock()
+        session.add = MagicMock()
+        session.flush = AsyncMock()
+        ownership_result = MagicMock()
+        ownership_result.scalar_one_or_none.return_value = chat_session
+        history_result = MagicMock()
+        history_result.scalars.return_value.all.return_value = []
+        session.execute = AsyncMock(side_effect=[ownership_result, history_result])
+        return session
+
+    @pytest.mark.asyncio
+    async def test_scoped_message_passes_filters_to_retrieval(self):
+        """course_id/week overrides are forwarded to search_chunks."""
+        chat_session = _make_chat_session(course_id="course-session")
+        session = self._session_mock(chat_session)
+
+        mock_agent = AsyncMock()
+        mock_agent.answer_question.return_value = AnswerResult(answer="Sure!", citations=[])
+        search_mock = AsyncMock(return_value=[])
+
+        p1, p2, p3, p4 = _rag_patches(mock_agent, search_mock)
+        with p1, p2, p3, p4:
+            await send_message(
+                session,
+                "session-001",
+                "user-001",
+                "What is ASLR?",
+                course_id="course-777",
+                week=7,
+            )
+
+        search_mock.assert_awaited_once()
+        kwargs = search_mock.await_args.kwargs
+        assert kwargs["course_id"] == "course-777"
+        assert kwargs["week"] == 7
+
+    @pytest.mark.asyncio
+    async def test_unscoped_message_defaults_to_session_course(self):
+        """Without overrides, retrieval keeps the session's course scope."""
+        chat_session = _make_chat_session(course_id="course-session")
+        session = self._session_mock(chat_session)
+
+        mock_agent = AsyncMock()
+        mock_agent.answer_question.return_value = AnswerResult(answer="Sure!", citations=[])
+        search_mock = AsyncMock(return_value=[])
+
+        p1, p2, p3, p4 = _rag_patches(mock_agent, search_mock)
+        with p1, p2, p3, p4:
+            await send_message(session, "session-001", "user-001", "What is ASLR?")
+
+        search_mock.assert_awaited_once()
+        kwargs = search_mock.await_args.kwargs
+        assert kwargs["course_id"] == "course-session"
+        assert kwargs.get("week") is None
+
+    @pytest.mark.asyncio
+    async def test_stream_message_passes_scope_filters(self):
+        """stream_message forwards course_id/week overrides to search_chunks."""
+        from app.services.chat_service import stream_message
+
+        chat_session = _make_chat_session(course_id="course-session")
+        session = self._session_mock(chat_session)
+
+        async def token_gen(*args, **kwargs):
+            yield "Hello"
+
+        mock_agent = MagicMock()
+        mock_agent.stream_answer = token_gen
+        search_mock = AsyncMock(return_value=[])
+
+        p1, p2, p3, p4 = _rag_patches(mock_agent, search_mock)
+        with p1, p2, p3, p4:
+            events = [
+                event
+                async for event in stream_message(
+                    session,
+                    "session-001",
+                    "user-001",
+                    "What is ASLR?",
+                    course_id="course-777",
+                    week=9,
+                )
+            ]
+
+        assert any(event["event"] == "done" for event in events)
+        search_mock.assert_awaited_once()
+        kwargs = search_mock.await_args.kwargs
+        assert kwargs["course_id"] == "course-777"
+        assert kwargs["week"] == 9
+
+
 # ── delete_session ─────────────────────────────────────────────────
 
 

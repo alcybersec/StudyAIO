@@ -123,6 +123,8 @@ async def send_message(
     session_id: str,
     user_id: str,
     content: str,
+    course_id: str | None = None,
+    week: int | None = None,
 ) -> tuple[ChatMessage, ChatMessage]:
     """Send a user message and get an AI response.
 
@@ -141,6 +143,9 @@ async def send_message(
         session_id: Chat session ID.
         user_id: User ID for ownership check.
         content: User's message text.
+        course_id: Optional per-message course scope for RAG retrieval
+            (overrides the session's course scope).
+        week: Optional per-message week scope for RAG retrieval.
 
     Returns:
         Tuple of (user_message, assistant_message) ChatMessage objects.
@@ -195,7 +200,8 @@ async def send_message(
                 session=session,
                 query_embedding=query_embeddings[0],
                 top_k=MAX_RAG_CHUNKS,
-                course_id=chat_session.course_id,
+                course_id=course_id or chat_session.course_id,
+                week=week,
                 user_id=user_id,
             )
     except Exception as e:
@@ -254,6 +260,8 @@ async def stream_message(
     session_id: str,
     user_id: str,
     content: str,
+    course_id: str | None = None,
+    week: int | None = None,
 ) -> AsyncIterator[dict]:
     """Stream a chat response token-by-token via SSE events.
 
@@ -269,6 +277,9 @@ async def stream_message(
         session_id: Chat session ID.
         user_id: User ID for ownership check.
         content: User's message text.
+        course_id: Optional per-message course scope for RAG retrieval
+            (overrides the session's course scope).
+        week: Optional per-message week scope for RAG retrieval.
 
     Yields:
         Dicts with event type and data for SSE serialization.
@@ -318,7 +329,8 @@ async def stream_message(
                 session=session,
                 query_embedding=query_embeddings[0],
                 top_k=MAX_RAG_CHUNKS,
-                course_id=chat_session.course_id,
+                course_id=course_id or chat_session.course_id,
+                week=week,
                 user_id=user_id,
             )
     except Exception as e:
