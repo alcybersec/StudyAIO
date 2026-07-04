@@ -1,11 +1,14 @@
 """Central notification dispatcher — routes events to configured channels."""
 
+from datetime import UTC, datetime
+
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.utils import generate_id
+from app.models.notification import Notification
 from app.models.notification_preference import NotificationPreference
 
 logger = structlog.get_logger()
@@ -20,6 +23,151 @@ EVENT_TYPES = [
 ]
 
 CHANNELS = ["email", "telegram", "push"]
+
+# Closed set of inbox notification kinds
+INBOX_KINDS = ["pipeline", "review", "achievement", "deadline"]
+
+
+# ── In-app inbox notifications ─────────────────────────────────────
+
+
+async def create_inbox_notification(
+    session: AsyncSession,
+    user_id: str,
+    kind: str,
+    title: str,
+    body: str | None = None,
+    href: str | None = None,
+) -> Notification:
+    """Create an in-app inbox notification.
+
+    Args:
+        session: Database session.
+        user_id: Recipient user UUID.
+        kind: One of INBOX_KINDS.
+        title: Short display title.
+        body: Optional longer description.
+        href: Optional frontend navigation target.
+
+    Returns:
+        The created Notification.
+    """
+    notification = Notification(
+        id=generate_id(),
+        user_id=user_id,
+        kind=kind,
+        title=title,
+        body=body,
+        href=href,
+    )
+    session.add(notification)
+    await session.flush()
+    logger.info("inbox_notification_created", user_id=user_id, kind=kind)
+    return notification
+
+
+async def notify_inbox(
+    session: AsyncSession,
+    user_id: str,
+    kind: str,
+    title: str,
+    body: str | None = None,
+    href: str | None = None,
+) -> Notification | None:
+    """Best-effort inbox notification — failures are logged, never raised.
+
+    Args:
+        session: Database session.
+        user_id: Recipient user UUID.
+        kind: One of INBOX_KINDS.
+        title: Short display title.
+        body: Optional longer description.
+        href: Optional frontend navigation target.
+
+    Returns:
+        The created Notification, or None on failure.
+    """
+    try:
+        return await create_inbox_notification(session, user_id, kind, title, body=body, href=href)
+    except Exception:
+        logger.warning("notify_inbox_failed", user_id=user_id, kind=kind, exc_info=True)
+        return None
+
+
+async def list_inbox_notifications(
+    session: AsyncSession,
+    user_id: str,
+    unread_only: bool = False,
+    limit: int = 50,
+) -> list[Notification]:
+    """List inbox notifications for a user, newest first.
+
+    Args:
+        session: Database session.
+        user_id: The user's ID.
+        unread_only: If True, only return unread notifications.
+        limit: Maximum number of notifications to return.
+
+    Returns:
+        List of Notification records ordered newest-first.
+    """
+    query = select(Notification).where(Notification.user_id == user_id)
+    if unread_only:
+        query = query.where(Notification.read_at.is_(None))
+    query = query.order_by(Notification.created_at.desc()).limit(limit)
+    result = await session.execute(query)
+    return list(result.scalars().all())
+
+
+async def mark_notifications_read(
+    session: AsyncSession,
+    user_id: str,
+    ids: list[str],
+) -> int:
+    """Mark notifications as read (idempotent — only unread rows change).
+
+    Args:
+        session: Database session.
+        user_id: The user's ID (rows must belong to this user).
+        ids: Notification IDs to mark read.
+
+    Returns:
+        Number of notifications newly marked read.
+    """
+    if not ids:
+        return 0
+    result = await session.execute(
+        update(Notification)
+        .where(
+            Notification.user_id == user_id,
+            Notification.id.in_(ids),
+            Notification.read_at.is_(None),
+        )
+        .values(read_at=datetime.now(UTC))
+    )
+    await session.flush()
+    updated = result.rowcount or 0
+    logger.info("notifications_marked_read", user_id=user_id, updated=updated)
+    return updated
+
+
+async def count_unread_notifications(session: AsyncSession, user_id: str) -> int:
+    """Count unread inbox notifications for a user.
+
+    Args:
+        session: Database session.
+        user_id: The user's ID.
+
+    Returns:
+        Number of unread notifications.
+    """
+    result = await session.execute(
+        select(func.count(Notification.id)).where(
+            Notification.user_id == user_id,
+            Notification.read_at.is_(None),
+        )
+    )
+    return result.scalar_one()
 
 
 async def get_preferences(session: AsyncSession, user_id: str) -> list[NotificationPreference]:
@@ -258,7 +406,16 @@ async def notify_pipeline_complete(
     flashcard_count: int,
     quiz_count: int,
 ) -> dict[str, bool]:
-    """Send pipeline completion notification."""
+    """Send pipeline completion notification (inbox + configured channels)."""
+    await notify_inbox(
+        session,
+        user_id,
+        kind="pipeline",
+        title=f"{filename} processed",
+        body=f"{flashcard_count} flashcards and {quiz_count} quiz questions generated "
+        f"for {course_code} week {week}.",
+        href=f"/courses/{course_code}/weeks/{week}",
+    )
     return await notify(
         session,
         user_id,

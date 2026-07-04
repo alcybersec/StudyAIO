@@ -30,6 +30,7 @@ from app.api import (
     exports_router,
     files_router,
     gamification_router,
+    notifications_inbox_router,
     notifications_router,
     qa_router,
     review_items_router,
@@ -247,6 +248,7 @@ app.include_router(gamification_router, prefix="/api", tags=["gamification"])
 app.include_router(concepts_router, prefix="/api", tags=["concepts"])
 app.include_router(billing_router, prefix="/api", tags=["billing"])
 app.include_router(notifications_router, prefix="/api", tags=["notifications"])
+app.include_router(notifications_inbox_router, prefix="/api", tags=["notifications"])
 app.include_router(calendar_sync_router, prefix="/api", tags=["calendar"])
 
 # Instrument with Prometheus if enabled

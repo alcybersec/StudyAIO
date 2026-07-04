@@ -178,3 +178,41 @@ class TestMarkNotified:
         session = AsyncMock()
         await mark_notified(session, [])
         session.execute.assert_not_called()
+
+
+class TestAchievementUnlockEmitsInbox:
+    """Achievement unlock emits a kind='achievement' inbox notification."""
+
+    @pytest.mark.asyncio
+    async def test_unlock_emits_notification(self):
+        """Newly earned achievements create an inbox notification."""
+        from unittest.mock import patch as _patch
+
+        from app.models.notification import Notification
+
+        achievement = MagicMock()
+        achievement.id = "ach-001"
+        achievement.code = "first_upload"
+        achievement.name = "First Upload"
+        achievement.xp_reward = 0
+        achievement.criteria_json = {"type": "count", "event": "upload", "threshold": 1}
+
+        session = AsyncMock()
+        session.add = MagicMock()
+        unearned_result = MagicMock()
+        unearned_result.scalars.return_value.all.return_value = [achievement]
+        session.execute = AsyncMock(return_value=unearned_result)
+
+        with _patch(
+            "app.services.achievement_service._evaluate_criteria",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            earned = await check_achievements(session, "user-001", "upload")
+
+        assert len(earned) == 1
+        added = [c.args[0] for c in session.add.call_args_list]
+        notifications = [n for n in added if isinstance(n, Notification)]
+        assert len(notifications) == 1
+        assert notifications[0].kind == "achievement"
+        assert "First Upload" in notifications[0].title
