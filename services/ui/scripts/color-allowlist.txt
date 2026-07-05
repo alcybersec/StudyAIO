@@ -57,4 +57,3 @@ services/ui/src/pages/ForgotPasswordPage.tsx
 services/ui/src/pages/NotFoundPage.tsx
 services/ui/src/pages/ResetPasswordPage.tsx
 services/ui/src/pages/ReviewInboxPage.tsx
-services/ui/src/pages/SettingsPage.tsx
