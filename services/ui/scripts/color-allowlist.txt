@@ -45,8 +45,6 @@ services/ui/src/components/week/FlashcardsTab.tsx
 services/ui/src/components/week/QuizTab.tsx
 services/ui/src/components/week/SummaryTab.tsx
 services/ui/src/pages/AchievementsPage.tsx
-services/ui/src/pages/AdminPage.tsx
-services/ui/src/pages/AdminUserDetailPage.tsx
 services/ui/src/pages/CourseOpsPage.tsx
 services/ui/src/pages/ForgotPasswordPage.tsx
 services/ui/src/pages/NotFoundPage.tsx
