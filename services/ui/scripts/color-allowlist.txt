@@ -3,8 +3,6 @@ services/ui/src/components/billing/BillingSection.tsx
 services/ui/src/components/billing/ProBadge.tsx
 services/ui/src/components/billing/UpgradePrompt.tsx
 services/ui/src/components/calendar/CalendarSyncSection.tsx
-services/ui/src/components/course/ExportButton.tsx
-services/ui/src/components/course/WeekRow.tsx
 services/ui/src/components/demo/DemoBanner.tsx
 services/ui/src/components/demo/UpgradeCTA.tsx
 services/ui/src/components/ErrorBoundary.tsx
@@ -22,19 +20,13 @@ services/ui/src/components/study/ExamsTab.tsx
 services/ui/src/components/ui/ConnectionBanner.tsx
 services/ui/src/components/ui/ErrorBanner.tsx
 services/ui/src/components/ui/Sheet.tsx
-<<<<<<< HEAD
-services/ui/src/components/week/FlashcardsTab.tsx
-services/ui/src/components/week/QuizTab.tsx
-=======
 services/ui/src/components/upload/FileQueue.tsx
 services/ui/src/components/upload/PipelineProgress.tsx
 services/ui/src/components/viewer/FileViewerToolbar.tsx
 services/ui/src/components/viewer/FileViewer.tsx
 services/ui/src/components/viewer/PdfViewer.tsx
 services/ui/src/components/week/ArtifactList.tsx
->>>>>>> fr/screens-study
+services/ui/src/components/week/FlashcardsTab.tsx
+services/ui/src/components/week/QuizTab.tsx
 services/ui/src/components/week/SummaryTab.tsx
-services/ui/src/pages/ForgotPasswordPage.tsx
 services/ui/src/pages/NotFoundPage.tsx
-services/ui/src/pages/ResetPasswordPage.tsx
-services/ui/src/pages/SettingsPage.tsx
