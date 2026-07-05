@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
+  ArrowRight,
   ClipboardPaste,
   Layers,
   Moon,
@@ -10,14 +12,23 @@ import {
   Upload,
   type LucideIcon,
 } from 'lucide-react'
+import { searchApi } from '../api/search'
 import { useCourses } from '../hooks/useApi'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useTheme } from '../hooks/useTheme'
-import { onCommandPaletteOpen } from '../lib/commandPalette'
+import { isSearchAvailable, onCommandPaletteOpen } from '../lib/commandPalette'
+import {
+  searchResultHref,
+  searchResultIcon,
+  searchResultSection,
+  searchResultSub,
+} from '../lib/searchResults'
 import { Kbd } from './ui/Kbd'
-import { Modal } from './ui/Modal'
+import { QuickCaptureModal } from './QuickCaptureModal'
+import { Skeleton } from './ui/Skeleton'
 
-/** Flips on when the E1 global-search endpoint lands. */
-const searchAvailable = false
+const SEARCH_MIN_CHARS = 2
+const SEARCH_DEBOUNCE_MS = 200
 
 interface PaletteItem {
   id: string
@@ -51,6 +62,22 @@ export function CommandPalette() {
     [],
   )
 
+  // Global search (E1): debounced, only from 2 characters.
+  const searchEnabled = isSearchAvailable()
+  const trimmedQuery = query.trim()
+  const debouncedQuery = useDebouncedValue(trimmedQuery, SEARCH_DEBOUNCE_MS)
+  const searchActive = searchEnabled && debouncedQuery.length >= SEARCH_MIN_CHARS
+  const search = useQuery({
+    queryKey: ['globalSearch', debouncedQuery],
+    queryFn: () => searchApi.search(debouncedQuery),
+    enabled: open && searchActive,
+    staleTime: 30_000,
+  })
+  const searchPending =
+    searchEnabled &&
+    trimmedQuery.length >= SEARCH_MIN_CHARS &&
+    (debouncedQuery !== trimmedQuery || search.isLoading)
+
   const items = useMemo<PaletteItem[]>(() => {
     const actions: PaletteItem[] = [
       {
@@ -73,6 +100,7 @@ export function CommandPalette() {
         id: 'action-capture',
         section: 'Actions',
         label: 'Quick capture — paste text or URL',
+        hint: '⌘V',
         icon: ClipboardPaste,
         run: () => setCaptureOpen(true),
       },
@@ -92,20 +120,37 @@ export function CommandPalette() {
       icon: Layers,
       run: () => navigate(`/courses/${course.code}`),
     }))
-    // "Content" section (global search results) stays hidden until the
-    // E1 search endpoint exists — flip `searchAvailable` and append the
-    // grouped results here when it lands.
-    const contentItems: PaletteItem[] = searchAvailable ? [] : []
-    return [...actions, ...navigateItems, ...contentItems]
+    return [...actions, ...navigateItems]
   }, [courses, navigate, toggleTheme])
 
+  // Content section (E1): server-filtered search results, grouped by kind.
+  const searchItems = useMemo<PaletteItem[]>(() => {
+    if (!searchActive) return []
+    return (search.data?.results ?? []).flatMap((result, index) => {
+      const href = searchResultHref(result)
+      if (!href) return []
+      return [
+        {
+          id: `search-${result.kind}-${index}`,
+          section: searchResultSection(result.kind),
+          label: result.title,
+          sub: searchResultSub(result),
+          icon: searchResultIcon(result.kind),
+          run: () => navigate(href),
+        },
+      ]
+    })
+  }, [searchActive, search.data, navigate])
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return items
-    return items.filter(
-      (item) => item.label.toLowerCase().includes(q) || item.sub?.toLowerCase().includes(q),
-    )
-  }, [items, query])
+    const q = trimmedQuery.toLowerCase()
+    const staticFiltered = q
+      ? items.filter(
+          (item) => item.label.toLowerCase().includes(q) || item.sub?.toLowerCase().includes(q),
+        )
+      : items
+    return [...staticFiltered, ...searchItems]
+  }, [items, searchItems, trimmedQuery])
 
   const clampedIndex = Math.min(activeIndex, Math.max(filtered.length - 1, 0))
 
@@ -115,6 +160,11 @@ export function CommandPalette() {
     item.run()
   }
 
+  const askInAsk = () => {
+    setOpen(false)
+    navigate(trimmedQuery ? `/ask?q=${encodeURIComponent(trimmedQuery)}` : '/ask')
+  }
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
@@ -122,6 +172,9 @@ export function CommandPalette() {
     } else if (event.key === 'ArrowUp') {
       event.preventDefault()
       setActiveIndex((i) => Math.max(i - 1, 0))
+    } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault()
+      askInAsk()
     } else if (event.key === 'Enter') {
       event.preventDefault()
       runItem(filtered[clampedIndex])
@@ -169,7 +222,7 @@ export function CommandPalette() {
               ref={listRef}
               className="max-h-96 overflow-y-auto py-2"
             >
-              {filtered.length === 0 && (
+              {filtered.length === 0 && !searchPending && (
                 <p className="px-4 py-6 text-center text-sm text-text-muted">No matches.</p>
               )}
               {filtered.map((item, index) => {
@@ -204,6 +257,26 @@ export function CommandPalette() {
                   </div>
                 )
               })}
+
+              {searchPending && (
+                <div aria-label="Searching your content">
+                  <div className="px-4 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.12em] text-text-faint">
+                    Content
+                  </div>
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex items-center gap-3 px-4 py-2">
+                      <Skeleton width={14} height={14} rounded />
+                      <Skeleton height={13} width={`${70 - i * 12}%`} />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {searchActive && search.isError && (
+                <p className="px-4 py-2 text-[11px] text-text-faint font-mono">
+                  search unavailable — navigation still works
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-4 px-4 py-2.5 border-t border-border text-[11px] text-text-faint font-mono">
@@ -213,25 +286,20 @@ export function CommandPalette() {
               <span className="flex items-center gap-1.5">
                 <Kbd>↵</Kbd> open
               </span>
-              <span className="ml-auto flex items-center gap-1.5">
-                <Kbd>esc</Kbd> close
-              </span>
+              <button
+                type="button"
+                onClick={askInAsk}
+                className="ml-auto flex items-center gap-1.5 hover:text-text-muted cursor-pointer transition-colors"
+              >
+                ask this in Ask <ArrowRight size={11} aria-hidden /> <Kbd>⌘↵</Kbd>
+              </button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Quick capture placeholder — E4 replaces this with the real capture modal */}
-      <Modal
-        open={captureOpen}
-        onOpenChange={setCaptureOpen}
-        title="Quick capture"
-        description="Paste text or a URL straight into the pipeline."
-      >
-        <p className="text-sm text-text-muted">
-          Coming soon — quick capture lands with the pipeline update.
-        </p>
-      </Modal>
+      {/* Quick capture (E4) */}
+      <QuickCaptureModal open={captureOpen} onOpenChange={setCaptureOpen} />
     </>
   )
 }

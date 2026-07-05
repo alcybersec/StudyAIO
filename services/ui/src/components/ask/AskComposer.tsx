@@ -15,10 +15,18 @@ interface AskComposerProps {
   onScopeChange: (scope: AskScope) => void
   onSend: (content: string) => void
   disabled?: boolean
+  /** Prefills the textarea on mount (e.g. a query handed over from the command palette). */
+  initialValue?: string
 }
 
 /** Composer with course/week scope chips — chips narrow RAG retrieval. */
-export function AskComposer({ scope, onScopeChange, onSend, disabled = false }: AskComposerProps) {
+export function AskComposer({
+  scope,
+  onScopeChange,
+  onSend,
+  disabled = false,
+  initialValue,
+}: AskComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { data: courses } = useCourses()
 
@@ -131,6 +139,7 @@ export function AskComposer({ scope, onScopeChange, onSend, disabled = false }: 
         <textarea
           ref={textareaRef}
           aria-label="Ask anything about your lectures"
+          defaultValue={initialValue}
           onChange={adjustHeight}
           onKeyDown={handleKeyDown}
           disabled={disabled}
