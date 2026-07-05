@@ -16,17 +16,6 @@ export const examCreateSchema = z.object({
 
 export type ExamCreateFormData = z.infer<typeof examCreateSchema>
 
-export const customResolutionSchema = z.object({
-  courseCode: z.string().optional(),
-  weekNumber: z.string().optional(),
-  title: z.string().optional(),
-}).refine(
-  (data) => (data.courseCode?.trim() || data.weekNumber?.trim() || data.title?.trim()),
-  { message: 'At least one field is required' }
-)
-
-export type CustomResolutionFormData = z.infer<typeof customResolutionSchema>
-
 export const deadlineEditSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   dueDate: z.string().min(1, 'Due date is required'),
