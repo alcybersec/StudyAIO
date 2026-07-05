@@ -968,6 +968,22 @@ export interface ExamReadinessData {
   study_days_last_week: number
 }
 
+// ── Global search (E1) ─────────────────────────────────────────────
+
+export type GlobalSearchKind = 'course' | 'course_week' | 'flashcard' | 'chat_session'
+
+export interface GlobalSearchResult {
+  kind: GlobalSearchKind | string
+  title: string
+  snippet: string
+  href_meta: Record<string, string | number>
+}
+
+export interface GlobalSearchResponse {
+  query: string
+  results: GlobalSearchResult[]
+}
+
 // ── Notification inbox (E2) ────────────────────────────────────────
 
 export type InboxNotificationKind = 'pipeline' | 'review' | 'achievement' | 'deadline'

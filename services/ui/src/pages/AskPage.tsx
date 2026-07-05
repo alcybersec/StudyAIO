@@ -16,6 +16,8 @@ export function AskPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedSessionId = searchParams.get('session') || ''
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
+  // Composer prefill from ?q= (command palette ⌘↵ hands its query over)
+  const [composerPrefill, setComposerPrefill] = useState(() => searchParams.get('q') ?? '')
   // Scope chips prefill from ?course=&week= (WeekView "ask about this week")
   const [scope, setScope] = useState<AskScope>(() => {
     const week = Number(searchParams.get('week'))
@@ -30,10 +32,13 @@ export function AskPage() {
   const createSession = useCreateChatSession()
 
   const handleSelectSession = (id: string) => {
+    // The prefill applies to the first shown session only — switching away consumes it.
+    if (selectedSessionId && selectedSessionId !== id) setComposerPrefill('')
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
         next.set('session', id)
+        next.delete('q')
         return next
       },
       { replace: true },
@@ -99,6 +104,7 @@ export function AskPage() {
               sessionId={selectedSessionId}
               scope={scope}
               onScopeChange={setScope}
+              composerPrefill={composerPrefill}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-text-muted">
@@ -135,10 +141,12 @@ function ConversationWithScope({
   sessionId,
   scope,
   onScopeChange,
+  composerPrefill,
 }: {
   sessionId: string
   scope: AskScope
   onScopeChange: (scope: AskScope) => void
+  composerPrefill?: string
 }) {
   const { data: messagesData, isLoading } = useChatMessages(sessionId)
   const messages = useMemo(() => messagesData?.messages ?? [], [messagesData])
@@ -185,6 +193,7 @@ function ConversationWithScope({
         onScopeChange={onScopeChange}
         onSend={(content) => sendStreaming(content, scope)}
         disabled={isStreaming}
+        initialValue={composerPrefill}
       />
     </>
   )
