@@ -33,11 +33,11 @@ export function AppLayout() {
   )
 
   return (
-    <div className="h-screen bg-surface-alt flex flex-col overflow-hidden">
+    <div className="h-screen bg-surface-0 flex flex-col overflow-hidden">
       {/* Skip to main content (accessibility) */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:text-sm focus:font-medium"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-sage focus:text-on-accent focus:rounded-lg focus:text-sm focus:font-medium"
       >
         Skip to main content
       </a>
@@ -52,8 +52,8 @@ export function AppLayout() {
         {/* Main content area */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           {/* Mobile top header — logo only */}
-          <header className="lg:hidden flex items-center h-14 px-4 bg-surface border-b border-border shrink-0">
-            <Link to="/" className="text-lg font-bold text-primary">
+          <header className="lg:hidden flex items-center h-14 px-4 bg-surface-1 border-b border-border shrink-0">
+            <Link to="/" className="text-lg font-bold text-sage-fg">
               StudyAIO
             </Link>
           </header>

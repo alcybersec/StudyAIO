@@ -73,7 +73,7 @@ export function ProfilePage() {
       <h1 className="text-2xl font-bold text-text">Profile</h1>
 
       {/* Profile Info */}
-      <div className="bg-surface rounded-lg border border-border p-6">
+      <div className="bg-surface-1 rounded-lg border border-border p-6">
         <h2 className="text-lg font-semibold text-text mb-4">Profile Info</h2>
         <form onSubmit={handleProfileSubmit} className="space-y-4">
           <div>
@@ -85,7 +85,7 @@ export function ProfilePage() {
               type="email"
               value={user.email}
               disabled
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface-alt text-text-muted"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface-0 text-text-muted"
             />
           </div>
           <div>
@@ -97,7 +97,7 @@ export function ProfilePage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface-1 focus:outline-none focus:ring-2 focus:ring-sage/30"
             />
           </div>
           <div>
@@ -109,19 +109,19 @@ export function ProfilePage() {
               type="url"
               value={avatarUrl}
               onChange={(e) => setAvatarUrl(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface-1 focus:outline-none focus:ring-2 focus:ring-sage/30"
               placeholder="https://..."
             />
           </div>
           {profileMsg && (
-            <p className={`text-sm ${updateProfile.isError ? 'text-danger' : 'text-success'}`}>
+            <p className={`text-sm ${updateProfile.isError ? 'text-red-fg' : 'text-sage-fg'}`}>
               {profileMsg}
             </p>
           )}
           <button
             type="submit"
             disabled={updateProfile.isPending}
-            className="min-h-[44px] px-4 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50 transition-colors"
+            className="min-h-[44px] px-4 bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover disabled:opacity-50 transition-colors"
           >
             {updateProfile.isPending ? 'Saving...' : 'Save'}
           </button>
@@ -129,7 +129,7 @@ export function ProfilePage() {
       </div>
 
       {/* Change Password */}
-      <div className="bg-surface rounded-lg border border-border p-6">
+      <div className="bg-surface-1 rounded-lg border border-border p-6">
         <h2 className="text-lg font-semibold text-text mb-4">Change Password</h2>
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
           <div>
@@ -142,7 +142,7 @@ export function ProfilePage() {
               required
               value={oldPassword}
               onChange={(e) => setOldPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface-1 focus:outline-none focus:ring-2 focus:ring-sage/30"
             />
           </div>
           <div>
@@ -156,7 +156,7 @@ export function ProfilePage() {
               minLength={8}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface-1 focus:outline-none focus:ring-2 focus:ring-sage/30"
               placeholder="At least 8 characters"
             />
           </div>
@@ -170,15 +170,15 @@ export function ProfilePage() {
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface-1 focus:outline-none focus:ring-2 focus:ring-sage/30"
             />
           </div>
-          {passwordError && <p className="text-sm text-danger">{passwordError}</p>}
-          {passwordMsg && <p className="text-sm text-success">{passwordMsg}</p>}
+          {passwordError && <p className="text-sm text-red-fg">{passwordError}</p>}
+          {passwordMsg && <p className="text-sm text-sage-fg">{passwordMsg}</p>}
           <button
             type="submit"
             disabled={changePassword.isPending}
-            className="min-h-[44px] px-4 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50 transition-colors"
+            className="min-h-[44px] px-4 bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover disabled:opacity-50 transition-colors"
           >
             {changePassword.isPending ? 'Changing...' : 'Change password'}
           </button>
@@ -186,7 +186,7 @@ export function ProfilePage() {
       </div>
 
       {/* MFA */}
-      <div className="bg-surface rounded-lg border border-border p-6">
+      <div className="bg-surface-1 rounded-lg border border-border p-6">
         <h2 className="text-lg font-semibold text-text mb-4">Two-Factor Authentication</h2>
         <MFASetup mfaEnabled={user.mfa_enabled} />
       </div>
