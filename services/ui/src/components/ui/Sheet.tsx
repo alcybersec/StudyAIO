@@ -7,7 +7,14 @@ interface SheetProps {
   onOpenChange: (open: boolean) => void
   children: ReactNode
   side?: 'bottom' | 'right'
-  title?: string
+  /**
+   * Accessible name for the sheet. Rendered as a visible heading; pass
+   * `titleVisible={false}` to keep it screen-reader-only. Radix requires a
+   * Dialog.Title on every dialog, so this is effectively mandatory for a11y —
+   * callers without a visible header must still supply one for screen readers.
+   */
+  title: string
+  titleVisible?: boolean
 }
 
 const slideVariants = {
@@ -26,7 +33,14 @@ const positionClasses = {
   right: 'inset-y-0 right-0 w-80 max-w-[90vw]',
 }
 
-export function Sheet({ open, onOpenChange, children, side = 'bottom', title }: SheetProps) {
+export function Sheet({
+  open,
+  onOpenChange,
+  children,
+  side = 'bottom',
+  title,
+  titleVisible = true,
+}: SheetProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <AnimatePresence>
@@ -55,11 +69,13 @@ export function Sheet({ open, onOpenChange, children, side = 'bottom', title }: 
                     <div className="w-10 h-1 rounded-full bg-border-strong" />
                   </div>
                 )}
-                {title && (
-                  <Dialog.Title className="px-4 pt-2 pb-3 text-lg font-semibold text-text">
-                    {title}
-                  </Dialog.Title>
-                )}
+                <Dialog.Title
+                  className={
+                    titleVisible ? 'px-4 pt-2 pb-3 text-lg font-semibold text-text' : 'sr-only'
+                  }
+                >
+                  {title}
+                </Dialog.Title>
                 <div className="p-4">{children}</div>
               </motion.div>
             </Dialog.Content>

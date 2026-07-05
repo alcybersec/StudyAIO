@@ -192,7 +192,13 @@ export function MobileNav() {
       </Sheet>
 
       {/* Notification center (E2) */}
-      <Sheet open={notificationsOpen} onOpenChange={setNotificationsOpen} side="bottom">
+      <Sheet
+        open={notificationsOpen}
+        onOpenChange={setNotificationsOpen}
+        side="bottom"
+        title="Notifications"
+        titleVisible={false}
+      >
         <NotificationCenter onNavigate={() => setNotificationsOpen(false)} />
       </Sheet>
     </>

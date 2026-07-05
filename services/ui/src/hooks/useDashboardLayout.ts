@@ -2,19 +2,16 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ResponsiveLayouts } from 'react-grid-layout'
 import { useSettings, useUpdateSettings } from './useApi'
 import { defaultLayouts, widgets } from '../components/dashboard/WidgetRegistry'
+import { sanitizeLayouts, serializeLayout } from '../components/dashboard/layoutUtils'
 
 function parseStored(raw: Record<string, unknown> | null | undefined): {
   layouts: ResponsiveLayouts
   hiddenWidgets: string[]
 } {
-  if (!raw) return { layouts: defaultLayouts, hiddenWidgets: [] }
-  try {
-    const layouts = (raw.layouts ?? null) as ResponsiveLayouts | null
-    const hiddenWidgets = (raw.hiddenWidgets ?? []) as string[]
-    return { layouts: layouts ?? defaultLayouts, hiddenWidgets }
-  } catch {
-    return { layouts: defaultLayouts, hiddenWidgets: [] }
-  }
+  // sanitizeLayouts version-gates and clamps; it never throws on bad input.
+  const layouts = sanitizeLayouts(raw)
+  const hiddenWidgets = Array.isArray(raw?.hiddenWidgets) ? (raw!.hiddenWidgets as string[]) : []
+  return { layouts, hiddenWidgets }
 }
 
 export function useDashboardLayout() {
@@ -39,7 +36,7 @@ export function useDashboardLayout() {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         updateSettings.mutate(
-          { dashboard_layout: { layouts: newLayouts, hiddenWidgets: newHidden } },
+          { dashboard_layout: serializeLayout(newLayouts, newHidden) },
           {
             onSuccess: () => {
               // Clear local overrides once server has persisted
