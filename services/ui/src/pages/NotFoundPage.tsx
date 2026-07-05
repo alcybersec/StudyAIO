@@ -13,7 +13,7 @@ export function NotFoundPage() {
         </p>
         <Link
           to="/"
-          className="min-h-[44px] px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center justify-center"
+          className="min-h-[44px] px-6 py-2.5 bg-sage text-on-accent font-medium rounded-lg hover:bg-sage-hover transition-colors inline-flex items-center justify-center"
         >
           Go to Dashboard
         </Link>

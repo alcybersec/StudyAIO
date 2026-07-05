@@ -20,7 +20,7 @@ export function DashboardCustomizer({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/40 z-50" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-surface border border-border rounded-xl shadow-lg w-full max-w-sm p-6">
+        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-surface-1 border border-border rounded-xl shadow-lg w-full max-w-sm p-6">
           <Dialog.Title className="text-lg font-semibold text-text mb-4">
             Customize Dashboard
           </Dialog.Title>
@@ -29,13 +29,13 @@ export function DashboardCustomizer({
             {widgets.map((w) => (
               <label
                 key={w.key}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-alt transition-colors cursor-pointer"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer"
               >
                 <input
                   type="checkbox"
                   checked={!hiddenWidgets.includes(w.key)}
                   onChange={() => onToggle(w.key)}
-                  className="rounded border-border text-primary focus:ring-primary"
+                  className="rounded border-border text-sage focus:ring-sage"
                 />
                 <span className="text-sm text-text">{w.label}</span>
               </label>
@@ -49,7 +49,7 @@ export function DashboardCustomizer({
             >
               Reset to default
             </button>
-            <Dialog.Close className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors">
+            <Dialog.Close className="px-4 py-2 text-sm font-medium rounded-lg bg-sage text-on-accent hover:bg-sage-hover transition-colors">
               Done
             </Dialog.Close>
           </div>

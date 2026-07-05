@@ -24,7 +24,7 @@ export function Toaster() {
     <SonnerToaster
       position="bottom-right"
       toastOptions={{
-        className: 'bg-surface text-text border-border',
+        className: 'bg-surface-1 text-text border-border',
         duration: 4000,
       }}
       richColors

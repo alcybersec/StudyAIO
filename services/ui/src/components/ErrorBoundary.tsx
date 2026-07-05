@@ -54,13 +54,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
               onClick={this.handleReset}
-              className="min-h-[44px] px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors"
+              className="min-h-[44px] px-6 py-2.5 bg-sage text-on-accent font-medium rounded-lg hover:bg-sage-hover transition-colors"
             >
               Try again
             </button>
             <Link
               to="/"
-              className="min-h-[44px] px-6 py-2.5 bg-surface-alt text-text font-medium rounded-lg hover:opacity-80 transition-colors inline-flex items-center justify-center"
+              className="min-h-[44px] px-6 py-2.5 bg-surface-0 text-text font-medium rounded-lg hover:opacity-80 transition-colors inline-flex items-center justify-center"
             >
               Go to Dashboard
             </Link>

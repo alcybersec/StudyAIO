@@ -53,7 +53,7 @@ export function SummaryTab({ summary, artifactId }: SummaryTabProps) {
           Updated {new Date(summary.updated_at).toLocaleDateString()}
         </span>
       </div>
-      <div className="prose prose-sm max-w-none prose-headings:text-text prose-p:text-text prose-li:text-text prose-td:text-text prose-a:text-primary prose-strong:text-text prose-code:text-primary prose-code:bg-primary/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-table:text-sm prose-th:bg-surface-2 prose-th:text-text prose-pre:bg-surface-2 prose-pre:text-text [&_pre_code]:text-text [&_pre_code]:bg-transparent [&_pre_code]:p-0">
+      <div className="prose prose-sm max-w-none prose-headings:text-text prose-p:text-text prose-li:text-text prose-td:text-text prose-a:text-peri-fg prose-strong:text-text prose-code:text-peri-fg prose-code:bg-peri/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-table:text-sm prose-th:bg-surface-2 prose-th:text-text prose-pre:bg-surface-2 prose-pre:text-text [&_pre_code]:text-text [&_pre_code]:bg-transparent [&_pre_code]:p-0">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
