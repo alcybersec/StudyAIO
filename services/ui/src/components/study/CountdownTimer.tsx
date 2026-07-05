@@ -36,14 +36,14 @@ export function CountdownTimer({ totalSeconds, onTimeUp, paused = false }: Count
   const pct = (remaining / totalSeconds) * 100
 
   // Color thresholds
-  let colorClass = 'text-green-600'
-  let barColor = 'bg-green-500'
+  let colorClass = 'text-sage-fg'
+  let barColor = 'bg-sage'
   if (pct < 20) {
-    colorClass = 'text-red-600'
-    barColor = 'bg-red-500'
+    colorClass = 'text-red-fg'
+    barColor = 'bg-red'
   } else if (pct < 50) {
-    colorClass = 'text-amber-600'
-    barColor = 'bg-amber-500'
+    colorClass = 'text-amber-fg'
+    barColor = 'bg-amber'
   }
 
   return (
