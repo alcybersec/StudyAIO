@@ -10,7 +10,7 @@ import { Button } from '../components/ui'
 import { ReviewAlert } from '../components/dashboard/ReviewAlert'
 import { DashboardCustomizer } from '../components/dashboard/DashboardCustomizer'
 import { MeasuredCell } from '../components/dashboard/MeasuredCell'
-import { ROW_HEIGHT, GRID_MARGIN, rowsForHeight } from '../components/dashboard/layoutUtils'
+import { ROW_HEIGHT, GRID_MARGIN, rowsForHeight, alignRows } from '../components/dashboard/layoutUtils'
 import type { ResponsiveLayouts } from 'react-grid-layout'
 import { StreakWidget } from '../components/dashboard/widgets/StreakWidget'
 import { ExamsWidget } from '../components/dashboard/widgets/ExamsWidget'
@@ -65,30 +65,19 @@ export function DashboardPage() {
   )
 
   // Filter to active widgets, drive each item's height from its measured
-  // content (so nothing clips or scrolls), then re-compact vertically.
+  // content (so nothing clips or scrolls), then snap every row to its tallest
+  // widget so cards line up and rows share a baseline.
   const DEFAULT_H = rowsForHeight(140)
   const filteredLayouts = useMemo(() => {
     const activeKeys = new Set(activeWidgets.map((w) => w.key))
     const result: Record<string, unknown[]> = {}
+    const rowsOf = (key: string) => (heights[key] ? rowsForHeight(heights[key]) : DEFAULT_H)
     for (const [bp, items] of Object.entries(layouts)) {
       if (!Array.isArray(items)) continue
-      const filtered = items
-        .filter((item: { i: string }) => activeKeys.has(item.i))
-        .sort((a: { y: number; x: number }, b: { y: number; x: number }) => a.y - b.y || a.x - b.x)
-
-      const placed: { x: number; y: number; w: number; h: number }[] = []
-      result[bp] = filtered.map((item: { i: string; x: number; y: number; w: number; h: number }) => {
-        const h = heights[item.i] ? rowsForHeight(heights[item.i]) : DEFAULT_H
-        let newY = 0
-        for (const p of placed) {
-          if (item.x < p.x + p.w && item.x + item.w > p.x) {
-            newY = Math.max(newY, p.y + p.h)
-          }
-        }
-        const compacted = { ...item, y: newY, h }
-        placed.push(compacted)
-        return compacted
-      })
+      const filtered = (items as { i: string; x: number; y: number; w: number }[]).filter((item) =>
+        activeKeys.has(item.i),
+      )
+      result[bp] = alignRows(filtered, rowsOf)
     }
     return result as ResponsiveLayouts
     // DEFAULT_H is derived from a constant; excluded intentionally.

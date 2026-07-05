@@ -1,9 +1,10 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
+import { WidgetMeasureContext } from './measureContext'
 
 /**
- * Reports its content's natural pixel height to `onMeasure` whenever it
- * changes. Lets the dashboard size each grid cell to fit its widget so
- * content is never clipped or scrolled, regardless of data state.
+ * Wraps a dashboard widget so its WidgetShell can report its natural content
+ * height (via context) and fill the grid cell. The dashboard uses the reported
+ * heights to size and align cells.
  */
 export function MeasuredCell({
   widgetKey,
@@ -14,17 +15,10 @@ export function MeasuredCell({
   onMeasure: (key: string, height: number) => void
   children: ReactNode
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const report = () => onMeasure(widgetKey, el.offsetHeight)
-    report()
-    const ro = new ResizeObserver(report)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [widgetKey, onMeasure])
-
-  return <div ref={ref}>{children}</div>
+  const value = useMemo(() => ({ widgetKey, onMeasure }), [widgetKey, onMeasure])
+  return (
+    <WidgetMeasureContext.Provider value={value}>
+      <div className="h-full">{children}</div>
+    </WidgetMeasureContext.Provider>
+  )
 }

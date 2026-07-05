@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sanitizeLayouts, serializeLayout, rowsForHeight, ROW_HEIGHT, GRID_MARGIN } from './layoutUtils'
+import { sanitizeLayouts, serializeLayout, rowsForHeight, alignRows, ROW_HEIGHT, GRID_MARGIN } from './layoutUtils'
 import { defaultLayouts, widgetByKey, widgets, LAYOUT_VERSION } from './WidgetRegistry'
 
 describe('rowsForHeight', () => {
@@ -18,6 +18,32 @@ describe('rowsForHeight', () => {
       const cellPx = rows * ROW_HEIGHT + (rows - 1) * GRID_MARGIN
       expect(cellPx).toBeGreaterThanOrEqual(px)
     }
+  })
+})
+
+describe('alignRows', () => {
+  // two side-by-side widgets in a row, one much taller than the other
+  const items = [
+    { i: 'left', x: 0, y: 0, w: 6 },
+    { i: 'right', x: 6, y: 0, w: 6 },
+    { i: 'below', x: 0, y: 1, w: 12 },
+  ]
+  const rowsOf = (k: string) => ({ left: 3, right: 8, below: 4 })[k] ?? 3
+
+  it('gives both widgets in a row the same height (the taller one wins)', () => {
+    const out = alignRows(items, rowsOf)
+    const left = out.find((i) => i.i === 'left')!
+    const right = out.find((i) => i.i === 'right')!
+    expect(left.y).toBe(right.y) // same row
+    expect(left.h).toBe(right.h) // equalized
+    expect(left.h).toBe(8) // to the taller
+  })
+
+  it('places the next row below the equalized row (no overlap)', () => {
+    const out = alignRows(items, rowsOf)
+    const right = out.find((i) => i.i === 'right')!
+    const below = out.find((i) => i.i === 'below')!
+    expect(below.y).toBe(right.y + right.h)
   })
 })
 

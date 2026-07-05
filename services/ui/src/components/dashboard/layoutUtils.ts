@@ -31,6 +31,53 @@ export function rowsForHeight(px: number): number {
   return Math.max(1, Math.ceil((px + GRID_MARGIN) / (ROW_HEIGHT + GRID_MARGIN)))
 }
 
+interface PlacedItem {
+  i: string
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+// Places items in the given order (callers pass them pre-sorted by row, then
+// column). Each item drops to the lowest y that clears everything already
+// placed in its columns.
+function place(items: { i: string; x: number; w: number }[], hOf: (key: string) => number): PlacedItem[] {
+  const placed: PlacedItem[] = []
+  return items.map((it) => {
+    const h = hOf(it.i)
+    let y = 0
+    for (const p of placed) {
+      if (it.x < p.x + p.w && it.x + it.w > p.x) y = Math.max(y, p.y + p.h)
+    }
+    const r = { ...it, y, h }
+    placed.push(r)
+    return r
+  })
+}
+
+/**
+ * Vertically compact items, then snap every item in a visual row to that row's
+ * tallest widget so cards line up and rows share a baseline. Two passes: place
+ * with natural heights to discover which items share a row, then re-place with
+ * each row's max height applied to all its members.
+ */
+export function alignRows(
+  items: { i: string; x: number; y: number; w: number }[],
+  rowsOf: (key: string) => number,
+): PlacedItem[] {
+  const ordered = [...items].sort((a, b) => a.y - b.y || a.x - b.x)
+  const pass1 = place(ordered, rowsOf)
+
+  const rowMax = new Map<number, number>()
+  for (const it of pass1) rowMax.set(it.y, Math.max(rowMax.get(it.y) ?? 0, it.h))
+
+  const equalized = new Map<string, number>()
+  for (const it of pass1) equalized.set(it.i, rowMax.get(it.y) ?? it.h)
+
+  return place(ordered, (key) => equalized.get(key) ?? rowsOf(key))
+}
+
 /**
  * Clamp a single item against its widget's registry minimums and the column
  * count. A saved item narrower/shorter than the widget's minimum (the classic
