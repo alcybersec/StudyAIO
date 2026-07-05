@@ -151,11 +151,13 @@ export function DashboardPage() {
           margin={[16, 16] as const}
         >
           {activeWidgets.map((w) => (
-            <div key={w.key} className="h-full relative group overflow-hidden rounded-xl">
+            <div key={w.key} className="h-full relative group rounded-xl">
               <div className="drag-handle absolute top-0 left-0 right-0 h-6 cursor-grab active:cursor-grabbing z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <div className="w-8 h-1 rounded-full bg-border" />
               </div>
-              <div className="h-full">{widgetContent[w.key]}</div>
+              {/* Scroll instead of clip: a cell that's slightly shorter than its
+                  content stays usable rather than silently cropping it. */}
+              <div className="h-full overflow-y-auto rounded-xl">{widgetContent[w.key]}</div>
             </div>
           ))}
         </ResponsiveGridLayout>
