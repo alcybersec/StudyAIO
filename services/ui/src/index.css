@@ -54,6 +54,40 @@
   --color-surface-alt: var(--t-surface-0);
 }
 
+/* -------- light (derived paper twin) --------
+   Declared before `.dark` so the dark block wins the cascade when the class
+   is set (both selectors have class-level specificity — order decides).
+   Text tokens hold WCAG AA 4.5:1 against every surface tier. */
+:root {
+  --t-surface-0: #f7f7f5;
+  --t-surface-1: #fdfdfc;
+  --t-surface-2: #f1f0ee;
+  --t-border: #e9e7e3;
+  --t-border-strong: #d9d6d0;
+  --t-text: #37352f;
+  --t-text-muted: #5f5c58;
+  --t-text-faint: #6d6a65;
+
+  --t-sage: #3d7355;
+  --t-sage-hover: #3a7154;
+  --t-sage-soft: rgba(68, 131, 97, 0.1);
+  --t-sage-fg: #3a7154;
+
+  --t-amber: #a3600e;
+  --t-amber-soft: rgba(217, 115, 13, 0.1);
+  --t-amber-fg: #96590f;
+
+  --t-red: #bc4f47;
+  --t-red-soft: rgba(196, 85, 77, 0.09);
+  --t-red-fg: #b04840;
+
+  --t-peri: #5f6ac4;
+  --t-peri-soft: rgba(110, 121, 214, 0.1);
+  --t-peri-fg: #545eb4;
+
+  --t-on-accent: #fdfdfc;
+}
+
 /* -------- dark (anchor) -------- */
 .dark {
   --t-surface-0: #191817;
@@ -63,14 +97,14 @@
   --t-border-strong: #423e3a;
   --t-text: #e9e7e3;
   --t-text-muted: #a5a19a;
-  --t-text-faint: #736f69;
+  --t-text-faint: #938f86;
 
-  --t-sage: #4a8265;
-  --t-sage-hover: #578f72;
+  --t-sage: #3f7057;
+  --t-sage-hover: #4a8265;
   --t-sage-soft: rgba(127, 169, 143, 0.14);
   --t-sage-fg: #93bfa4;
 
-  --t-amber: #c77b32;
+  --t-amber: #a05e1b;
   --t-amber-soft: rgba(217, 154, 98, 0.14);
   --t-amber-fg: #dfa06a;
 
@@ -78,42 +112,11 @@
   --t-red-soft: rgba(215, 138, 131, 0.13);
   --t-red-fg: #d98d86;
 
-  --t-peri: #6d77cd;
+  --t-peri: #5a64bd;
   --t-peri-soft: rgba(154, 163, 236, 0.13);
   --t-peri-fg: #a3abee;
 
   --t-on-accent: #f7f7f5;
-}
-
-/* -------- light (derived paper twin) -------- */
-:root {
-  --t-surface-0: #f7f7f5;
-  --t-surface-1: #fdfdfc;
-  --t-surface-2: #f1f0ee;
-  --t-border: #e9e7e3;
-  --t-border-strong: #d9d6d0;
-  --t-text: #37352f;
-  --t-text-muted: #787571;
-  --t-text-faint: #a3a09b;
-
-  --t-sage: #448361;
-  --t-sage-hover: #3a7154;
-  --t-sage-soft: rgba(68, 131, 97, 0.1);
-  --t-sage-fg: #3a7154;
-
-  --t-amber: #c17322;
-  --t-amber-soft: rgba(217, 115, 13, 0.1);
-  --t-amber-fg: #a96312;
-
-  --t-red: #c4554d;
-  --t-red-soft: rgba(196, 85, 77, 0.09);
-  --t-red-fg: #b04840;
-
-  --t-peri: #5f6ac4;
-  --t-peri-soft: rgba(110, 121, 214, 0.1);
-  --t-peri-fg: #545eb4;
-
-  --t-on-accent: #fdfdfc;
 }
 
 /* -------- base -------- */

@@ -153,7 +153,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
         </div>
 
         {createExam.isError && (
-          <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950 text-sm text-red-700 dark:text-red-400">
+          <div className="p-3 rounded-lg bg-red-soft text-sm text-red-fg">
             {(createExam.error as Error).message || 'Failed to create exam'}
           </div>
         )}

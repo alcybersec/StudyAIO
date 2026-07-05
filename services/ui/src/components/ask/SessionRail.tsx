@@ -45,36 +45,34 @@ function SessionItem({
     deleteSession.mutate(session.id, { onSuccess: onDeleted })
   }
 
+  // The row is a plain container: selecting and deleting are two sibling
+  // buttons (a focusable control must not nest another — axe nested-interactive).
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onSelect()
-        }
-      }}
-      className={`group w-full flex items-start gap-2 text-left px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+      className={`group w-full flex items-start gap-2 rounded-lg transition-colors ${
         isSelected ? 'bg-surface-2' : 'hover:bg-surface-2'
       }`}
     >
-      <div className="flex-1 min-w-0">
-        <div className={`text-[13px] truncate ${isSelected ? 'text-text font-medium' : 'text-text-muted'}`}>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={isSelected ? 'true' : undefined}
+        className="flex-1 min-w-0 text-left pl-2.5 py-2 rounded-lg cursor-pointer"
+      >
+        <span className={`block text-[13px] truncate ${isSelected ? 'text-text font-medium' : 'text-text-muted'}`}>
           {session.title || 'New question'}
-        </div>
-        <div className="text-[10px] text-text-faint font-mono mt-0.5">
+        </span>
+        <span className="block text-[10px] text-text-faint font-mono mt-0.5">
           {formatSessionDate(session.updated_at)} · {session.message_count} msgs
-        </div>
-      </div>
+        </span>
+      </button>
       <button
         type="button"
         onClick={handleDelete}
         disabled={deleteSession.isPending}
         aria-label={confirmDelete ? 'Confirm delete conversation' : 'Delete conversation'}
         title={confirmDelete ? 'Click again to confirm' : 'Delete conversation'}
-        className={`shrink-0 mt-0.5 p-1 rounded-md transition-opacity cursor-pointer ${
+        className={`shrink-0 mt-2 mr-1.5 p-1 rounded-md transition-opacity cursor-pointer ${
           confirmDelete
             ? 'text-red-fg opacity-100'
             : 'text-text-faint hover:text-red-fg opacity-0 group-hover:opacity-100 focus-visible:opacity-100'

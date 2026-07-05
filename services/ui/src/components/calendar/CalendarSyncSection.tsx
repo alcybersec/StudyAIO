@@ -61,7 +61,7 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
                 setConfirming(false)
               }}
               disabled={disconnectMutation.isPending}
-              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+              className="rounded-lg bg-red px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-50 transition-colors"
             >
               Confirm
             </button>
@@ -75,7 +75,7 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
         ) : (
           <button
             onClick={() => setConfirming(true)}
-            className="rounded-lg border border-red-200 dark:border-red-900 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+            className="rounded-lg border border-red/30 px-3 py-1.5 text-xs font-medium text-red-fg hover:bg-red-soft transition-colors"
           >
             Disconnect
           </button>
@@ -183,7 +183,7 @@ export function CalendarSyncSection() {
       )}
 
       {connectMutation.isError && (
-        <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+        <p className="mt-3 text-sm text-red-fg">
           Failed to connect: {connectMutation.error instanceof Error ? connectMutation.error.message : 'Unknown error'}
         </p>
       )}

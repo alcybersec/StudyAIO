@@ -22,8 +22,8 @@ export function UpgradePrompt({ resource, limit, period, onDismiss }: UpgradePro
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-surface border border-border rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
         <div className="text-center">
-          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-            <svg className="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-amber-soft flex items-center justify-center">
+            <svg className="w-6 h-6 text-amber-fg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>

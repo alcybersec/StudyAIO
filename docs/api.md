@@ -1642,3 +1642,161 @@ Get flashcards for a course, optionally filtered by week. Query params: `course_
 Get quiz questions for a course, optionally filtered by week. Query params: `course_code` (required), `week` (optional).
 
 **Response** `200` `QuizResponse`
+
+---
+
+## Search
+
+### `GET /api/search`
+
+Global search across courses, week summaries, flashcards, and chat sessions for the current user. Rate limited: 60/minute.
+
+**Query params:** `q` (required, non-empty), `limit` (default 10, max 50)
+
+**Response** `200`
+```json
+{
+  "query": "forensics",
+  "results": [
+    { "kind": "course", "title": "CSIT302 — Cybersecurity", "snippet": "...", "href_meta": { "course_code": "CSIT302" } },
+    { "kind": "course_week", "title": "CSIT302 Week 3", "snippet": "...forensics...", "href_meta": { "course_code": "CSIT302", "week": 3 } },
+    { "kind": "flashcard", "title": "...", "snippet": "...", "href_meta": {} },
+    { "kind": "chat_session", "title": "forensics intro", "snippet": "...", "href_meta": { "session_id": "..." } }
+  ]
+}
+```
+**Response** `400` empty query
+
+Result `kind` values: `course`, `course_week`, `flashcard`, `chat_session`. `href_meta` carries the identifiers the frontend needs to build a link.
+
+---
+
+## Notification Inbox
+
+In-app notification center (distinct from channel preferences under `/api/notifications/preferences`). Emitted on pipeline completion, review-item creation, achievement unlocks, and upcoming deadlines (max one per deadline per day).
+
+### `GET /api/notifications`
+
+List inbox notifications, newest first.
+
+**Query params:** `unread` (bool, default false — only unread), `limit` (default 50, max 200)
+
+**Response** `200` `NotificationResponse[]` — `{ id, kind, title, body?, href?, read_at?, created_at }`
+
+### `GET /api/notifications/unread-count`
+
+**Response** `200` `{ "count": 3 }`
+
+### `POST /api/notifications/mark-read`
+
+Marks the given notification IDs as read. Idempotent.
+
+**Body** `{ "ids": ["..."] }`
+**Response** `200` `{ "updated": 2 }`
+
+---
+
+## Study Plan
+
+### `GET /api/study/plan`
+
+Returns a 7-day plan of card/quiz/mock targets per course, scheduled from active exam dates and readiness. `done` counts come from the current week's study sessions. Days with no exams return empty `items`.
+
+**Response** `200`
+```json
+{
+  "days": [
+    {
+      "day": "2026-07-06",
+      "items": [
+        { "course_code": "CSIT302", "kind": "cards", "target": 30, "done": 12 },
+        { "course_code": "CSIT302", "kind": "quiz", "target": 10, "done": 0 }
+      ]
+    }
+  ]
+}
+```
+`kind` values: `cards`, `quiz`, `mock`.
+
+---
+
+## Quick Capture
+
+### `POST /api/uploads/capture`
+
+Creates a mini text artifact from pasted text or a fetched URL (`source_type="capture"`) and runs the pipeline from the classify stage. Quota-checked like uploads. Rate limited like uploads.
+
+**Body** `CaptureRequest` — exactly one of `text` or `url`, plus optional `title` (max 200 chars)
+```json
+{ "text": "raw notes...", "title": "Lecture scratchpad" }
+```
+**Response** `201` `UploadResponse` — `{ artifact_id, filename, status, pipeline_task_id }`
+**Response** `409` duplicate capture (same SHA-256 of text)
+**Response** `413` text larger than 1 MB
+**Response** `422` both or neither of `text`/`url` provided
+
+---
+
+## Exam Readiness
+
+### `GET /api/exams/{exam_id}/readiness`
+
+Readiness drill-down: overall score plus topic-level breakdown (per week in the exam's scope). Shares the weak-topic math used by the exam overview.
+
+**Response** `200`
+```json
+{
+  "exam_id": "...",
+  "title": "Final — CSIT302",
+  "overall": 62,
+  "topics": [
+    { "topic": "Week 3", "week": 3, "accuracy": 55.0, "weight": 0.4, "card_count": 24 }
+  ]
+}
+```
+**Response** `404` exam not found (including another user's exam — tenant isolation)
+
+---
+
+## Artifact Reclassify
+
+### `POST /api/artifacts/{artifact_id}/reclassify`
+
+Moves an artifact (and its chunks/flashcards/quiz questions) to a different course/week, then enqueues summary regeneration for both affected weeks (target version increments — no duplicates).
+
+**Body** `{ "course_code": "CSIT302", "week": 4 }` (`week` 0–52)
+**Response** `200` `{ artifact_id, course_code, week, summaries_enqueued }`
+**Response** `404` artifact not found | `409` artifact still processing
+
+---
+
+## Course Management
+
+### `PATCH /api/courses/{course_code}`
+
+Rename a course (code and/or display name). Children keep FK integrity.
+
+**Body** `{ "new_code": "CSIT999", "name": "New name" }` (both optional)
+**Response** `200` `CourseResponse` | `404` not found | `409` target code already exists
+
+### `POST /api/courses/{course_code}/archive`
+
+Soft-archives the course (hidden from default listings, data retained). Use `GET /api/courses?include_archived=1` to list archived courses.
+
+**Response** `200` `{ "code": "CSIT302", "archived": true }`
+
+### `DELETE /api/courses/{course_code}`
+
+Permanently deletes the course and its children (summaries, flashcards, quiz questions, chunks). Uploaded source files stay in storage (never deleted).
+
+**Headers:** `X-Confirm: <course_code>` required
+**Response** `200` `{ "code": "CSIT302", "deleted": true, "counts": { ... } }`
+**Response** `428` missing/mismatched `X-Confirm` header | `404` not found
+
+### `POST /api/courses/{course_code}/merge`
+
+Moves all content into the target course. Colliding week summaries create review items instead of silently overwriting. The source course is archived afterwards.
+
+**Body** `{ "into": "CSIT302" }`
+**Response** `200` `{ "moved_summaries": 5, "conflict_weeks": [3], "review_items_created": 1 }`
+**Response** `400` invalid target | `404` course not found

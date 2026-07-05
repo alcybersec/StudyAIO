@@ -21,10 +21,10 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
 
   const urgencyColor =
     progress.days_remaining <= 3
-      ? 'text-red-600 dark:text-red-400'
+      ? 'text-red-fg'
       : progress.days_remaining <= 7
-        ? 'text-amber-600 dark:text-amber-400'
-        : 'text-blue-600 dark:text-blue-400'
+        ? 'text-amber-fg'
+        : 'text-peri-fg'
 
   const masteryPct = Math.round(progress.mastery_pct)
   const targetReached = masteryPct >= progress.target_mastery_pct
@@ -57,7 +57,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
             </span>
             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
               progress.status === 'active'
-                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400'
+                ? 'bg-sage-soft text-sage-fg'
                 : 'bg-surface-alt text-text-muted'
             }`}>
               {progress.status}
@@ -88,7 +88,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
           <div className="text-2xl font-bold text-text">{masteryPct}%</div>
           <div className="w-full h-1.5 bg-border rounded-full mt-2">
             <div
-              className={`h-full rounded-full ${targetReached ? 'bg-green-500' : 'bg-primary'}`}
+              className={`h-full rounded-full ${targetReached ? 'bg-sage' : 'bg-primary'}`}
               style={{ width: `${Math.min(100, masteryPct)}%` }}
             />
           </div>
@@ -126,9 +126,9 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
             <div className="space-y-2">
               {schedule.slice(0, 7).map((day) => {
                 const priorityColor =
-                  day.priority === 'critical' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400'
-                    : day.priority === 'high' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-400'
-                      : day.priority === 'medium' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-400'
+                  day.priority === 'critical' ? 'bg-red-soft text-red-fg'
+                    : day.priority === 'high' ? 'bg-amber-soft text-amber-fg'
+                      : day.priority === 'medium' ? 'bg-peri-soft text-peri-fg'
                         : 'bg-surface-alt text-text-muted'
 
                 return (
@@ -193,10 +193,10 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
                   intensity === 0
                     ? 'bg-surface-alt'
                     : intensity < 10
-                      ? 'bg-green-200 dark:bg-green-900'
+                      ? 'bg-sage/30'
                       : intensity < 25
-                        ? 'bg-green-400 dark:bg-green-700'
-                        : 'bg-green-600 dark:bg-green-500'
+                        ? 'bg-sage/60'
+                        : 'bg-sage'
 
                 return (
                   <div
