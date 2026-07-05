@@ -42,7 +42,7 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
             <button
               onClick={() => syncCalendar.mutate()}
               disabled={syncCalendar.isPending}
-              className="inline-flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium border border-border text-text hover:bg-surface-alt disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium border border-border text-text hover:bg-surface-2 disabled:opacity-50 transition-colors"
               title="Sync exams to Google Calendar"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -53,7 +53,7 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
           )}
           <button
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary/90 transition-colors"
+            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-sage text-on-accent hover:bg-sage-hover transition-colors"
           >
             + Create Exam
           </button>
@@ -97,7 +97,7 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="text-base font-semibold text-text group-hover:text-primary transition-colors">
+                    <h3 className="text-base font-semibold text-text group-hover:text-sage-fg transition-colors">
                       {exam.title}
                     </h3>
                     <div className="text-sm text-text-muted mt-0.5">
@@ -113,7 +113,7 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
 
                 <div className="flex items-center gap-2 flex-wrap">
                   {exam.weeks_scope.map((w) => (
-                    <span key={w} className="px-2 py-0.5 rounded-full bg-surface-alt text-text-muted text-xs font-medium">
+                    <span key={w} className="px-2 py-0.5 rounded-full bg-surface-0 text-text-muted text-xs font-medium">
                       W{w}
                     </span>
                   ))}
@@ -124,7 +124,7 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
                     <span>Target: {exam.target_mastery_pct}%</span>
                   </div>
                   <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full" style={{ width: '0%' }} />
+                    <div className="h-full bg-peri rounded-full" style={{ width: '0%' }} />
                   </div>
                 </div>
               </button>
