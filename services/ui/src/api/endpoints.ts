@@ -25,7 +25,9 @@ import type {
   QAResponse,
   QuizAttemptRequest,
   QuizQuestion,
+  ReclassifyResponse,
   RetentionPoint,
+  RetryResponse,
   ReviewItem,
   ReviewRequest,
   ReviewResponse,
@@ -71,7 +73,12 @@ export const uploadApi = {
   upload: (file: File) => api.upload<UploadResult>('/uploads', file),
   batchUpload: (files: File[]) => api.uploadMany<BatchUploadResponse>('/uploads/batch', files),
   status: (artifactId: string) => api.get<PipelineRun[]>(`/uploads/${artifactId}/status`),
-  retry: (artifactId: string) => api.post<{ artifact_id: string; status: string; retrying_from_stage: string }>(`/uploads/${artifactId}/retry`),
+  retry: (artifactId: string) => api.post<RetryResponse>(`/uploads/${artifactId}/retry`),
+}
+
+export const artifactsApi = {
+  reclassify: (artifactId: string, data: { course_code: string; week: number }) =>
+    api.post<ReclassifyResponse>(`/artifacts/${artifactId}/reclassify`, data),
 }
 
 export const qaApi = {

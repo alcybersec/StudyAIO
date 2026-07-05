@@ -113,6 +113,21 @@ export interface PipelineEvent {
   stage: string
   status: string
   message: string | null
+  /** Client-side receipt stamp (ms epoch), added by usePipelineEvents for stage timings. */
+  receivedAt?: number
+}
+
+export interface ReclassifyResponse {
+  artifact_id: string
+  course_code: string
+  week: number
+  summaries_enqueued: number
+}
+
+export interface RetryResponse {
+  artifact_id: string
+  status: string
+  retrying_from_stage: string
 }
 
 export interface PipelineRun {
