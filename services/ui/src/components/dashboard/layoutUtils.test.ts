@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { sanitizeLayouts, serializeLayout } from './layoutUtils'
+import { sanitizeLayouts, serializeLayout, rowsForHeight, ROW_HEIGHT, GRID_MARGIN } from './layoutUtils'
 import { defaultLayouts, widgetByKey, widgets, LAYOUT_VERSION } from './WidgetRegistry'
+
+describe('rowsForHeight', () => {
+  it('returns at least one row for tiny content', () => {
+    expect(rowsForHeight(0)).toBe(1)
+    expect(rowsForHeight(5)).toBe(1)
+  })
+
+  it('grows monotonically with content height', () => {
+    expect(rowsForHeight(400)).toBeGreaterThan(rowsForHeight(140))
+  })
+
+  it('picks a row count whose pixel height covers the content (never clips)', () => {
+    for (const px of [80, 140, 260, 512]) {
+      const rows = rowsForHeight(px)
+      const cellPx = rows * ROW_HEIGHT + (rows - 1) * GRID_MARGIN
+      expect(cellPx).toBeGreaterThanOrEqual(px)
+    }
+  })
+})
 
 describe('sanitizeLayouts', () => {
   it('returns defaults when nothing is stored', () => {
