@@ -1,4 +1,3 @@
-services/ui/src/components/analytics/ExamReadiness.tsx
 services/ui/src/components/auth/MFASetup.tsx
 services/ui/src/components/billing/BillingSection.tsx
 services/ui/src/components/billing/ProBadge.tsx
