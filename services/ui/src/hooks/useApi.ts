@@ -399,6 +399,14 @@ export function useAnalyticsReadiness(examId: string) {
   })
 }
 
+export function useExamReadiness(examId: string) {
+  return useQuery({
+    queryKey: ['exams', examId, 'readiness'],
+    queryFn: () => examsApi.getReadiness(examId),
+    enabled: !!examId,
+  })
+}
+
 // ── Chat ──────────────────────────────────────────────────────
 
 export function useChatSessions() {
