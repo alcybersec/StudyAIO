@@ -84,9 +84,9 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
 
             const urgencyColor =
               daysRemaining <= 3
-                ? 'border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/50'
+                ? 'border-red/30 bg-red-soft'
                 : daysRemaining <= 7
-                  ? 'border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/50'
+                  ? 'border-amber/30 bg-amber-soft'
                   : 'border-border'
 
             return (
@@ -105,7 +105,7 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
                     </div>
                   </div>
                   <div className={`text-lg font-bold ${
-                    daysRemaining <= 3 ? 'text-red-600 dark:text-red-400' : daysRemaining <= 7 ? 'text-amber-600 dark:text-amber-400' : 'text-text-muted'
+                    daysRemaining <= 3 ? 'text-red-fg' : daysRemaining <= 7 ? 'text-amber-fg' : 'text-text-muted'
                   }`}>
                     {daysRemaining}d
                   </div>
