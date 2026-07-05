@@ -1,24 +1,18 @@
-import { useConceptDetail, useRelatedConcepts } from '../../hooks/useApi'
+import { useMemo } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { BookOpen, Sparkles, X } from 'lucide-react'
+import { Badge } from '../ui/Badge'
+import { Button } from '../ui/Button'
+import { SectionLabel } from '../ui/SectionLabel'
+import { Skeleton } from '../ui/Skeleton'
+import { useConceptDetail, useCourses, useRelatedConcepts } from '../../hooks/useApi'
 
 const RELATION_LABELS: Record<string, string> = {
-  prerequisite: 'Prerequisite for',
-  extends: 'Extends',
-  uses: 'Uses',
-  related_to: 'Related to',
-  part_of: 'Part of',
-}
-
-const CATEGORY_BADGES: Record<string, string> = {
-  theory: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
-  algorithm: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-  data_structure: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-  pattern: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
-  tool: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-  language: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  protocol: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
-  principle: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
-  method: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
-  general: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300',
+  prerequisite: 'prerequisite for',
+  extends: 'extends',
+  uses: 'uses',
+  related_to: 'related to',
+  part_of: 'part of',
 }
 
 interface ConceptDetailProps {
@@ -27,128 +21,161 @@ interface ConceptDetailProps {
   onClose?: () => void
 }
 
+interface RelatedChip {
+  id: string
+  name: string
+  hint?: string
+}
+
+function ChipRow({ chips, onNavigate }: { chips: RelatedChip[]; onNavigate?: (id: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {chips.map((chip) => (
+        <button
+          key={chip.id}
+          type="button"
+          onClick={() => onNavigate?.(chip.id)}
+          title={chip.hint}
+          className="text-[11px] font-medium bg-surface-2 text-text-muted hover:text-text border border-transparent hover:border-border rounded-md px-2 py-0.5 cursor-pointer transition-colors"
+        >
+          {chip.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function ConceptDetailPanel({ conceptId, onNavigate, onClose }: ConceptDetailProps) {
+  const navigate = useNavigate()
   const { data: concept, isLoading } = useConceptDetail(conceptId)
   const { data: related } = useRelatedConcepts(conceptId)
+  const { data: courses } = useCourses()
+
+  const courseCode = useMemo(
+    () => courses?.find((c) => c.id === concept?.course_id)?.code,
+    [courses, concept],
+  )
+
+  const relatedChips = useMemo<RelatedChip[]>(() => {
+    if (!concept) return []
+    const seen = new Set<string>()
+    const chips: RelatedChip[] = []
+    for (const rel of [...concept.outgoing_relations, ...concept.incoming_relations]) {
+      if (seen.has(rel.concept_id)) continue
+      seen.add(rel.concept_id)
+      chips.push({
+        id: rel.concept_id,
+        name: rel.concept_name,
+        hint: RELATION_LABELS[rel.relation_type] ?? rel.relation_type,
+      })
+    }
+    return chips
+  }, [concept])
 
   if (isLoading) {
     return (
-      <div className="p-4 space-y-3 animate-pulse">
-        <div className="h-6 bg-surface-alt rounded w-3/4" />
-        <div className="h-4 bg-surface-alt rounded w-full" />
-        <div className="h-4 bg-surface-alt rounded w-2/3" />
+      <div className="space-y-3">
+        <Skeleton height={16} width="40%" />
+        <Skeleton height={20} width="70%" />
+        <Skeleton height={48} width="100%" />
+        <Skeleton height={32} width="100%" />
       </div>
     )
   }
 
   if (!concept) {
-    return <div className="p-4 text-text-muted">Concept not found</div>
+    return <p className="text-sm text-text-muted">Concept not found</p>
   }
 
-  const badgeClass = CATEGORY_BADGES[concept.category] || CATEGORY_BADGES.general
+  const weeks = [...concept.source_weeks].sort((a, b) => a - b)
+  const studyWeek = weeks[0]
 
   return (
-    <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-text">{concept.name}</h3>
-          <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${badgeClass}`}>
-            {concept.category.replace('_', ' ')}
-          </span>
+    <div className="space-y-4">
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <SectionLabel className="mb-0">Selected concept</SectionLabel>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-text-faint hover:text-text p-1 rounded-md cursor-pointer transition-colors"
+              aria-label="Close concept detail"
+            >
+              <X size={14} aria-hidden />
+            </button>
+          )}
         </div>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="text-text-muted hover:text-text p-1"
-            aria-label="Close"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
+        <div className="flex items-center justify-between gap-2 mt-1">
+          <h2 className="text-sm font-semibold text-text">{concept.name}</h2>
+          <Badge variant="success">{courseCode ?? concept.category.replace('_', ' ')}</Badge>
+        </div>
+        <p className="text-xs text-text-muted mt-2 leading-relaxed">{concept.description}</p>
+        <p className="font-mono text-[10px] text-text-faint mt-2">
+          {concept.category.replace('_', ' ')} · mentioned {concept.mention_count}×
+        </p>
       </div>
 
-      {/* Description */}
-      <p className="text-sm text-text-muted">{concept.description}</p>
-
-      {/* Metadata */}
-      <div className="flex gap-4 text-xs text-text-muted">
-        <span>Mentioned {concept.mention_count}x</span>
-        {concept.source_weeks.length > 0 && (
-          <span>Weeks: {concept.source_weeks.sort((a, b) => a - b).join(', ')}</span>
-        )}
-      </div>
-
-      {/* Outgoing Relations */}
-      {concept.outgoing_relations.length > 0 && (
+      {relatedChips.length > 0 && (
         <div>
-          <h4 className="text-sm font-medium text-text mb-2">Relationships</h4>
-          <ul className="space-y-1.5">
-            {concept.outgoing_relations.map((rel) => (
-              <li key={rel.id} className="flex items-center gap-2 text-sm">
-                <span className="text-text-muted text-xs shrink-0">
-                  {RELATION_LABELS[rel.relation_type] || rel.relation_type}
-                </span>
-                <button
-                  onClick={() => onNavigate?.(rel.concept_id)}
-                  className="text-primary hover:underline truncate"
-                >
-                  {rel.concept_name}
-                </button>
-                <span className="ml-auto text-xs text-text-muted">
-                  {Math.round(rel.confidence * 100)}%
-                </span>
-              </li>
-            ))}
-          </ul>
+          <SectionLabel>Related concepts</SectionLabel>
+          <ChipRow chips={relatedChips} onNavigate={onNavigate} />
         </div>
       )}
 
-      {/* Incoming Relations */}
-      {concept.incoming_relations.length > 0 && (
-        <div>
-          <h4 className="text-sm font-medium text-text mb-2">Referenced by</h4>
-          <ul className="space-y-1.5">
-            {concept.incoming_relations.map((rel) => (
-              <li key={rel.id} className="flex items-center gap-2 text-sm">
-                <button
-                  onClick={() => onNavigate?.(rel.concept_id)}
-                  className="text-primary hover:underline truncate"
-                >
-                  {rel.concept_name}
-                </button>
-                <span className="text-text-muted text-xs">
-                  ({RELATION_LABELS[rel.relation_type] || rel.relation_type})
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Semantically Similar */}
       {related && related.length > 0 && (
         <div>
-          <h4 className="text-sm font-medium text-text mb-2">Semantically Similar</h4>
-          <ul className="space-y-1.5">
-            {related.map((sim) => (
-              <li key={sim.id} className="flex items-center gap-2 text-sm">
-                <button
-                  onClick={() => onNavigate?.(sim.id)}
-                  className="text-primary hover:underline truncate"
-                >
-                  {sim.name}
-                </button>
-                <span className="ml-auto text-xs text-text-muted">
-                  {Math.round(sim.similarity * 100)}%
-                </span>
+          <SectionLabel>Semantically similar</SectionLabel>
+          <ChipRow
+            chips={related.map((s) => ({
+              id: s.id,
+              name: s.name,
+              hint: `${Math.round(s.similarity * 100)}% similar`,
+            }))}
+            onNavigate={onNavigate}
+          />
+        </div>
+      )}
+
+      {weeks.length > 0 && (
+        <div>
+          <SectionLabel>Appears in</SectionLabel>
+          <ul className="text-xs space-y-1.5">
+            {weeks.map((week) => (
+              <li key={week}>
+                {courseCode ? (
+                  <Link
+                    to={`/courses/${courseCode}/weeks/${week}`}
+                    className="flex items-center gap-2 text-text-muted hover:text-text transition-colors"
+                  >
+                    <BookOpen size={12} className="text-text-faint shrink-0" aria-hidden />
+                    <span className="underline decoration-border-strong underline-offset-2">
+                      Week {week}
+                    </span>
+                  </Link>
+                ) : (
+                  <span className="flex items-center gap-2 text-text-muted">
+                    <BookOpen size={12} className="text-text-faint shrink-0" aria-hidden />
+                    Week {week}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
         </div>
       )}
+
+      <Button
+        size="sm"
+        className="w-full"
+        disabled={!courseCode || studyWeek === undefined}
+        onClick={() => {
+          if (!courseCode || studyWeek === undefined) return
+          navigate(`/study?tab=flashcards&course=${courseCode}&week=${studyWeek}`)
+        }}
+      >
+        <Sparkles size={13} aria-hidden /> Study this
+      </Button>
     </div>
   )
 }

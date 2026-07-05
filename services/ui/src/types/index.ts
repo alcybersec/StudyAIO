@@ -967,3 +967,20 @@ export interface ExamReadinessData {
   quiz_correct: number
   study_days_last_week: number
 }
+
+// ── Readiness drill-down (GET /api/exams/{id}/readiness) ───────
+
+export interface ReadinessTopic {
+  topic: string
+  week: number
+  accuracy: number | null
+  weight: number
+  card_count: number
+}
+
+export interface ReadinessDetail {
+  exam_id: string
+  title: string
+  overall: number
+  topics: ReadinessTopic[]
+}

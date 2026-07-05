@@ -1,11 +1,8 @@
-services/ui/src/components/analytics/ExamReadiness.tsx
 services/ui/src/components/auth/MFASetup.tsx
 services/ui/src/components/billing/BillingSection.tsx
 services/ui/src/components/billing/ProBadge.tsx
 services/ui/src/components/billing/UpgradePrompt.tsx
 services/ui/src/components/calendar/CalendarSyncSection.tsx
-services/ui/src/components/concepts/ConceptDetail.tsx
-services/ui/src/components/concepts/ConceptList.tsx
 services/ui/src/components/course/ExportButton.tsx
 services/ui/src/components/courseops/AssessmentTable.tsx
 services/ui/src/components/courseops/DeadlineTimeline.tsx
