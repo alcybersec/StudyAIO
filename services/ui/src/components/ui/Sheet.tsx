@@ -52,7 +52,7 @@ export function Sheet({ open, onOpenChange, children, side = 'bottom', title }: 
               >
                 {side === 'bottom' && (
                   <div className="flex justify-center pt-3 pb-1">
-                    <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
+                    <div className="w-10 h-1 rounded-full bg-border-strong" />
                   </div>
                 )}
                 {title && (
