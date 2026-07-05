@@ -1,32 +1,57 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { MailCheck } from 'lucide-react'
+import { Button, ErrorState, Input } from '../components/ui'
+import { RateLimitCard } from '../components/auth/RateLimitCard'
+import { classifyAuthError } from '../components/auth/authErrorMap'
 import { authApi } from '../api/auth'
+import { forgotPasswordSchema, type ForgotPasswordFormData } from '../lib/schemas'
 
 export function ForgotPasswordPage() {
-  const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [cooldown, setCooldown] = useState<{ key: number; seconds: number } | null>(null)
+  const [networkFailed, setNetworkFailed] = useState(false)
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ForgotPasswordFormData>({ resolver: zodResolver(forgotPasswordSchema) })
+
+  const onSubmit = handleSubmit(async (data) => {
+    setNetworkFailed(false)
     try {
-      await authApi.forgotPassword({ email })
-    } catch {
-      // Always show success to prevent email enumeration
+      await authApi.forgotPassword({ email: data.email })
+      setSubmitted(true)
+    } catch (err) {
+      const outcome = classifyAuthError(err)
+      if (outcome.kind === 'rate_limited') {
+        setCooldown((prev) => ({ key: (prev?.key ?? 0) + 1, seconds: outcome.retryAfterSeconds }))
+      } else if (outcome.kind === 'network') {
+        setNetworkFailed(true)
+      } else {
+        // Enumeration-safe: any other failure looks identical to success.
+        setSubmitted(true)
+      }
     }
-    setSubmitted(true)
-    setLoading(false)
-  }
+  })
 
   if (submitted) {
     return (
       <div className="text-center space-y-4">
-        <h2 className="text-xl font-semibold text-gray-900">Check your email</h2>
-        <p className="text-sm text-gray-600">
+        <span className="mx-auto w-10 h-10 rounded-xl bg-sage-soft text-sage-fg flex items-center justify-center">
+          <MailCheck size={18} aria-hidden />
+        </span>
+        <h2 className="text-lg font-semibold text-text">Check your email</h2>
+        <p className="text-sm text-text-muted">
           If an account exists with that email, we&apos;ve sent a password reset link.
         </p>
-        <Link to="/login" className="inline-block text-sm text-primary hover:underline">
+        <Link
+          to="/login"
+          className="inline-block text-xs text-text-muted hover:text-text underline-offset-2 hover:underline"
+        >
           Back to sign in
         </Link>
       </div>
@@ -35,35 +60,46 @@ export function ForgotPasswordPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">Reset password</h2>
-      <p className="text-sm text-gray-500 mb-6">
+      <h2 className="text-lg font-semibold text-text mb-1.5">Reset password</h2>
+      <p className="text-xs text-text-muted mb-5">
         Enter your email and we&apos;ll send you a reset link.
       </p>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            placeholder="you@example.com"
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        <Input
+          id="email"
+          type="email"
+          label="Email"
+          placeholder="you@example.com"
+          autoComplete="email"
+          error={errors.email?.message}
+          {...register('email')}
+        />
+        {cooldown && (
+          <RateLimitCard
+            key={cooldown.key}
+            seconds={cooldown.seconds}
+            onExpire={() => setCooldown(null)}
           />
-        </div>
-        <button
+        )}
+        {networkFailed && (
+          <ErrorState
+            compact
+            title="Couldn't reach the server"
+            onRetry={() => void onSubmit()}
+          />
+        )}
+        <Button
           type="submit"
-          disabled={loading}
-          className="w-full min-h-[44px] bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50 transition-colors"
+          size="lg"
+          className="w-full"
+          loading={isSubmitting}
+          disabled={cooldown !== null}
         >
-          {loading ? 'Sending...' : 'Send reset link'}
-        </button>
+          {isSubmitting ? 'Sending…' : 'Send reset link'}
+        </Button>
       </form>
-      <p className="mt-4 text-center text-sm text-gray-500">
-        <Link to="/login" className="text-primary hover:underline">
+      <p className="text-xs text-text-muted text-center mt-6">
+        <Link to="/login" className="hover:text-text underline-offset-2 hover:underline">
           Back to sign in
         </Link>
       </p>

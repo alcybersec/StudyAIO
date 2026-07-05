@@ -566,6 +566,20 @@ export function useReclassifyArtifact() {
   })
 }
 
+// ── Course management (E7) ─────────────────────────────────────
+
+export function useRenameCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ courseCode, data }: { courseCode: string; data: import('../types').CourseUpdatePayload }) =>
+      coursesApi.rename(courseCode, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
 export function useRetryPipeline() {
   return useMutation({
     mutationFn: (artifactId: string) => uploadApi.retry(artifactId),
@@ -614,4 +628,38 @@ export function useDashboardCourses() {
 
 export function useDashboardPendingReviews() {
   return useDashboardSlice((d) => d.pending_review_count)
+}
+
+export function useArchiveCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (courseCode: string) => coursesApi.archive(courseCode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useDeleteCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (courseCode: string) => coursesApi.remove(courseCode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useMergeCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ courseCode, into }: { courseCode: string; into: string }) =>
+      coursesApi.merge(courseCode, into),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
 }
