@@ -1,20 +1,13 @@
 import { useMemo } from 'react'
+import { Card, EmptyState, ErrorState, SectionLabel, Skeleton } from '../ui'
 import { useAnalyticsHeatmap } from '../../hooks/useApi'
-import { LoadingSpinner } from '../ui'
+import { heatLevel, LEVEL_OPACITY } from './trend'
 
 const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', '']
-const CELL_SIZE = 14
+const CELL_SIZE = 12
 const CELL_GAP = 3
 const LABEL_WIDTH = 32
 const WEEKS = 13
-
-function getColorClass(minutes: number, isDark: boolean): string {
-  if (minutes === 0) return isDark ? 'fill-gray-800' : 'fill-gray-100'
-  if (minutes <= 15) return isDark ? 'fill-emerald-900' : 'fill-green-200'
-  if (minutes <= 30) return isDark ? 'fill-emerald-700' : 'fill-green-400'
-  if (minutes <= 60) return isDark ? 'fill-emerald-500' : 'fill-green-500'
-  return isDark ? 'fill-teal-400' : 'fill-green-700'
-}
 
 function getMonthLabels(days: { date: string }[]): { label: string; col: number }[] {
   const labels: { label: string; col: number }[] = []
@@ -22,11 +15,11 @@ function getMonthLabels(days: { date: string }[]): { label: string; col: number 
   let lastMonth = -1
 
   for (let i = 0; i < days.length; i++) {
+    if (!days[i].date) continue
     const d = new Date(days[i].date)
     const month = d.getMonth()
     if (month !== lastMonth) {
-      const col = Math.floor(i / 7)
-      labels.push({ label: months[month], col })
+      labels.push({ label: months[month], col: Math.floor(i / 7) })
       lastMonth = month
     }
   }
@@ -34,61 +27,61 @@ function getMonthLabels(days: { date: string }[]): { label: string; col: number 
 }
 
 export function StudyHeatmap() {
-  const { data, isLoading, error } = useAnalyticsHeatmap(91)
-
-  const isDark = useMemo(() => {
-    if (typeof document === 'undefined') return false
-    return document.documentElement.classList.contains('dark')
-  }, [])
+  const { data, isLoading, error, refetch } = useAnalyticsHeatmap(91)
 
   const grid = useMemo(() => {
     if (!data?.days) return []
-    // Pad to full weeks (13 weeks = 91 days)
     const days = data.days.slice(-91)
-    // Pad from the start so the grid fills 13 columns
     const padCount = WEEKS * 7 - days.length
-    const padded = [
+    return [
       ...Array.from({ length: padCount }, () => ({ date: '', minutes: 0, cards: 0, sessions: 0 })),
       ...days,
     ]
-    return padded
   }, [data])
 
-  const monthLabels = useMemo(() => {
-    if (!data?.days) return []
-    const days = data.days.slice(-91)
-    const padCount = WEEKS * 7 - days.length
-    const padded = [
-      ...Array.from({ length: padCount }, () => ({ date: '' })),
-      ...days,
-    ]
-    return getMonthLabels(padded.filter((d) => d.date))
-  }, [data])
+  const monthLabels = useMemo(() => getMonthLabels(grid), [grid])
 
-  if (isLoading) return <LoadingSpinner label="Loading heatmap..." />
+  const hasActivity = useMemo(() => grid.some((d) => d.minutes > 0), [grid])
 
-  if (error) {
+  if (isLoading) {
     return (
-      <div className="text-center py-12">
-        <p className="text-sm text-danger">Failed to load heatmap data.</p>
-      </div>
+      <Card padding>
+        <Skeleton height={12} width={96} className="mb-3" />
+        <Skeleton height={110} width="100%" />
+      </Card>
     )
   }
 
-  if (!data?.days || data.days.length === 0) {
+  if (error) {
     return (
-      <div className="text-center py-12 text-text-muted text-sm">
-        No study activity in the last 90 days. Start studying to build your heatmap.
-      </div>
+      <ErrorState
+        title="Study heatmap couldn't load"
+        detail={error instanceof Error ? error.message : undefined}
+        onRetry={() => refetch()}
+      />
+    )
+  }
+
+  if (!data?.days || data.days.length === 0 || !hasActivity) {
+    return (
+      <Card>
+        <EmptyState
+          icon="🗓"
+          title="No study activity yet"
+          description="No sessions in the last 90 days. Study a few cards and the grid starts filling in."
+          actionLabel="Start a session"
+          actionTo="/study?tab=flashcards"
+        />
+      </Card>
     )
   }
 
   const svgWidth = LABEL_WIDTH + WEEKS * (CELL_SIZE + CELL_GAP)
-  const svgHeight = 20 + 7 * (CELL_SIZE + CELL_GAP) + 30
+  const svgHeight = 20 + 7 * (CELL_SIZE + CELL_GAP) + 4
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-text">Study Activity</h3>
+    <Card padding>
+      <SectionLabel>Study heatmap</SectionLabel>
       <div className="overflow-x-auto">
         <svg
           width={svgWidth}
@@ -96,45 +89,43 @@ export function StudyHeatmap() {
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           className="block"
           role="img"
-          aria-label="Study activity heatmap"
+          aria-label="Study activity heatmap — last 13 weeks"
         >
-          {/* Month labels */}
           {monthLabels.map(({ label, col }, i) => (
             <text
               key={`m-${i}`}
               x={LABEL_WIDTH + col * (CELL_SIZE + CELL_GAP)}
               y={12}
-              className="fill-text-muted text-[10px]"
+              className="font-mono"
               fontSize={10}
+              fill="var(--t-text-faint)"
             >
               {label}
             </text>
           ))}
 
-          {/* Day labels */}
           {DAY_LABELS.map((label, row) =>
             label ? (
               <text
                 key={`d-${row}`}
                 x={0}
                 y={22 + row * (CELL_SIZE + CELL_GAP) + CELL_SIZE - 2}
-                className="fill-text-muted text-[10px]"
+                className="font-mono"
                 fontSize={10}
+                fill="var(--t-text-faint)"
               >
                 {label}
               </text>
             ) : null,
           )}
 
-          {/* Cells */}
           {grid.map((day, i) => {
             const col = Math.floor(i / 7)
             const row = i % 7
             const x = LABEL_WIDTH + col * (CELL_SIZE + CELL_GAP)
             const y = 20 + row * (CELL_SIZE + CELL_GAP)
-            const tooltip = day.date
-              ? `${day.date}: ${day.minutes}min, ${day.cards} cards`
-              : ''
+            const level = heatLevel(day.minutes)
+            const tooltip = day.date ? `${day.date}: ${day.minutes}min, ${day.cards} cards` : ''
 
             return (
               <rect
@@ -143,8 +134,12 @@ export function StudyHeatmap() {
                 y={y}
                 width={CELL_SIZE}
                 height={CELL_SIZE}
-                rx={2}
-                className={`${getColorClass(day.minutes, isDark)} transition-colors`}
+                rx={3}
+                style={
+                  level === 0
+                    ? { fill: 'var(--t-surface-2)' }
+                    : { fill: 'var(--t-sage)', opacity: LEVEL_OPACITY[level] }
+                }
               >
                 {tooltip && <title>{tooltip}</title>}
               </rect>
@@ -153,21 +148,21 @@ export function StudyHeatmap() {
         </svg>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-2 text-xs text-text-muted">
-        <span>Less</span>
-        {[0, 15, 30, 60, 90].map((min) => (
-          <svg key={min} width={CELL_SIZE} height={CELL_SIZE}>
-            <rect
-              width={CELL_SIZE}
-              height={CELL_SIZE}
-              rx={2}
-              className={getColorClass(min, isDark)}
-            />
-          </svg>
+      <div className="flex items-center gap-1.5 mt-2.5 font-mono text-[10px] text-text-faint">
+        less
+        <span
+          className="inline-block rounded-[3px]"
+          style={{ width: CELL_SIZE, height: CELL_SIZE, background: 'var(--t-surface-2)' }}
+        />
+        {LEVEL_OPACITY.slice(1).map((o) => (
+          <span
+            key={o}
+            className="inline-block rounded-[3px]"
+            style={{ width: CELL_SIZE, height: CELL_SIZE, background: 'var(--t-sage)', opacity: o }}
+          />
         ))}
-        <span>More</span>
+        more
       </div>
-    </div>
+    </Card>
   )
 }
