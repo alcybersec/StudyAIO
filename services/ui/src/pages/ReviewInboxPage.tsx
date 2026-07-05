@@ -1,100 +1,182 @@
-import { useState } from 'react'
-import { useReviewItems, useResolveReview, useDismissReview } from '../hooks/useApi'
-import { PageHeader, LoadingSpinner, EmptyState } from '../components/ui'
-import { ReviewCard } from '../components/review/ReviewCard'
+import { useCallback, useMemo, useState } from 'react'
+import { Card, ErrorState, PageHeader, Skeleton, toast } from '../components/ui'
+import { ReviewRow } from '../components/review/ReviewRow'
+import { ReviewEmptyState } from '../components/review/ReviewEmptyState'
+import { ReviewFilterPills, type ReviewFilter } from '../components/review/ReviewFilterPills'
+import { approveResolution } from '../components/review/reviewUtils'
+import {
+  useCourses,
+  useDismissReview,
+  usePendingReviews,
+  useReviewItems,
+  useResolveReview,
+} from '../hooks/useApi'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
+import { useTriageKeys } from '../hooks/useTriageKeys'
+import type { ReviewItem } from '../types'
 
-type FilterTab = 'pending' | 'resolved' | 'dismissed'
-
-const filterTabs: { id: FilterTab; label: string }[] = [
-  { id: 'pending', label: 'Pending' },
-  { id: 'resolved', label: 'Resolved' },
-  { id: 'dismissed', label: 'Dismissed' },
-]
+function RowSkeleton() {
+  return (
+    <div className="flex items-center gap-4 px-3 py-3">
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-3.5 w-48" />
+        <Skeleton className="h-3 w-72" />
+      </div>
+      <Skeleton className="h-6 w-40" />
+    </div>
+  )
+}
 
 export function ReviewInboxPage() {
-  const [activeFilter, setActiveFilter] = useState<FilterTab>('pending')
-  const { data, isLoading, error } = useReviewItems(activeFilter)
+  const [filter, setFilter] = useState<ReviewFilter>('pending')
+  const [rawFocus, setRawFocus] = useState(0)
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  const { data, isLoading, error, refetch } = useReviewItems(filter)
+  const { data: pendingItems } = usePendingReviews()
+  const { data: courses } = useCourses()
   const resolve = useResolveReview()
   const dismiss = useDismissReview()
+  const online = useOnlineStatus()
 
-  const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null)
+  const items = useMemo(() => data ?? [], [data])
+  const focusIndex = items.length === 0 ? 0 : Math.min(rawFocus, items.length - 1)
+  const focusedItem: ReviewItem | undefined = items[focusIndex]
+  const busy = resolve.isPending || dismiss.isPending
 
-  const handleResolve = async (reviewId: string, resolution: Record<string, unknown>) => {
-    setFeedback(null)
-    try {
-      await resolve.mutateAsync({ reviewId, resolution })
-      setFeedback({ ok: true, message: 'Review item resolved successfully.' })
-    } catch (err) {
-      setFeedback({ ok: false, message: err instanceof Error ? err.message : 'Failed to resolve.' })
-    }
+  const changeFilter = (next: ReviewFilter) => {
+    setFilter(next)
+    setRawFocus(0)
+    setEditingId(null)
   }
 
-  const handleDismiss = async (reviewId: string) => {
-    setFeedback(null)
-    try {
-      await dismiss.mutateAsync(reviewId)
-      setFeedback({ ok: true, message: 'Review item dismissed.' })
-    } catch (err) {
-      setFeedback({ ok: false, message: err instanceof Error ? err.message : 'Failed to dismiss.' })
-    }
-  }
+  const handleResolve = useCallback(
+    async (item: ReviewItem, resolution: Record<string, unknown>) => {
+      try {
+        await resolve.mutateAsync({ reviewId: item.id, resolution })
+        setEditingId(null)
+        toast.success('Review item resolved.')
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to resolve the item.')
+      }
+    },
+    [resolve],
+  )
+
+  const handleDismiss = useCallback(
+    async (item: ReviewItem) => {
+      try {
+        await dismiss.mutateAsync(item.id)
+        setEditingId(null)
+        toast.success('Review item dismissed.')
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to dismiss the item.')
+      }
+    },
+    [dismiss],
+  )
+
+  const handleApprove = useCallback(
+    (item: ReviewItem) => {
+      if (busy) return
+      const resolution = approveResolution(item)
+      // No usable guess to approve — fall back to the inline editor.
+      if (resolution === null) {
+        setEditingId(item.id)
+        return
+      }
+      void handleResolve(item, resolution)
+    },
+    [busy, handleResolve],
+  )
+
+  const keyHandlers = useMemo(
+    () => ({
+      onMove: (delta: 1 | -1) =>
+        setRawFocus(Math.max(0, Math.min(items.length - 1, focusIndex + delta))),
+      onApprove: () => {
+        if (focusedItem) handleApprove(focusedItem)
+      },
+      onEdit: () => {
+        if (focusedItem) setEditingId(focusedItem.id)
+      },
+      onDismiss: () => {
+        if (focusedItem && !busy) void handleDismiss(focusedItem)
+      },
+      onCancelEdit: () => setEditingId(null),
+    }),
+    [items.length, focusIndex, focusedItem, busy, handleApprove, handleDismiss],
+  )
+
+  useTriageKeys(filter === 'pending' && items.length > 0, editingId !== null, keyHandlers)
+
+  const pendingCount = pendingItems?.length ?? 0
 
   return (
     <div>
       <PageHeader
-        title="Review Inbox"
-        subtitle={data ? `${data.length} ${activeFilter} item${data.length !== 1 ? 's' : ''}` : undefined}
+        title="Review inbox"
+        subtitle="Files the pipeline wasn't confident about — approve, correct, or dismiss."
+        actions={
+          <ReviewFilterPills filter={filter} pendingCount={pendingCount} onChange={changeFilter} />
+        }
       />
 
-      {/* Feedback toast */}
-      {feedback && (
-        <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm ${feedback.ok ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400'}`}>
-          {feedback.message}
-        </div>
+      {isLoading && (
+        <Card padding={false}>
+          <div className="divide-y divide-border" role="status" aria-label="Loading review items">
+            <RowSkeleton />
+            <RowSkeleton />
+            <RowSkeleton />
+          </div>
+        </Card>
       )}
 
-      {/* Filter tabs */}
-      <div className="flex items-center gap-1 mb-6">
-        {filterTabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => { setActiveFilter(tab.id); setFeedback(null) }}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-              activeFilter === tab.id
-                ? 'bg-primary/10 text-primary'
-                : 'text-text-muted hover:text-text hover:bg-surface-alt'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {isLoading && <LoadingSpinner label="Loading review items..." />}
-
-      {error && <EmptyState icon="!" title="Failed to load reviews" description="Check that the API is running." />}
-
-      {data && data.length === 0 && (
-        <EmptyState
-          icon={activeFilter === 'pending' ? '\u2713' : '\u{1F4CB}'}
-          title={activeFilter === 'pending' ? 'All caught up!' : `No ${activeFilter} items`}
-          description={activeFilter === 'pending' ? 'There are no items waiting for your review.' : undefined}
+      {error && (
+        <ErrorState
+          title={online ? "Review inbox couldn't load" : "You're offline"}
+          detail={
+            online
+              ? error instanceof Error
+                ? error.message
+                : undefined
+              : 'The review inbox needs a connection. It will load again once you are back online.'
+          }
+          onRetry={() => refetch()}
         />
       )}
 
-      {data && data.length > 0 && (
-        <div className="space-y-4">
-          {data.map((item) => (
-            <ReviewCard
-              key={item.id}
-              item={item}
-              onResolve={handleResolve}
-              onDismiss={handleDismiss}
-              isResolving={resolve.isPending}
-              isDismissing={dismiss.isPending}
-            />
-          ))}
-        </div>
+      {!error && !isLoading && items.length === 0 && <ReviewEmptyState filter={filter} />}
+
+      {!error && items.length > 0 && (
+        <>
+          <Card padding={false} className="overflow-hidden">
+            <ul className="divide-y divide-border">
+              {items.map((item, index) => (
+                <ReviewRow
+                  key={item.id}
+                  item={item}
+                  focused={index === focusIndex}
+                  editing={item.id === editingId}
+                  busy={busy}
+                  courses={courses ?? []}
+                  onFocus={() => setRawFocus(index)}
+                  onApprove={() => handleApprove(item)}
+                  onEdit={() => setEditingId(item.id)}
+                  onDismiss={() => void handleDismiss(item)}
+                  onConfirmEdit={(resolution) => void handleResolve(item, resolution)}
+                  onCancelEdit={() => setEditingId(null)}
+                />
+              ))}
+            </ul>
+          </Card>
+
+          {filter === 'pending' && (
+            <p className="text-[11px] font-mono text-text-faint mt-3 text-center">
+              j/k navigate · a approve · e edit · d dismiss
+            </p>
+          )}
+        </>
       )}
     </div>
   )

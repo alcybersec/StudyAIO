@@ -28,18 +28,23 @@ services/ui/src/components/qa/AnswerDisplay.tsx
 services/ui/src/components/qa/CitationList.tsx
 services/ui/src/components/qa/QuestionForm.tsx
 services/ui/src/components/qa/ScopedQA.tsx
-services/ui/src/components/review/ReviewCard.tsx
-services/ui/src/components/review/SuggestionButtons.tsx
 services/ui/src/components/study/CountdownTimer.tsx
 services/ui/src/components/study/ExamDetailInline.tsx
 services/ui/src/components/study/ExamsTab.tsx
-services/ui/src/components/study/RatingButtons.tsx
-services/ui/src/components/study/SessionSummary.tsx
 services/ui/src/components/ui/ConnectionBanner.tsx
 services/ui/src/components/ui/ErrorBanner.tsx
 services/ui/src/components/ui/Sheet.tsx
+<<<<<<< HEAD
 services/ui/src/components/week/FlashcardsTab.tsx
 services/ui/src/components/week/QuizTab.tsx
+=======
+services/ui/src/components/upload/FileQueue.tsx
+services/ui/src/components/upload/PipelineProgress.tsx
+services/ui/src/components/viewer/FileViewerToolbar.tsx
+services/ui/src/components/viewer/FileViewer.tsx
+services/ui/src/components/viewer/PdfViewer.tsx
+services/ui/src/components/week/ArtifactList.tsx
+>>>>>>> fr/screens-study
 services/ui/src/components/week/SummaryTab.tsx
 services/ui/src/pages/AchievementsPage.tsx
 services/ui/src/pages/AdminPage.tsx
@@ -49,5 +54,4 @@ services/ui/src/pages/DashboardPage.tsx
 services/ui/src/pages/ForgotPasswordPage.tsx
 services/ui/src/pages/NotFoundPage.tsx
 services/ui/src/pages/ResetPasswordPage.tsx
-services/ui/src/pages/ReviewInboxPage.tsx
 services/ui/src/pages/SettingsPage.tsx
