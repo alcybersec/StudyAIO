@@ -967,3 +967,25 @@ export interface ExamReadinessData {
   quiz_correct: number
   study_days_last_week: number
 }
+
+// ── Notification inbox (E2) ────────────────────────────────────────
+
+export type InboxNotificationKind = 'pipeline' | 'review' | 'achievement' | 'deadline'
+
+export interface InboxNotification {
+  id: string
+  kind: InboxNotificationKind | string
+  title: string
+  body: string | null
+  href: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export interface UnreadCountResponse {
+  count: number
+}
+
+export interface MarkReadResponse {
+  updated: number
+}

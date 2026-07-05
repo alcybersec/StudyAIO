@@ -7,6 +7,7 @@ import { MobileNav } from './MobileNav'
 const mockUseAuth = vi.fn()
 const mockUseDashboard = vi.fn()
 const mockUseCourses = vi.fn()
+const mockUseUnreadCount = vi.fn()
 
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => mockUseAuth(),
@@ -15,14 +16,20 @@ vi.mock('../../hooks/useApi', () => ({
   useDashboard: () => mockUseDashboard(),
   useCourses: () => mockUseCourses(),
 }))
+vi.mock('../../hooks/useNotificationInbox', () => ({
+  useUnreadCount: () => mockUseUnreadCount(),
+  useNotifications: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useMarkNotificationsRead: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 
-function setup({ role = 'user' }: { role?: string } = {}) {
+function setup({ role = 'user', unread = 0 }: { role?: string; unread?: number } = {}) {
   mockUseAuth.mockReturnValue({
     user: { id: 'u1', username: 'alex', role, tier: 'free', avatar_url: null },
     isSelfHosted: true,
     isDemo: false,
     logout: vi.fn(),
   })
+  mockUseUnreadCount.mockReturnValue({ data: unread })
   mockUseDashboard.mockReturnValue({ data: { pending_review_count: 2 } })
   mockUseCourses.mockReturnValue({
     data: [{ id: 'c1', code: 'CSIT302', name: 'Cybersecurity', weeks_covered: 9 }],
@@ -78,5 +85,21 @@ describe('MobileNav', () => {
     setup({ role: 'admin' })
     await u.click(screen.getByRole('button', { name: /more/i }))
     expect(await screen.findByRole('link', { name: /admin/i })).toBeInTheDocument()
+  })
+
+  it('opens the notification center from the More sheet', async () => {
+    const u = userEvent.setup()
+    setup()
+    await u.click(screen.getByRole('button', { name: /more/i }))
+    await u.click(await screen.findByRole('button', { name: /notifications/i }))
+    expect(await screen.findByText(/you're all caught up/i)).toBeInTheDocument()
+  })
+
+  it('shows the capped unread badge on the notifications entry', async () => {
+    const u = userEvent.setup()
+    setup({ unread: 11 })
+    await u.click(screen.getByRole('button', { name: /more/i }))
+    const entry = await screen.findByRole('button', { name: /notifications/i })
+    expect(entry).toHaveTextContent('9+')
   })
 })

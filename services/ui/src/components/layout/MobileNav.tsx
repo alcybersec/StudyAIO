@@ -2,6 +2,7 @@ import { useState, type ComponentType } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   BarChart3,
+  Bell,
   GraduationCap,
   Home,
   Inbox,
@@ -17,6 +18,8 @@ import {
 } from 'lucide-react'
 import { useDashboard, useCourses } from '../../hooks/useApi'
 import { useAuth } from '../../hooks/useAuth'
+import { useUnreadCount } from '../../hooks/useNotificationInbox'
+import { NotificationCenter } from '../notifications/NotificationCenter'
 import { Badge } from '../ui/Badge'
 import { Sheet } from '../ui/Sheet'
 
@@ -59,7 +62,9 @@ export function MobileNav() {
   const { user } = useAuth()
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const pendingCount = dashboard?.pending_review_count ?? 0
+  const { data: unreadCount = 0 } = useUnreadCount()
 
   const isActive = (path: string) =>
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)
@@ -151,6 +156,22 @@ export function MobileNav() {
       {/* More sheet: secondary destinations */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen} side="bottom" title="More">
         <div className="space-y-1 pb-4">
+          <button
+            type="button"
+            onClick={() => {
+              setMoreOpen(false)
+              setNotificationsOpen(true)
+            }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors min-h-[44px] text-text-muted hover:text-text hover:bg-surface-2/60 cursor-pointer"
+          >
+            <Bell size={17} strokeWidth={1.8} className="text-text-faint" aria-hidden />
+            <span>Notifications</span>
+            {unreadCount > 0 && (
+              <span className="ml-auto">
+                <Badge variant="warning">{unreadCount > 9 ? '9+' : unreadCount}</Badge>
+              </span>
+            )}
+          </button>
           <SheetLink
             to="/review"
             icon={Inbox}
@@ -168,6 +189,11 @@ export function MobileNav() {
             <SheetLink to="/admin" icon={ShieldCheck} label="Admin" active={isActive('/admin')} onNavigate={closeSheets} />
           )}
         </div>
+      </Sheet>
+
+      {/* Notification center (E2) */}
+      <Sheet open={notificationsOpen} onOpenChange={setNotificationsOpen} side="bottom">
+        <NotificationCenter onNavigate={() => setNotificationsOpen(false)} />
       </Sheet>
     </>
   )

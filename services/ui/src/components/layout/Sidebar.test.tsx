@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar'
 const mockUseAuth = vi.fn()
 const mockUseDashboard = vi.fn()
 const mockUseCourses = vi.fn()
+const mockUseUnreadCount = vi.fn()
 
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => mockUseAuth(),
@@ -14,6 +15,11 @@ vi.mock('../../hooks/useAuth', () => ({
 vi.mock('../../hooks/useApi', () => ({
   useDashboard: () => mockUseDashboard(),
   useCourses: () => mockUseCourses(),
+}))
+vi.mock('../../hooks/useNotificationInbox', () => ({
+  useUnreadCount: () => mockUseUnreadCount(),
+  useNotifications: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useMarkNotificationsRead: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 const user = {
@@ -25,13 +31,18 @@ const user = {
   avatar_url: null,
 }
 
-function setup({ role = 'user', pending = 3 }: { role?: string; pending?: number } = {}) {
+function setup({
+  role = 'user',
+  pending = 3,
+  unread = 0,
+}: { role?: string; pending?: number; unread?: number } = {}) {
   mockUseAuth.mockReturnValue({
     user: { ...user, role },
     isSelfHosted: true,
     isDemo: false,
     logout: vi.fn(),
   })
+  mockUseUnreadCount.mockReturnValue({ data: unread })
   mockUseDashboard.mockReturnValue({ data: { pending_review_count: pending } })
   mockUseCourses.mockReturnValue({
     data: [
@@ -121,11 +132,29 @@ describe('Sidebar', () => {
     expect(search).toHaveTextContent('⌘K')
   })
 
-  it('opens a placeholder notifications panel from the bell button', async () => {
+  it('opens the notification center from the bell button', async () => {
     const u = userEvent.setup()
     setup()
     await u.click(screen.getByRole('button', { name: /notifications/i }))
-    expect(await screen.findByText(/notifications arrive here soon/i)).toBeInTheDocument()
+    expect(await screen.findByText(/you're all caught up/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /mark all read/i })).toBeDisabled()
+  })
+
+  it('shows no bell badge when everything is read', () => {
+    setup({ unread: 0 })
+    const bell = screen.getByRole('button', { name: /^notifications$/i })
+    expect(bell).toHaveTextContent('')
+  })
+
+  it('shows a dot for a single unread notification', () => {
+    setup({ unread: 1 })
+    expect(screen.getByRole('button', { name: /notifications — 1 unread/i })).toBeInTheDocument()
+  })
+
+  it('caps the unread bell count at 9+', () => {
+    setup({ unread: 12 })
+    const bell = screen.getByRole('button', { name: /notifications — 12 unread/i })
+    expect(bell).toHaveTextContent('9+')
   })
 
   it('persists collapse state to localStorage', async () => {
