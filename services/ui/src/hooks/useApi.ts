@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { analyticsApi, assetsApi, chatApi, conceptsApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
+import { analyticsApi, artifactsApi, assetsApi, chatApi, conceptsApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
 import { adminApi } from '../api/admin'
 import type { AdminUserUpdate, CreateSessionRequest, DeadlineUpdate, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
@@ -542,5 +542,25 @@ export function useAdminUserDetail(userId: string | undefined) {
     queryKey: ['admin', 'users', userId, 'details'],
     queryFn: () => adminApi.getUserDetails(userId!),
     enabled: !!userId,
+  })
+}
+
+export function useReclassifyArtifact() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ artifactId, courseCode, week }: { artifactId: string; courseCode: string; week: number }) =>
+      artifactsApi.reclassify(artifactId, { course_code: courseCode, week }),
+    onSuccess: () => {
+      // Week/course detail queries nest under ['courses', …] — both source and
+      // target weeks change, so invalidate the whole course tree + dashboard.
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useRetryPipeline() {
+  return useMutation({
+    mutationFn: (artifactId: string) => uploadApi.retry(artifactId),
   })
 }
