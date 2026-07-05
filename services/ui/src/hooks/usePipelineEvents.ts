@@ -31,7 +31,8 @@ export function usePipelineEvents(artifactIds?: string[]) {
     const handlePipeline = (event: MessageEvent) => {
       const data = JSON.parse(event.data) as PipelineEvent
       if (ids.length === 0 || ids.includes(data.artifact_id)) {
-        setEvents((prev) => [...prev, data].slice(-MAX_EVENTS))
+        // Stamp receipt time so consumers can derive per-stage durations
+        setEvents((prev) => [...prev, { ...data, receivedAt: Date.now() }].slice(-MAX_EVENTS))
       }
     }
 

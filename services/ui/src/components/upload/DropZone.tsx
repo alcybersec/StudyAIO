@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
+import { FolderOpen, Upload } from 'lucide-react'
 
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.pptx']
-const ACCEPTED_DISPLAY = 'PDF, DOCX, PPTX'
 
 interface DropZoneProps {
   onFiles: (files: File[]) => void
@@ -36,52 +36,43 @@ export function DropZone({ onFiles, disabled }: DropZoneProps) {
 
   return (
     <div className="space-y-3">
-      <div
+      <button
+        type="button"
+        disabled={disabled}
         onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         onClick={() => !disabled && inputRef.current?.click()}
-        className={`flex flex-col items-center justify-center gap-3 py-16 px-6 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+        className={`w-full border border-dashed rounded-xl py-10 text-sm transition-colors flex flex-col items-center gap-2 ${
           disabled
-            ? 'border-border bg-surface-alt cursor-not-allowed opacity-60'
+            ? 'border-border text-text-faint cursor-not-allowed opacity-60'
             : dragOver
-              ? 'border-primary bg-primary/5 scale-[1.01]'
-              : 'border-border hover:border-primary/50 hover:bg-surface-alt'
+              ? 'border-sage text-text bg-sage-soft cursor-pointer'
+              : 'border-border-strong text-text-muted hover:text-text hover:border-text-faint cursor-pointer'
         }`}
       >
-        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-2xl text-primary">
-          {'\u2191'}
-        </div>
-        <div className="text-center">
-          <p className="text-base font-medium text-text">
-            {dragOver ? 'Drop files here' : 'Drag and drop lecture files'}
-          </p>
-          <p className="text-sm text-text-muted mt-1">
-            or <span className="text-primary font-medium">click to browse</span>
-          </p>
-        </div>
-        <p className="text-xs text-text-muted">Accepts {ACCEPTED_DISPLAY} — multiple files supported</p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept={ACCEPTED_EXTENSIONS.join(',')}
-          multiple
-          onChange={handleChange}
-          className="hidden"
-        />
-      </div>
+        <Upload size={20} strokeWidth={1.5} aria-hidden />
+        {dragOver ? 'Drop to upload' : 'Drop lecture files here — PDF, DOCX, PPTX · up to 20 at once'}
+        <span className="text-[11px] text-text-faint">duplicates are detected and skipped automatically</span>
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPTED_EXTENSIONS.join(',')}
+        multiple
+        onChange={handleChange}
+        className="hidden"
+      />
 
       <div className="flex justify-center">
         <button
-          onClick={(e) => {
-            e.stopPropagation()
-            if (!disabled) folderInputRef.current?.click()
-          }}
+          type="button"
+          onClick={() => !disabled && folderInputRef.current?.click()}
           disabled={disabled}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-text-muted bg-surface border border-border rounded-lg hover:bg-surface-alt disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-text-muted bg-surface-1 border border-border rounded-lg hover:bg-surface-2 hover:text-text disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
         >
-          <span>{'\u{1F4C1}'}</span>
-          Upload Folder
+          <FolderOpen size={14} aria-hidden />
+          Upload folder
         </button>
         <input
           ref={folderInputRef}
