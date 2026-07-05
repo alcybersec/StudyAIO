@@ -40,18 +40,6 @@
 
   --font-sans: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
-
-  /* -------- legacy compatibility shim --------
-     Keeps unmigrated screens rendering during the rework.
-     Shrinks to nothing once all D-streams have migrated to the new tokens. */
-  --color-primary: var(--t-peri);
-  --color-primary-dark: var(--t-peri);
-  --color-primary-light: var(--t-peri-soft);
-  --color-success: var(--t-sage);
-  --color-warning: var(--t-amber);
-  --color-danger: var(--t-red);
-  --color-surface: var(--t-surface-1);
-  --color-surface-alt: var(--t-surface-0);
 }
 
 /* -------- light (derived paper twin) --------
