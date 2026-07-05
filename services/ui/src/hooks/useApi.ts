@@ -210,6 +210,13 @@ export function useRecordQuizAttempt() {
   })
 }
 
+export function useStudyPlan() {
+  return useQuery({
+    queryKey: ['study', 'plan'],
+    queryFn: studyApi.getPlan,
+  })
+}
+
 export function useStreak(courseId?: string) {
   return useQuery({
     queryKey: ['study', 'streak', courseId],

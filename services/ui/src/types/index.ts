@@ -999,3 +999,22 @@ export interface ReadinessDetail {
   overall: number
   topics: ReadinessTopic[]
 }
+
+// ── Weekly study plan ───────────────────────────────────────────
+
+export interface StudyPlanItem {
+  course_code: string
+  kind: 'cards' | 'quiz' | 'mock'
+  target: number
+  done: number
+}
+
+export interface StudyPlanDay {
+  /** ISO date (YYYY-MM-DD). */
+  day: string
+  items: StudyPlanItem[]
+}
+
+export interface WeekPlan {
+  days: StudyPlanDay[]
+}

@@ -69,6 +69,33 @@ describe('useTabRouting', () => {
     expect(result.current[0]).toBe('timed')
   })
 
+  it('clears listed params when switching to a tab they are not scoped to', () => {
+    const { result } = renderHook(
+      () => {
+        const tab = useTabRouting(TABS, 'flashcards', 'tab', { clearParams: { exam: 'exams' } })
+        const [params] = useSearchParams()
+        return { tab, params }
+      },
+      { wrapper: wrapperWith(['/study?tab=exams&exam=abc123']) },
+    )
+    act(() => result.current.tab[1]('history'))
+    expect(result.current.tab[0]).toBe('history')
+    expect(result.current.params.get('exam')).toBeNull()
+  })
+
+  it('keeps scoped params when switching to their owning tab', () => {
+    const { result } = renderHook(
+      () => {
+        const tab = useTabRouting(TABS, 'flashcards', 'tab', { clearParams: { exam: 'exams' } })
+        const [params] = useSearchParams()
+        return { tab, params }
+      },
+      { wrapper: wrapperWith(['/study?tab=history&exam=abc123']) },
+    )
+    act(() => result.current.tab[1]('exams'))
+    expect(result.current.params.get('exam')).toBe('abc123')
+  })
+
   it('works with history back/forward navigation', () => {
     const { result } = renderHook(
       () => {
