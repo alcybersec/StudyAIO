@@ -1,218 +1,212 @@
 import { useState } from 'react'
-import * as Tabs from '@radix-ui/react-tabs'
+import { List, Network } from 'lucide-react'
 import { ConceptGraph } from '../components/concepts/ConceptGraph'
 import { ConceptDetailPanel } from '../components/concepts/ConceptDetail'
 import { ConceptList } from '../components/concepts/ConceptList'
-import { ErrorBanner } from '../components/ui/ErrorBanner'
+import { Card, EmptyState, ErrorState, Input, PageHeader, SectionLabel, Select, Skeleton } from '../components/ui'
 import { useConceptGraph, useConceptList, useCourses } from '../hooks/useApi'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
 
-export function KnowledgeGraphPage() {
-  const [courseFilter, setCourseFilter] = useState<string>('')
-  const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null)
-  const [tab, setTab] = useState('graph')
-  const [search, setSearch] = useState('')
+type View = 'graph' | 'list'
 
-  const { data: courses } = useCourses()
-  const { data: graph, isLoading: graphLoading, error: graphError, refetch: refetchGraph } = useConceptGraph(courseFilter || undefined)
-  const { data: conceptList, isLoading: listLoading, error: listError, refetch: refetchList } = useConceptList(
-    courseFilter || undefined,
-    search || undefined
-  )
-
-  const handleNodeClick = (nodeId: string) => {
-    setSelectedConceptId(nodeId)
-  }
-
-  const handleNavigate = (conceptId: string) => {
-    setSelectedConceptId(conceptId)
-  }
+function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const buttonClass = (active: boolean) =>
+    `flex items-center gap-1.5 text-xs font-medium px-3 py-2 cursor-pointer transition-colors ${
+      active ? 'bg-surface-2 text-text' : 'text-text-muted hover:text-text hover:bg-surface-2'
+    }`
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
-      {graphError && (
-        <ErrorBanner message="Failed to load knowledge graph." onRetry={() => refetchGraph()} />
-      )}
-      {listError && !graphError && (
-        <ErrorBanner message="Failed to load concept list." onRetry={() => refetchList()} />
-      )}
-
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-text">Knowledge Graph</h1>
-          <p className="text-sm text-text-muted mt-1">
-            Explore concepts and their relationships across your courses
-          </p>
-        </div>
-
-        {/* Course filter */}
-        <select
-          value={courseFilter}
-          onChange={(e) => {
-            setCourseFilter(e.target.value)
-            setSelectedConceptId(null)
-          }}
-          className="px-3 py-2 rounded-lg border border-border bg-surface text-text text-sm"
-        >
-          <option value="">All courses</option>
-          {courses?.map((course) => (
-            <option key={course.id} value={course.code}>
-              {course.code}{course.name ? ` — ${course.name}` : ''}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Tabs */}
-      <Tabs.Root value={tab} onValueChange={setTab}>
-        <Tabs.List className="flex gap-1 border-b border-border">
-          <Tabs.Trigger
-            value="graph"
-            className="px-4 py-2 text-sm font-medium text-text-muted hover:text-text transition-colors border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary"
-          >
-            Graph View
-          </Tabs.Trigger>
-          <Tabs.Trigger
-            value="list"
-            className="px-4 py-2 text-sm font-medium text-text-muted hover:text-text transition-colors border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary"
-          >
-            List View
-          </Tabs.Trigger>
-        </Tabs.List>
-
-        {/* Graph Tab */}
-        <Tabs.Content value="graph" className="mt-4">
-          <div className="flex gap-4">
-            {/* Graph */}
-            <div className={`flex-1 ${selectedConceptId ? 'lg:w-2/3' : 'w-full'}`}>
-              {graphLoading ? (
-                <div className="flex items-center justify-center h-[500px] bg-surface rounded-lg border border-border">
-                  <div className="text-text-muted">Loading graph...</div>
-                </div>
-              ) : (
-                <div className="h-[500px] lg:h-[600px]">
-                  <ConceptGraph
-                    nodes={graph?.nodes || []}
-                    edges={graph?.edges || []}
-                    onNodeClick={handleNodeClick}
-                    selectedNodeId={selectedConceptId}
-                  />
-                </div>
-              )}
-
-              {/* Legend */}
-              {graph && graph.nodes.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-3 text-xs text-text-muted">
-                  {Array.from(new Set(graph.nodes.map((n) => n.category))).map((cat) => (
-                    <span key={cat} className="flex items-center gap-1.5">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: getCategoryColor(cat) }}
-                      />
-                      {cat.replace('_', ' ')}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Detail panel */}
-            {selectedConceptId && (
-              <div className="hidden lg:block w-80 bg-surface rounded-lg border border-border shrink-0">
-                <ConceptDetailPanel
-                  conceptId={selectedConceptId}
-                  onNavigate={handleNavigate}
-                  onClose={() => setSelectedConceptId(null)}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Mobile detail */}
-          {selectedConceptId && (
-            <div className="lg:hidden mt-4 bg-surface rounded-lg border border-border">
-              <ConceptDetailPanel
-                conceptId={selectedConceptId}
-                onNavigate={handleNavigate}
-                onClose={() => setSelectedConceptId(null)}
-              />
-            </div>
-          )}
-        </Tabs.Content>
-
-        {/* List Tab */}
-        <Tabs.Content value="list" className="mt-4">
-          {/* Search */}
-          <div className="mb-4">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search concepts..."
-              className="w-full sm:w-80 px-3 py-2 rounded-lg border border-border bg-surface text-text text-sm placeholder:text-text-muted"
-            />
-          </div>
-
-          <div className="flex gap-4">
-            <div className={`flex-1 bg-surface rounded-lg border border-border p-4 ${selectedConceptId ? 'lg:w-2/3' : 'w-full'}`}>
-              {listLoading ? (
-                <div className="text-center py-8 text-text-muted">Loading...</div>
-              ) : (
-                <ConceptList
-                  concepts={conceptList || []}
-                  onSelect={handleNodeClick}
-                  selectedId={selectedConceptId}
-                />
-              )}
-            </div>
-
-            {selectedConceptId && (
-              <div className="hidden lg:block w-80 bg-surface rounded-lg border border-border shrink-0">
-                <ConceptDetailPanel
-                  conceptId={selectedConceptId}
-                  onNavigate={handleNavigate}
-                  onClose={() => setSelectedConceptId(null)}
-                />
-              </div>
-            )}
-          </div>
-
-          {selectedConceptId && (
-            <div className="lg:hidden mt-4 bg-surface rounded-lg border border-border">
-              <ConceptDetailPanel
-                conceptId={selectedConceptId}
-                onNavigate={handleNavigate}
-                onClose={() => setSelectedConceptId(null)}
-              />
-            </div>
-          )}
-        </Tabs.Content>
-      </Tabs.Root>
-
-      {/* Stats */}
-      {graph && graph.nodes.length > 0 && (
-        <div className="flex gap-6 text-sm text-text-muted">
-          <span>{graph.nodes.length} concepts</span>
-          <span>{graph.edges.length} relationships</span>
-          <span>{Array.from(new Set(graph.nodes.map((n) => n.category))).length} categories</span>
-        </div>
-      )}
+    <div
+      className="flex items-center border border-border rounded-lg overflow-hidden"
+      role="group"
+      aria-label="View"
+    >
+      <button
+        type="button"
+        className={buttonClass(view === 'graph')}
+        aria-pressed={view === 'graph'}
+        onClick={() => onChange('graph')}
+      >
+        <Network size={13} aria-hidden /> Graph
+      </button>
+      <button
+        type="button"
+        className={`${buttonClass(view === 'list')} border-l border-border`}
+        aria-pressed={view === 'list'}
+        onClick={() => onChange('list')}
+      >
+        <List size={13} aria-hidden /> List
+      </button>
     </div>
   )
 }
 
-function getCategoryColor(category: string): string {
-  const colors: Record<string, string> = {
-    theory: '#6366f1',
-    algorithm: '#f59e0b',
-    data_structure: '#10b981',
-    pattern: '#8b5cf6',
-    tool: '#ef4444',
-    language: '#3b82f6',
-    protocol: '#ec4899',
-    principle: '#14b8a6',
-    method: '#f97316',
-    general: '#6b7280',
-  }
-  return colors[category] || colors.general
+function LoadingMirror() {
+  return (
+    <div className="flex flex-col lg:flex-row gap-4 items-start">
+      <Card className="flex-1 w-full" padding>
+        <Skeleton className="w-full h-[380px]" />
+      </Card>
+      <Card className="w-full lg:w-80 shrink-0" padding>
+        <Skeleton height={14} width={96} className="mb-3" />
+        <div className="space-y-2">
+          <Skeleton height={16} width="100%" />
+          <Skeleton height={16} width="90%" />
+          <Skeleton height={16} width="75%" />
+        </div>
+        <Skeleton height={32} width="100%" className="mt-4" />
+      </Card>
+    </div>
+  )
+}
+
+export function KnowledgeGraphPage() {
+  const [courseFilter, setCourseFilter] = useState('')
+  const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null)
+  const [view, setView] = useState<View>('graph')
+  const [search, setSearch] = useState('')
+  const isOnline = useOnlineStatus()
+
+  const { data: courses } = useCourses()
+  const {
+    data: graph,
+    isLoading: graphLoading,
+    error: graphError,
+    refetch: refetchGraph,
+  } = useConceptGraph(courseFilter || undefined)
+  const {
+    data: conceptList,
+    isLoading: listLoading,
+    error: listError,
+    refetch: refetchList,
+  } = useConceptList(courseFilter || undefined, search || undefined)
+
+  const handleSelect = (conceptId: string) => setSelectedConceptId(conceptId)
+
+  const courseOptions = [
+    { value: '', label: 'All courses' },
+    ...(courses?.map((c) => ({ value: c.code, label: c.code })) ?? []),
+  ]
+
+  const loading = view === 'graph' ? graphLoading : listLoading
+  const error = view === 'graph' ? graphError : listError
+  const retry = view === 'graph' ? refetchGraph : refetchList
+  const isEmpty = view === 'graph' ? graph && graph.nodes.length === 0 && !courseFilter : false
+
+  const sidePanel = (
+    <Card className="w-full lg:w-80 shrink-0 self-start" padding>
+      {selectedConceptId ? (
+        <ConceptDetailPanel
+          conceptId={selectedConceptId}
+          onNavigate={handleSelect}
+          onClose={() => setSelectedConceptId(null)}
+        />
+      ) : (
+        <>
+          <SectionLabel>Selected concept</SectionLabel>
+          <p className="text-xs text-text-muted leading-relaxed">
+            Select a concept to see its description, relationships, and where it appears — then
+            scope a study session to it.
+          </p>
+        </>
+      )}
+    </Card>
+  )
+
+  return (
+    <div>
+      <PageHeader
+        title="Knowledge"
+        subtitle="Every extracted concept, linked. Select a node to scope a session."
+        actions={
+          <>
+            <Select
+              className="w-40"
+              options={courseOptions}
+              value={courseFilter}
+              onValueChange={(value) => {
+                setCourseFilter(value)
+                setSelectedConceptId(null)
+              }}
+              placeholder="All courses"
+            />
+            <ViewToggle view={view} onChange={setView} />
+          </>
+        }
+      />
+
+      {loading ? (
+        <LoadingMirror />
+      ) : isEmpty ? (
+        <Card>
+          <EmptyState
+            icon="🕸"
+            title="No concepts extracted yet"
+            description="Concepts are mined from your summaries. Process a lecture, then extract its concept graph."
+            actionLabel="Upload lectures"
+            actionTo="/upload"
+          />
+        </Card>
+      ) : (
+        <>
+          <div className="flex flex-col lg:flex-row gap-4 items-start">
+            <div className="flex-1 min-w-0 w-full">
+              {error ? (
+                // Canvas-only failure — the side panel structure stays put.
+                <Card padding>
+                  <ErrorState
+                    title={
+                      isOnline
+                        ? `${view === 'graph' ? 'Graph' : 'Concept list'} couldn't load`
+                        : "You're offline"
+                    }
+                    detail={error instanceof Error ? error.message : undefined}
+                    onRetry={() => retry()}
+                  />
+                </Card>
+              ) : view === 'graph' ? (
+                <Card className="bg-surface-0 overflow-hidden" padding={false}>
+                  <div className="h-[500px] lg:h-[560px]">
+                    <ConceptGraph
+                      nodes={graph?.nodes ?? []}
+                      edges={graph?.edges ?? []}
+                      onNodeClick={handleSelect}
+                      selectedNodeId={selectedConceptId}
+                    />
+                  </div>
+                </Card>
+              ) : (
+                <Card padding>
+                  <Input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search concepts…"
+                    aria-label="Search concepts"
+                    className="mb-3 sm:max-w-xs"
+                  />
+                  <ConceptList
+                    concepts={conceptList ?? []}
+                    onSelect={handleSelect}
+                    selectedId={selectedConceptId}
+                  />
+                </Card>
+              )}
+
+              <p className="font-mono text-[11px] text-text-faint mt-3">
+                {view === 'graph'
+                  ? 'list view is the keyboard/screen-reader twin — arrows navigate, enter opens'
+                  : '↑↓ navigate · enter opens · same actions as the graph'}
+                {graph && graph.nodes.length > 0 && (
+                  <> · {graph.nodes.length} concepts · {graph.edges.length} links</>
+                )}
+              </p>
+            </div>
+
+            {sidePanel}
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
