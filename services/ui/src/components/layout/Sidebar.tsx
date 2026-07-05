@@ -22,7 +22,10 @@ import {
 } from 'lucide-react'
 import { useDashboard, useCourses } from '../../hooks/useApi'
 import { useAuth } from '../../hooks/useAuth'
+import { useUnreadCount } from '../../hooks/useNotificationInbox'
 import { openCommandPalette } from '../../lib/commandPalette'
+import { bellBadge } from '../../lib/notificationBadge'
+import { NotificationCenter } from '../notifications/NotificationCenter'
 import { Badge } from '../ui/Badge'
 import { Kbd } from '../ui/Kbd'
 import { Sheet } from '../ui/Sheet'
@@ -101,6 +104,8 @@ export function Sidebar() {
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)
 
   const pendingCount = dashboard?.pending_review_count ?? 0
+  const { data: unreadCount = 0 } = useUnreadCount()
+  const badge = bellBadge(unreadCount)
 
   const toggleCollapsed = () => {
     const next = !collapsed
@@ -137,10 +142,23 @@ export function Sidebar() {
             <button
               type="button"
               onClick={() => setNotificationsOpen(true)}
-              aria-label="Notifications"
-              className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
+              aria-label={
+                unreadCount > 0 ? `Notifications — ${unreadCount} unread` : 'Notifications'
+              }
+              className="relative p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
             >
               <Bell size={15} aria-hidden />
+              {badge.kind === 'dot' && (
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber" aria-hidden />
+              )}
+              {badge.kind === 'count' && (
+                <span
+                  aria-hidden
+                  className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-1 rounded-full bg-amber text-on-accent text-[9px] font-bold leading-none flex items-center justify-center"
+                >
+                  {badge.label}
+                </span>
+              )}
             </button>
           </Tooltip>
           <button
@@ -274,9 +292,9 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Notifications placeholder panel (Stream E fills this in) */}
-      <Sheet open={notificationsOpen} onOpenChange={setNotificationsOpen} side="right" title="Notifications">
-        <p className="text-sm text-text-muted">Notifications arrive here soon.</p>
+      {/* Notification center (E2) */}
+      <Sheet open={notificationsOpen} onOpenChange={setNotificationsOpen} side="right">
+        <NotificationCenter onNavigate={() => setNotificationsOpen(false)} />
       </Sheet>
     </aside>
   )

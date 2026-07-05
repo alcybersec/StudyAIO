@@ -1042,3 +1042,49 @@ export interface CourseMergeResult {
   conflict_weeks: number[]
   review_items_created: number
 }
+
+// ── Global search (E1) ─────────────────────────────────────────────
+
+export type GlobalSearchKind = 'course' | 'course_week' | 'flashcard' | 'chat_session'
+
+export interface GlobalSearchResult {
+  kind: GlobalSearchKind | string
+  title: string
+  snippet: string
+  href_meta: Record<string, string | number>
+}
+
+export interface GlobalSearchResponse {
+  query: string
+  results: GlobalSearchResult[]
+}
+
+// ── Notification inbox (E2) ────────────────────────────────────────
+
+export type InboxNotificationKind = 'pipeline' | 'review' | 'achievement' | 'deadline'
+
+export interface InboxNotification {
+  id: string
+  kind: InboxNotificationKind | string
+  title: string
+  body: string | null
+  href: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export interface UnreadCountResponse {
+  count: number
+}
+
+export interface MarkReadResponse {
+  updated: number
+}
+
+// ── Quick capture (E4) ─────────────────────────────────────────────
+
+export interface CaptureRequest {
+  text?: string
+  url?: string
+  title?: string
+}
