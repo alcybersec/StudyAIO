@@ -53,12 +53,12 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
   if (mfaEnabled && step === 'idle') {
     return (
       <div className="space-y-3">
-        <div className="flex items-center gap-2 text-sm text-success font-medium">
+        <div className="flex items-center gap-2 text-sm text-sage-fg font-medium">
           <span>MFA is enabled</span>
         </div>
         <button
           onClick={() => setStep('disable')}
-          className="text-sm text-danger hover:underline"
+          className="text-sm text-red-fg hover:underline"
         >
           Disable MFA
         </button>
@@ -76,14 +76,14 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
           onChange={(e) => setDisableCode(e.target.value)}
           placeholder="6-digit code"
           maxLength={6}
-          className="w-full px-3 py-2 bg-surface-1 border border-border rounded-lg text-text placeholder:text-text-faint text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+          className="w-full px-3 py-2 bg-surface-1 border border-border rounded-lg text-text placeholder:text-text-faint text-sm focus:outline-none focus:ring-2 focus:ring-sage/30"
         />
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {error && <p className="text-sm text-red-fg">{error}</p>}
         <div className="flex gap-2">
           <button
             onClick={handleDisable}
             disabled={disableCode.length !== 6 || disableMutation.isPending}
-            className="px-4 min-h-[44px] bg-danger text-white rounded-lg text-sm font-medium hover:bg-danger/90 disabled:opacity-50"
+            className="px-4 min-h-[44px] bg-red text-on-accent rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
           >
             {disableMutation.isPending ? 'Disabling...' : 'Disable MFA'}
           </button>
@@ -101,7 +101,7 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
   if (step === 'done') {
     return (
       <div className="space-y-3">
-        <p className="text-sm font-medium text-success">MFA enabled successfully!</p>
+        <p className="text-sm font-medium text-sage-fg">MFA enabled successfully!</p>
         <p className="text-sm text-text-muted">Save these backup codes in a secure place:</p>
         <div className="bg-surface-2 text-text rounded-lg p-3 font-mono text-sm space-y-1">
           {backupCodes.map((c, i) => (
@@ -110,7 +110,7 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
         </div>
         <button
           onClick={() => setStep('idle')}
-          className="px-4 min-h-[44px] bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark"
+          className="px-4 min-h-[44px] bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover"
         >
           Done
         </button>
@@ -146,14 +146,14 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
             onChange={(e) => setCode(e.target.value)}
             placeholder="000000"
             maxLength={6}
-            className="w-full px-3 py-2 bg-surface-1 border border-border rounded-lg text-text placeholder:text-text-faint text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full px-3 py-2 bg-surface-1 border border-border rounded-lg text-text placeholder:text-text-faint text-sm focus:outline-none focus:ring-2 focus:ring-sage/30"
           />
         </div>
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {error && <p className="text-sm text-red-fg">{error}</p>}
         <button
           onClick={handleVerify}
           disabled={code.length !== 6 || verifyMutation.isPending}
-          className="w-full min-h-[44px] bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50"
+          className="w-full min-h-[44px] bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover disabled:opacity-50"
         >
           {verifyMutation.isPending ? 'Verifying...' : 'Verify & Enable'}
         </button>
@@ -170,7 +170,7 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
       <button
         onClick={handleSetup}
         disabled={setupMutation.isPending}
-        className="px-4 min-h-[44px] bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50"
+        className="px-4 min-h-[44px] bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover disabled:opacity-50"
       >
         {setupMutation.isPending ? 'Setting up...' : 'Enable MFA'}
       </button>
