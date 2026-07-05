@@ -1,43 +1,43 @@
 import { useState } from 'react'
+import { CalendarPlus } from 'lucide-react'
 import { useCreateExamFromDeadline, useDeleteDeadline, useUpdateDeadline } from '../../hooks/useApi'
 import { useCalendarStatus, useSyncCalendar } from '../../hooks/useCalendar'
+import { Badge, EmptyState, ErrorState, Skeleton } from '../ui'
 import type { Deadline } from '../../types'
+import { daysUntil } from './dates'
 import { DeadlineEditModal } from './DeadlineEditModal'
 
 interface DeadlineTimelineProps {
-  deadlines: Deadline[]
+  deadlines: Deadline[] | undefined
   isLoading: boolean
+  isError: boolean
+  onRetry: () => void
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  exam: 'border-red-400 bg-red-50',
-  assignment: 'border-blue-400 bg-blue-50',
-  quiz: 'border-yellow-400 bg-yellow-50',
-  project: 'border-purple-400 bg-purple-50',
-  lab: 'border-green-400 bg-green-50',
-  presentation: 'border-orange-400 bg-orange-50',
-  other: 'border-gray-400 bg-gray-50',
+const TYPE_TONES: Record<string, { card: string; dot: string }> = {
+  exam: { card: 'border-l-red bg-red-soft/40', dot: 'bg-red' },
+  assignment: { card: 'border-l-peri bg-peri-soft/40', dot: 'bg-peri' },
+  quiz: { card: 'border-l-amber bg-amber-soft/40', dot: 'bg-amber' },
+  project: { card: 'border-l-peri bg-peri-soft/40', dot: 'bg-peri' },
+  lab: { card: 'border-l-sage bg-sage-soft/40', dot: 'bg-sage' },
+  presentation: { card: 'border-l-amber bg-amber-soft/40', dot: 'bg-amber' },
+  other: { card: 'border-l-border-strong bg-surface-1', dot: 'bg-text-faint' },
 }
 
-const TYPE_DOT: Record<string, string> = {
-  exam: 'bg-red-500',
-  assignment: 'bg-blue-500',
-  quiz: 'bg-yellow-500',
-  project: 'bg-purple-500',
-  lab: 'bg-green-500',
-  presentation: 'bg-orange-500',
-  other: 'bg-gray-500',
+function TimelineSkeleton() {
+  return (
+    <div className="space-y-3" role="status" aria-label="Loading deadlines">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="rounded-xl border border-border p-3 space-y-2">
+          <Skeleton height={14} width="40%" />
+          <Skeleton height={10} width="25%" />
+        </div>
+      ))}
+    </div>
+  )
 }
 
-function daysUntil(dateStr: string): number {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const due = new Date(dateStr)
-  due.setHours(0, 0, 0, 0)
-  return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-}
-
-export function DeadlineTimeline({ deadlines, isLoading }: DeadlineTimelineProps) {
+export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: DeadlineTimelineProps) {
   const [editingDeadline, setEditingDeadline] = useState<Deadline | null>(null)
   const updateDeadline = useUpdateDeadline()
   const deleteDeadline = useDeleteDeadline()
@@ -46,15 +46,18 @@ export function DeadlineTimeline({ deadlines, isLoading }: DeadlineTimelineProps
   const syncCalendar = useSyncCalendar()
   const hasCalendar = (calStatus?.calendars?.length ?? 0) > 0
 
-  if (isLoading) {
-    return <div className="py-8 text-center text-sm text-gray-500">Loading deadlines...</div>
+  if (isLoading && !deadlines) return <TimelineSkeleton />
+
+  if (isError && !deadlines) {
+    return <ErrorState title="Deadlines couldn't load" onRetry={onRetry} />
   }
 
-  if (deadlines.length === 0) {
+  if (!deadlines || deadlines.length === 0) {
     return (
-      <div className="py-8 text-center text-sm text-gray-500">
-        No deadlines extracted yet. Upload a course outline to get started.
-      </div>
+      <EmptyState
+        title="No deadlines extracted yet"
+        description="Upload a course outline in the Documents tab to get started."
+      />
     )
   }
 
@@ -66,65 +69,49 @@ export function DeadlineTimeline({ deadlines, isLoading }: DeadlineTimelineProps
           const isPast = days < 0
           const isUrgent = !isPast && days <= 3
           const isSoon = !isPast && !isUrgent && days <= 7
+          const tone = TYPE_TONES[d.deadline_type] ?? TYPE_TONES.other
 
           return (
             <div
               key={d.id}
-              className={`flex items-start gap-3 rounded-lg border-l-4 p-3 ${
-                isPast ? 'border-gray-300 bg-gray-50 opacity-60' : TYPE_COLORS[d.deadline_type] ?? TYPE_COLORS.other
+              className={`flex items-start gap-3 rounded-xl border border-border border-l-4 p-3 ${
+                isPast ? 'border-l-border bg-surface-1 opacity-60' : tone.card
               }`}
             >
-              <div className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${TYPE_DOT[d.deadline_type] ?? TYPE_DOT.other}`} />
+              <div className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${isPast ? 'bg-text-faint' : tone.dot}`} />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h4 className={`text-sm font-medium ${isPast ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className={`text-sm font-medium ${isPast ? 'text-text-muted line-through' : 'text-text'}`}>
                     {d.title}
                   </h4>
-                  {d.is_confirmed && (
-                    <span className="inline-flex items-center rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
-                      Confirmed
-                    </span>
-                  )}
-                  {isUrgent && (
-                    <span className="inline-flex items-center rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
-                      URGENT
-                    </span>
-                  )}
-                  {isSoon && (
-                    <span className="inline-flex items-center rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-700">
-                      Soon
-                    </span>
-                  )}
+                  {d.is_confirmed && <Badge variant="success">confirmed</Badge>}
+                  {isUrgent && <Badge variant="danger">urgent</Badge>}
+                  {isSoon && <Badge variant="warning">soon</Badge>}
                 </div>
-                <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500">
-                  <span>{d.due_date}</span>
+                <div className="mt-0.5 flex items-center gap-3 text-xs text-text-muted">
+                  <span className="font-mono text-[11px]">{d.due_date}</span>
                   <span className="capitalize">{d.deadline_type}</span>
-                  {!isPast && <span>{days === 0 ? 'Today' : `${days}d`}</span>}
-                  {isPast && <span>Past</span>}
+                  {!isPast && <span className="font-mono text-[11px]">{days === 0 ? 'today' : `${days}d`}</span>}
+                  {isPast && <span className="font-mono text-[11px]">past</span>}
                 </div>
-                {d.description && (
-                  <p className="mt-1 text-xs text-gray-500">{d.description}</p>
-                )}
+                {d.description && <p className="mt-1 text-xs text-text-muted">{d.description}</p>}
               </div>
               <div className="flex flex-shrink-0 items-center gap-1">
                 {hasCalendar && (
                   <button
                     onClick={() => syncCalendar.mutate()}
                     disabled={syncCalendar.isPending}
-                    className="rounded px-2 py-1 text-xs text-primary hover:bg-primary/10"
+                    className="rounded-md px-2 py-1 text-xs text-peri-fg hover:bg-peri-soft transition-colors disabled:opacity-50"
                     title="Sync to Google Calendar"
+                    aria-label="Sync to Google Calendar"
                   >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
+                    <CalendarPlus size={14} aria-hidden />
                   </button>
                 )}
                 {!d.is_confirmed && (
                   <button
-                    onClick={() =>
-                      updateDeadline.mutate({ deadlineId: d.id, data: { is_confirmed: true } })
-                    }
-                    className="rounded px-2 py-1 text-xs text-green-600 hover:bg-green-100"
+                    onClick={() => updateDeadline.mutate({ deadlineId: d.id, data: { is_confirmed: true } })}
+                    className="rounded-md px-2 py-1 text-xs text-sage-fg hover:bg-sage-soft transition-colors"
                     title="Confirm deadline"
                   >
                     Confirm
@@ -132,7 +119,7 @@ export function DeadlineTimeline({ deadlines, isLoading }: DeadlineTimelineProps
                 )}
                 <button
                   onClick={() => setEditingDeadline(d)}
-                  className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-100"
+                  className="rounded-md px-2 py-1 text-xs text-peri-fg hover:bg-peri-soft transition-colors"
                 >
                   Edit
                 </button>
@@ -140,7 +127,7 @@ export function DeadlineTimeline({ deadlines, isLoading }: DeadlineTimelineProps
                   <button
                     onClick={() => createExam.mutate(d.id)}
                     disabled={createExam.isPending}
-                    className="rounded px-2 py-1 text-xs text-purple-600 hover:bg-purple-100"
+                    className="rounded-md px-2 py-1 text-xs text-peri-fg hover:bg-peri-soft transition-colors disabled:opacity-50"
                   >
                     Create Exam
                   </button>
@@ -151,7 +138,7 @@ export function DeadlineTimeline({ deadlines, isLoading }: DeadlineTimelineProps
                       deleteDeadline.mutate(d.id)
                     }
                   }}
-                  className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-100"
+                  className="rounded-md px-2 py-1 text-xs text-red-fg hover:bg-red-soft transition-colors"
                 >
                   Delete
                 </button>
@@ -161,12 +148,7 @@ export function DeadlineTimeline({ deadlines, isLoading }: DeadlineTimelineProps
         })}
       </div>
 
-      {editingDeadline && (
-        <DeadlineEditModal
-          deadline={editingDeadline}
-          onClose={() => setEditingDeadline(null)}
-        />
-      )}
+      {editingDeadline && <DeadlineEditModal deadline={editingDeadline} onClose={() => setEditingDeadline(null)} />}
     </>
   )
 }

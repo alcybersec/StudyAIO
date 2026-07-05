@@ -1,21 +1,27 @@
 import { Link } from 'react-router-dom'
+import { TriangleAlert } from 'lucide-react'
+import { useDashboardPendingReviews } from '../../hooks/useApi'
 
-interface ReviewAlertProps {
-  count: number
-}
-
-export function ReviewAlert({ count }: ReviewAlertProps) {
-  if (count === 0) return null
+/**
+ * Banner above the widget grid. Best-effort: while loading, on error, or
+ * with zero pending items it renders nothing — the widgets carry the page.
+ */
+export function ReviewAlert() {
+  const { data: count } = useDashboardPendingReviews()
+  if (!count) return null
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl mb-6">
-      <span className="text-amber-600 dark:text-amber-400 text-lg shrink-0">{'\u26A0'}</span>
-      <p className="text-sm text-amber-800 dark:text-amber-200 flex-1">
-        <strong>{count} item{count !== 1 ? 's' : ''}</strong> need{count === 1 ? 's' : ''} your review before the pipeline can continue.
+    <div className="flex items-center gap-2.5 bg-amber-soft border border-amber/25 rounded-lg px-3.5 py-2.5 mb-5 text-xs font-medium">
+      <TriangleAlert size={14} aria-hidden className="shrink-0 text-amber-fg" />
+      <p className="flex-1 text-text">
+        <strong>
+          {count} item{count !== 1 ? 's' : ''}
+        </strong>{' '}
+        need{count === 1 ? 's' : ''} your review before the pipeline can continue.
       </p>
       <Link
         to="/review"
-        className="shrink-0 px-3 py-1.5 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900 hover:bg-amber-200 dark:hover:bg-amber-800 rounded-lg transition-colors"
+        className="shrink-0 px-2.5 py-1 rounded-md font-medium bg-surface-1 border border-border hover:bg-surface-2 text-text transition-colors"
       >
         Review now
       </Link>
