@@ -15,9 +15,6 @@ services/ui/src/components/demo/DemoBanner.tsx
 services/ui/src/components/demo/UpgradeCTA.tsx
 services/ui/src/components/ErrorBoundary.tsx
 services/ui/src/components/exam/ExamCreateForm.tsx
-services/ui/src/components/gamification/AchievementBadge.tsx
-services/ui/src/components/gamification/AchievementUnlock.tsx
-services/ui/src/components/gamification/XPBar.tsx
 services/ui/src/components/notifications/NotificationsSection.tsx
 services/ui/src/components/notifications/PushNotificationToggle.tsx
 services/ui/src/components/notifications/TelegramLinkCard.tsx
@@ -44,7 +41,6 @@ services/ui/src/components/week/ArtifactList.tsx
 services/ui/src/components/week/FlashcardsTab.tsx
 services/ui/src/components/week/QuizTab.tsx
 services/ui/src/components/week/SummaryTab.tsx
-services/ui/src/pages/AchievementsPage.tsx
 services/ui/src/pages/CourseOpsPage.tsx
 services/ui/src/pages/ForgotPasswordPage.tsx
 services/ui/src/pages/NotFoundPage.tsx
