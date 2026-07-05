@@ -989,3 +989,11 @@ export interface UnreadCountResponse {
 export interface MarkReadResponse {
   updated: number
 }
+
+// ── Quick capture (E4) ─────────────────────────────────────────────
+
+export interface CaptureRequest {
+  text?: string
+  url?: string
+  title?: string
+}
