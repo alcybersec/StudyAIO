@@ -35,3 +35,37 @@ export const deadlineEditSchema = z.object({
 })
 
 export type DeadlineEditFormData = z.infer<typeof deadlineEditSchema>
+
+export const captureSchema = z
+  .object({
+    text: z.string().trim().optional(),
+    url: z.string().trim().optional(),
+    title: z.string().trim().max(200, 'Title too long').optional(),
+  })
+  .superRefine((data, ctx) => {
+    const hasText = !!data.text
+    const hasUrl = !!data.url
+    if (hasText && hasUrl) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Provide either text or a URL, not both',
+        path: ['text'],
+      })
+    }
+    if (!hasText && !hasUrl) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Paste some text or enter a URL',
+        path: ['text'],
+      })
+    }
+    if (hasUrl && !/^https?:\/\/\S+$/i.test(data.url ?? '')) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a valid http(s) URL',
+        path: ['url'],
+      })
+    }
+  })
+
+export type CaptureFormData = z.infer<typeof captureSchema>
