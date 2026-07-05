@@ -293,7 +293,13 @@ export function Sidebar() {
       </div>
 
       {/* Notification center (E2) */}
-      <Sheet open={notificationsOpen} onOpenChange={setNotificationsOpen} side="right">
+      <Sheet
+        open={notificationsOpen}
+        onOpenChange={setNotificationsOpen}
+        side="right"
+        title="Notifications"
+        titleVisible={false}
+      >
         <NotificationCenter onNavigate={() => setNotificationsOpen(false)} />
       </Sheet>
     </aside>
