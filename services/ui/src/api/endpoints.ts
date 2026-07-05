@@ -25,6 +25,7 @@ import type {
   QAResponse,
   QuizAttemptRequest,
   QuizQuestion,
+  ReadinessDetail,
   RetentionPoint,
   ReviewItem,
   ReviewRequest,
@@ -114,6 +115,8 @@ export const examsApi = {
   }) => api.post(`/exams/${examId}/sessions`, data),
   history: (examId: string, days = 30) =>
     api.get<StudyHistoryDay[]>(`/exams/${examId}/history?days=${days}`),
+  getReadiness: (examId: string) =>
+    api.get<ReadinessDetail>(`/exams/${examId}/readiness`),
 }
 
 export const studyApi = {

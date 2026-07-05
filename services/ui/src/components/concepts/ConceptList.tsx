@@ -1,16 +1,20 @@
+import { useRef, useState } from 'react'
+import { Badge } from '../ui/Badge'
 import type { ConceptNode } from '../../types'
 
-const CATEGORY_BADGES: Record<string, string> = {
-  theory: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
-  algorithm: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-  data_structure: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-  pattern: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
-  tool: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-  language: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  protocol: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
-  principle: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
-  method: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
-  general: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300',
+type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info'
+
+const CATEGORY_VARIANTS: Record<string, BadgeVariant> = {
+  theory: 'info',
+  algorithm: 'warning',
+  data_structure: 'success',
+  pattern: 'info',
+  tool: 'danger',
+  language: 'info',
+  protocol: 'info',
+  principle: 'success',
+  method: 'warning',
+  general: 'default',
 }
 
 interface ConceptListProps {
@@ -19,58 +23,94 @@ interface ConceptListProps {
   selectedId?: string | null
 }
 
+/**
+ * Keyboard/screen-reader twin of the graph canvas. Roving tabindex: arrows
+ * move focus between rows, Enter opens the focused concept's detail panel.
+ */
 export function ConceptList({ concepts, onSelect, selectedId }: ConceptListProps) {
+  const [activeIndex, setActiveIndex] = useState(0)
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
+
   if (concepts.length === 0) {
     return (
-      <div className="text-center py-8 text-text-muted">
+      <div className="text-center py-8 text-sm text-text-muted">
         <p>No concepts found</p>
       </div>
     )
   }
 
+  const clampedActive = Math.min(activeIndex, concepts.length - 1)
+
+  const moveTo = (index: number) => {
+    const next = Math.max(0, Math.min(concepts.length - 1, index))
+    setActiveIndex(next)
+    rowRefs.current[next]?.focus()
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent, index: number) => {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault()
+        moveTo(index + 1)
+        break
+      case 'ArrowUp':
+        event.preventDefault()
+        moveTo(index - 1)
+        break
+      case 'Home':
+        event.preventDefault()
+        moveTo(0)
+        break
+      case 'End':
+        event.preventDefault()
+        moveTo(concepts.length - 1)
+        break
+      case 'Enter':
+      case ' ':
+        event.preventDefault()
+        onSelect?.(concepts[index].id)
+        break
+    }
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-left">
-            <th className="pb-2 font-medium text-text-muted">Name</th>
-            <th className="pb-2 font-medium text-text-muted">Category</th>
-            <th className="pb-2 font-medium text-text-muted text-center">Mentions</th>
-            <th className="pb-2 font-medium text-text-muted">Weeks</th>
-          </tr>
-        </thead>
-        <tbody>
-          {concepts.map((concept) => {
-            const badgeClass = CATEGORY_BADGES[concept.category] || CATEGORY_BADGES.general
-            return (
-              <tr
-                key={concept.id}
-                onClick={() => onSelect?.(concept.id)}
-                className={`border-b border-border/50 cursor-pointer transition-colors ${
-                  selectedId === concept.id
-                    ? 'bg-primary/5'
-                    : 'hover:bg-surface-alt'
-                }`}
-              >
-                <td className="py-2.5 pr-4">
-                  <span className="font-medium text-text">{concept.name}</span>
-                </td>
-                <td className="py-2.5 pr-4">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badgeClass}`}>
-                    {concept.category.replace('_', ' ')}
-                  </span>
-                </td>
-                <td className="py-2.5 text-center text-text-muted">
-                  {concept.mention_count}
-                </td>
-                <td className="py-2.5 text-text-muted text-xs">
-                  {concept.source_weeks.sort((a, b) => a - b).join(', ') || '—'}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+    <div role="listbox" aria-label="Concepts" className="divide-y divide-border">
+      {concepts.map((concept, i) => {
+        const selected = selectedId === concept.id
+        return (
+          <div
+            key={concept.id}
+            ref={(el) => {
+              rowRefs.current[i] = el
+            }}
+            role="option"
+            aria-selected={selected}
+            tabIndex={i === clampedActive ? 0 : -1}
+            onKeyDown={(e) => handleKeyDown(e, i)}
+            onClick={() => {
+              setActiveIndex(i)
+              onSelect?.(concept.id)
+            }}
+            onFocus={() => setActiveIndex(i)}
+            className={`flex items-center gap-3 py-2.5 px-2 text-[13px] cursor-pointer rounded-sm transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-peri ${
+              selected ? 'bg-surface-2' : 'hover:bg-surface-2/50'
+            }`}
+          >
+            <span className="flex-1 min-w-0 truncate font-medium text-text">{concept.name}</span>
+            <Badge variant={CATEGORY_VARIANTS[concept.category] ?? 'default'}>
+              {concept.category.replace('_', ' ')}
+            </Badge>
+            <span className="font-mono text-[10px] text-text-faint w-12 text-right shrink-0">
+              {concept.mention_count}×
+            </span>
+            <span className="font-mono text-[10px] text-text-faint w-20 text-right shrink-0 truncate">
+              {concept.source_weeks.length > 0
+                ? `wk ${[...concept.source_weeks].sort((a, b) => a - b).join(', ')}`
+                : '—'}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }

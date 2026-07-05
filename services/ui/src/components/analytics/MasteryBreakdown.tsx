@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   BarChart,
   Bar,
@@ -9,14 +9,13 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts'
-import { useAnalyticsMastery } from '../../hooks/useApi'
-import { useCourses } from '../../hooks/useApi'
-import { LoadingSpinner } from '../ui'
+import { Card, EmptyState, ErrorState, SectionLabel, Select, Skeleton } from '../ui'
+import { useAnalyticsMastery, useCourses } from '../../hooks/useApi'
 
 export function MasteryBreakdown() {
-  const [courseCode, setCourseCode] = useState<string>('')
+  const [courseCode, setCourseCode] = useState('')
   const { data: courses } = useCourses()
-  const { data, isLoading, error } = useAnalyticsMastery(courseCode || undefined)
+  const { data, isLoading, error, refetch } = useAnalyticsMastery(courseCode || undefined)
 
   const chartData = useMemo(() => {
     if (!data?.weeks) return []
@@ -31,86 +30,104 @@ export function MasteryBreakdown() {
     }))
   }, [data])
 
+  const totals = useMemo(
+    () => ({
+      cards: chartData.reduce((s, d) => s + d.total, 0),
+      avgMastery:
+        chartData.length > 0
+          ? Math.round(chartData.reduce((s, d) => s + d.mastery_pct, 0) / chartData.length)
+          : 0,
+    }),
+    [chartData],
+  )
+
+  const courseOptions = useMemo(
+    () => [
+      { value: '', label: 'All courses' },
+      ...(courses?.map((c) => ({ value: c.code, label: c.code })) ?? []),
+    ],
+    [courses],
+  )
+
+  if (isLoading) {
+    return (
+      <Card padding>
+        <Skeleton height={12} width={112} className="mb-3" />
+        <Skeleton height={240} width="100%" />
+      </Card>
+    )
+  }
+
   if (error) {
     return (
-      <div className="text-center py-12">
-        <p className="text-sm text-danger">Failed to load mastery data.</p>
-      </div>
+      <ErrorState
+        title="Mastery breakdown couldn't load"
+        detail={error instanceof Error ? error.message : undefined}
+        onRetry={() => refetch()}
+      />
+    )
+  }
+
+  if (chartData.length === 0) {
+    return (
+      <Card>
+        <EmptyState
+          icon="🗂"
+          title="No flashcard data yet"
+          description="Upload lectures and generate flashcards to see mastery by week."
+          actionLabel="Upload lectures"
+          actionTo="/upload"
+        />
+      </Card>
     )
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h3 className="text-lg font-semibold text-text">Mastery by Week</h3>
+    <Card padding>
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+        <SectionLabel className="mb-0">Mastery by week</SectionLabel>
         {courses && courses.length > 1 && (
-          <select
+          <Select
+            className="w-36"
+            options={courseOptions}
             value={courseCode}
-            onChange={(e) => setCourseCode(e.target.value)}
-            className="text-sm rounded-lg border border-border bg-surface text-text px-3 py-1.5 min-h-[36px]"
-          >
-            <option value="">All courses</option>
-            {courses.map((c) => (
-              <option key={c.id} value={c.code}>
-                {c.code}
-              </option>
-            ))}
-          </select>
+            onValueChange={setCourseCode}
+          />
         )}
       </div>
 
-      {isLoading && <LoadingSpinner label="Loading mastery data..." />}
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--t-border)" />
+          <XAxis
+            dataKey="name"
+            tick={{ fill: 'var(--t-text-muted)', fontSize: 11 }}
+            stroke="var(--t-border)"
+          />
+          <YAxis tick={{ fill: 'var(--t-text-muted)', fontSize: 11 }} stroke="var(--t-border)" />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: 'var(--t-surface-1)',
+              border: '1px solid var(--t-border)',
+              borderRadius: '8px',
+              color: 'var(--t-text)',
+              fontSize: 12,
+            }}
+            formatter={((value: number, name: string) => [
+              value,
+              name.charAt(0).toUpperCase() + name.slice(1),
+            ]) as never}
+          />
+          <Legend wrapperStyle={{ fontSize: 12, color: 'var(--t-text-muted)' }} />
+          <Bar dataKey="mastered" stackId="a" fill="var(--t-sage)" name="Mastered" />
+          <Bar dataKey="learning" stackId="a" fill="var(--t-amber)" name="Learning" />
+          <Bar dataKey="new" stackId="a" fill="var(--t-border-strong)" name="New" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
 
-      {!isLoading && chartData.length === 0 && (
-        <div className="text-center py-12 text-text-muted text-sm">
-          No flashcard data available yet. Upload lectures and generate flashcards to see mastery breakdown.
-        </div>
-      )}
-
-      {!isLoading && chartData.length > 0 && (
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-              <XAxis
-                dataKey="name"
-                tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
-                stroke="var(--color-border)"
-              />
-              <YAxis
-                tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
-                stroke="var(--color-border)"
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '8px',
-                  color: 'var(--color-text)',
-                  fontSize: 12,
-                }}
-                formatter={((value: number, name: string) => [value, name.charAt(0).toUpperCase() + name.slice(1)]) as never}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: 12, color: 'var(--color-text-muted)' }}
-              />
-              <Bar dataKey="mastered" stackId="a" fill="#22c55e" name="Mastered" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="learning" stackId="a" fill="#eab308" name="Learning" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="new" stackId="a" fill="#9ca3af" name="New" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-
-          {/* Summary row */}
-          <div className="flex items-center justify-center gap-6 mt-3 text-xs text-text-muted">
-            <span>
-              Total cards: {chartData.reduce((s, d) => s + d.total, 0)}
-            </span>
-            <span>
-              Avg mastery: {chartData.length > 0 ? Math.round(chartData.reduce((s, d) => s + d.mastery_pct, 0) / chartData.length) : 0}%
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
+      <p className="font-mono text-[11px] text-text-faint text-center mt-3">
+        {totals.cards} cards · avg mastery {totals.avgMastery}%
+      </p>
+    </Card>
   )
 }
