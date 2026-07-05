@@ -1,73 +1,78 @@
+import { ChevronLeft, ChevronRight, FileText, ZoomIn, ZoomOut } from 'lucide-react'
+import { Button, Select } from '../ui'
 import type { Artifact } from '../../types'
 
 interface FileViewerToolbarProps {
   artifacts: Artifact[]
   selectedArtifact: Artifact | null
   onSelectArtifact: (artifactId: string) => void
-  currentPage: number
+  page: number
   totalPages: number
-  onGoToPage: (page: number) => void
+  zoom: number
+  onPrevPage: () => void
+  onNextPage: () => void
+  onZoomIn: () => void
+  onZoomOut: () => void
 }
 
 export function FileViewerToolbar({
   artifacts,
   selectedArtifact,
   onSelectArtifact,
-  currentPage,
+  page,
   totalPages,
-  onGoToPage,
+  zoom,
+  onPrevPage,
+  onNextPage,
+  onZoomIn,
+  onZoomOut,
 }: FileViewerToolbarProps) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
-      {/* Artifact selector */}
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-surface-1">
+      <FileText size={13} className="text-text-faint shrink-0" aria-hidden />
       {artifacts.length > 1 ? (
-        <select
-          value={selectedArtifact?.id ?? ''}
-          onChange={(e) => onSelectArtifact(e.target.value)}
-          className="text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white min-h-[36px] max-w-[200px] truncate"
-        >
-          {artifacts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.original_filename}
-            </option>
-          ))}
-        </select>
+        <Select
+          options={artifacts.map((a) => ({ value: a.id, label: a.original_filename }))}
+          value={selectedArtifact?.id}
+          onValueChange={onSelectArtifact}
+          className="max-w-[200px] min-w-0"
+        />
       ) : (
-        <span className="text-sm font-medium text-gray-700 truncate max-w-[200px]">
+        <span className="font-mono text-[11px] text-text-muted truncate">
           {selectedArtifact?.original_filename ?? 'No file'}
         </span>
       )}
 
-      <div className="flex-1" />
-
-      {/* Page navigation */}
-      {totalPages > 0 && (
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => onGoToPage(Math.max(1, currentPage - 1))}
-            disabled={currentPage <= 1}
-            className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed min-w-[36px] min-h-[36px] flex items-center justify-center text-gray-600"
-            aria-label="Previous page"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <span className="text-xs text-gray-500 whitespace-nowrap px-1">
-            {currentPage} / {totalPages}
-          </span>
-          <button
-            onClick={() => onGoToPage(Math.min(totalPages, currentPage + 1))}
-            disabled={currentPage >= totalPages}
-            className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed min-w-[36px] min-h-[36px] flex items-center justify-center text-gray-600"
-            aria-label="Next page"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-      )}
+      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <Button variant="ghost" size="sm" aria-label="Zoom out" kbd="-" onClick={onZoomOut}>
+          <ZoomOut size={13} aria-hidden />
+        </Button>
+        <span className="font-mono text-[11px] text-text-faint">{zoom}%</span>
+        <Button variant="ghost" size="sm" aria-label="Zoom in" kbd="+" onClick={onZoomIn}>
+          <ZoomIn size={13} aria-hidden />
+        </Button>
+        <span className="w-px h-4 bg-border mx-1" aria-hidden />
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label="Previous page"
+          kbd="←"
+          onClick={onPrevPage}
+          disabled={totalPages > 0 && page <= 1}
+        >
+          <ChevronLeft size={13} aria-hidden />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label="Next page"
+          kbd="→"
+          onClick={onNextPage}
+          disabled={totalPages > 0 && page >= totalPages}
+        >
+          <ChevronRight size={13} aria-hidden />
+        </Button>
+      </div>
     </div>
   )
 }
