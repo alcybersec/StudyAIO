@@ -13,7 +13,7 @@ export function UpgradeCTA({ open, onDismiss }: UpgradeCTAProps) {
     <Dialog.Root open={open} onOpenChange={(v) => !v && onDismiss()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <Dialog.Content className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-surface border border-border rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+        <Dialog.Content className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-surface-1 border border-border rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
           <div className="text-center">
             <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-amber-soft flex items-center justify-center">
               <svg className="w-6 h-6 text-amber-fg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -33,14 +33,14 @@ export function UpgradeCTA({ open, onDismiss }: UpgradeCTAProps) {
               <button
                 type="button"
                 onClick={onDismiss}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg border border-border text-text hover:bg-surface-alt transition-colors"
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg border border-border text-text hover:bg-surface-2 transition-colors"
               >
                 Continue Browsing
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/register')}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-sage text-on-accent hover:bg-sage-hover transition-colors"
               >
                 Register
               </button>

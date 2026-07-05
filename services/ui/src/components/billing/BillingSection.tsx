@@ -23,10 +23,10 @@ function UsageBar({ current, limit, label }: { current: number; limit: number | 
           {current} / {limit}
         </span>
       </div>
-      <div className="h-2 bg-surface-alt rounded-full overflow-hidden">
+      <div className="h-2 bg-surface-0 rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${
-            isNearLimit ? 'bg-amber' : 'bg-primary'
+            isNearLimit ? 'bg-amber' : 'bg-sage'
           }`}
           style={{ width: `${pct}%` }}
         />
@@ -57,9 +57,9 @@ export function BillingSection() {
       <Card>
         <h2 className="text-lg font-semibold text-text mb-4">Plan & Billing</h2>
         <div className="animate-pulse space-y-3">
-          <div className="h-4 bg-surface-alt rounded w-1/3" />
-          <div className="h-2 bg-surface-alt rounded" />
-          <div className="h-2 bg-surface-alt rounded" />
+          <div className="h-4 bg-surface-0 rounded w-1/3" />
+          <div className="h-2 bg-surface-0 rounded" />
+          <div className="h-2 bg-surface-0 rounded" />
         </div>
       </Card>
     )
@@ -75,7 +75,7 @@ export function BillingSection() {
           className={`px-2.5 py-1 text-xs font-bold uppercase rounded-full ${
             isPro
               ? 'bg-amber-soft text-amber-fg'
-              : 'bg-surface-alt text-text-muted'
+              : 'bg-surface-0 text-text-muted'
           }`}
         >
           {subscription.plan}
@@ -117,7 +117,7 @@ export function BillingSection() {
             type="button"
             onClick={() => checkout.mutate()}
             disabled={checkout.isPending}
-            className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-sage text-on-accent hover:bg-sage-hover disabled:opacity-50 transition-colors"
           >
             {checkout.isPending ? 'Loading...' : 'Upgrade to Pro'}
           </button>
@@ -127,7 +127,7 @@ export function BillingSection() {
             type="button"
             onClick={() => portal.mutate()}
             disabled={portal.isPending}
-            className="px-4 py-2 text-sm font-medium rounded-lg border border-border text-text hover:bg-surface-alt disabled:opacity-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-border text-text hover:bg-surface-2 disabled:opacity-50 transition-colors"
           >
             {portal.isPending ? 'Loading...' : 'Manage Subscription'}
           </button>

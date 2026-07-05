@@ -25,7 +25,7 @@ export function ThemeToggle({ showLabel = false, className = '' }: ThemeTogglePr
   return (
     <button
       onClick={toggle}
-      className={`inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-text-muted hover:text-text hover:bg-surface-alt transition-colors ${className}`}
+      className={`inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-text-muted hover:text-text hover:bg-surface-2 transition-colors ${className}`}
       title={`Theme: ${labels[theme]}`}
       aria-label={`Current theme: ${labels[theme]}. Click to change.`}
     >

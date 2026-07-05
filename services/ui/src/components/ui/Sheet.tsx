@@ -57,7 +57,7 @@ export function Sheet({
             </Dialog.Overlay>
             <Dialog.Content asChild>
               <motion.div
-                className={`fixed z-50 bg-surface border-border shadow-lg overflow-y-auto ${positionClasses[side]}`}
+                className={`fixed z-50 bg-surface-1 border-border shadow-lg overflow-y-auto ${positionClasses[side]}`}
                 variants={slideVariants[side]}
                 initial="hidden"
                 animate="visible"

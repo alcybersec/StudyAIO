@@ -39,7 +39,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
             Connected{username ? ` (@${username})` : ''}
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-text-muted">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-surface-0 text-text-muted">
             Not connected
           </span>
         )}
@@ -71,7 +71,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
                 href={deepLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] text-white text-sm font-medium rounded-lg hover:bg-[#006da3] transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] text-on-accent text-sm font-medium rounded-lg hover:bg-[#006da3] transition-colors"
               >
                 Open in Telegram
               </a>
@@ -83,7 +83,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
             <button
               onClick={handleLink}
               disabled={linkMutation.isPending}
-              className="px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 border border-primary/20 rounded-lg hover:bg-primary/20 disabled:opacity-50 transition-colors"
+              className="px-3 py-1.5 text-sm font-medium text-sage-fg bg-sage-soft border border-sage/20 rounded-lg hover:bg-sage/20 disabled:opacity-50 transition-colors"
             >
               {linkMutation.isPending ? 'Generating link...' : 'Generate Link'}
             </button>

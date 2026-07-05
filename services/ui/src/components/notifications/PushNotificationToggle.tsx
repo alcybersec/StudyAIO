@@ -32,8 +32,8 @@ export function PushNotificationToggle() {
         disabled={loading}
         className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${
           subscribed
-            ? 'bg-surface-alt text-text hover:bg-red-soft hover:text-red-fg'
-            : 'bg-primary text-white hover:bg-primary/90'
+            ? 'bg-surface-0 text-text hover:bg-red-soft hover:text-red-fg'
+            : 'bg-sage text-on-accent hover:bg-sage-hover'
         }`}
       >
         {loading ? 'Working...' : subscribed ? 'Disable' : 'Enable'}
