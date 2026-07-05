@@ -35,7 +35,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-text">Telegram</h3>
         {linked ? (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-sage-soft text-sage-fg">
             Connected{username ? ` (@${username})` : ''}
           </span>
         ) : (
@@ -53,7 +53,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
           <button
             onClick={handleUnlink}
             disabled={unlinkMutation.isPending}
-            className="px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-lg hover:bg-red-100 dark:hover:bg-red-950 disabled:opacity-50 transition-colors"
+            className="px-3 py-1.5 text-sm font-medium text-red-fg bg-red-soft border border-red/30 rounded-lg hover:border-red/50 disabled:opacity-50 transition-colors"
           >
             {unlinkMutation.isPending ? 'Unlinking...' : 'Unlink Telegram'}
           </button>
@@ -90,7 +90,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
           )}
 
           {linkMutation.isError && (
-            <p className="text-sm text-red-600 dark:text-red-400">
+            <p className="text-sm text-red-fg">
               {linkMutation.error instanceof Error
                 ? linkMutation.error.message
                 : 'Failed to generate link. Is the Telegram bot configured?'}

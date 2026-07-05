@@ -155,12 +155,12 @@ export function NotificationsSection() {
             </button>
           ))}
           {testMutation.isSuccess && (
-            <span className="text-xs text-green-600 dark:text-green-400">
+            <span className="text-xs text-sage-fg">
               {testMutation.data.message}
             </span>
           )}
           {testMutation.isError && (
-            <span className="text-xs text-red-600 dark:text-red-400">
+            <span className="text-xs text-red-fg">
               {testMutation.error instanceof Error ? testMutation.error.message : 'Failed'}
             </span>
           )}

@@ -32,7 +32,7 @@ export function PushNotificationToggle() {
         disabled={loading}
         className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${
           subscribed
-            ? 'bg-surface-alt text-text hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-900/30 dark:hover:text-red-400'
+            ? 'bg-surface-alt text-text hover:bg-red-soft hover:text-red-fg'
             : 'bg-primary text-white hover:bg-primary/90'
         }`}
       >

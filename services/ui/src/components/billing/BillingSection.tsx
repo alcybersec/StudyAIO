@@ -19,14 +19,14 @@ function UsageBar({ current, limit, label }: { current: number; limit: number | 
     <div>
       <div className="flex items-center justify-between text-sm mb-1">
         <span className="text-text-muted">{label}</span>
-        <span className={`font-medium ${isNearLimit ? 'text-amber-600 dark:text-amber-400' : 'text-text'}`}>
+        <span className={`font-medium ${isNearLimit ? 'text-amber-fg' : 'text-text'}`}>
           {current} / {limit}
         </span>
       </div>
       <div className="h-2 bg-surface-alt rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${
-            isNearLimit ? 'bg-amber-500' : 'bg-primary'
+            isNearLimit ? 'bg-amber' : 'bg-primary'
           }`}
           style={{ width: `${pct}%` }}
         />
@@ -74,7 +74,7 @@ export function BillingSection() {
         <span
           className={`px-2.5 py-1 text-xs font-bold uppercase rounded-full ${
             isPro
-              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+              ? 'bg-amber-soft text-amber-fg'
               : 'bg-surface-alt text-text-muted'
           }`}
         >
