@@ -1,4 +1,6 @@
 export { PdfViewer } from './PdfViewer'
 export { FileViewer } from './FileViewer'
 export { FileViewerToolbar } from './FileViewerToolbar'
+export { FileViewerContainer } from './FileViewerContainer'
+export type { ViewerHandle, ViewerStateSnapshot } from './FileViewerContainer'
 export { ViewOriginalModal } from './ViewOriginalModal'
