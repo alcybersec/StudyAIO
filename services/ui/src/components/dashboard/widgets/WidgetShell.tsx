@@ -34,7 +34,7 @@ export function WidgetShell({
   children,
 }: WidgetShellProps) {
   return (
-    <section className="relative group/widget h-full overflow-auto bg-surface-1 border border-border rounded-xl p-3">
+    <section className="relative group/widget bg-surface-1 border border-border rounded-xl p-3">
       <span
         className="absolute top-2.5 right-2.5 text-text-faint opacity-0 group-hover/widget:opacity-100 cursor-grab transition-opacity"
         aria-hidden

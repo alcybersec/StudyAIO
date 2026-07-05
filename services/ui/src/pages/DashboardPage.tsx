@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
@@ -9,6 +9,9 @@ import { useDashboardLayout } from '../hooks/useDashboardLayout'
 import { Button } from '../components/ui'
 import { ReviewAlert } from '../components/dashboard/ReviewAlert'
 import { DashboardCustomizer } from '../components/dashboard/DashboardCustomizer'
+import { MeasuredCell } from '../components/dashboard/MeasuredCell'
+import { ROW_HEIGHT, GRID_MARGIN, rowsForHeight } from '../components/dashboard/layoutUtils'
+import type { ResponsiveLayouts } from 'react-grid-layout'
 import { StreakWidget } from '../components/dashboard/widgets/StreakWidget'
 import { ExamsWidget } from '../components/dashboard/widgets/ExamsWidget'
 import { GamificationWidget } from '../components/dashboard/widgets/GamificationWidget'
@@ -27,6 +30,14 @@ export function DashboardPage() {
   const { layouts, hiddenWidgets, visibleWidgets, onLayoutChange, toggleWidget, resetLayout } = useDashboardLayout()
   const [customizerOpen, setCustomizerOpen] = useState(false)
   const { width, containerRef } = useContainerWidth()
+
+  // Measured content height per widget. Cells are sized to fit so a widget
+  // never clips or scrolls, whatever its data state. ~140px is a sane guess
+  // before the first measurement lands.
+  const [heights, setHeights] = useState<Record<string, number>>({})
+  const onMeasure = useCallback((key: string, px: number) => {
+    setHeights((prev) => (Math.abs((prev[key] ?? 0) - px) < 3 ? prev : { ...prev, [key]: px }))
+  }, [])
 
   const today = useMemo(
     () => new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
@@ -53,34 +64,36 @@ export function DashboardPage() {
     [visibleWidgets, widgetContent],
   )
 
-  // Filter layouts to only include active widgets and re-compact vertically
+  // Filter to active widgets, drive each item's height from its measured
+  // content (so nothing clips or scrolls), then re-compact vertically.
+  const DEFAULT_H = rowsForHeight(140)
   const filteredLayouts = useMemo(() => {
     const activeKeys = new Set(activeWidgets.map((w) => w.key))
     const result: Record<string, unknown[]> = {}
     for (const [bp, items] of Object.entries(layouts)) {
-      if (Array.isArray(items)) {
-        const filtered = items
-          .filter((item: { i: string }) => activeKeys.has(item.i))
-          .sort((a: { y: number; x: number }, b: { y: number; x: number }) => a.y - b.y || a.x - b.x)
+      if (!Array.isArray(items)) continue
+      const filtered = items
+        .filter((item: { i: string }) => activeKeys.has(item.i))
+        .sort((a: { y: number; x: number }, b: { y: number; x: number }) => a.y - b.y || a.x - b.x)
 
-        // Re-compact: for each item, find the earliest y it can fit without overlapping
-        const placed: { x: number; y: number; w: number; h: number }[] = []
-        result[bp] = filtered.map((item: { i: string; x: number; y: number; w: number; h: number }) => {
-          let newY = 0
-          for (const p of placed) {
-            // Check if they overlap on x-axis
-            if (item.x < p.x + p.w && item.x + item.w > p.x) {
-              newY = Math.max(newY, p.y + p.h)
-            }
+      const placed: { x: number; y: number; w: number; h: number }[] = []
+      result[bp] = filtered.map((item: { i: string; x: number; y: number; w: number; h: number }) => {
+        const h = heights[item.i] ? rowsForHeight(heights[item.i]) : DEFAULT_H
+        let newY = 0
+        for (const p of placed) {
+          if (item.x < p.x + p.w && item.x + item.w > p.x) {
+            newY = Math.max(newY, p.y + p.h)
           }
-          const compacted = { ...item, y: newY }
-          placed.push(compacted)
-          return compacted
-        })
-      }
+        }
+        const compacted = { ...item, y: newY, h }
+        placed.push(compacted)
+        return compacted
+      })
     }
-    return result as typeof layouts
-  }, [layouts, activeWidgets])
+    return result as ResponsiveLayouts
+    // DEFAULT_H is derived from a constant; excluded intentionally.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layouts, activeWidgets, heights])
 
   const courseCount = data?.courses.length
   const streakDays = data?.streak?.current_streak ?? 0
@@ -138,26 +151,28 @@ export function DashboardPage() {
           layouts={filteredLayouts}
           breakpoints={{ lg: 1024, sm: 0 }}
           cols={{ lg: 12, sm: 12 }}
-          rowHeight={30}
+          rowHeight={ROW_HEIGHT}
           onLayoutChange={onLayoutChange}
           dragConfig={{
             enabled: true,
             handle: '.drag-handle',
           }}
           resizeConfig={{
-            enabled: true,
+            // Heights are content-driven; manual resize would fight the
+            // measured layout, so widgets are drag-to-reorder only.
+            enabled: false,
           }}
           containerPadding={[0, 0] as const}
-          margin={[16, 16] as const}
+          margin={[GRID_MARGIN, GRID_MARGIN] as const}
         >
           {activeWidgets.map((w) => (
-            <div key={w.key} className="h-full relative group rounded-xl">
+            <div key={w.key} className="relative group rounded-xl">
               <div className="drag-handle absolute top-0 left-0 right-0 h-6 cursor-grab active:cursor-grabbing z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <div className="w-8 h-1 rounded-full bg-border" />
               </div>
-              {/* Scroll instead of clip: a cell that's slightly shorter than its
-                  content stays usable rather than silently cropping it. */}
-              <div className="h-full overflow-y-auto rounded-xl">{widgetContent[w.key]}</div>
+              <MeasuredCell widgetKey={w.key} onMeasure={onMeasure}>
+                {widgetContent[w.key]}
+              </MeasuredCell>
             </div>
           ))}
         </ResponsiveGridLayout>

@@ -20,6 +20,18 @@ interface StoredLayout {
 const COLS = 12
 
 /**
+ * Grid geometry. A small row height gives fine-grained control so a cell can
+ * be sized to closely match its widget's measured content height.
+ */
+export const ROW_HEIGHT = 8
+export const GRID_MARGIN = 16
+
+/** Grid rows needed to fit `px` pixels of content (RGL height math). */
+export function rowsForHeight(px: number): number {
+  return Math.max(1, Math.ceil((px + GRID_MARGIN) / (ROW_HEIGHT + GRID_MARGIN)))
+}
+
+/**
  * Clamp a single item against its widget's registry minimums and the column
  * count. A saved item narrower/shorter than the widget's minimum (the classic
  * corrupt `w:1 h:1`) is snapped back up so its content can never be clipped.
