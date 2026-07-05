@@ -1,46 +1,58 @@
+import type { LucideIcon } from 'lucide-react'
+import {
+  Book,
+  Brain,
+  Check,
+  Crown,
+  Flame,
+  Folder,
+  Medal,
+  Play,
+  Star,
+  Target,
+  Trophy,
+  Upload,
+  Zap,
+} from 'lucide-react'
+import { Tooltip } from '../ui'
 import type { Achievement } from '../../types'
 
 interface AchievementBadgeProps {
   achievement: Achievement
 }
 
-const iconMap: Record<string, string> = {
-  star: '\u2B50',
-  upload: '\uD83D\uDCE4',
-  folder: '\uD83D\uDCC1',
-  play: '\u25B6\uFE0F',
-  book: '\uD83D\uDCD6',
-  trophy: '\uD83C\uDFC6',
-  crown: '\uD83D\uDC51',
-  check: '\u2705',
-  medal: '\uD83C\uDFC5',
-  flame: '\uD83D\uDD25',
-  zap: '\u26A1',
-  target: '\uD83C\uDFAF',
-  brain: '\uD83E\uDDE0',
+const iconMap: Record<string, LucideIcon> = {
+  star: Star,
+  upload: Upload,
+  folder: Folder,
+  play: Play,
+  book: Book,
+  trophy: Trophy,
+  crown: Crown,
+  check: Check,
+  medal: Medal,
+  flame: Flame,
+  zap: Zap,
+  target: Target,
+  brain: Brain,
 }
 
 export function AchievementBadge({ achievement }: AchievementBadgeProps) {
-  const icon = iconMap[achievement.icon] || '\u2B50'
+  const Icon = iconMap[achievement.icon] ?? Star
 
   return (
-    <div
-      className={`group relative flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors ${
-        achievement.earned
-          ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20'
-          : 'border-border bg-surface opacity-50 grayscale'
-      }`}
-    >
-      <span className="text-2xl">{icon}</span>
-      <span className="text-xs font-medium text-text leading-tight">{achievement.title}</span>
-      {achievement.xp_reward > 0 && (
-        <span className="text-[10px] text-text-muted">+{achievement.xp_reward} XP</span>
-      )}
-
-      {/* Tooltip */}
-      <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded bg-gray-900 dark:bg-gray-100 px-2 py-1 text-xs text-white dark:text-gray-900 opacity-0 transition-opacity group-hover:opacity-100">
-        {achievement.description}
+    <Tooltip content={achievement.description}>
+      <div
+        className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-colors ${
+          achievement.earned ? 'border-peri/30 bg-peri-soft' : 'border-border bg-surface-1 opacity-60'
+        }`}
+      >
+        <Icon size={20} aria-hidden className={achievement.earned ? 'text-peri-fg' : 'text-text-faint'} />
+        <span className="text-xs font-medium text-text leading-tight">{achievement.title}</span>
+        {achievement.xp_reward > 0 && (
+          <span className="text-[10px] font-mono text-text-faint">+{achievement.xp_reward} XP</span>
+        )}
       </div>
-    </div>
+    </Tooltip>
   )
 }

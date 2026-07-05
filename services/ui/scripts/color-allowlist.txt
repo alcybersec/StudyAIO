@@ -4,23 +4,11 @@ services/ui/src/components/billing/ProBadge.tsx
 services/ui/src/components/billing/UpgradePrompt.tsx
 services/ui/src/components/calendar/CalendarSyncSection.tsx
 services/ui/src/components/course/ExportButton.tsx
-services/ui/src/components/courseops/AssessmentTable.tsx
-services/ui/src/components/courseops/DeadlineTimeline.tsx
-services/ui/src/components/courseops/DocumentUpload.tsx
 services/ui/src/components/course/WeekRow.tsx
-services/ui/src/components/dashboard/ExamCountdown.tsx
-services/ui/src/components/dashboard/QuickUpload.tsx
-services/ui/src/components/dashboard/ReviewAlert.tsx
-services/ui/src/components/dashboard/StudyProgress.tsx
 services/ui/src/components/demo/DemoBanner.tsx
 services/ui/src/components/demo/UpgradeCTA.tsx
 services/ui/src/components/ErrorBoundary.tsx
 services/ui/src/components/exam/ExamCreateForm.tsx
-services/ui/src/components/gamification/AchievementBadge.tsx
-services/ui/src/components/gamification/AchievementUnlock.tsx
-services/ui/src/components/gamification/DailyChallenges.tsx
-services/ui/src/components/gamification/LevelDisplay.tsx
-services/ui/src/components/gamification/XPBar.tsx
 services/ui/src/components/notifications/NotificationsSection.tsx
 services/ui/src/components/notifications/PushNotificationToggle.tsx
 services/ui/src/components/notifications/TelegramLinkCard.tsx
@@ -46,11 +34,6 @@ services/ui/src/components/viewer/PdfViewer.tsx
 services/ui/src/components/week/ArtifactList.tsx
 >>>>>>> fr/screens-study
 services/ui/src/components/week/SummaryTab.tsx
-services/ui/src/pages/AchievementsPage.tsx
-services/ui/src/pages/AdminPage.tsx
-services/ui/src/pages/AdminUserDetailPage.tsx
-services/ui/src/pages/CourseOpsPage.tsx
-services/ui/src/pages/DashboardPage.tsx
 services/ui/src/pages/ForgotPasswordPage.tsx
 services/ui/src/pages/NotFoundPage.tsx
 services/ui/src/pages/ResetPasswordPage.tsx

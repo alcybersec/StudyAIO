@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { analyticsApi, artifactsApi, assetsApi, chatApi, conceptsApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
 import { adminApi } from '../api/admin'
-import type { AdminUserUpdate, CreateSessionRequest, DeadlineUpdate, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
+import type { AdminUserUpdate, CreateSessionRequest, DashboardData, DeadlineUpdate, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -570,4 +570,48 @@ export function useRetryPipeline() {
   return useMutation({
     mutationFn: (artifactId: string) => uploadApi.retry(artifactId),
   })
+}
+
+// ── Dashboard slices ───────────────────────────────────────────
+// Per-widget hooks that share the ['dashboard'] cache entry (one network
+// request) while letting each widget own its loading/error/empty state.
+
+export function useDashboardSlice<T>(select: (data: DashboardData) => T) {
+  return useQuery({
+    queryKey: ['dashboard'],
+    queryFn: dashboardApi.get,
+    select,
+  })
+}
+
+export function useDashboardStreak() {
+  return useDashboardSlice((d) => d.streak)
+}
+
+export function useDashboardExams() {
+  return useDashboardSlice((d) => d.active_exams)
+}
+
+export function useDashboardGamification() {
+  return useDashboardSlice((d) => d.gamification)
+}
+
+export function useDashboardStudyStats() {
+  return useDashboardSlice((d) => d.study_stats)
+}
+
+export function useDashboardDeadlines() {
+  return useDashboardSlice((d) => d.upcoming_deadlines)
+}
+
+export function useDashboardActivity() {
+  return useDashboardSlice((d) => d.recent_activity)
+}
+
+export function useDashboardCourses() {
+  return useDashboardSlice((d) => d.courses)
+}
+
+export function useDashboardPendingReviews() {
+  return useDashboardSlice((d) => d.pending_review_count)
 }
