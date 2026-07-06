@@ -36,7 +36,7 @@ export function CourseOpsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       <PageHeader
         title={`${courseCode} — Course Documents`}
         breadcrumbs={[
