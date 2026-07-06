@@ -98,6 +98,85 @@ class TestListDocuments:
 
 
 @pytest.mark.asyncio
+class TestCreateAssessment:
+    """Tests for POST /api/courseops/assessments."""
+
+    async def test_creates_manual_assessment(self, async_client):
+        """Creates an assessment for a course and returns 201."""
+        created = _mock_assessment(title="Midterm", assessment_type="exam")
+        created.source_document_id = None
+        with patch(
+            "app.api.courseops.courseops_service.create_assessment",
+            new_callable=AsyncMock,
+            return_value=created,
+        ) as mock_create:
+            response = await async_client.post(
+                "/api/courseops/assessments?course_code=CSIT302",
+                json={"title": "Midterm", "assessment_type": "exam", "weight_pct": 30.0},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["title"] == "Midterm"
+        assert data["source_document_id"] is None
+        mock_create.assert_called_once()
+        assert mock_create.call_args.kwargs["course_code"] == "CSIT302"
+        assert mock_create.call_args.kwargs["title"] == "Midterm"
+
+    async def test_returns_404_for_unknown_course(self, async_client):
+        """Unknown course code yields 404."""
+        with patch(
+            "app.api.courseops.courseops_service.create_assessment",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = await async_client.post(
+                "/api/courseops/assessments?course_code=NOPE",
+                json={"title": "X", "assessment_type": "exam"},
+            )
+        assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestCreateDeadline:
+    """Tests for POST /api/courseops/deadlines."""
+
+    async def test_creates_manual_deadline(self, async_client):
+        """Creates a deadline for a course and returns 201, confirmed by default."""
+        created = _mock_deadline(title="Lab report", is_confirmed=True)
+        created.source_document_id = None
+        with patch(
+            "app.api.courseops.courseops_service.create_deadline",
+            new_callable=AsyncMock,
+            return_value=created,
+        ) as mock_create:
+            response = await async_client.post(
+                "/api/courseops/deadlines?course_code=CSIT302",
+                json={"title": "Lab report", "due_date": "2026-05-01", "deadline_type": "assignment"},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["title"] == "Lab report"
+        assert data["is_confirmed"] is True
+        mock_create.assert_called_once()
+        assert mock_create.call_args.kwargs["course_code"] == "CSIT302"
+
+    async def test_returns_404_for_unknown_course(self, async_client):
+        """Unknown course code yields 404."""
+        with patch(
+            "app.api.courseops.courseops_service.create_deadline",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = await async_client.post(
+                "/api/courseops/deadlines?course_code=NOPE",
+                json={"title": "X", "due_date": "2026-05-01"},
+            )
+        assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 class TestListAssessments:
     """Tests for GET /api/courseops/assessments."""
 

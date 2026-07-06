@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { CalendarDays, FileText } from 'lucide-react'
+import { CalendarDays, FileText, Plus } from 'lucide-react'
 import { AssessmentTable } from '../components/courseops/AssessmentTable'
 import { DeadlineTimeline } from '../components/courseops/DeadlineTimeline'
 import { DocumentList } from '../components/courseops/DocumentList'
 import { DocumentUpload } from '../components/courseops/DocumentUpload'
-import { EmptyState, PageHeader } from '../components/ui'
+import { AddAssessmentModal } from '../components/courseops/AddAssessmentModal'
+import { AddDeadlineModal } from '../components/courseops/AddDeadlineModal'
+import { Button, EmptyState, PageHeader } from '../components/ui'
 import { useAssessments, useCourseDocuments, useDeadlines } from '../hooks/useApi'
 import { useTabRouting } from '../hooks/useTabRouting'
 import { courseopsApi } from '../api/endpoints'
@@ -21,6 +24,8 @@ const TAB_LABELS: Record<(typeof TABS)[number], string> = {
 export function CourseOpsPage() {
   const { courseCode } = useParams<{ courseCode: string }>()
   const [activeTab, setActiveTab] = useTabRouting(TABS, 'documents')
+  const [addAssessmentOpen, setAddAssessmentOpen] = useState(false)
+  const [addDeadlineOpen, setAddDeadlineOpen] = useState(false)
 
   const documentsQuery = useCourseDocuments(courseCode ?? '')
   const assessmentsQuery = useAssessments(courseCode ?? '')
@@ -74,21 +79,42 @@ export function CourseOpsPage() {
       )}
 
       {activeTab === 'assessments' && (
-        <AssessmentTable
-          assessments={assessmentsQuery.data}
-          isLoading={assessmentsQuery.isLoading}
-          isError={assessmentsQuery.isError}
-          onRetry={() => assessmentsQuery.refetch()}
-        />
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => setAddAssessmentOpen(true)}>
+              <Plus size={14} /> Add assessment
+            </Button>
+          </div>
+          <AssessmentTable
+            assessments={assessmentsQuery.data}
+            isLoading={assessmentsQuery.isLoading}
+            isError={assessmentsQuery.isError}
+            onRetry={() => assessmentsQuery.refetch()}
+          />
+        </div>
       )}
 
       {activeTab === 'deadlines' && (
-        <DeadlineTimeline
-          deadlines={deadlinesQuery.data}
-          isLoading={deadlinesQuery.isLoading}
-          isError={deadlinesQuery.isError}
-          onRetry={() => deadlinesQuery.refetch()}
-        />
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => setAddDeadlineOpen(true)}>
+              <Plus size={14} /> Add deadline
+            </Button>
+          </div>
+          <DeadlineTimeline
+            deadlines={deadlinesQuery.data}
+            isLoading={deadlinesQuery.isLoading}
+            isError={deadlinesQuery.isError}
+            onRetry={() => deadlinesQuery.refetch()}
+          />
+        </div>
+      )}
+
+      {addAssessmentOpen && (
+        <AddAssessmentModal courseCode={courseCode} onClose={() => setAddAssessmentOpen(false)} />
+      )}
+      {addDeadlineOpen && (
+        <AddDeadlineModal courseCode={courseCode} onClose={() => setAddDeadlineOpen(false)} />
       )}
 
       {activeTab === 'exports' && (

@@ -25,6 +25,30 @@ export const deadlineEditSchema = z.object({
 
 export type DeadlineEditFormData = z.infer<typeof deadlineEditSchema>
 
+export const deadlineCreateSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  dueDate: z.string().min(1, 'Due date is required'),
+  deadlineType: z.string().min(1),
+  description: z.string().optional(),
+})
+
+export type DeadlineCreateFormData = z.infer<typeof deadlineCreateSchema>
+
+export const assessmentCreateSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  assessmentType: z.string().min(1),
+  weightPct: z
+    .string()
+    .optional()
+    .refine(
+      (v) => v === undefined || v === '' || (!Number.isNaN(Number(v)) && Number(v) >= 0 && Number(v) <= 100),
+      'Enter a number between 0 and 100',
+    ),
+  description: z.string().optional(),
+})
+
+export type AssessmentCreateFormData = z.infer<typeof assessmentCreateSchema>
+
 // ── Settings (D9) ──────────────────────────────────────────────
 
 export const AGENT_BACKENDS = ['claude_code', 'anthropic_api', 'openai', 'ollama'] as const

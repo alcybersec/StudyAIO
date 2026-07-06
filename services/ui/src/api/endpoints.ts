@@ -2,6 +2,7 @@ import { api } from './client'
 import type {
   AnalyticsOverview,
   Assessment,
+  AssessmentCreate,
   BatchUploadResponse,
   CaptureRequest,
   ChatMessage,
@@ -18,6 +19,7 @@ import type {
   DailyPlan,
   DashboardData,
   Deadline,
+  DeadlineCreate,
   DeadlineUpdate,
   Exam,
   ExamProgress,
@@ -294,8 +296,12 @@ export const courseopsApi = {
     api.get<CourseDocument>(`/courseops/documents/${documentId}`),
   listAssessments: (courseCode: string) =>
     api.get<Assessment[]>(`/courseops/assessments?course_code=${courseCode}`),
+  createAssessment: (courseCode: string, data: AssessmentCreate) =>
+    api.post<Assessment>(`/courseops/assessments?course_code=${courseCode}`, data),
   listDeadlines: (courseCode: string, upcoming = false) =>
     api.get<Deadline[]>(`/courseops/deadlines?course_code=${courseCode}&upcoming=${upcoming}`),
+  createDeadline: (courseCode: string, data: DeadlineCreate) =>
+    api.post<Deadline>(`/courseops/deadlines?course_code=${courseCode}`, data),
   updateDeadline: (deadlineId: string, data: DeadlineUpdate) =>
     api.put<Deadline>(`/courseops/deadlines/${deadlineId}`, data),
   deleteDeadline: (deadlineId: string) =>
