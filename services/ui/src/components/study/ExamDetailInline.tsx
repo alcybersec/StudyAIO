@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useExamDetail, useExamSchedule, useExamWeakTopics, useExamHistory, useDeleteExam } from '../../hooks/useApi'
-import { LoadingSpinner, ErrorBanner } from '../ui'
+import { LoadingSpinner, ErrorBanner, Modal, Button } from '../ui'
 
 interface ExamDetailInlineProps {
   examId: string
@@ -14,6 +15,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
   const { data: weakTopics } = useExamWeakTopics(examId)
   const { data: history } = useExamHistory(examId)
   const deleteExam = useDeleteExam()
+  const [archiveOpen, setArchiveOpen] = useState(false)
 
   if (isLoading) return <LoadingSpinner label="Loading exam..." />
   if (error) return <ErrorBanner message="Failed to load exam." onRetry={refetch} />
@@ -30,8 +32,8 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
   const targetReached = masteryPct >= progress.target_mastery_pct
 
   async function handleArchive() {
-    if (!confirm('Archive this exam?')) return
     await deleteExam.mutateAsync(examId)
+    setArchiveOpen(false)
     onBack()
   }
 
@@ -73,7 +75,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
             Start Studying
           </button>
           <button
-            onClick={handleArchive}
+            onClick={() => setArchiveOpen(true)}
             className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-surface-0 text-text hover:bg-border transition-colors"
           >
             Archive
@@ -210,6 +212,22 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
           </div>
         )}
       </div>
+
+      <Modal
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        title="Archive this exam?"
+        description="It moves out of your active exams. You can still find it in history."
+      >
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setArchiveOpen(false)}>
+            Cancel
+          </Button>
+          <Button size="sm" loading={deleteExam.isPending} onClick={handleArchive}>
+            Archive
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }
