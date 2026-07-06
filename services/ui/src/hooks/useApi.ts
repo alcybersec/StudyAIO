@@ -294,6 +294,29 @@ export function useUploadCourseDocument() {
   })
 }
 
+export function useCreateAssessment(courseCode: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: import('../types').AssessmentCreate) =>
+      courseopsApi.createAssessment(courseCode, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'assessments', courseCode] })
+    },
+  })
+}
+
+export function useCreateDeadline(courseCode: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: import('../types').DeadlineCreate) =>
+      courseopsApi.createDeadline(courseCode, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'deadlines', courseCode] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
 export function useUpdateDeadline() {
   const queryClient = useQueryClient()
   return useMutation({

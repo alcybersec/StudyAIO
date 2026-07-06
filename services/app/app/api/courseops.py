@@ -8,9 +8,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.courseops_schemas import (
+    AssessmentCreateRequest,
     AssessmentResponse,
     CourseDocumentDetailResponse,
     CourseDocumentResponse,
+    DeadlineCreateRequest,
     DeadlineResponse,
     DeadlineUpdateRequest,
 )
@@ -138,6 +140,33 @@ async def get_document(
     return CourseDocumentDetailResponse.model_validate(doc)
 
 
+@router.post(
+    "/assessments",
+    response_model=AssessmentResponse,
+    status_code=201,
+    summary="Create an assessment manually",
+)
+async def create_assessment(
+    body: AssessmentCreateRequest,
+    course_code: str = Query(..., description="Course code"),
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> AssessmentResponse:
+    """Manually add an assessment to a course."""
+    assessment = await courseops_service.create_assessment(
+        session,
+        course_code=course_code,
+        title=body.title,
+        assessment_type=body.assessment_type,
+        weight_pct=body.weight_pct,
+        description=body.description,
+        weeks_relevant=body.weeks_relevant,
+    )
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return AssessmentResponse.model_validate(assessment)
+
+
 @router.get(
     "/assessments",
     response_model=list[AssessmentResponse],
@@ -151,6 +180,32 @@ async def list_assessments(
     """List all assessments for a course."""
     assessments = await courseops_service.list_assessments(session, course_code)
     return [AssessmentResponse.model_validate(a) for a in assessments]
+
+
+@router.post(
+    "/deadlines",
+    response_model=DeadlineResponse,
+    status_code=201,
+    summary="Create a deadline manually",
+)
+async def create_deadline(
+    body: DeadlineCreateRequest,
+    course_code: str = Query(..., description="Course code"),
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> DeadlineResponse:
+    """Manually add a deadline to a course (confirmed by default)."""
+    deadline = await courseops_service.create_deadline(
+        session,
+        course_code=course_code,
+        title=body.title,
+        due_date=body.due_date,
+        deadline_type=body.deadline_type,
+        description=body.description,
+    )
+    if not deadline:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return DeadlineResponse.model_validate(deadline)
 
 
 @router.get(

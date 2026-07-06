@@ -253,6 +253,100 @@ async def get_course_document(
     return result.unique().scalar_one_or_none()
 
 
+async def create_assessment(
+    session: AsyncSession,
+    *,
+    course_code: str,
+    title: str,
+    assessment_type: str = "other",
+    weight_pct: float | None = None,
+    description: str | None = None,
+    weeks_relevant: list[int] | None = None,
+) -> Assessment | None:
+    """Manually create an assessment for a course.
+
+    Args:
+        session: Database session.
+        course_code: Course code the assessment belongs to.
+        title: Assessment title.
+        assessment_type: Type (exam, assignment, quiz, project, lab, presentation, other).
+        weight_pct: Grade weight percentage, if known.
+        description: Optional free-text description.
+        weeks_relevant: Optional list of relevant week numbers.
+
+    Returns:
+        The created Assessment, or None if the course code is unknown.
+    """
+    result = await session.execute(select(Course).where(Course.code == course_code))
+    course = result.scalar_one_or_none()
+    if not course:
+        return None
+
+    assessment = Assessment(
+        id=generate_id(),
+        course_id=course.id,
+        source_document_id=None,
+        title=title,
+        assessment_type=assessment_type,
+        weight_pct=weight_pct,
+        description=description,
+        weeks_relevant=weeks_relevant,
+    )
+    session.add(assessment)
+    await session.commit()
+    await session.refresh(assessment)
+    logger.info("assessment_created_manually", course_code=course_code, title=title)
+    return assessment
+
+
+async def create_deadline(
+    session: AsyncSession,
+    *,
+    course_code: str,
+    title: str,
+    due_date: date,
+    deadline_type: str = "other",
+    description: str | None = None,
+) -> Deadline | None:
+    """Manually create a deadline for a course.
+
+    Manually entered deadlines are confirmed by default (unlike AI-extracted
+    ones, which start unconfirmed and go through the review flow).
+
+    Args:
+        session: Database session.
+        course_code: Course code the deadline belongs to.
+        title: Deadline title.
+        due_date: Date the deadline is due.
+        deadline_type: Type (assignment, exam, quiz, project, other).
+        description: Optional free-text description.
+
+    Returns:
+        The created Deadline, or None if the course code is unknown.
+    """
+    result = await session.execute(select(Course).where(Course.code == course_code))
+    course = result.scalar_one_or_none()
+    if not course:
+        return None
+
+    deadline = Deadline(
+        id=generate_id(),
+        course_id=course.id,
+        assessment_id=None,
+        source_document_id=None,
+        title=title,
+        due_date=due_date,
+        deadline_type=deadline_type,
+        description=description,
+        is_confirmed=True,
+    )
+    session.add(deadline)
+    await session.commit()
+    await session.refresh(deadline)
+    logger.info("deadline_created_manually", course_code=course_code, title=title)
+    return deadline
+
+
 async def list_assessments(
     session: AsyncSession,
     course_code: str,

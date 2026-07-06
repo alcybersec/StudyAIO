@@ -407,6 +407,21 @@ export interface DeadlineUpdate {
   is_confirmed?: boolean
 }
 
+export interface DeadlineCreate {
+  title: string
+  due_date: string
+  deadline_type?: string
+  description?: string | null
+}
+
+export interface AssessmentCreate {
+  title: string
+  assessment_type?: string
+  weight_pct?: number | null
+  description?: string | null
+  weeks_relevant?: number[] | null
+}
+
 export interface UpcomingDeadline {
   id: string
   title: string
