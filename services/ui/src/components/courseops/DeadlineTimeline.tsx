@@ -39,6 +39,7 @@ function TimelineSkeleton() {
 
 export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: DeadlineTimelineProps) {
   const [editingDeadline, setEditingDeadline] = useState<Deadline | null>(null)
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const updateDeadline = useUpdateDeadline()
   const deleteDeadline = useDeleteDeadline()
   const createExam = useCreateExamFromDeadline()
@@ -132,16 +133,32 @@ export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: Dea
                     Create Exam
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    if (confirm('Delete this deadline?')) {
-                      deleteDeadline.mutate(d.id)
-                    }
-                  }}
-                  className="rounded-md px-2 py-1 text-xs text-red-fg hover:bg-red-soft transition-colors"
-                >
-                  Delete
-                </button>
+                {confirmingDeleteId === d.id ? (
+                  <span className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        deleteDeadline.mutate(d.id)
+                        setConfirmingDeleteId(null)
+                      }}
+                      className="rounded-md bg-red px-2 py-1 text-xs text-on-accent hover:opacity-90 transition-opacity"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => setConfirmingDeleteId(null)}
+                      className="rounded-md px-2 py-1 text-xs text-text-muted hover:bg-surface-2 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingDeleteId(d.id)}
+                    className="rounded-md px-2 py-1 text-xs text-red-fg hover:bg-red-soft transition-colors"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           )
