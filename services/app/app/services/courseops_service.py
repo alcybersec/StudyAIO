@@ -299,6 +299,120 @@ async def create_assessment(
     return assessment
 
 
+async def update_assessment(
+    session: AsyncSession,
+    assessment_id: str,
+    *,
+    title: str | None = None,
+    assessment_type: str | None = None,
+    weight_pct: float | None = None,
+    description: str | None = None,
+    weeks_relevant: list[int] | None = None,
+) -> Assessment | None:
+    """Edit an assessment's info. Only provided fields are changed.
+
+    Returns:
+        The updated Assessment, or None if not found.
+    """
+    assessment = await session.get(Assessment, assessment_id)
+    if not assessment:
+        return None
+
+    if title is not None:
+        assessment.title = title
+    if assessment_type is not None:
+        assessment.assessment_type = assessment_type
+    if weight_pct is not None:
+        assessment.weight_pct = weight_pct
+    if description is not None:
+        assessment.description = description
+    if weeks_relevant is not None:
+        assessment.weeks_relevant = weeks_relevant
+
+    assessment.updated_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(assessment)
+    logger.info("assessment_updated", assessment_id=assessment_id)
+    return assessment
+
+
+async def list_assessment_documents(
+    session: AsyncSession,
+    assessment_id: str,
+) -> list[CourseDocument]:
+    """List documents attached to a specific assessment."""
+    result = await session.execute(
+        select(CourseDocument)
+        .where(CourseDocument.assessment_id == assessment_id)
+        .order_by(CourseDocument.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def attach_assessment_document(
+    session: AsyncSession,
+    *,
+    assessment_id: str,
+    document_type: str,
+    original_filename: str,
+    file_path: str,
+    file_type: str,
+    sha256: str,
+    file_size_bytes: int,
+    user_id: str | None = None,
+) -> CourseDocument | None:
+    """Attach a reference document (brief, rubric, guideline, …) to an assessment.
+
+    Unlike a course outline upload, this does NOT trigger AI extraction — it is a
+    reference file linked to the assessment.
+
+    Returns:
+        The created CourseDocument, or None if the assessment does not exist.
+    """
+    assessment = await session.get(Assessment, assessment_id)
+    if not assessment:
+        return None
+
+    owner_id = user_id
+    if owner_id is None:
+        course = await session.get(Course, assessment.course_id)
+        owner_id = course.user_id if course else None
+
+    doc = CourseDocument(
+        id=generate_id(),
+        user_id=owner_id,
+        course_id=assessment.course_id,
+        assessment_id=assessment_id,
+        document_type=document_type,
+        title=original_filename,
+        original_filename=original_filename,
+        file_path=file_path,
+        file_type=file_type,
+        sha256=sha256,
+        file_size_bytes=file_size_bytes,
+        status="processed",
+    )
+    session.add(doc)
+    await session.commit()
+    await session.refresh(doc)
+    logger.info("assessment_document_attached", assessment_id=assessment_id, document_type=document_type)
+    return doc
+
+
+async def delete_course_document(
+    session: AsyncSession,
+    document_id: str,
+) -> bool:
+    """Delete a course document. Returns True if it existed."""
+    doc = await session.get(CourseDocument, document_id)
+    if not doc:
+        return False
+    await session.delete(doc)
+    await session.commit()
+    logger.info("course_document_deleted", document_id=document_id)
+    return True
+
+
 async def create_deadline(
     session: AsyncSession,
     *,

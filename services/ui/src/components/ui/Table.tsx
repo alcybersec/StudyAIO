@@ -38,7 +38,19 @@ export function TRow({ children, onClick, className = '' }: TRowProps) {
   return (
     <tr
       onClick={onClick}
-      className={`${onClick ? 'hover:bg-surface-2/60 cursor-pointer' : ''} ${className}`}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onClick()
+              }
+            }
+          : undefined
+      }
+      tabIndex={onClick ? 0 : undefined}
+      role={onClick ? 'button' : undefined}
+      className={`${onClick ? 'hover:bg-surface-2/60 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-peri' : ''} ${className}`}
     >
       {children}
     </tr>

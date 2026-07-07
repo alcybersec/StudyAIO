@@ -17,9 +17,17 @@ class CourseDocument(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     course_id: Mapped[str] = mapped_column(String(36), ForeignKey("courses.id"), nullable=False)
+    # Set when the document is attached to a specific assessment (brief, rubric,
+    # guideline, …) rather than being a course-level outline to extract from.
+    assessment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("assessments.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     document_type: Mapped[str] = mapped_column(
         String(50), nullable=False
-    )  # "outline", "rubric", "handbook", "other"
+    )  # "outline", "rubric", "handbook", "brief", "guideline", "other"
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     original_filename: Mapped[str] = mapped_column(String(500), nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
@@ -42,8 +50,13 @@ class CourseDocument(Base):
     # Relationships
     user: Mapped["User"] = relationship(back_populates="course_documents")
     course: Mapped["Course"] = relationship(back_populates="course_documents")
-    assessments: Mapped[list["Assessment"]] = relationship(back_populates="source_document")
+    assessments: Mapped[list["Assessment"]] = relationship(
+        back_populates="source_document", foreign_keys="Assessment.source_document_id"
+    )
     deadlines: Mapped[list["Deadline"]] = relationship(back_populates="source_document")
+    assessment: Mapped["Assessment | None"] = relationship(
+        foreign_keys=[assessment_id], viewonly=True
+    )
 
     __table_args__ = (
         Index("ix_course_documents_user_id", "user_id"),

@@ -38,7 +38,9 @@ class Assessment(Base):
 
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="assessments")
-    source_document: Mapped["CourseDocument | None"] = relationship(back_populates="assessments")
+    source_document: Mapped["CourseDocument | None"] = relationship(
+        back_populates="assessments", foreign_keys=[source_document_id]
+    )
     deadlines: Mapped[list["Deadline"]] = relationship(back_populates="assessment")
 
     __table_args__ = (Index("ix_assessments_course", "course_id"),)
