@@ -57,25 +57,21 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
   return (
     <Table>
       <THead>
-        <TCell header grow>
-          Assessment
-        </TCell>
-        <TCell header>Type</TCell>
-        <TCell header align="right">
+        <TCell header className="w-[28%]">Assessment</TCell>
+        <TCell header className="w-[14%]">Type</TCell>
+        <TCell header align="right" className="w-[10%]">
           Weight
         </TCell>
-        <TCell header>Weeks</TCell>
-        <TCell header grow>
-          Description
-        </TCell>
-        <TCell header align="right">
+        <TCell header className="w-[12%]">Weeks</TCell>
+        <TCell header className="w-[26%]">Description</TCell>
+        <TCell header align="right" className="w-[10%]">
           Docs
         </TCell>
       </THead>
       <TBody>
         {assessments.map((a) => (
           <TRow key={a.id} onClick={onSelect ? () => onSelect(a) : undefined}>
-            <TCell grow className="font-medium text-text">{a.title}</TCell>
+            <TCell className="font-medium text-text">{a.title}</TCell>
             <TCell>
               <Badge variant={TYPE_VARIANTS[a.assessment_type] ?? 'default'}>{a.assessment_type}</Badge>
             </TCell>
@@ -85,7 +81,7 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
             <TCell className="font-mono text-[12px] text-text-muted">
               {a.weeks_relevant && a.weeks_relevant.length > 0 ? a.weeks_relevant.join(', ') : '—'}
             </TCell>
-            <TCell grow className="max-w-0 truncate text-text-muted">{a.description ?? '—'}</TCell>
+            <TCell className="max-w-0 truncate text-text-muted">{a.description ?? '—'}</TCell>
             <TCell align="right" className="text-xs text-peri-fg">
               {onSelect ? 'Manage →' : ''}
             </TCell>

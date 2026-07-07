@@ -71,9 +71,10 @@ export function TCell({ children, header, align = 'left', grow, className = '' }
   const alignClass = align === 'right' ? 'text-right' : ''
   // Horizontal padding gives columns breathing room; first/last stay flush to
   // the table edges so content lines up with the surrounding card. A `grow`
-  // cell takes the slack so remaining columns size to their content.
+  // cell absorbs remaining width; otherwise set explicit column widths on the
+  // header cells (via className) to distribute columns across the table.
   const pad = 'px-3 first:pl-0 last:pr-0'
-  const growClass = grow ? 'w-full' : 'whitespace-nowrap'
+  const growClass = grow ? 'w-full' : ''
   if (header) {
     return <th className={`font-medium py-1.5 ${pad} ${growClass} ${alignClass} ${className}`}>{children}</th>
   }
