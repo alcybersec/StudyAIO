@@ -59,9 +59,7 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
       <THead>
         <TCell header className="w-[28%]">Assessment</TCell>
         <TCell header className="w-[14%]">Type</TCell>
-        <TCell header align="right" className="w-[10%]">
-          Weight
-        </TCell>
+        <TCell header className="w-[10%]">Weight</TCell>
         <TCell header className="w-[12%]">Weeks</TCell>
         <TCell header className="w-[26%]">Description</TCell>
         <TCell header align="right" className="w-[10%]">
@@ -75,7 +73,7 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
             <TCell>
               <Badge variant={TYPE_VARIANTS[a.assessment_type] ?? 'default'}>{a.assessment_type}</Badge>
             </TCell>
-            <TCell align="right" className="font-mono text-text">
+            <TCell className="font-mono text-text">
               {a.weight_pct != null ? `${a.weight_pct}%` : '—'}
             </TCell>
             <TCell className="font-mono text-[12px] text-text-muted">
@@ -91,9 +89,7 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
           <TRow className="border-t border-border-strong">
             <TCell className="font-medium text-text">Total</TCell>
             <TCell />
-            <TCell align="right" className="font-mono font-medium text-text">
-              {totalWeight}%
-            </TCell>
+            <TCell className="font-mono font-medium text-text">{totalWeight}%</TCell>
             <TCell />
             <TCell />
             <TCell />
