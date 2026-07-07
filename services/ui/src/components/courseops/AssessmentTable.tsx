@@ -63,7 +63,9 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
           Weight
         </TCell>
         <TCell header>Weeks</TCell>
-        <TCell header>Description</TCell>
+        <TCell header grow>
+          Description
+        </TCell>
         <TCell header align="right">
           Docs
         </TCell>
@@ -81,8 +83,8 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
             <TCell className="font-mono text-[12px] text-text-muted">
               {a.weeks_relevant && a.weeks_relevant.length > 0 ? a.weeks_relevant.join(', ') : '—'}
             </TCell>
-            <TCell className="max-w-xs truncate text-text-muted">{a.description ?? '—'}</TCell>
-            <TCell align="right" className="text-xs text-peri-fg whitespace-nowrap">
+            <TCell grow className="max-w-0 truncate text-text-muted">{a.description ?? '—'}</TCell>
+            <TCell align="right" className="text-xs text-peri-fg">
               {onSelect ? 'Manage →' : ''}
             </TCell>
           </TRow>
