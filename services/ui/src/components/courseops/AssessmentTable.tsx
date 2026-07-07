@@ -57,7 +57,9 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
   return (
     <Table>
       <THead>
-        <TCell header>Assessment</TCell>
+        <TCell header grow>
+          Assessment
+        </TCell>
         <TCell header>Type</TCell>
         <TCell header align="right">
           Weight
@@ -73,7 +75,7 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
       <TBody>
         {assessments.map((a) => (
           <TRow key={a.id} onClick={onSelect ? () => onSelect(a) : undefined}>
-            <TCell className="font-medium text-text">{a.title}</TCell>
+            <TCell grow className="font-medium text-text">{a.title}</TCell>
             <TCell>
               <Badge variant={TYPE_VARIANTS[a.assessment_type] ?? 'default'}>{a.assessment_type}</Badge>
             </TCell>
