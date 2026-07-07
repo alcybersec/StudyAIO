@@ -61,16 +61,21 @@ interface TCellProps {
   children?: ReactNode
   header?: boolean
   align?: 'left' | 'right'
+  /** Absorb the table's remaining width (use on the primary column so the
+   *  compact columns pack together instead of spreading unevenly). */
+  grow?: boolean
   className?: string
 }
 
-export function TCell({ children, header, align = 'left', className = '' }: TCellProps) {
+export function TCell({ children, header, align = 'left', grow, className = '' }: TCellProps) {
   const alignClass = align === 'right' ? 'text-right' : ''
   // Horizontal padding gives columns breathing room; first/last stay flush to
-  // the table edges so content lines up with the surrounding card.
+  // the table edges so content lines up with the surrounding card. A `grow`
+  // cell takes the slack so remaining columns size to their content.
   const pad = 'px-3 first:pl-0 last:pr-0'
+  const growClass = grow ? 'w-full' : 'whitespace-nowrap'
   if (header) {
-    return <th className={`font-medium py-1.5 ${pad} ${alignClass} ${className}`}>{children}</th>
+    return <th className={`font-medium py-1.5 ${pad} ${growClass} ${alignClass} ${className}`}>{children}</th>
   }
-  return <td className={`py-2 ${pad} ${alignClass} ${className}`}>{children}</td>
+  return <td className={`py-2 ${pad} ${growClass} ${alignClass} ${className}`}>{children}</td>
 }
