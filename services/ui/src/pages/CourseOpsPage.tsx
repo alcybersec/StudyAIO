@@ -7,10 +7,12 @@ import { DocumentList } from '../components/courseops/DocumentList'
 import { DocumentUpload } from '../components/courseops/DocumentUpload'
 import { AddAssessmentModal } from '../components/courseops/AddAssessmentModal'
 import { AddDeadlineModal } from '../components/courseops/AddDeadlineModal'
+import { AssessmentDetailModal } from '../components/courseops/AssessmentDetailModal'
 import { Button, EmptyState, PageHeader } from '../components/ui'
 import { useAssessments, useCourseDocuments, useDeadlines } from '../hooks/useApi'
 import { useTabRouting } from '../hooks/useTabRouting'
 import { courseopsApi } from '../api/endpoints'
+import type { Assessment } from '../types'
 
 const TABS = ['documents', 'assessments', 'deadlines', 'exports'] as const
 
@@ -26,6 +28,7 @@ export function CourseOpsPage() {
   const [activeTab, setActiveTab] = useTabRouting(TABS, 'documents')
   const [addAssessmentOpen, setAddAssessmentOpen] = useState(false)
   const [addDeadlineOpen, setAddDeadlineOpen] = useState(false)
+  const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null)
 
   const documentsQuery = useCourseDocuments(courseCode ?? '')
   const assessmentsQuery = useAssessments(courseCode ?? '')
@@ -90,6 +93,7 @@ export function CourseOpsPage() {
             isLoading={assessmentsQuery.isLoading}
             isError={assessmentsQuery.isError}
             onRetry={() => assessmentsQuery.refetch()}
+            onSelect={setSelectedAssessment}
           />
         </div>
       )}
@@ -115,6 +119,13 @@ export function CourseOpsPage() {
       )}
       {addDeadlineOpen && (
         <AddDeadlineModal courseCode={courseCode} onClose={() => setAddDeadlineOpen(false)} />
+      )}
+      {selectedAssessment && (
+        <AssessmentDetailModal
+          assessment={selectedAssessment}
+          courseCode={courseCode}
+          onClose={() => setSelectedAssessment(null)}
+        />
       )}
 
       {activeTab === 'exports' && (

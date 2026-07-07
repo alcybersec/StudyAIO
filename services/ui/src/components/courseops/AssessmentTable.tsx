@@ -6,6 +6,7 @@ interface AssessmentTableProps {
   isLoading: boolean
   isError: boolean
   onRetry: () => void
+  onSelect?: (assessment: Assessment) => void
 }
 
 type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info'
@@ -35,7 +36,7 @@ function AssessmentTableSkeleton() {
   )
 }
 
-export function AssessmentTable({ assessments, isLoading, isError, onRetry }: AssessmentTableProps) {
+export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSelect }: AssessmentTableProps) {
   if (isLoading && !assessments) return <AssessmentTableSkeleton />
 
   if (isError && !assessments) {
@@ -63,10 +64,13 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry }: As
         </TCell>
         <TCell header>Weeks</TCell>
         <TCell header>Description</TCell>
+        <TCell header align="right">
+          Docs
+        </TCell>
       </THead>
       <TBody>
         {assessments.map((a) => (
-          <TRow key={a.id}>
+          <TRow key={a.id} onClick={onSelect ? () => onSelect(a) : undefined}>
             <TCell className="font-medium text-text">{a.title}</TCell>
             <TCell>
               <Badge variant={TYPE_VARIANTS[a.assessment_type] ?? 'default'}>{a.assessment_type}</Badge>
@@ -78,6 +82,9 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry }: As
               {a.weeks_relevant && a.weeks_relevant.length > 0 ? a.weeks_relevant.join(', ') : '—'}
             </TCell>
             <TCell className="max-w-xs truncate text-text-muted">{a.description ?? '—'}</TCell>
+            <TCell align="right" className="text-xs text-peri-fg whitespace-nowrap">
+              {onSelect ? 'Manage →' : ''}
+            </TCell>
           </TRow>
         ))}
         {totalWeight > 0 && (
@@ -87,6 +94,7 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry }: As
             <TCell align="right" className="font-mono font-medium text-text">
               {totalWeight}%
             </TCell>
+            <TCell />
             <TCell />
             <TCell />
           </TRow>

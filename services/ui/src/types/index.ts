@@ -361,6 +361,7 @@ export interface StudyStats {
 export interface CourseDocument {
   id: string
   course_id: string
+  assessment_id?: string | null
   document_type: string
   title: string | null
   original_filename: string
@@ -421,6 +422,8 @@ export interface AssessmentCreate {
   description?: string | null
   weeks_relevant?: number[] | null
 }
+
+export type AssessmentUpdate = Partial<AssessmentCreate>
 
 export interface UpcomingDeadline {
   id: string

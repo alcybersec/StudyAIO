@@ -3,6 +3,7 @@ import type {
   AnalyticsOverview,
   Assessment,
   AssessmentCreate,
+  AssessmentUpdate,
   BatchUploadResponse,
   CaptureRequest,
   ChatMessage,
@@ -298,6 +299,27 @@ export const courseopsApi = {
     api.get<Assessment[]>(`/courseops/assessments?course_code=${courseCode}`),
   createAssessment: (courseCode: string, data: AssessmentCreate) =>
     api.post<Assessment>(`/courseops/assessments?course_code=${courseCode}`, data),
+  updateAssessment: (assessmentId: string, data: AssessmentUpdate) =>
+    api.patch<Assessment>(`/courseops/assessments/${assessmentId}`, data),
+  listAssessmentDocuments: (assessmentId: string) =>
+    api.get<CourseDocument[]>(`/courseops/assessments/${assessmentId}/documents`),
+  uploadAssessmentDocument: async (assessmentId: string, file: File, documentType: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const params = new URLSearchParams({ document_type: documentType })
+    const response = await fetch(`/api/courseops/assessments/${assessmentId}/documents?${params}`, {
+      method: 'POST',
+      body: formData,
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ detail: response.statusText }))
+      throw new Error(body.detail || response.statusText)
+    }
+    return response.json() as Promise<CourseDocument>
+  },
+  deleteDocument: (documentId: string) => api.delete(`/courseops/documents/${documentId}`),
+  documentDownloadUrl: (documentId: string) =>
+    api.downloadUrl(`/files/courseops/documents/${documentId}`),
   listDeadlines: (courseCode: string, upcoming = false) =>
     api.get<Deadline[]>(`/courseops/deadlines?course_code=${courseCode}&upcoming=${upcoming}`),
   createDeadline: (courseCode: string, data: DeadlineCreate) =>

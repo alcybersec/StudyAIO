@@ -21,6 +21,7 @@ def _mock_document(
     doc = MagicMock()
     doc.id = id
     doc.course_id = course_id
+    doc.assessment_id = None
     doc.document_type = document_type
     doc.title = title
     doc.original_filename = original_filename
@@ -74,6 +75,108 @@ def _mock_deadline(
     dl.created_at = datetime(2026, 3, 1)
     dl.updated_at = datetime(2026, 3, 1)
     return dl
+
+
+@pytest.mark.asyncio
+class TestUpdateAssessment:
+    """Tests for PATCH /api/courseops/assessments/{id}."""
+
+    async def test_updates_assessment_info(self, async_client):
+        """Edits an assessment's info and returns it."""
+        updated = _mock_assessment(title="Final Exam (updated)")
+        updated.weight_pct = 50.0
+        updated.description = "Now covers weeks 1-12"
+        with patch(
+            "app.api.courseops.courseops_service.update_assessment",
+            new_callable=AsyncMock,
+            return_value=updated,
+        ) as mock_update:
+            response = await async_client.patch(
+                "/api/courseops/assessments/assess-001",
+                json={"title": "Final Exam (updated)", "weight_pct": 50.0},
+            )
+        assert response.status_code == 200
+        assert response.json()["weight_pct"] == 50.0
+        mock_update.assert_called_once()
+
+    async def test_returns_404_for_missing(self, async_client):
+        """Unknown assessment yields 404."""
+        with patch(
+            "app.api.courseops.courseops_service.update_assessment",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = await async_client.patch(
+                "/api/courseops/assessments/nope", json={"title": "X"}
+            )
+        assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestAssessmentDocuments:
+    """Tests for assessment-scoped document attachments."""
+
+    async def test_lists_assessment_documents(self, async_client):
+        """Returns documents attached to an assessment."""
+        doc = _mock_document(document_type="brief")
+        doc.assessment_id = "assess-001"
+        with patch(
+            "app.api.courseops.courseops_service.list_assessment_documents",
+            new_callable=AsyncMock,
+            return_value=[doc],
+        ) as mock_list:
+            response = await async_client.get(
+                "/api/courseops/assessments/assess-001/documents"
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["document_type"] == "brief"
+        mock_list.assert_called_once()
+
+    async def test_upload_attaches_without_extraction(self, async_client):
+        """Uploading an assessment document attaches it and does NOT run the outline pipeline."""
+        doc = _mock_document(document_type="guideline")
+        doc.assessment_id = "assess-001"
+        with (
+            patch(
+                "app.api.courseops.courseops_service.attach_assessment_document",
+                new_callable=AsyncMock,
+                return_value=doc,
+            ) as mock_attach,
+            patch("app.pipeline.courseops_task.process_course_document") as mock_pipeline,
+        ):
+            response = await async_client.post(
+                "/api/courseops/assessments/assess-001/documents?document_type=guideline",
+                files={"file": ("guide.pdf", io.BytesIO(b"%PDF-1.4 test"), "application/pdf")},
+            )
+        assert response.status_code == 201
+        assert response.json()["assessment_id"] == "assess-001"
+        mock_attach.assert_called_once()
+        mock_pipeline.delay.assert_not_called()
+
+    async def test_upload_404_for_unknown_assessment(self, async_client):
+        """Unknown assessment yields 404 and cleans up the stored file."""
+        with patch(
+            "app.api.courseops.courseops_service.attach_assessment_document",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = await async_client.post(
+                "/api/courseops/assessments/nope/documents?document_type=brief",
+                files={"file": ("g.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+            )
+        assert response.status_code == 404
+
+    async def test_deletes_document(self, async_client):
+        """Deletes an attached document."""
+        with patch(
+            "app.api.courseops.courseops_service.delete_course_document",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            response = await async_client.delete("/api/courseops/documents/doc-001")
+        assert response.status_code == 204
 
 
 @pytest.mark.asyncio

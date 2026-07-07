@@ -305,6 +305,46 @@ export function useCreateAssessment(courseCode: string) {
   })
 }
 
+export function useUpdateAssessment(courseCode: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ assessmentId, data }: { assessmentId: string; data: import('../types').AssessmentUpdate }) =>
+      courseopsApi.updateAssessment(assessmentId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'assessments', courseCode] })
+    },
+  })
+}
+
+export function useAssessmentDocuments(assessmentId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['courseops', 'assessment-documents', assessmentId],
+    queryFn: () => courseopsApi.listAssessmentDocuments(assessmentId),
+    enabled: enabled && !!assessmentId,
+  })
+}
+
+export function useUploadAssessmentDocument(assessmentId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ file, documentType }: { file: File; documentType: string }) =>
+      courseopsApi.uploadAssessmentDocument(assessmentId, file, documentType),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'assessment-documents', assessmentId] })
+    },
+  })
+}
+
+export function useDeleteDocument(assessmentId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (documentId: string) => courseopsApi.deleteDocument(documentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'assessment-documents', assessmentId] })
+    },
+  })
+}
+
 export function useCreateDeadline(courseCode: string) {
   const queryClient = useQueryClient()
   return useMutation({
