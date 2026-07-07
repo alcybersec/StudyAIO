@@ -66,8 +66,11 @@ interface TCellProps {
 
 export function TCell({ children, header, align = 'left', className = '' }: TCellProps) {
   const alignClass = align === 'right' ? 'text-right' : ''
+  // Horizontal padding gives columns breathing room; first/last stay flush to
+  // the table edges so content lines up with the surrounding card.
+  const pad = 'px-3 first:pl-0 last:pr-0'
   if (header) {
-    return <th className={`font-medium py-1.5 ${alignClass} ${className}`}>{children}</th>
+    return <th className={`font-medium py-1.5 ${pad} ${alignClass} ${className}`}>{children}</th>
   }
-  return <td className={`py-2 ${alignClass} ${className}`}>{children}</td>
+  return <td className={`py-2 ${pad} ${alignClass} ${className}`}>{children}</td>
 }
