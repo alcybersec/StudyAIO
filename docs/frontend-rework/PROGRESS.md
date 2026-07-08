@@ -17,3 +17,8 @@ Integration branch: `frontend-rework`. Streams merge here in dependency order; `
 - 2026-07-05: Stream F complete. Token sweep finished (last 20 files migrated; color guard now fails on any raw palette class, allowlist deleted). New Playwright specs: analytics, knowledge, admin, palette, notifications, pipeline-console, errors, offline, course-management + axe a11y gate (6 pages × 2 themes, serious/critical = fail). Real bugs found and fixed by the gates: `.dark` token block lost the cascade to `:root` (dark mode never applied colors), WCAG AA contrast corrections (light muted/faint, sage/amber both themes, light red, dark peri), Ask session rail nested-interactive, sonner rich-colors palette. Bundle budget script wired into CI (pdf.js worker excluded, documented inline). Backend 1136 green in container; vitest 380; e2e 59 passed / 5 data-dependent skips.
 
 - 2026-07-05: All six streams merged into `frontend-rework`. Final verification: 380 vitest / 1136 pytest / 59+5skip Playwright / axe green / budgets green. Awaiting sign-off for merge to main.
+
+## Final verification (2026-07-08)
+All streams merged into `frontend-rework`. Post-review polish landed: dashboard layout sanitize/content-driven heights/row alignment, dark-theme cascade fix, full legacy-token sweep + guard, native-dialog removal, per-assessment documents + editable info (TDD), manual deadline/assessment add (TDD), table column spacing/distribution.
+
+Final gate: **394 vitest · 1148 backend (container) · 59 Playwright (5 env-skips) · build/color-guard/bundle-budget green · axe both themes**. Merged `frontend-rework` → `main`.
