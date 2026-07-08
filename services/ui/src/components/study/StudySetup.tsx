@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
+import { Target } from 'lucide-react'
 import { useCourses, useStudyStats, useExams } from '../../hooks/useApi'
-import { LoadingSpinner } from '../ui'
+import { useOnlineStatus } from '../../hooks/useOnlineStatus'
+import { Button, Card, EmptyState, ErrorState, Skeleton } from '../ui'
 
 interface StudySetupProps {
   courseCode: string
@@ -10,9 +12,32 @@ interface StudySetupProps {
   onStart: () => void
 }
 
+function SetupSkeleton() {
+  return (
+    <div className="max-w-md mx-auto" aria-busy="true">
+      <Card className="space-y-5">
+        <div className="space-y-2">
+          <Skeleton width={60} height={12} />
+          <Skeleton height={38} />
+        </div>
+        <div className="space-y-2">
+          <Skeleton width={100} height={12} />
+          <Skeleton height={38} />
+        </div>
+        <div className="flex flex-col items-center gap-2 py-2">
+          <Skeleton width={56} height={32} />
+          <Skeleton width={140} height={14} />
+        </div>
+        <Skeleton height={48} />
+      </Card>
+    </div>
+  )
+}
+
 export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onStart }: StudySetupProps) {
-  const { data: courses, isLoading: loadingCourses } = useCourses()
+  const { data: courses, isLoading: loadingCourses, error: coursesError, refetch } = useCourses()
   const { data: activeExams } = useExams(courseCode || undefined, 'active')
+  const online = useOnlineStatus()
   const weekNum = week ? Number(week) : undefined
   const { data: stats, isLoading: loadingStats } = useStudyStats(
     courseCode || undefined,
@@ -21,37 +46,68 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
 
   const dueCount = stats?.due_today ?? 0
 
+  if (coursesError) {
+    return (
+      <div className="max-w-md mx-auto">
+        <ErrorState
+          title={online ? "Courses couldn't load" : "You're offline"}
+          detail={coursesError instanceof Error ? coursesError.message : undefined}
+          onRetry={() => refetch()}
+        />
+      </div>
+    )
+  }
+  if (!courses && !online) {
+    return (
+      <div className="max-w-md mx-auto">
+        <ErrorState
+          title="You're offline"
+          detail="The course list hasn't been cached. It will load once you're back online."
+          onRetry={() => refetch()}
+        />
+      </div>
+    )
+  }
+  if (loadingCourses || !courses) return <SetupSkeleton />
+
+  if (courses.length === 0) {
+    return (
+      <EmptyState
+        title="No courses yet"
+        description="Upload lecture files and the pipeline will build flashcards you can study here."
+        actionLabel="Upload lectures"
+        actionTo="/upload"
+      />
+    )
+  }
+
   return (
     <div className="max-w-md mx-auto">
-      <div className="bg-surface rounded-xl border border-border p-6 space-y-5">
+      <Card className="space-y-5">
         <div>
-          <label htmlFor="study-course" className="block text-sm font-medium text-text mb-1.5">
+          <label htmlFor="study-course" className="block text-xs font-medium text-text-muted mb-1.5">
             Course
           </label>
-          {loadingCourses ? (
-            <LoadingSpinner label="" />
-          ) : (
-            <select
-              id="study-course"
-              value={courseCode}
-              onChange={(e) => {
-                onCourseChange(e.target.value)
-                onWeekChange('')
-              }}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
-            >
-              <option value="">All courses</option>
-              {courses?.map((c) => (
-                <option key={c.id} value={c.code}>
-                  {c.code}{c.name ? ` — ${c.name}` : ''}
-                </option>
-              ))}
-            </select>
-          )}
+          <select
+            id="study-course"
+            value={courseCode}
+            onChange={(e) => {
+              onCourseChange(e.target.value)
+              onWeekChange('')
+            }}
+            className="w-full rounded-lg border border-border bg-surface-1 text-text px-3 py-2.5 text-sm focus:outline-none focus:border-peri"
+          >
+            <option value="">All courses</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.code}>
+                {c.code}{c.name ? ` — ${c.name}` : ''}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>
-          <label htmlFor="study-week" className="block text-sm font-medium text-text mb-1.5">
+          <label htmlFor="study-week" className="block text-xs font-medium text-text-muted mb-1.5">
             Week (optional)
           </label>
           <input
@@ -62,16 +118,19 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
             placeholder="All weeks"
             value={week}
             onChange={(e) => onWeekChange(e.target.value)}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+            className="w-full rounded-lg border border-border bg-surface-1 text-text placeholder:text-text-faint px-3 py-2.5 text-sm focus:outline-none focus:border-peri"
           />
         </div>
 
         <div className="pt-2 text-center">
           {loadingStats ? (
-            <LoadingSpinner label="Checking due cards..." />
+            <div className="flex flex-col items-center gap-2" aria-busy="true">
+              <Skeleton width={56} height={32} />
+              <Skeleton width={140} height={14} />
+            </div>
           ) : (
             <>
-              <p className="text-3xl font-bold text-text mb-1">{dueCount}</p>
+              <p className="text-3xl font-bold font-mono text-text mb-1">{dueCount}</p>
               <p className="text-sm text-text-muted mb-4">
                 {dueCount === 1 ? 'card' : 'cards'} due for review
               </p>
@@ -79,13 +138,14 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
           )}
         </div>
 
-        <button
+        <Button
+          size="lg"
           onClick={onStart}
           disabled={dueCount === 0 || loadingStats}
-          className="w-full py-3 px-4 rounded-lg text-sm font-semibold text-white bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-h-[48px]"
+          className="w-full min-h-[48px]"
         >
           Start Session
-        </button>
+        </Button>
 
         {activeExams && activeExams.length > 0 && (
           <div className="pt-2 border-t border-border">
@@ -94,17 +154,17 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
               {activeExams.map((exam) => (
                 <Link
                   key={exam.id}
-                  to={`/study?exam=${exam.id}`}
-                  className="flex items-center justify-between w-full p-2.5 rounded-lg text-sm text-left bg-primary/5 hover:bg-primary/10 text-primary transition-colors min-h-[44px]"
+                  to={`/study?tab=flashcards&exam=${exam.id}`}
+                  className="flex items-center justify-between w-full p-2.5 rounded-lg text-sm text-left bg-peri-soft hover:opacity-80 text-peri-fg transition-opacity min-h-[44px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
                 >
                   <span className="font-medium">{exam.title}</span>
-                  <span className="text-xs opacity-70">{'\u{1F3AF}'}</span>
+                  <Target size={14} className="opacity-70" aria-hidden />
                 </Link>
               ))}
             </div>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }

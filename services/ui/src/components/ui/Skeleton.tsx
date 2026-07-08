@@ -12,7 +12,7 @@ export function Skeleton({ className = '', width, height, rounded = false }: Ske
 
   return (
     <div
-      className={`animate-pulse bg-gray-200 dark:bg-gray-700 ${rounded ? 'rounded-full' : 'rounded-md'} ${className}`}
+      className={`animate-pulse bg-surface-2 ${rounded ? 'rounded-full' : 'rounded-md'} ${className}`}
       style={style}
       aria-hidden="true"
     />
@@ -35,7 +35,7 @@ export function SkeletonText({ lines = 3, className = '' }: { lines?: number; cl
 
 export function SkeletonCard({ className = '' }: { className?: string }) {
   return (
-    <div className={`rounded-lg border border-border bg-surface p-4 space-y-3 ${className}`}>
+    <div className={`rounded-lg border border-border bg-surface-1 p-4 space-y-3 ${className}`}>
       <Skeleton height={20} width="60%" />
       <SkeletonText lines={2} />
       <div className="flex gap-2 pt-1">

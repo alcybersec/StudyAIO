@@ -27,7 +27,7 @@ function CitationLinks({ citations }: { citations: CitationData[] }) {
           <Link
             key={i}
             to={`/courses/${c.course_code}/weeks/${c.week}${c.artifact_id ? `?artifact=${c.artifact_id}` : ''}${c.page_ref ? `&page=${c.page_ref}` : ''}`}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-peri-soft text-peri-fg hover:bg-peri/20 transition-colors"
             title={c.text_snippet || undefined}
           >
             <span className="font-medium">[{c.ref ?? i + 1}]</span>
@@ -47,7 +47,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] sm:max-w-[70%] rounded-2xl rounded-br-md px-4 py-2.5 bg-primary/10 text-text">
+        <div className="max-w-[80%] sm:max-w-[70%] rounded-2xl rounded-br-md px-4 py-2.5 bg-peri-soft text-text">
           <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
           <p className="text-[10px] text-text-muted mt-1 text-right">
             {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -59,7 +59,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-bl-md px-4 py-2.5 bg-surface-alt text-text">
+      <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-bl-md px-4 py-2.5 bg-surface-0 text-text">
         <div className="prose prose-sm dark:prose-invert max-w-none text-text [&_p]:mb-2 [&_p:last-child]:mb-0 [&_pre]:bg-black/5 [&_pre]:dark:bg-white/5 [&_code]:text-xs [&_table]:text-xs [&_li]:my-0.5">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {message.content}

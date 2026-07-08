@@ -62,7 +62,7 @@ export function InstallPrompt() {
   if (!deferredPrompt && !showIOSPrompt) return null
 
   return (
-    <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 mt-6">
+    <div className="rounded-lg border border-sage/20 bg-sage-soft p-4 mt-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <h3 className="text-sm font-semibold text-text">Install StudyAIO</h3>
@@ -93,7 +93,7 @@ export function InstallPrompt() {
       {deferredPrompt && (
         <button
           onClick={handleInstall}
-          className="mt-3 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+          className="mt-3 rounded-md bg-sage px-4 py-2 text-sm font-medium text-on-accent hover:bg-sage-hover transition-colors"
         >
           Install App
         </button>

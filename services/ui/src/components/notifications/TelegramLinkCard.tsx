@@ -35,11 +35,11 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-text">Telegram</h3>
         {linked ? (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-sage-soft text-sage-fg">
             Connected{username ? ` (@${username})` : ''}
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-text-muted">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-surface-0 text-text-muted">
             Not connected
           </span>
         )}
@@ -53,7 +53,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
           <button
             onClick={handleUnlink}
             disabled={unlinkMutation.isPending}
-            className="px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-lg hover:bg-red-100 dark:hover:bg-red-950 disabled:opacity-50 transition-colors"
+            className="px-3 py-1.5 text-sm font-medium text-red-fg bg-red-soft border border-red/30 rounded-lg hover:border-red/50 disabled:opacity-50 transition-colors"
           >
             {unlinkMutation.isPending ? 'Unlinking...' : 'Unlink Telegram'}
           </button>
@@ -71,7 +71,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
                 href={deepLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] text-white text-sm font-medium rounded-lg hover:bg-[#006da3] transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] text-on-accent text-sm font-medium rounded-lg hover:bg-[#006da3] transition-colors"
               >
                 Open in Telegram
               </a>
@@ -83,14 +83,14 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
             <button
               onClick={handleLink}
               disabled={linkMutation.isPending}
-              className="px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 border border-primary/20 rounded-lg hover:bg-primary/20 disabled:opacity-50 transition-colors"
+              className="px-3 py-1.5 text-sm font-medium text-sage-fg bg-sage-soft border border-sage/20 rounded-lg hover:bg-sage/20 disabled:opacity-50 transition-colors"
             >
               {linkMutation.isPending ? 'Generating link...' : 'Generate Link'}
             </button>
           )}
 
           {linkMutation.isError && (
-            <p className="text-sm text-red-600 dark:text-red-400">
+            <p className="text-sm text-red-fg">
               {linkMutation.error instanceof Error
                 ? linkMutation.error.message
                 : 'Failed to generate link. Is the Telegram bot configured?'}

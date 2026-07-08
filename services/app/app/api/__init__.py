@@ -2,6 +2,7 @@
 
 from app.api.admin import router as admin_router
 from app.api.analytics import router as analytics_router
+from app.api.artifacts import router as artifacts_router
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
 from app.api.billing import router as billing_router
@@ -16,8 +17,10 @@ from app.api.exports import router as exports_router
 from app.api.files import router as files_router
 from app.api.gamification import router as gamification_router
 from app.api.notifications import router as notifications_router
+from app.api.notifications_inbox import router as notifications_inbox_router
 from app.api.qa import router as qa_router
 from app.api.review_items import router as review_items_router
+from app.api.search import router as search_router
 from app.api.settings import router as settings_router
 from app.api.study import router as study_router
 from app.api.summaries import router as summaries_router
@@ -25,6 +28,7 @@ from app.api.uploads import router as uploads_router
 
 __all__ = [
     "admin_router",
+    "artifacts_router",
     "analytics_router",
     "assets_router",
     "auth_router",
@@ -39,9 +43,11 @@ __all__ = [
     "exports_router",
     "gamification_router",
     "notifications_router",
+    "notifications_inbox_router",
     "files_router",
     "qa_router",
     "review_items_router",
+    "search_router",
     "settings_router",
     "study_router",
     "summaries_router",

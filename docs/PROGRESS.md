@@ -402,6 +402,19 @@
 | PU.6 | Frontend credential input UI | ✅ Done | SettingsPage: CLI credentials textarea with status badges, Anthropic API key field, Test Connection button with result display. TypeScript types updated. |
 | PU.7 | Unit tests | ✅ Done | 29 new tests (factory routing, credential validation, temp file flow, test-ai endpoint). Fixed 7 existing tests (chat_service, chat_streaming, assets). 1021 unit + 285 golden = 1306 total. |
 
+## Frontend Rework (Streams A–F)
+
+Full stream log: `docs/frontend-rework/PROGRESS.md`. Design brief and plan: `docs/frontend-rework/`.
+
+| # | Stream | Status | Notes |
+|---|--------|--------|-------|
+| FR.A | Design system, tokens, vitest | ✅ Done | Nordic Calm dark-anchored token layer (`--t-*` + `@theme inline`), 11 UI primitives with tests, vitest infra, color-guard CI check. |
+| FR.B | Error layer | ✅ Done | Typed API error taxonomy, route error boundaries, persistent study-write queue, connectivity banner, SSE resume. |
+| FR.C | Shell, IA, ⌘K, Ask | ✅ Done | Activity-group nav (Sidebar/MobileNav), command palette + global shortcuts, `useTabRouting`, QA merged into /ask. |
+| FR.D | Screen redesigns (D1–D11) | ✅ Done | Home widgets, Study Hub w/ Plan tab, Week view + reclassify, Course management, Pipeline console, Review inbox, Knowledge, Analytics + readiness, Settings sub-routes, Auth, Admin/Achievements/CourseOps. |
+| FR.E | Backend features (TDD) | ✅ Done | 7 new endpoint groups: global search, notification inbox, study plan, quick capture, exam readiness, artifact reclassify, course management (rename/archive/delete/merge). Documented in `docs/api.md`. |
+| FR.F | Hardening | ✅ Done | Color allowlist emptied and removed (guard fails on any raw palette class). 10 new Playwright specs incl. axe a11y gate (6 pages × 2 themes) and failure-mode tests (forced 500s, offline). Bundle budget (500KB) in CI. Fixed: dark-theme CSS cascade bug, WCAG AA contrast tokens, nested-interactive session rail, sonner toast palette. Suite: 1136 backend, 380 vitest, 59 e2e passed / 5 data-skips. |
+
 ## Issues & Blockers
 
 | Date | Issue | Status | Resolution |

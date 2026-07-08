@@ -138,3 +138,36 @@ class TestDownloadArtifact:
 
         assert response.status_code == 200
         assert "attachment" in response.headers.get("content-disposition", "")
+
+
+@pytest.mark.asyncio
+class TestDownloadCourseDocument:
+    """Tests for GET /api/files/courseops/documents/{id}."""
+
+    async def test_download_returns_attachment(self, async_client, tmp_path):
+        """Serves a course document by ID with an attachment header."""
+        pdf_file = tmp_path / "brief.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4 brief")
+
+        mock_doc = AsyncMock()
+        mock_doc.file_path = str(pdf_file)
+        mock_doc.file_type = "pdf"
+        mock_doc.original_filename = "Assignment3_brief.pdf"
+
+        with patch(
+            "app.services.courseops_service.get_course_document",
+            new=AsyncMock(return_value=mock_doc),
+        ):
+            response = await async_client.get("/api/files/courseops/documents/doc-001")
+
+        assert response.status_code == 200
+        assert "attachment" in response.headers.get("content-disposition", "")
+
+    async def test_download_404_when_missing(self, async_client):
+        """Unknown document yields 404."""
+        with patch(
+            "app.services.courseops_service.get_course_document",
+            new=AsyncMock(return_value=None),
+        ):
+            response = await async_client.get("/api/files/courseops/documents/nope")
+        assert response.status_code == 404

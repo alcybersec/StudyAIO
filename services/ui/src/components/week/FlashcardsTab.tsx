@@ -1,16 +1,29 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useFlashcards, useStudyStats } from '../../hooks/useApi'
-import { LoadingSpinner, EmptyState, Badge } from '../ui'
+import { useOnlineStatus } from '../../hooks/useOnlineStatus'
+import { Badge, EmptyState, ErrorState, Kbd, Skeleton } from '../ui'
 
 interface FlashcardsTabProps {
   courseCode: string
   week: number
 }
 
+function FlashcardsSkeleton() {
+  return (
+    <div className="flex flex-col items-center gap-6 py-4" aria-busy="true">
+      <Skeleton width={320} height={44} className="max-w-xl w-full" />
+      <Skeleton width={160} height={20} />
+      <Skeleton className="w-full max-w-xl" height={220} />
+      <Skeleton width={240} height={36} />
+    </div>
+  )
+}
+
 export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
-  const { data: flashcards, isLoading, error } = useFlashcards(courseCode, week)
+  const { data: flashcards, isLoading, error, refetch } = useFlashcards(courseCode, week)
   const { data: studyStats } = useStudyStats(courseCode, week)
+  const online = useOnlineStatus()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [shuffledCards, setShuffledCards] = useState<typeof flashcards>()
@@ -59,12 +72,28 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
     return () => window.removeEventListener('keydown', handleKey)
   }, [toggleFlip, goNext, goPrev])
 
-  if (isLoading) return <LoadingSpinner label="Loading flashcards..." />
-  if (error) return <EmptyState icon="!" title="Failed to load flashcards" />
+  if (error) {
+    return (
+      <ErrorState
+        title={online ? "Flashcards couldn't load" : "You're offline"}
+        detail={error instanceof Error ? error.message : undefined}
+        onRetry={() => refetch()}
+      />
+    )
+  }
+  if (!flashcards && !online) {
+    return (
+      <ErrorState
+        title="You're offline"
+        detail="Flashcards for this week haven't been cached. They'll load once you're back online."
+        onRetry={() => refetch()}
+      />
+    )
+  }
+  if (isLoading || !flashcards) return <FlashcardsSkeleton />
   if (!cards.length) {
     return (
       <EmptyState
-        icon="?"
         title="No flashcards yet"
         description="Flashcards will be generated when the pipeline processes lecture files."
       />
@@ -75,22 +104,22 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
     <div className="flex flex-col items-center gap-6 py-4">
       {/* Study CTA + Stats */}
       {studyStats && (
-        <div className="w-full max-w-xl flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
+        <div className="w-full max-w-xl flex items-center justify-between bg-surface-2 rounded-lg px-4 py-3">
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-gray-500">
-              <span className="font-semibold text-gray-900">{studyStats.mastered}</span> mastered
-              {' \u00B7 '}
-              <span className="font-semibold text-gray-900">{studyStats.learning}</span> learning
-              {' \u00B7 '}
-              <span className="font-semibold text-gray-900">{studyStats.new}</span> new
+            <span className="text-text-muted">
+              <span className="font-semibold text-text">{studyStats.mastered}</span> mastered
+              {' · '}
+              <span className="font-semibold text-text">{studyStats.learning}</span> learning
+              {' · '}
+              <span className="font-semibold text-text">{studyStats.new}</span> new
             </span>
           </div>
           <Link
-            to={`/study?course=${courseCode}&week=${week}`}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-white bg-primary hover:bg-primary/90 transition-colors min-h-[36px]"
+            to={`/study?tab=flashcards&course=${courseCode}&week=${week}`}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-on-accent bg-sage hover:bg-sage-hover transition-colors min-h-[36px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
           >
             {studyStats.due_today > 0 && (
-              <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-[10px]">
+              <span className="bg-surface-0/20 rounded-full px-1.5 py-0.5 text-[10px]">
                 {studyStats.due_today}
               </span>
             )}
@@ -100,16 +129,16 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
       )}
 
       {/* Counter + Shuffle */}
-      <div className="flex items-center gap-4 text-sm text-gray-500">
-        <span className="font-medium">
+      <div className="flex items-center gap-4 text-sm text-text-muted">
+        <span className="font-mono font-medium">
           {currentIndex + 1} / {cards.length}
         </span>
         <button
           onClick={toggleShuffle}
-          className={`px-4 py-2.5 min-h-[44px] rounded-full text-xs font-medium transition-colors ${
+          className={`px-4 py-2.5 min-h-[44px] rounded-full text-xs font-medium transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri ${
             shuffledCards
-              ? 'bg-primary/10 text-primary'
-              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              ? 'bg-peri-soft text-peri-fg'
+              : 'bg-surface-2 text-text-muted hover:text-text'
           }`}
         >
           Shuffle {shuffledCards ? 'On' : 'Off'}
@@ -119,13 +148,13 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
       {/* Card */}
       <button
         onClick={toggleFlip}
-        className="w-full max-w-xl min-h-[220px] rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer p-8 text-center focus:outline-none focus:ring-2 focus:ring-primary/50"
+        className="w-full max-w-xl min-h-[220px] rounded-xl border border-border bg-surface-1 shadow-sm hover:shadow-md transition-shadow cursor-pointer p-8 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
         aria-label={flipped ? 'Showing answer, click to see question' : 'Showing question, click to see answer'}
       >
-        <div className="text-xs uppercase tracking-wider text-gray-400 mb-4">
+        <div className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-faint mb-4">
           {flipped ? 'Answer' : 'Question'}
         </div>
-        <div className="text-lg leading-relaxed text-gray-800 whitespace-pre-wrap">
+        <div className="text-lg leading-relaxed text-text whitespace-pre-wrap">
           {flipped ? card.back : card.front}
         </div>
       </button>
@@ -137,7 +166,7 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
             {tag}
           </Badge>
         ))}
-        <span className="text-xs text-gray-400">p.{card.source_page_ref}</span>
+        <span className="text-xs font-mono text-text-faint">p.{card.source_page_ref}</span>
       </div>
 
       {/* Navigation */}
@@ -145,27 +174,27 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
         <button
           onClick={goPrev}
           disabled={currentIndex === 0}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-2 text-text border border-border hover:border-border-strong disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
         >
           Previous
         </button>
         <button
           onClick={toggleFlip}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary/90 transition-colors"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-sage text-on-accent hover:bg-sage-hover transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
         >
           Flip
         </button>
         <button
           onClick={goNext}
           disabled={currentIndex === cards.length - 1}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-2 text-text border border-border hover:border-border-strong disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
         >
           Next
         </button>
       </div>
 
-      <p className="text-xs text-gray-400">
-        Space to flip, arrow keys to navigate
+      <p className="text-[11px] font-mono text-text-faint">
+        <Kbd>space</Kbd> flip · <Kbd>←</Kbd> <Kbd>→</Kbd> navigate
       </p>
     </div>
   )

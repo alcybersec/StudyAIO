@@ -55,6 +55,29 @@ async def _serve_storage_key(
 
 
 @router.get(
+    "/files/courseops/documents/{document_id}",
+    response_model=None,
+    summary="Download a course/assessment document",
+    description="Downloads a course or assessment document by ID with its original filename.",
+)
+async def download_course_document(
+    document_id: str,
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Download a CourseDocument's file by ID."""
+    from app.services import courseops_service
+
+    doc = await courseops_service.get_course_document(session, document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    key = normalize_storage_key(doc.file_path)
+    media_type = _MIME_TYPES.get(doc.file_type, "application/octet-stream")
+    return await _serve_storage_key(key, filename=doc.original_filename, media_type=media_type)
+
+
+@router.get(
     "/files/uploads/artifacts/{artifact_id}",
     response_model=None,
     summary="Download an uploaded artifact",

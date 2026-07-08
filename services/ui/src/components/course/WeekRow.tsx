@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
-import { StatusBadge } from '../ui'
+import { Link, useNavigate } from 'react-router-dom'
+import { StatusBadge, TCell, TRow } from '../ui'
 import type { WeekSummaryRow } from '../../types'
 
 interface WeekRowProps {
@@ -7,29 +7,48 @@ interface WeekRowProps {
   week: WeekSummaryRow
 }
 
+const DONE_STATUSES = new Set(['completed', 'summarized', 'processed', 'generated'])
+
+/** Dash shown for columns whose data source doesn't exist yet (due, quiz %, updated). */
+function EmDash() {
+  return <span className="text-text-faint">—</span>
+}
+
+/** One week as a dense table row per the course-page prototype. */
 export function WeekRow({ courseCode, week }: WeekRowProps) {
+  const navigate = useNavigate()
+  const href = `/courses/${courseCode}/weeks/${week.week}`
   const title = week.titles.length > 0 ? week.titles.join(', ') : 'Untitled'
 
   return (
-    <Link
-      to={`/courses/${courseCode}/weeks/${week.week}`}
-      className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors group"
-    >
-      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-bold text-primary shrink-0">
-        {week.week}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 truncate group-hover:text-primary transition-colors">
-          {title}
-        </p>
-        <p className="text-xs text-gray-500 mt-0.5">
-          {week.artifact_count} file{week.artifact_count !== 1 ? 's' : ''}
-          {week.flashcard_count > 0 && ` \u00B7 ${week.flashcard_count} flashcards`}
-          {week.quiz_count > 0 && ` \u00B7 ${week.quiz_count} quizzes`}
-        </p>
-      </div>
-      <StatusBadge status={week.summary_status} />
-      <span className="text-gray-300 group-hover:text-gray-400 transition-colors">{'\u203A'}</span>
-    </Link>
+    <TRow onClick={() => navigate(href)}>
+      <TCell className="pl-1 font-mono text-text-faint">
+        {String(week.week).padStart(2, '0')}
+      </TCell>
+      <TCell className="font-medium">
+        <span className="flex items-center gap-2">
+          <Link
+            to={href}
+            className="text-text hover:text-sage-fg transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {title}
+          </Link>
+          {!DONE_STATUSES.has(week.summary_status) && <StatusBadge status={week.summary_status} />}
+        </span>
+      </TCell>
+      <TCell align="right" className="text-text-muted">
+        {week.flashcard_count > 0 ? week.flashcard_count : <EmDash />}
+      </TCell>
+      <TCell align="right">
+        <EmDash />
+      </TCell>
+      <TCell align="right">
+        <EmDash />
+      </TCell>
+      <TCell align="right" className="pr-1">
+        <EmDash />
+      </TCell>
+    </TRow>
   )
 }

@@ -55,16 +55,16 @@ export function OAuthButtons({ providers, error }: OAuthButtonsProps) {
           <div className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="bg-surface px-2 text-text-muted">or continue with</span>
+          <span className="bg-surface-1 px-2 text-text-muted">or continue with</span>
         </div>
       </div>
-      {error && <p className="text-sm text-danger text-center">{error}</p>}
+      {error && <p className="text-sm text-red-fg text-center">{error}</p>}
       {providers.map((provider) => (
         <button
           key={provider}
           type="button"
           disabled={loadingProvider !== null}
-          className="w-full flex items-center justify-center gap-2 px-4 min-h-[44px] rounded-lg border border-border text-sm font-medium text-text hover:bg-surface-hover transition-colors disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 px-4 min-h-[44px] rounded-lg border border-border text-sm font-medium text-text hover:bg-surface-2 transition-colors disabled:opacity-50"
           onClick={() => handleOAuthClick(provider)}
         >
           {loadingProvider === provider ? (

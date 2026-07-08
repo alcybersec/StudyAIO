@@ -8,9 +8,12 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.courseops_schemas import (
+    AssessmentCreateRequest,
     AssessmentResponse,
+    AssessmentUpdateRequest,
     CourseDocumentDetailResponse,
     CourseDocumentResponse,
+    DeadlineCreateRequest,
     DeadlineResponse,
     DeadlineUpdateRequest,
 )
@@ -138,6 +141,155 @@ async def get_document(
     return CourseDocumentDetailResponse.model_validate(doc)
 
 
+@router.patch(
+    "/assessments/{assessment_id}",
+    response_model=AssessmentResponse,
+    summary="Edit an assessment's info",
+)
+async def update_assessment(
+    assessment_id: str,
+    body: AssessmentUpdateRequest,
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> AssessmentResponse:
+    """Edit an assessment's title, type, weight, description, or weeks."""
+    assessment = await courseops_service.update_assessment(
+        session,
+        assessment_id,
+        title=body.title,
+        assessment_type=body.assessment_type,
+        weight_pct=body.weight_pct,
+        description=body.description,
+        weeks_relevant=body.weeks_relevant,
+    )
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    return AssessmentResponse.model_validate(assessment)
+
+
+@router.get(
+    "/assessments/{assessment_id}/documents",
+    response_model=list[CourseDocumentResponse],
+    summary="List documents attached to an assessment",
+)
+async def list_assessment_documents(
+    assessment_id: str,
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> list[CourseDocumentResponse]:
+    """List reference documents (brief, rubric, guideline, …) for an assessment."""
+    docs = await courseops_service.list_assessment_documents(session, assessment_id)
+    return [CourseDocumentResponse.model_validate(d) for d in docs]
+
+
+@router.post(
+    "/assessments/{assessment_id}/documents",
+    response_model=CourseDocumentResponse,
+    status_code=201,
+    summary="Attach a document to an assessment",
+    description="Attach a reference document (brief, rubric, guideline, …). No AI extraction is run.",
+)
+@limiter.limit(lambda: settings.rate_limit_uploads)
+async def upload_assessment_document(
+    request: Request,
+    file: UploadFile,
+    assessment_id: str,
+    document_type: str = Query("brief", description="brief, rubric, guideline, handbook, or other"),
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> CourseDocumentResponse:
+    """Attach a reference document to an assessment (no extraction pipeline)."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {ext}. Supported: {sorted(SUPPORTED_EXTENSIONS)}",
+        )
+
+    if document_type not in ("brief", "rubric", "guideline", "handbook", "other"):
+        raise HTTPException(
+            status_code=400,
+            detail="document_type must be one of: brief, rubric, guideline, handbook, other",
+        )
+
+    storage = get_storage()
+    await storage.ensure_dir("courseops")
+
+    safe_name = sanitize_filename(file.filename)
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    content = await read_upload_with_limit(file, max_bytes)
+
+    import hashlib
+
+    sha256 = hashlib.sha256(content).hexdigest()
+    stored_name = f"{sha256[:16]}_{safe_name}"
+    storage_key = f"courseops/{stored_name}"
+    await storage.put(storage_key, content)
+
+    doc = await courseops_service.attach_assessment_document(
+        session=session,
+        assessment_id=assessment_id,
+        document_type=document_type,
+        original_filename=file.filename,
+        file_path=storage_key,
+        file_type=ext.lstrip("."),
+        sha256=sha256,
+        file_size_bytes=len(content),
+        user_id=user.id,
+    )
+    if not doc:
+        await storage.delete(storage_key)
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    return CourseDocumentResponse.model_validate(doc)
+
+
+@router.delete(
+    "/documents/{document_id}",
+    status_code=204,
+    summary="Delete a course document",
+)
+async def delete_document(
+    document_id: str,
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Delete a course or assessment document."""
+    deleted = await courseops_service.delete_course_document(session, document_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+
+@router.post(
+    "/assessments",
+    response_model=AssessmentResponse,
+    status_code=201,
+    summary="Create an assessment manually",
+)
+async def create_assessment(
+    body: AssessmentCreateRequest,
+    course_code: str = Query(..., description="Course code"),
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> AssessmentResponse:
+    """Manually add an assessment to a course."""
+    assessment = await courseops_service.create_assessment(
+        session,
+        course_code=course_code,
+        title=body.title,
+        assessment_type=body.assessment_type,
+        weight_pct=body.weight_pct,
+        description=body.description,
+        weeks_relevant=body.weeks_relevant,
+    )
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return AssessmentResponse.model_validate(assessment)
+
+
 @router.get(
     "/assessments",
     response_model=list[AssessmentResponse],
@@ -151,6 +303,32 @@ async def list_assessments(
     """List all assessments for a course."""
     assessments = await courseops_service.list_assessments(session, course_code)
     return [AssessmentResponse.model_validate(a) for a in assessments]
+
+
+@router.post(
+    "/deadlines",
+    response_model=DeadlineResponse,
+    status_code=201,
+    summary="Create a deadline manually",
+)
+async def create_deadline(
+    body: DeadlineCreateRequest,
+    course_code: str = Query(..., description="Course code"),
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> DeadlineResponse:
+    """Manually add a deadline to a course (confirmed by default)."""
+    deadline = await courseops_service.create_deadline(
+        session,
+        course_code=course_code,
+        title=body.title,
+        due_date=body.due_date,
+        deadline_type=body.deadline_type,
+        description=body.description,
+    )
+    if not deadline:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return DeadlineResponse.model_validate(deadline)
 
 
 @router.get(

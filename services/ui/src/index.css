@@ -3,54 +3,159 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-  --color-primary: var(--theme-primary);
-  --color-primary-dark: var(--theme-primary-dark);
-  --color-primary-light: var(--theme-primary-light);
-  --color-success: var(--theme-success);
-  --color-warning: var(--theme-warning);
-  --color-danger: var(--theme-danger);
-  --color-surface: var(--theme-surface);
-  --color-surface-alt: var(--theme-surface-alt);
-  --color-border: var(--theme-border);
-  --color-text: var(--theme-text);
-  --color-text-muted: var(--theme-text-muted);
-  --font-family-sans: "Inter", system-ui, sans-serif;
+/* ---------------------------------------------------------------------------
+   StudyAIO tokens — "Nordic Calm, dark-anchored"
+   Dark is the design target: warm-tinted charcoal, muted earth accents.
+   Light is the derived paper twin.
+--------------------------------------------------------------------------- */
+
+@theme inline {
+  --color-surface-0: var(--t-surface-0);
+  --color-surface-1: var(--t-surface-1);
+  --color-surface-2: var(--t-surface-2);
+  --color-border: var(--t-border);
+  --color-border-strong: var(--t-border-strong);
+  --color-text: var(--t-text);
+  --color-text-muted: var(--t-text-muted);
+  --color-text-faint: var(--t-text-faint);
+
+  --color-sage: var(--t-sage);
+  --color-sage-hover: var(--t-sage-hover);
+  --color-sage-soft: var(--t-sage-soft);
+  --color-sage-fg: var(--t-sage-fg);
+
+  --color-amber: var(--t-amber);
+  --color-amber-soft: var(--t-amber-soft);
+  --color-amber-fg: var(--t-amber-fg);
+
+  --color-red: var(--t-red);
+  --color-red-soft: var(--t-red-soft);
+  --color-red-fg: var(--t-red-fg);
+
+  --color-peri: var(--t-peri);
+  --color-peri-soft: var(--t-peri-soft);
+  --color-peri-fg: var(--t-peri-fg);
+
+  --color-on-accent: var(--t-on-accent);
+
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* ── Light theme (default) ─────────────────────────── */
+/* -------- light (derived paper twin) --------
+   Declared before `.dark` so the dark block wins the cascade when the class
+   is set (both selectors have class-level specificity — order decides).
+   Text tokens hold WCAG AA 4.5:1 against every surface tier. */
 :root {
-  --theme-primary: #6366f1;
-  --theme-primary-dark: #4f46e5;
-  --theme-primary-light: #a5b4fc;
-  --theme-success: #22c55e;
-  --theme-warning: #f59e0b;
-  --theme-danger: #ef4444;
-  --theme-surface: #ffffff;
-  --theme-surface-alt: #f9fafb;
-  --theme-border: #e5e7eb;
-  --theme-text: #111827;
-  --theme-text-muted: #6b7280;
+  --t-surface-0: #f7f7f5;
+  --t-surface-1: #fdfdfc;
+  --t-surface-2: #f1f0ee;
+  --t-border: #e9e7e3;
+  --t-border-strong: #d9d6d0;
+  --t-text: #37352f;
+  --t-text-muted: #5f5c58;
+  --t-text-faint: #6d6a65;
+
+  --t-sage: #3d7355;
+  --t-sage-hover: #3a7154;
+  --t-sage-soft: rgba(68, 131, 97, 0.1);
+  --t-sage-fg: #3a7154;
+
+  --t-amber: #a3600e;
+  --t-amber-soft: rgba(217, 115, 13, 0.1);
+  --t-amber-fg: #96590f;
+
+  --t-red: #bc4f47;
+  --t-red-soft: rgba(196, 85, 77, 0.09);
+  --t-red-fg: #b04840;
+
+  --t-peri: #5f6ac4;
+  --t-peri-soft: rgba(110, 121, 214, 0.1);
+  --t-peri-fg: #545eb4;
+
+  --t-on-accent: #fdfdfc;
 }
 
-/* ── Dark theme ────────────────────────────────────── */
+/* -------- dark (anchor) -------- */
 .dark {
-  --theme-primary: #818cf8;
-  --theme-primary-dark: #6366f1;
-  --theme-primary-light: #4f46e5;
-  --theme-success: #4ade80;
-  --theme-warning: #fbbf24;
-  --theme-danger: #f87171;
-  --theme-surface: #1f2937;
-  --theme-surface-alt: #111827;
-  --theme-border: #374151;
-  --theme-text: #f9fafb;
-  --theme-text-muted: #9ca3af;
+  --t-surface-0: #191817;
+  --t-surface-1: #201f1e;
+  --t-surface-2: #282624;
+  --t-border: #33302d;
+  --t-border-strong: #423e3a;
+  --t-text: #e9e7e3;
+  --t-text-muted: #a5a19a;
+  --t-text-faint: #938f86;
+
+  --t-sage: #3f7057;
+  --t-sage-hover: #4a8265;
+  --t-sage-soft: rgba(127, 169, 143, 0.14);
+  --t-sage-fg: #93bfa4;
+
+  --t-amber: #a05e1b;
+  --t-amber-soft: rgba(217, 154, 98, 0.14);
+  --t-amber-fg: #dfa06a;
+
+  --t-red: #b0554d;
+  --t-red-soft: rgba(215, 138, 131, 0.13);
+  --t-red-fg: #d98d86;
+
+  --t-peri: #5a64bd;
+  --t-peri-soft: rgba(154, 163, 236, 0.13);
+  --t-peri-fg: #a3abee;
+
+  --t-on-accent: #f7f7f5;
 }
 
-.dark body {
-  background-color: var(--theme-surface-alt);
-  color: var(--theme-text);
+/* -------- base -------- */
+body {
+  background: var(--t-surface-0);
+  color: var(--t-text);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* visible keyboard focus, invisible mouse focus */
+:focus-visible {
+  outline: 2px solid var(--t-peri);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* keyboard hint chips — part of the power-tool identity */
+kbd {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--t-text-muted);
+  background: var(--t-surface-2);
+  border: 1px solid var(--t-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 5px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--t-border-strong) transparent;
+}
+
+::selection {
+  background: var(--t-peri-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* 3D flip animation for study cards */
@@ -78,7 +183,7 @@
   display: none;
 }
 .react-grid-item.react-grid-placeholder {
-  background: var(--theme-primary) !important;
+  background: var(--t-peri) !important;
   opacity: 0.1 !important;
   border-radius: 0.75rem !important;
 }

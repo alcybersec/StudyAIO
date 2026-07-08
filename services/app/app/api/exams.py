@@ -11,6 +11,8 @@ from app.api.exam_schemas import (
     ExamProgressResponse,
     ExamResponse,
     ExamUpdateRequest,
+    ReadinessDetailResponse,
+    ReadinessTopicRow,
     StudyHistoryDayResponse,
     StudySessionRequest,
     StudySessionResponse,
@@ -21,6 +23,7 @@ from app.models.user import User
 from app.services import (
     challenge_service,
     exam_service,
+    readiness_service,
     schedule_service,
     streak_service,
     xp_service,
@@ -260,3 +263,27 @@ async def get_history(
         session, exam_id=exam_id, days=days, user_id=user.id
     )
     return [StudyHistoryDayResponse(**h) for h in history]
+
+
+@router.get(
+    "/exams/{exam_id}/readiness",
+    response_model=ReadinessDetailResponse,
+    summary="Get readiness drill-down",
+    description="Returns overall readiness plus topic-level breakdown "
+    "(accuracy, weakness weight, card count per week).",
+)
+async def get_readiness_detail(
+    exam_id: str,
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> ReadinessDetailResponse:
+    """Get topic-level readiness detail for an exam."""
+    detail = await readiness_service.compute_readiness_detail(session, exam_id, user.id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    return ReadinessDetailResponse(
+        exam_id=detail["exam_id"],
+        title=detail["title"],
+        overall=detail["overall"],
+        topics=[ReadinessTopicRow(**t) for t in detail["topics"]],
+    )

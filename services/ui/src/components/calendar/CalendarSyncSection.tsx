@@ -32,7 +32,7 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
     <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <svg className="h-5 w-5 flex-shrink-0 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="h-5 w-5 flex-shrink-0 text-peri-fg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
           <span className="text-sm font-medium text-text truncate">
@@ -49,7 +49,7 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
         <button
           onClick={() => syncMutation.mutate()}
           disabled={syncMutation.isPending}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text hover:bg-surface-alt disabled:opacity-50 transition-colors"
+          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text hover:bg-surface-2 disabled:opacity-50 transition-colors"
         >
           {syncMutation.isPending ? 'Syncing...' : 'Sync Now'}
         </button>
@@ -61,13 +61,13 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
                 setConfirming(false)
               }}
               disabled={disconnectMutation.isPending}
-              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+              className="rounded-lg bg-red px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-50 transition-colors"
             >
               Confirm
             </button>
             <button
               onClick={() => setConfirming(false)}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text hover:bg-surface-alt transition-colors"
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text hover:bg-surface-2 transition-colors"
             >
               Cancel
             </button>
@@ -75,7 +75,7 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
         ) : (
           <button
             onClick={() => setConfirming(true)}
-            className="rounded-lg border border-red-200 dark:border-red-900 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+            className="rounded-lg border border-red/30 px-3 py-1.5 text-xs font-medium text-red-fg hover:bg-red-soft transition-colors"
           >
             Disconnect
           </button>
@@ -127,8 +127,8 @@ export function CalendarSyncSection() {
       <Card>
         <h2 className="text-lg font-semibold text-text mb-4">Google Calendar</h2>
         <div className="animate-pulse space-y-3">
-          <div className="h-4 bg-surface-alt rounded w-3/4" />
-          <div className="h-4 bg-surface-alt rounded w-1/2" />
+          <div className="h-4 bg-surface-0 rounded w-3/4" />
+          <div className="h-4 bg-surface-0 rounded w-1/2" />
         </div>
       </Card>
     )
@@ -164,7 +164,7 @@ export function CalendarSyncSection() {
           <button
             onClick={handleConnect}
             disabled={connectMutation.isPending || !GOOGLE_CLIENT_ID}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-sage px-4 py-2 text-sm font-medium text-on-accent hover:bg-sage-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
@@ -183,7 +183,7 @@ export function CalendarSyncSection() {
       )}
 
       {connectMutation.isError && (
-        <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+        <p className="mt-3 text-sm text-red-fg">
           Failed to connect: {connectMutation.error instanceof Error ? connectMutation.error.message : 'Unknown error'}
         </p>
       )}

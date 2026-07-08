@@ -9,10 +9,9 @@ from app.api.deps import get_current_user_or_default
 from app.api.schemas import ResolveReviewRequest, ReviewItemResponse
 from app.core.database import get_session
 from app.models.artifact import LectureArtifact
-from app.models.course import Course
 from app.models.user import User
 from app.pipeline.orchestrator import resume_pipeline
-from app.services import review_service
+from app.services import artifact_service, review_service
 
 logger = structlog.get_logger()
 
@@ -101,19 +100,14 @@ async def resolve_review_item(
         if not artifact:
             raise HTTPException(status_code=404, detail="Referenced artifact not found")
 
-        # Apply classification fields from resolution
-        if "course_code" in resolution:
-            course_result = await session.execute(
-                select(Course).where(Course.code == resolution["course_code"])
-            )
-            course = course_result.scalar_one_or_none()
-            if course:
-                artifact.course_id = course.id
-
-        if "week" in resolution:
-            artifact.week = resolution["week"]
-        if "title" in resolution:
-            artifact.title = resolution["title"]
+        # Apply classification fields from resolution (shared move logic)
+        await artifact_service.apply_classification(
+            session,
+            artifact,
+            course_code=resolution.get("course_code"),
+            week=resolution.get("week"),
+            title=resolution.get("title"),
+        )
 
         artifact.status = "classified"
 

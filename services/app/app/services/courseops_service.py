@@ -253,6 +253,214 @@ async def get_course_document(
     return result.unique().scalar_one_or_none()
 
 
+async def create_assessment(
+    session: AsyncSession,
+    *,
+    course_code: str,
+    title: str,
+    assessment_type: str = "other",
+    weight_pct: float | None = None,
+    description: str | None = None,
+    weeks_relevant: list[int] | None = None,
+) -> Assessment | None:
+    """Manually create an assessment for a course.
+
+    Args:
+        session: Database session.
+        course_code: Course code the assessment belongs to.
+        title: Assessment title.
+        assessment_type: Type (exam, assignment, quiz, project, lab, presentation, other).
+        weight_pct: Grade weight percentage, if known.
+        description: Optional free-text description.
+        weeks_relevant: Optional list of relevant week numbers.
+
+    Returns:
+        The created Assessment, or None if the course code is unknown.
+    """
+    result = await session.execute(select(Course).where(Course.code == course_code))
+    course = result.scalar_one_or_none()
+    if not course:
+        return None
+
+    assessment = Assessment(
+        id=generate_id(),
+        course_id=course.id,
+        source_document_id=None,
+        title=title,
+        assessment_type=assessment_type,
+        weight_pct=weight_pct,
+        description=description,
+        weeks_relevant=weeks_relevant,
+    )
+    session.add(assessment)
+    await session.commit()
+    await session.refresh(assessment)
+    logger.info("assessment_created_manually", course_code=course_code, title=title)
+    return assessment
+
+
+async def update_assessment(
+    session: AsyncSession,
+    assessment_id: str,
+    *,
+    title: str | None = None,
+    assessment_type: str | None = None,
+    weight_pct: float | None = None,
+    description: str | None = None,
+    weeks_relevant: list[int] | None = None,
+) -> Assessment | None:
+    """Edit an assessment's info. Only provided fields are changed.
+
+    Returns:
+        The updated Assessment, or None if not found.
+    """
+    assessment = await session.get(Assessment, assessment_id)
+    if not assessment:
+        return None
+
+    if title is not None:
+        assessment.title = title
+    if assessment_type is not None:
+        assessment.assessment_type = assessment_type
+    if weight_pct is not None:
+        assessment.weight_pct = weight_pct
+    if description is not None:
+        assessment.description = description
+    if weeks_relevant is not None:
+        assessment.weeks_relevant = weeks_relevant
+
+    assessment.updated_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(assessment)
+    logger.info("assessment_updated", assessment_id=assessment_id)
+    return assessment
+
+
+async def list_assessment_documents(
+    session: AsyncSession,
+    assessment_id: str,
+) -> list[CourseDocument]:
+    """List documents attached to a specific assessment."""
+    result = await session.execute(
+        select(CourseDocument)
+        .where(CourseDocument.assessment_id == assessment_id)
+        .order_by(CourseDocument.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def attach_assessment_document(
+    session: AsyncSession,
+    *,
+    assessment_id: str,
+    document_type: str,
+    original_filename: str,
+    file_path: str,
+    file_type: str,
+    sha256: str,
+    file_size_bytes: int,
+    user_id: str | None = None,
+) -> CourseDocument | None:
+    """Attach a reference document (brief, rubric, guideline, …) to an assessment.
+
+    Unlike a course outline upload, this does NOT trigger AI extraction — it is a
+    reference file linked to the assessment.
+
+    Returns:
+        The created CourseDocument, or None if the assessment does not exist.
+    """
+    assessment = await session.get(Assessment, assessment_id)
+    if not assessment:
+        return None
+
+    owner_id = user_id
+    if owner_id is None:
+        course = await session.get(Course, assessment.course_id)
+        owner_id = course.user_id if course else None
+
+    doc = CourseDocument(
+        id=generate_id(),
+        user_id=owner_id,
+        course_id=assessment.course_id,
+        assessment_id=assessment_id,
+        document_type=document_type,
+        title=original_filename,
+        original_filename=original_filename,
+        file_path=file_path,
+        file_type=file_type,
+        sha256=sha256,
+        file_size_bytes=file_size_bytes,
+        status="processed",
+    )
+    session.add(doc)
+    await session.commit()
+    await session.refresh(doc)
+    logger.info("assessment_document_attached", assessment_id=assessment_id, document_type=document_type)
+    return doc
+
+
+async def delete_course_document(
+    session: AsyncSession,
+    document_id: str,
+) -> bool:
+    """Delete a course document. Returns True if it existed."""
+    doc = await session.get(CourseDocument, document_id)
+    if not doc:
+        return False
+    await session.delete(doc)
+    await session.commit()
+    logger.info("course_document_deleted", document_id=document_id)
+    return True
+
+
+async def create_deadline(
+    session: AsyncSession,
+    *,
+    course_code: str,
+    title: str,
+    due_date: date,
+    deadline_type: str = "other",
+    description: str | None = None,
+) -> Deadline | None:
+    """Manually create a deadline for a course.
+
+    Manually entered deadlines are confirmed by default (unlike AI-extracted
+    ones, which start unconfirmed and go through the review flow).
+
+    Args:
+        session: Database session.
+        course_code: Course code the deadline belongs to.
+        title: Deadline title.
+        due_date: Date the deadline is due.
+        deadline_type: Type (assignment, exam, quiz, project, other).
+        description: Optional free-text description.
+
+    Returns:
+        The created Deadline, or None if the course code is unknown.
+    """
+    result = await session.execute(select(Course).where(Course.code == course_code))
+    course = result.scalar_one_or_none()
+    if not course:
+        return None
+
+    deadline = Deadline(
+        id=generate_id(),
+        course_id=course.id,
+        assessment_id=None,
+        source_document_id=None,
+        title=title,
+        due_date=due_date,
+        deadline_type=deadline_type,
+        description=description,
+        is_confirmed=True,
+    )
+    session.add(deadline)
+    await session.commit()
+    await session.refresh(deadline)
+    logger.info("deadline_created_manually", course_code=course_code, title=title)
+    return deadline
+
+
 async def list_assessments(
     session: AsyncSession,
     course_code: str,

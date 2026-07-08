@@ -226,6 +226,72 @@ class TestSendMessage:
 
 
 @pytest.mark.asyncio
+class TestSendMessageScoping:
+    """Per-message course/week scoping on POST /messages."""
+
+    async def test_send_message_with_scope_resolves_course_and_forwards(
+        self, async_client, mock_session
+    ):
+        """course_code resolves to course_id; week passes through."""
+        mock_course = MagicMock()
+        mock_course.id = "course-001"
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_course
+        mock_session.execute.return_value = mock_result
+
+        user_msg = _mock_message_obj(id="m-001", role="user", content="What is ASLR?")
+        assistant_msg = _mock_message_obj(id="m-002", role="assistant", content="ASLR is...")
+
+        with patch(
+            "app.api.chat.chat_service.send_message",
+            new_callable=AsyncMock,
+            return_value=(user_msg, assistant_msg),
+        ) as mock_send:
+            response = await async_client.post(
+                "/api/chat/sessions/session-001/messages",
+                json={"content": "What is ASLR?", "course_code": "CSIT302", "week": 7},
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_send.await_args.kwargs
+        assert kwargs["course_id"] == "course-001"
+        assert kwargs["week"] == 7
+
+    async def test_send_message_unknown_scope_course_returns_404(self, async_client, mock_session):
+        """Unknown course_code on a message returns 404."""
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = mock_result
+
+        response = await async_client.post(
+            "/api/chat/sessions/session-001/messages",
+            json={"content": "Hello", "course_code": "INVALID"},
+        )
+
+        assert response.status_code == 404
+
+    async def test_send_message_without_scope_passes_none(self, async_client, mock_session):
+        """Scope fields are optional and default to None."""
+        user_msg = _mock_message_obj(id="m-001", role="user", content="Hi")
+        assistant_msg = _mock_message_obj(id="m-002", role="assistant", content="Hello!")
+
+        with patch(
+            "app.api.chat.chat_service.send_message",
+            new_callable=AsyncMock,
+            return_value=(user_msg, assistant_msg),
+        ) as mock_send:
+            response = await async_client.post(
+                "/api/chat/sessions/session-001/messages",
+                json={"content": "Hi"},
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_send.await_args.kwargs
+        assert kwargs.get("course_id") is None
+        assert kwargs.get("week") is None
+
+
+@pytest.mark.asyncio
 class TestDeleteSession:
     """Tests for DELETE /api/chat/sessions/{session_id}."""
 

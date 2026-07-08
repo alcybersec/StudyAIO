@@ -56,3 +56,9 @@ services/app/alembic/versions/__pycache__/
 
 # Claude local settings
 .claude/settings.local.json
+
+# Superpowers brainstorming sessions
+.superpowers/
+
+# agent worktrees
+.claude/worktrees/

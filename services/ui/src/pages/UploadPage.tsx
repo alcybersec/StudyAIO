@@ -1,13 +1,24 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { Lock, WifiOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
-import { Card, PageHeader, ConnectionBanner } from '../components/ui'
+import { Card, EmptyState, PageHeader, toast } from '../components/ui'
 import { DropZone } from '../components/upload/DropZone'
-import { FileQueue, type QueuedFile } from '../components/upload/FileQueue'
-import { PipelineProgress } from '../components/upload/PipelineProgress'
+import { PipelineFileCard, type UploadStatus } from '../components/upload/PipelineFileCard'
 import { usePipelineEvents } from '../hooks/usePipelineEvents'
+import { useRetryPipeline } from '../hooks/useApi'
+import { mapPipelineEventsToStages } from '../lib/pipelineStages'
+import { toastMutationError } from '../lib/toast'
 import { uploadApi } from '../api/endpoints'
 import { useQueryClient } from '@tanstack/react-query'
 import type { BatchUploadResponse } from '../types'
+
+interface QueuedFile {
+  id: string
+  file: File
+  status: UploadStatus
+  artifactId?: string
+  error?: string
+}
 
 let nextId = 0
 
@@ -19,12 +30,13 @@ export function UploadPage() {
   const processingRef = useRef(false)
   const queryClient = useQueryClient()
   const [batchResult, setBatchResult] = useState<BatchUploadResponse | null>(null)
+  const retryPipeline = useRetryPipeline()
 
   const artifactIds = useMemo(
-    () => queue.filter((f) => f.artifactId).map((f) => f.artifactId!),
+    () => queue.filter((f) => f.artifactId && f.status !== 'duplicate').map((f) => f.artifactId!),
     [queue],
   )
-  const { events, connected } = usePipelineEvents(artifactIds.length > 0 ? artifactIds : undefined)
+  const { events, connectionState } = usePipelineEvents(artifactIds.length > 0 ? artifactIds : undefined)
 
   const processQueue = useCallback(async (updatedQueue: QueuedFile[]) => {
     if (processingRef.current) return
@@ -55,7 +67,7 @@ export function UploadPage() {
               return { ...f, status: 'done' as const, artifactId: r.artifact_id || undefined }
             }
             if (r.status === 'duplicate') {
-              return { ...f, status: 'done' as const, artifactId: r.artifact_id || undefined }
+              return { ...f, status: 'duplicate' as const, artifactId: r.artifact_id || undefined }
             }
             return { ...f, status: 'error' as const, error: r.error || 'Upload failed' }
           })
@@ -77,10 +89,11 @@ export function UploadPage() {
         )
         try {
           const result = await uploadApi.upload(item.file)
+          const status: UploadStatus = result.status === 'duplicate' ? 'duplicate' : 'done'
           setQueue((prev) =>
             prev.map((f) =>
               f.id === item.id
-                ? { ...f, status: 'done' as const, artifactId: result.artifact_id }
+                ? { ...f, status, artifactId: result.artifact_id }
                 : f
             )
           )
@@ -119,20 +132,25 @@ export function UploadPage() {
     setQueue((prev) => prev.filter((f) => f.id !== id))
   }, [])
 
+  const handleRetryStage = useCallback((artifactId: string) => {
+    retryPipeline.mutate(artifactId, {
+      onSuccess: (res) => toast.success(`Retrying from ${res.retrying_from_stage}`),
+      onError: (err) => toastMutationError(err, () => handleRetryStage(artifactId)),
+    })
+  }, [retryPipeline])
+
   const hasActive = queue.some((f) => f.status === 'uploading')
 
   if (isDemo) {
     return (
       <div>
         <PageHeader
-          title="Upload Lectures"
-          subtitle="Upload PDF, DOCX, or PPTX files to start the processing pipeline"
+          title="Upload"
+          subtitle="Files move through six stages — each retryable on its own"
         />
         <Card>
           <div className="text-center py-8">
-            <svg className="w-12 h-12 mx-auto mb-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+            <Lock size={40} strokeWidth={1.25} className="mx-auto mb-4 text-text-faint" aria-hidden />
             <h3 className="text-lg font-semibold text-text mb-2">Uploads disabled in demo</h3>
             <p className="text-sm text-text-muted">
               Create a free account to upload your own lecture files and start the processing pipeline.
@@ -146,34 +164,62 @@ export function UploadPage() {
   return (
     <div>
       <PageHeader
-        title="Upload Lectures"
-        subtitle="Upload PDF, DOCX, or PPTX files to start the processing pipeline"
+        title="Upload"
+        subtitle="Files move through six stages — each retryable on its own"
       />
 
-      <div className="space-y-6">
-        <ConnectionBanner connected={connected} />
-        <DropZone onFiles={handleFiles} disabled={hasActive} />
+      <DropZone onFiles={handleFiles} disabled={hasActive} />
 
-        {/* Batch result summary */}
-        {batchResult && (
-          <div className="bg-surface rounded-xl border border-border px-4 py-3">
-            <p className="text-sm font-medium text-text">
-              Batch upload: {batchResult.succeeded} succeeded, {batchResult.duplicates} duplicates, {batchResult.failed} failed
-              <span className="text-text-muted"> ({batchResult.total} total)</span>
-            </p>
-          </div>
-        )}
+      {/* Batch result summary */}
+      {batchResult && (
+        <div className="bg-surface-1 rounded-xl border border-border px-4 py-3 mt-6">
+          <p className="text-sm font-medium text-text">
+            Batch upload: {batchResult.succeeded} succeeded, {batchResult.duplicates} duplicates, {batchResult.failed} failed
+            <span className="text-text-muted"> ({batchResult.total} total)</span>
+          </p>
+        </div>
+      )}
 
-        <FileQueue files={queue} onRemove={handleRemove} />
+      <h3 className="text-[11px] font-mono uppercase tracking-wider text-text-faint mt-6 mb-3">
+        Processing now
+      </h3>
 
-        {/* Pipeline progress per uploaded artifact */}
-        {queue.filter((f) => f.artifactId).map((f) => (
-          <div key={f.id} className="bg-surface rounded-xl border border-border px-4 py-3">
-            <p className="text-sm font-medium text-text truncate">{f.file.name}</p>
-            <PipelineProgress events={events} artifactId={f.artifactId!} />
-          </div>
-        ))}
-      </div>
+      {artifactIds.length > 0 && connectionState === 'reconnecting' && (
+        <div className="flex items-center gap-2 bg-amber-soft border border-amber/25 rounded-lg px-3 py-2 mb-3">
+          <WifiOff size={13} className="text-amber-fg shrink-0" aria-hidden />
+          <span className="text-xs text-amber-fg">
+            Live progress stream disconnected — reconnecting. Stages keep running on the server.
+          </span>
+        </div>
+      )}
+
+      {queue.length === 0 ? (
+        <EmptyState
+          title="Nothing processing"
+          description="Drop files above — they'll appear here with live stage-by-stage progress."
+        />
+      ) : (
+        <>
+          {queue.map((f) => (
+            <PipelineFileCard
+              key={f.id}
+              name={f.file.name}
+              sizeBytes={f.file.size}
+              uploadStatus={f.status}
+              uploadError={f.error}
+              stages={f.artifactId && f.status !== 'duplicate'
+                ? mapPipelineEventsToStages(events.filter((e) => e.artifact_id === f.artifactId))
+                : undefined}
+              onRetryStage={f.artifactId ? () => handleRetryStage(f.artifactId!) : undefined}
+              retrying={retryPipeline.isPending && retryPipeline.variables === f.artifactId}
+              onRemove={f.status === 'queued' || f.status === 'error' ? () => handleRemove(f.id) : undefined}
+            />
+          ))}
+          <p className="text-[11px] text-text-faint font-mono mt-4">
+            event log capped at 200 entries · full history in each file's detail view
+          </p>
+        </>
+      )}
     </div>
   )
 }

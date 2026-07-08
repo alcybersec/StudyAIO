@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChevronDown, ChevronRight, Download, FileText, Presentation } from 'lucide-react'
 import { Badge, StatusBadge } from '../ui'
 import type { Artifact } from '../../types'
 
@@ -8,8 +9,8 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1_048_576).toFixed(1)} MB`
 }
 
-const typeVariant: Record<string, 'info' | 'success' | 'warning' | 'default'> = {
-  pdf: 'danger' as 'info',
+const typeVariant: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'default'> = {
+  pdf: 'danger',
   docx: 'info',
   pptx: 'warning',
 }
@@ -24,40 +25,38 @@ export function ArtifactList({ artifacts, selectedArtifactId, onSelectArtifact }
   const [expanded, setExpanded] = useState(true)
 
   if (artifacts.length === 0) {
-    return <p className="text-sm text-gray-500 py-4">No source artifacts for this week.</p>
+    return <p className="text-sm text-text-muted py-4">No source artifacts for this week.</p>
   }
 
   return (
     <div>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900 mb-3 transition-colors"
+        className="flex items-center gap-2 text-sm font-semibold text-text-muted hover:text-text mb-3 transition-colors"
+        aria-expanded={expanded}
       >
-        <span className="text-xs">{expanded ? '\u25BC' : '\u25B6'}</span>
-        Source Files ({artifacts.length})
+        {expanded ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+        Source files ({artifacts.length})
       </button>
       {expanded && (
-        <ul className="divide-y divide-gray-100 bg-white rounded-xl border border-gray-200">
+        <ul className="divide-y divide-border bg-surface-1 rounded-xl border border-border">
           {artifacts.map((artifact) => {
             const isSelected = selectedArtifactId === artifact.id
+            const Icon = artifact.file_type === 'pptx' ? Presentation : FileText
             return (
               <li
                 key={artifact.id}
                 className={`flex items-center gap-3 px-4 py-3 transition-colors ${
-                  onSelectArtifact ? 'cursor-pointer hover:bg-gray-50' : ''
-                } ${isSelected ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
+                  onSelectArtifact ? 'cursor-pointer hover:bg-surface-2' : ''
+                } ${isSelected ? 'bg-peri-soft border-l-2 border-l-peri' : ''}`}
                 onClick={() => onSelectArtifact?.(artifact.id)}
               >
-                <span className="text-lg text-gray-400 shrink-0">
-                  {artifact.file_type === 'pdf' ? '\u{1F4C4}' : artifact.file_type === 'pptx' ? '\u{1F4CA}' : '\u{1F4DD}'}
-                </span>
+                <Icon size={16} className="text-text-faint shrink-0" aria-hidden />
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium truncate ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
+                  <p className={`text-sm font-medium truncate ${isSelected ? 'text-peri-fg' : 'text-text'}`}>
                     {artifact.original_filename}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {formatSize(artifact.file_size_bytes)}
-                  </p>
+                  <p className="text-xs text-text-faint mt-0.5">{formatSize(artifact.file_size_bytes)}</p>
                 </div>
                 <Badge variant={typeVariant[artifact.file_type] ?? 'default'}>
                   {artifact.file_type.toUpperCase()}
@@ -66,10 +65,10 @@ export function ArtifactList({ artifacts, selectedArtifactId, onSelectArtifact }
                 <a
                   href={`/api/files/uploads/artifacts/${artifact.id}`}
                   download
-                  className="text-xs text-primary hover:text-primary-dark transition-colors"
+                  className="inline-flex items-center gap-1 text-xs text-peri-fg hover:underline transition-colors"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  Download
+                  <Download size={12} aria-hidden /> Download
                 </a>
               </li>
             )

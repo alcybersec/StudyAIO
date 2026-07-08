@@ -48,7 +48,7 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 mx-4 w-full max-w-md rounded-lg bg-surface border border-border p-6 shadow-xl focus:outline-none">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 mx-4 w-full max-w-md rounded-lg bg-surface-1 border border-border p-6 shadow-xl focus:outline-none">
           <Dialog.Title className="mb-4 text-lg font-medium text-text">Edit Deadline</Dialog.Title>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
@@ -57,9 +57,9 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
               <input
                 type="text"
                 {...register('title')}
-                className="mt-1 w-full rounded-md border border-border bg-surface text-text px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="mt-1 w-full rounded-md border border-border bg-surface-1 text-text px-3 py-2 text-sm focus:border-sage focus:outline-none focus:ring-1 focus:ring-sage"
               />
-              {errors.title && <p className="mt-1 text-xs text-danger">{errors.title.message}</p>}
+              {errors.title && <p className="mt-1 text-xs text-red-fg">{errors.title.message}</p>}
             </div>
 
             <div>
@@ -67,16 +67,16 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
               <input
                 type="date"
                 {...register('dueDate')}
-                className="mt-1 w-full rounded-md border border-border bg-surface text-text px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="mt-1 w-full rounded-md border border-border bg-surface-1 text-text px-3 py-2 text-sm focus:border-sage focus:outline-none focus:ring-1 focus:ring-sage"
               />
-              {errors.dueDate && <p className="mt-1 text-xs text-danger">{errors.dueDate.message}</p>}
+              {errors.dueDate && <p className="mt-1 text-xs text-red-fg">{errors.dueDate.message}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-text">Type</label>
               <select
                 {...register('deadlineType')}
-                className="mt-1 w-full rounded-md border border-border bg-surface text-text px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="mt-1 w-full rounded-md border border-border bg-surface-1 text-text px-3 py-2 text-sm focus:border-sage focus:outline-none focus:ring-1 focus:ring-sage"
               >
                 {['exam', 'assignment', 'quiz', 'project', 'lab', 'presentation', 'other'].map((t) => (
                   <option key={t} value={t}>
@@ -91,7 +91,7 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
               <textarea
                 {...register('description')}
                 rows={2}
-                className="mt-1 w-full rounded-md border border-border bg-surface text-text px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="mt-1 w-full rounded-md border border-border bg-surface-1 text-text px-3 py-2 text-sm focus:border-sage focus:outline-none focus:ring-1 focus:ring-sage"
               />
             </div>
 
@@ -99,7 +99,7 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="rounded-md border border-border px-4 py-2 text-sm text-text hover:bg-surface-alt"
+                  className="rounded-md border border-border px-4 py-2 text-sm text-text hover:bg-surface-2"
                 >
                   Cancel
                 </button>
@@ -107,7 +107,7 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
               <button
                 type="submit"
                 disabled={updateDeadline.isPending || !isValid}
-                className="rounded-md bg-primary px-4 py-2 text-sm text-white hover:bg-primary-dark disabled:opacity-50"
+                className="rounded-md bg-sage px-4 py-2 text-sm text-on-accent hover:bg-sage-hover disabled:opacity-50"
               >
                 {updateDeadline.isPending ? 'Saving...' : 'Save & Confirm'}
               </button>
