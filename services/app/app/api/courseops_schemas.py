@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # ── Course Documents ────────────────────────────────────────────
 
@@ -12,6 +12,7 @@ class CourseDocumentResponse(BaseModel):
 
     id: str
     course_id: str
+    assessment_id: str | None = None
     document_type: str
     title: str | None
     original_filename: str
@@ -81,6 +82,35 @@ class DeadlineUpdateRequest(BaseModel):
     deadline_type: str | None = None
     description: str | None = None
     is_confirmed: bool | None = None
+
+
+class DeadlineCreateRequest(BaseModel):
+    """Request schema for manually creating a deadline."""
+
+    title: str = Field(..., min_length=1, max_length=255)
+    due_date: date
+    deadline_type: str = Field(default="other", max_length=50)
+    description: str | None = None
+
+
+class AssessmentCreateRequest(BaseModel):
+    """Request schema for manually creating an assessment."""
+
+    title: str = Field(..., min_length=1, max_length=255)
+    assessment_type: str = Field(default="other", max_length=50)
+    weight_pct: float | None = Field(default=None, ge=0, le=100)
+    description: str | None = None
+    weeks_relevant: list[int] | None = None
+
+
+class AssessmentUpdateRequest(BaseModel):
+    """Request schema for editing an assessment's info."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    assessment_type: str | None = Field(default=None, max_length=50)
+    weight_pct: float | None = Field(default=None, ge=0, le=100)
+    description: str | None = None
+    weeks_relevant: list[int] | None = None
 
 
 # ── Dashboard ───────────────────────────────────────────────────

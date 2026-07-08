@@ -2,16 +2,25 @@ import { api } from './client'
 import type {
   AnalyticsOverview,
   Assessment,
+  AssessmentCreate,
+  AssessmentUpdate,
   BatchUploadResponse,
+  CaptureRequest,
   ChatMessage,
   ChatSession,
+  Course,
+  CourseArchiveResult,
+  CourseDeleteResult,
   CourseDetail,
   CourseDocument,
   CourseListItem,
+  CourseMergeResult,
+  CourseUpdatePayload,
   CreateSessionRequest,
   DailyPlan,
   DashboardData,
   Deadline,
+  DeadlineCreate,
   DeadlineUpdate,
   Exam,
   ExamProgress,
@@ -19,12 +28,16 @@ import type {
   Flashcard,
   HeatmapDay,
   MasteryWeek,
+  MessageScope,
   PipelineRun,
   QARequest,
   QAResponse,
   QuizAttemptRequest,
   QuizQuestion,
+  ReadinessDetail,
+  ReclassifyResponse,
   RetentionPoint,
+  RetryResponse,
   ReviewItem,
   ReviewRequest,
   ReviewResponse,
@@ -41,6 +54,7 @@ import type {
   UploadResult,
   WeakTopic,
   WeekDetail,
+  WeekPlan,
 } from '../types'
 
 export const dashboardApi = {
@@ -52,6 +66,18 @@ export const coursesApi = {
   detail: (courseCode: string) => api.get<CourseDetail>(`/courses/${courseCode}`),
   week: (courseCode: string, week: number) =>
     api.get<WeekDetail>(`/courses/${courseCode}/weeks/${week}`),
+  rename: (courseCode: string, data: CourseUpdatePayload) =>
+    api.patch<Course>(`/courses/${courseCode}`, data),
+  archive: (courseCode: string) =>
+    api.post<CourseArchiveResult>(`/courses/${courseCode}/archive`),
+  merge: (courseCode: string, into: string) =>
+    api.post<CourseMergeResult>(`/courses/${courseCode}/merge`, { into }),
+  /** Type-to-confirm delete: the API requires an X-Confirm header matching the code (428 otherwise). */
+  remove: (courseCode: string) =>
+    api.request<CourseDeleteResult>(`/courses/${courseCode}`, {
+      method: 'DELETE',
+      headers: { 'X-Confirm': courseCode },
+    }),
 }
 
 export const summariesApi = {
@@ -68,9 +94,15 @@ export const reviewApi = {
 
 export const uploadApi = {
   upload: (file: File) => api.upload<UploadResult>('/uploads', file),
+  capture: (body: CaptureRequest) => api.post<UploadResult>('/uploads/capture', body),
   batchUpload: (files: File[]) => api.uploadMany<BatchUploadResponse>('/uploads/batch', files),
   status: (artifactId: string) => api.get<PipelineRun[]>(`/uploads/${artifactId}/status`),
-  retry: (artifactId: string) => api.post<{ artifact_id: string; status: string; retrying_from_stage: string }>(`/uploads/${artifactId}/retry`),
+  retry: (artifactId: string) => api.post<RetryResponse>(`/uploads/${artifactId}/retry`),
+}
+
+export const artifactsApi = {
+  reclassify: (artifactId: string, data: { course_code: string; week: number }) =>
+    api.post<ReclassifyResponse>(`/artifacts/${artifactId}/reclassify`, data),
 }
 
 export const qaApi = {
@@ -113,6 +145,8 @@ export const examsApi = {
   }) => api.post(`/exams/${examId}/sessions`, data),
   history: (examId: string, days = 30) =>
     api.get<StudyHistoryDay[]>(`/exams/${examId}/history?days=${days}`),
+  getReadiness: (examId: string) =>
+    api.get<ReadinessDetail>(`/exams/${examId}/readiness`),
 }
 
 export const studyApi = {
@@ -140,6 +174,7 @@ export const studyApi = {
     if (courseId) params.set('course_id', courseId)
     return api.get<StreakInfo>(`/study/streak?${params}`)
   },
+  getPlan: () => api.get<WeekPlan>('/study/plan'),
 }
 
 export const exportApi = {
@@ -186,15 +221,23 @@ export const chatApi = {
     api.get<{ sessions: ChatSession[] }>(`/chat/sessions?limit=${limit}`),
   getMessages: (sessionId: string, limit = 100, offset = 0) =>
     api.get<{ messages: ChatMessage[] }>(`/chat/sessions/${sessionId}/messages?limit=${limit}&offset=${offset}`),
-  sendMessage: (sessionId: string, content: string) =>
-    api.post<SendMessageResponse>(`/chat/sessions/${sessionId}/messages`, { content }),
+  sendMessage: (sessionId: string, content: string, scope?: MessageScope) =>
+    api.post<SendMessageResponse>(`/chat/sessions/${sessionId}/messages`, {
+      content,
+      course_code: scope?.courseCode ?? null,
+      week: scope?.week ?? null,
+    }),
   deleteSession: (sessionId: string) =>
     api.delete(`/chat/sessions/${sessionId}`),
-  streamMessage: (sessionId: string, content: string) =>
+  streamMessage: (sessionId: string, content: string, scope?: MessageScope) =>
     fetch(`/api/chat/sessions/${sessionId}/messages/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({
+        content,
+        course_code: scope?.courseCode ?? null,
+        week: scope?.week ?? null,
+      }),
     }),
 }
 
@@ -254,8 +297,33 @@ export const courseopsApi = {
     api.get<CourseDocument>(`/courseops/documents/${documentId}`),
   listAssessments: (courseCode: string) =>
     api.get<Assessment[]>(`/courseops/assessments?course_code=${courseCode}`),
+  createAssessment: (courseCode: string, data: AssessmentCreate) =>
+    api.post<Assessment>(`/courseops/assessments?course_code=${courseCode}`, data),
+  updateAssessment: (assessmentId: string, data: AssessmentUpdate) =>
+    api.patch<Assessment>(`/courseops/assessments/${assessmentId}`, data),
+  listAssessmentDocuments: (assessmentId: string) =>
+    api.get<CourseDocument[]>(`/courseops/assessments/${assessmentId}/documents`),
+  uploadAssessmentDocument: async (assessmentId: string, file: File, documentType: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const params = new URLSearchParams({ document_type: documentType })
+    const response = await fetch(`/api/courseops/assessments/${assessmentId}/documents?${params}`, {
+      method: 'POST',
+      body: formData,
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ detail: response.statusText }))
+      throw new Error(body.detail || response.statusText)
+    }
+    return response.json() as Promise<CourseDocument>
+  },
+  deleteDocument: (documentId: string) => api.delete(`/courseops/documents/${documentId}`),
+  documentDownloadUrl: (documentId: string) =>
+    api.downloadUrl(`/files/courseops/documents/${documentId}`),
   listDeadlines: (courseCode: string, upcoming = false) =>
     api.get<Deadline[]>(`/courseops/deadlines?course_code=${courseCode}&upcoming=${upcoming}`),
+  createDeadline: (courseCode: string, data: DeadlineCreate) =>
+    api.post<Deadline>(`/courseops/deadlines?course_code=${courseCode}`, data),
   updateDeadline: (deadlineId: string, data: DeadlineUpdate) =>
     api.put<Deadline>(`/courseops/deadlines/${deadlineId}`, data),
   deleteDeadline: (deadlineId: string) =>

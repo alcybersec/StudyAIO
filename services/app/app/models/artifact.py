@@ -24,6 +24,7 @@ class LectureArtifact(Base):
     original_filename: Mapped[str] = mapped_column(String(500), nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     file_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="upload")
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ingested")

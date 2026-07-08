@@ -14,6 +14,7 @@ from app.models.flashcard_review import FlashcardReview
 from app.models.quiz import QuizQuestion
 from app.models.quiz_attempt import QuizAttempt
 from app.models.study_session import StudySession
+from app.services import readiness_service
 
 logger = structlog.get_logger()
 
@@ -235,60 +236,16 @@ async def get_weak_topics(
     Returns:
         List of dicts with week, quiz_accuracy, avg_ease, reason.
     """
-    # Quiz accuracy per week
-    quiz_stats = await session.execute(
-        select(
-            QuizQuestion.week,
-            func.count(QuizAttempt.id).label("attempts"),
-            func.sum(case((QuizAttempt.is_correct == True, 1), else_=0)).label("correct"),  # noqa: E712
-        )
-        .join(QuizAttempt, QuizQuestion.id == QuizAttempt.quiz_question_id)
-        .where(
-            QuizQuestion.course_id == course_id,
-            QuizQuestion.week.in_(weeks_scope),
-        )
-        .group_by(QuizQuestion.week)
+    quiz_by_week, ease_by_week = await readiness_service.collect_week_stats(
+        session, course_id, weeks_scope
     )
-    quiz_by_week = {}
-    for row in quiz_stats:
-        accuracy = (row.correct / row.attempts * 100) if row.attempts > 0 else None
-        quiz_by_week[row.week] = {"attempts": row.attempts, "accuracy": accuracy}
-
-    # Flashcard ease per week
-    ease_stats = await session.execute(
-        select(
-            Flashcard.week,
-            func.avg(FlashcardReview.ease_factor).label("avg_ease"),
-        )
-        .join(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
-        .where(
-            Flashcard.course_id == course_id,
-            Flashcard.week.in_(weeks_scope),
-        )
-        .group_by(Flashcard.week)
-    )
-    ease_by_week = {row.week: row.avg_ease for row in ease_stats}
 
     weak = []
     for week in weeks_scope:
         quiz = quiz_by_week.get(week, {"attempts": 0, "accuracy": None})
         avg_ease = ease_by_week.get(week)
 
-        reasons = []
-        weakness_score = 0
-
-        if quiz["accuracy"] is not None and quiz["accuracy"] < 70:
-            reasons.append("low_quiz_accuracy")
-            weakness_score += 70 - quiz["accuracy"]
-
-        if avg_ease is not None and avg_ease < 2.0:
-            reasons.append("low_flashcard_ease")
-            weakness_score += (2.0 - avg_ease) * 50
-
-        # No data = we can't assess, mark as unstudied
-        if quiz["accuracy"] is None and avg_ease is None:
-            reasons.append("unstudied")
-            weakness_score += 100
+        reasons, weakness_score = readiness_service.score_week(quiz["accuracy"], avg_ease)
 
         if reasons:
             weak.append(

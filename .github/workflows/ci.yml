@@ -147,6 +147,18 @@ jobs:
         working-directory: services/ui
         run: npm run lint
 
+      - name: Color token guard
+        working-directory: services/ui
+        run: bash scripts/check-colors.sh
+
+      - name: Unit tests
+        working-directory: services/ui
+        run: npm run test
+
       - name: Production build
         working-directory: services/ui
         run: npm run build
+
+      - name: Bundle size budget
+        working-directory: services/ui
+        run: bash scripts/check-bundle.sh

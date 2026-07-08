@@ -1,53 +1,87 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { KeyRound } from 'lucide-react'
+import { Button, ErrorState, Input } from '../components/ui'
+import { RateLimitCard } from '../components/auth/RateLimitCard'
+import { classifyAuthError } from '../components/auth/authErrorMap'
 import { authApi } from '../api/auth'
-import { ApiError } from '../api/client'
+import { resetPasswordSchema, type ResetPasswordFormData } from '../lib/schemas'
+
+const RESET_FIELDS = ['password', 'confirm'] as const
+type ResetField = (typeof RESET_FIELDS)[number]
+
+function isResetField(key: string): key is ResetField {
+  return (RESET_FIELDS as readonly string[]).includes(key)
+}
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [cooldown, setCooldown] = useState<{ key: number; seconds: number } | null>(null)
+  const [networkFailed, setNetworkFailed] = useState(false)
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setError('')
+  const {
+    register,
+    handleSubmit,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<ResetPasswordFormData>({ resolver: zodResolver(resetPasswordSchema) })
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters')
-      return
-    }
-    if (password !== confirm) {
-      setError('Passwords do not match')
-      return
-    }
+  const onSubmit = handleSubmit(async (data) => {
+    setNetworkFailed(false)
     if (!token) {
-      setError('Invalid or missing reset token')
+      setError('root', { message: 'This reset link is invalid or has expired' })
       return
     }
-
-    setLoading(true)
     try {
-      await authApi.resetPassword({ token, new_password: password })
+      await authApi.resetPassword({ token, new_password: data.password })
       setSuccess(true)
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Reset failed')
-    } finally {
-      setLoading(false)
+      const outcome = classifyAuthError(err)
+      switch (outcome.kind) {
+        case 'fields': {
+          let mapped = false
+          for (const [field, message] of Object.entries(outcome.fields)) {
+            const key = field === 'new_password' ? 'password' : field
+            if (isResetField(key)) {
+              setError(key, { message })
+              mapped = true
+            }
+          }
+          if (!mapped) setError('root', { message: outcome.message })
+          break
+        }
+        case 'credentials':
+          setError('root', { message: 'This reset link is invalid or has expired' })
+          break
+        case 'rate_limited':
+          setCooldown((prev) => ({ key: (prev?.key ?? 0) + 1, seconds: outcome.retryAfterSeconds }))
+          break
+        case 'network':
+          setNetworkFailed(true)
+          break
+        default:
+          setError('root', {
+            message: 'message' in outcome ? outcome.message : 'Reset failed',
+          })
+      }
     }
-  }
+  })
 
   if (success) {
     return (
       <div className="text-center space-y-4">
-        <h2 className="text-xl font-semibold text-gray-900">Password reset!</h2>
-        <p className="text-sm text-gray-600">Your password has been updated.</p>
+        <span className="mx-auto w-10 h-10 rounded-xl bg-sage-soft text-sage-fg flex items-center justify-center">
+          <KeyRound size={18} aria-hidden />
+        </span>
+        <h2 className="text-lg font-semibold text-text">Password reset!</h2>
+        <p className="text-sm text-text-muted">Your password has been updated.</p>
         <Link
           to="/login"
-          className="inline-block min-h-[44px] leading-[44px] px-6 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors"
+          className="inline-flex items-center justify-center min-h-[44px] px-6 bg-sage text-on-accent rounded-lg text-sm font-semibold hover:bg-sage-hover transition-colors"
         >
           Sign in
         </Link>
@@ -57,47 +91,56 @@ export function ResetPasswordPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Set new password</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-            New password
-          </label>
-          <input
-            id="password"
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            placeholder="At least 8 characters"
+      <h2 className="text-lg font-semibold text-text mb-5">Set new password</h2>
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        <Input
+          id="password"
+          type="password"
+          label="New password"
+          placeholder="At least 8 characters"
+          autoComplete="new-password"
+          error={errors.password?.message}
+          {...register('password')}
+        />
+        <Input
+          id="confirm"
+          type="password"
+          label="Confirm new password"
+          autoComplete="new-password"
+          error={errors.confirm?.message}
+          {...register('confirm')}
+        />
+        {errors.root?.message && (
+          <p role="alert" className="text-xs text-red-fg">
+            {errors.root.message}
+          </p>
+        )}
+        {cooldown && (
+          <RateLimitCard
+            key={cooldown.key}
+            seconds={cooldown.seconds}
+            onExpire={() => setCooldown(null)}
           />
-        </div>
-        <div>
-          <label htmlFor="confirm" className="block text-sm font-medium text-gray-700 mb-1">
-            Confirm new password
-          </label>
-          <input
-            id="confirm"
-            type="password"
-            required
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+        )}
+        {networkFailed && (
+          <ErrorState
+            compact
+            title="Couldn't reach the server"
+            onRetry={() => void onSubmit()}
           />
-        </div>
-        {error && <p className="text-sm text-danger">{error}</p>}
-        <button
+        )}
+        <Button
           type="submit"
-          disabled={loading}
-          className="w-full min-h-[44px] bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50 transition-colors"
+          size="lg"
+          className="w-full"
+          loading={isSubmitting}
+          disabled={cooldown !== null}
         >
-          {loading ? 'Resetting...' : 'Reset password'}
-        </button>
+          {isSubmitting ? 'Resetting…' : 'Reset password'}
+        </Button>
       </form>
-      <p className="mt-4 text-center text-sm text-gray-500">
-        <Link to="/login" className="text-primary hover:underline">
+      <p className="text-xs text-text-muted text-center mt-6">
+        <Link to="/login" className="hover:text-text underline-offset-2 hover:underline">
           Back to sign in
         </Link>
       </p>

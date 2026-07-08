@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { analyticsApi, assetsApi, chatApi, conceptsApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, qaApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
+import { analyticsApi, artifactsApi, assetsApi, chatApi, conceptsApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
 import { adminApi } from '../api/admin'
-import type { AdminUserUpdate, CreateSessionRequest, DeadlineUpdate, QARequest, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
+import type { AdminUserUpdate, CreateSessionRequest, DashboardData, DeadlineUpdate, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -86,12 +86,6 @@ export function useUpload() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['courses'] })
     },
-  })
-}
-
-export function useAskQuestion() {
-  return useMutation({
-    mutationFn: (request: QARequest) => qaApi.ask(request),
   })
 }
 
@@ -216,6 +210,13 @@ export function useRecordQuizAttempt() {
   })
 }
 
+export function useStudyPlan() {
+  return useQuery({
+    queryKey: ['study', 'plan'],
+    queryFn: studyApi.getPlan,
+  })
+}
+
 export function useStreak(courseId?: string) {
   return useQuery({
     queryKey: ['study', 'streak', courseId],
@@ -289,6 +290,69 @@ export function useUploadCourseDocument() {
       courseopsApi.uploadDocument(file, courseCode, documentType),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['courseops', 'documents', variables.courseCode] })
+    },
+  })
+}
+
+export function useCreateAssessment(courseCode: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: import('../types').AssessmentCreate) =>
+      courseopsApi.createAssessment(courseCode, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'assessments', courseCode] })
+    },
+  })
+}
+
+export function useUpdateAssessment(courseCode: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ assessmentId, data }: { assessmentId: string; data: import('../types').AssessmentUpdate }) =>
+      courseopsApi.updateAssessment(assessmentId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'assessments', courseCode] })
+    },
+  })
+}
+
+export function useAssessmentDocuments(assessmentId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['courseops', 'assessment-documents', assessmentId],
+    queryFn: () => courseopsApi.listAssessmentDocuments(assessmentId),
+    enabled: enabled && !!assessmentId,
+  })
+}
+
+export function useUploadAssessmentDocument(assessmentId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ file, documentType }: { file: File; documentType: string }) =>
+      courseopsApi.uploadAssessmentDocument(assessmentId, file, documentType),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'assessment-documents', assessmentId] })
+    },
+  })
+}
+
+export function useDeleteDocument(assessmentId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (documentId: string) => courseopsApi.deleteDocument(documentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'assessment-documents', assessmentId] })
+    },
+  })
+}
+
+export function useCreateDeadline(courseCode: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: import('../types').DeadlineCreate) =>
+      courseopsApi.createDeadline(courseCode, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseops', 'deadlines', courseCode] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
   })
 }
@@ -401,6 +465,14 @@ export function useAnalyticsReadiness(examId: string) {
   return useQuery({
     queryKey: ['analytics', 'readiness', examId],
     queryFn: () => analyticsApi.readiness(examId),
+    enabled: !!examId,
+  })
+}
+
+export function useExamReadiness(examId: string) {
+  return useQuery({
+    queryKey: ['exams', examId, 'readiness'],
+    queryFn: () => examsApi.getReadiness(examId),
     enabled: !!examId,
   })
 }
@@ -540,5 +612,117 @@ export function useAdminUserDetail(userId: string | undefined) {
     queryKey: ['admin', 'users', userId, 'details'],
     queryFn: () => adminApi.getUserDetails(userId!),
     enabled: !!userId,
+  })
+}
+
+export function useReclassifyArtifact() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ artifactId, courseCode, week }: { artifactId: string; courseCode: string; week: number }) =>
+      artifactsApi.reclassify(artifactId, { course_code: courseCode, week }),
+    onSuccess: () => {
+      // Week/course detail queries nest under ['courses', …] — both source and
+      // target weeks change, so invalidate the whole course tree + dashboard.
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+// ── Course management (E7) ─────────────────────────────────────
+
+export function useRenameCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ courseCode, data }: { courseCode: string; data: import('../types').CourseUpdatePayload }) =>
+      coursesApi.rename(courseCode, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useRetryPipeline() {
+  return useMutation({
+    mutationFn: (artifactId: string) => uploadApi.retry(artifactId),
+  })
+}
+
+// ── Dashboard slices ───────────────────────────────────────────
+// Per-widget hooks that share the ['dashboard'] cache entry (one network
+// request) while letting each widget own its loading/error/empty state.
+
+export function useDashboardSlice<T>(select: (data: DashboardData) => T) {
+  return useQuery({
+    queryKey: ['dashboard'],
+    queryFn: dashboardApi.get,
+    select,
+  })
+}
+
+export function useDashboardStreak() {
+  return useDashboardSlice((d) => d.streak)
+}
+
+export function useDashboardExams() {
+  return useDashboardSlice((d) => d.active_exams)
+}
+
+export function useDashboardGamification() {
+  return useDashboardSlice((d) => d.gamification)
+}
+
+export function useDashboardStudyStats() {
+  return useDashboardSlice((d) => d.study_stats)
+}
+
+export function useDashboardDeadlines() {
+  return useDashboardSlice((d) => d.upcoming_deadlines)
+}
+
+export function useDashboardActivity() {
+  return useDashboardSlice((d) => d.recent_activity)
+}
+
+export function useDashboardCourses() {
+  return useDashboardSlice((d) => d.courses)
+}
+
+export function useDashboardPendingReviews() {
+  return useDashboardSlice((d) => d.pending_review_count)
+}
+
+export function useArchiveCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (courseCode: string) => coursesApi.archive(courseCode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useDeleteCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (courseCode: string) => coursesApi.remove(courseCode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useMergeCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ courseCode, into }: { courseCode: string; into: string }) =>
+      coursesApi.merge(courseCode, into),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
   })
 }

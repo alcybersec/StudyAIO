@@ -134,3 +134,7 @@ class ReviewRequiredError(StudyAIOError):
         self.entity_id = entity_id
         self.reason = reason
         super().__init__(f"Review required ({review_type}): {reason}")
+
+
+class ArtifactBusyError(StudyAIOError):
+    """Raised when an operation requires an artifact that is not mid-pipeline."""

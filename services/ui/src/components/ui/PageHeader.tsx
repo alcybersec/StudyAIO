@@ -21,7 +21,7 @@ export function PageHeader({ title, subtitle, breadcrumbs, actions }: PageHeader
             <span key={i} className="flex items-center gap-1.5">
               {i > 0 && <span className="text-border">/</span>}
               {crumb.to ? (
-                <Link to={crumb.to} className="hover:text-primary transition-colors">
+                <Link to={crumb.to} className="hover:text-peri-fg transition-colors">
                   {crumb.label}
                 </Link>
               ) : (

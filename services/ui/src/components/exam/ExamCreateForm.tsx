@@ -50,12 +50,12 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
   }
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-6">
+    <div className="bg-surface-1 border border-border rounded-xl p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-text">Create Exam</h3>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
+          className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-2 transition-colors"
         >
           {'\u2715'}
         </button>
@@ -66,7 +66,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
           <label className="block text-sm font-medium text-text mb-1">Course</label>
           <select
             {...register('courseCode')}
-            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface-1 text-text text-sm focus:outline-none focus:ring-2 focus:ring-sage/30"
           >
             <option value="">Select a course</option>
             {courses?.map((c) => (
@@ -75,7 +75,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
               </option>
             ))}
           </select>
-          {errors.courseCode && <p className="mt-1 text-xs text-danger">{errors.courseCode.message}</p>}
+          {errors.courseCode && <p className="mt-1 text-xs text-red-fg">{errors.courseCode.message}</p>}
         </div>
 
         <div>
@@ -84,9 +84,9 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
             type="text"
             {...register('title')}
             placeholder="e.g., Midterm Exam"
-            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface-1 text-text text-sm focus:outline-none focus:ring-2 focus:ring-sage/30"
           />
-          {errors.title && <p className="mt-1 text-xs text-danger">{errors.title.message}</p>}
+          {errors.title && <p className="mt-1 text-xs text-red-fg">{errors.title.message}</p>}
         </div>
 
         <div>
@@ -94,9 +94,9 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
           <input
             type="datetime-local"
             {...register('examDate')}
-            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface-1 text-text text-sm focus:outline-none focus:ring-2 focus:ring-sage/30"
           />
-          {errors.examDate && <p className="mt-1 text-xs text-danger">{errors.examDate.message}</p>}
+          {errors.examDate && <p className="mt-1 text-xs text-red-fg">{errors.examDate.message}</p>}
         </div>
 
         <div>
@@ -107,13 +107,13 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
             type="text"
             {...register('weeksInput')}
             placeholder="e.g., 1, 2, 3, 4, 5"
-            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface-1 text-text text-sm focus:outline-none focus:ring-2 focus:ring-sage/30"
           />
-          {errors.weeksInput && <p className="mt-1 text-xs text-danger">{errors.weeksInput.message}</p>}
+          {errors.weeksInput && <p className="mt-1 text-xs text-red-fg">{errors.weeksInput.message}</p>}
           {parsedWeeks.length > 0 && (
             <div className="flex gap-1.5 mt-2 flex-wrap">
               {parsedWeeks.map((w) => (
-                <span key={w} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                <span key={w} className="px-2 py-0.5 rounded-full bg-peri-soft text-peri-fg text-xs font-medium">
                   W{w}
                 </span>
               ))}
@@ -139,21 +139,21 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
           <button
             type="submit"
             disabled={createExam.isPending || !isValid}
-            className="flex-1 px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-sage text-on-accent hover:bg-sage-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {createExam.isPending ? 'Creating...' : 'Create Exam'}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-surface-alt text-text hover:bg-border transition-colors"
+            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-surface-0 text-text hover:bg-border transition-colors"
           >
             Cancel
           </button>
         </div>
 
         {createExam.isError && (
-          <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950 text-sm text-red-700 dark:text-red-400">
+          <div className="p-3 rounded-lg bg-red-soft text-sm text-red-fg">
             {(createExam.error as Error).message || 'Failed to create exam'}
           </div>
         )}

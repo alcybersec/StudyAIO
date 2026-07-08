@@ -4,7 +4,7 @@ test.describe('Navigation', () => {
   test('sidebar navigation links work on desktop', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await expect(page.getByRole('heading', { name: /home/i })).toBeVisible({ timeout: 10_000 })
 
     // Click Study in sidebar
     const studyLink = page.locator('aside a[href="/study"]')
@@ -17,16 +17,16 @@ test.describe('Navigation', () => {
     await uploadLink.click()
     await expect(page).toHaveURL('/upload', { timeout: 10_000 })
 
-    // Click Dashboard
-    const dashLink = page.locator('aside a[href="/"]')
-    await dashLink.click()
+    // Click Home (nav item, not the logo link)
+    const homeLink = page.locator('aside').getByRole('link', { name: 'Home', exact: true })
+    await homeLink.click()
     await expect(page).toHaveURL('/', { timeout: 10_000 })
   })
 
   test('mobile bottom tabs navigate correctly', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 })
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await expect(page.getByRole('heading', { name: /home/i })).toBeVisible({ timeout: 10_000 })
 
     // Bottom nav should be visible
     const bottomNav = page.locator('nav.lg\\:hidden')
@@ -36,18 +36,22 @@ test.describe('Navigation', () => {
     await page.locator('nav.lg\\:hidden a[href="/study"]').click()
     await expect(page).toHaveURL('/study', { timeout: 10_000 })
 
-    // Click Upload tab
-    await page.locator('nav.lg\\:hidden a[href="/upload"]').click()
+    // Click Ask tab
+    await page.locator('nav.lg\\:hidden a[href="/ask"]').click()
+    await expect(page).toHaveURL('/ask', { timeout: 10_000 })
+
+    // Upload lives inside the Library sheet
+    await page.locator('nav.lg\\:hidden button[aria-label="Library"]').click()
+    await page.getByRole('link', { name: /upload/i }).click()
     await expect(page).toHaveURL('/upload', { timeout: 10_000 })
   })
 
   test('page transitions animate between routes', async ({ page }) => {
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await expect(page.getByRole('heading', { name: /home/i })).toBeVisible({ timeout: 10_000 })
 
     // Navigate to another page and check that main content area exists
     await page.goto('/upload')
-    await page.waitForLoadState('networkidle')
 
     const main = page.locator('#main-content')
     await expect(main).toBeVisible({ timeout: 10_000 })
@@ -55,10 +59,9 @@ test.describe('Navigation', () => {
 
   test('404 page shows for unknown routes', async ({ page }) => {
     await page.goto('/nonexistent-route-xyz')
-    await page.waitForLoadState('networkidle')
 
     await expect(
-      page.getByText(/not found|404|page.*exist/i),
+      page.getByText(/not found|404|page.*exist/i).first(),
     ).toBeVisible({ timeout: 10_000 })
   })
 })

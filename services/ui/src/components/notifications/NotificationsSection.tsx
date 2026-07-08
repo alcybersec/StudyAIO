@@ -78,8 +78,8 @@ export function NotificationsSection() {
       <Card>
         <h2 className="text-lg font-semibold text-text mb-4">Notifications</h2>
         <div className="animate-pulse space-y-3">
-          <div className="h-4 bg-surface-alt rounded w-3/4" />
-          <div className="h-4 bg-surface-alt rounded w-1/2" />
+          <div className="h-4 bg-surface-0 rounded w-3/4" />
+          <div className="h-4 bg-surface-0 rounded w-1/2" />
         </div>
       </Card>
     )
@@ -118,9 +118,9 @@ export function NotificationsSection() {
                       <button
                         onClick={() => handleToggle(ch, event)}
                         disabled={updateMutation.isPending}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-sage/30 ${
                           isEnabled(ch, event)
-                            ? 'bg-primary'
+                            ? 'bg-sage'
                             : 'bg-border'
                         }`}
                         role="switch"
@@ -149,18 +149,18 @@ export function NotificationsSection() {
               key={ch}
               onClick={() => handleTest(ch)}
               disabled={testMutation.isPending}
-              className="px-3 py-1.5 text-xs font-medium text-text bg-surface-alt border border-border rounded-lg hover:bg-border disabled:opacity-50 transition-colors capitalize"
+              className="px-3 py-1.5 text-xs font-medium text-text bg-surface-0 border border-border rounded-lg hover:bg-border disabled:opacity-50 transition-colors capitalize"
             >
               {ch}
             </button>
           ))}
           {testMutation.isSuccess && (
-            <span className="text-xs text-green-600 dark:text-green-400">
+            <span className="text-xs text-sage-fg">
               {testMutation.data.message}
             </span>
           )}
           {testMutation.isError && (
-            <span className="text-xs text-red-600 dark:text-red-400">
+            <span className="text-xs text-red-fg">
               {testMutation.error instanceof Error ? testMutation.error.message : 'Failed'}
             </span>
           )}

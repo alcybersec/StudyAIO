@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Card } from '../ui'
+import { Card, Button, Input } from '../ui'
 import { CountdownTimer } from './CountdownTimer'
 import { useTimedPlan, useRecordReview } from '../../hooks/useApi'
 import { studyApi, examsApi } from '../../api/endpoints'
+import { writeQueue } from '../../lib/writeQueue'
 import type { Flashcard, QuizQuestion, TimedSessionPlan } from '../../types'
 
 type Phase = 'setup' | 'studying' | 'summary'
@@ -117,9 +118,16 @@ export function TimedStudyTab() {
 
   const handleCardRate = useCallback(async (quality: number) => {
     if (!currentCard) return
+    const review = { flashcard_id: currentCard.id, quality }
     try {
-      await recordReview.mutateAsync({ flashcard_id: currentCard.id, quality })
-    } catch { /* best effort */ }
+      await recordReview.mutateAsync(review)
+    } catch {
+      void writeQueue.enqueue({
+        url: '/api/study/review',
+        method: 'POST',
+        body: JSON.stringify(review),
+      })
+    }
     setCardsReviewed(prev => prev + 1)
     advanceItem()
   }, [currentCard, recordReview, advanceItem])
@@ -132,12 +140,19 @@ export function TimedStudyTab() {
     const isCorrect = selectedAnswer.trim().toLowerCase() === currentQuiz.correct_answer.trim().toLowerCase()
     if (isCorrect) setQuizCorrect(prev => prev + 1)
 
-    studyApi.quizAttempt({
+    const attempt = {
       quiz_question_id: currentQuiz.id,
       selected_answer: selectedAnswer,
       is_correct: isCorrect,
       exam_id: examId || undefined,
-    }).catch(() => {})
+    }
+    studyApi.quizAttempt(attempt).catch(() => {
+      void writeQueue.enqueue({
+        url: '/api/study/quiz-attempt',
+        method: 'POST',
+        body: JSON.stringify(attempt),
+      })
+    })
   }
 
   useEffect(() => {
@@ -168,20 +183,27 @@ export function TimedStudyTab() {
   useEffect(() => {
     if (phase !== 'summary' || !plan) return
     if (examId) {
-      examsApi.recordSession(examId, {
+      const session = {
         cards_reviewed: cardsReviewed,
         quiz_questions_answered: quizAnswered,
         quiz_correct: quizCorrect,
         duration_seconds: plan.total_minutes * 60,
-      }).catch(() => {})
+      }
+      examsApi.recordSession(examId, session).catch(() => {
+        void writeQueue.enqueue({
+          url: `/api/exams/${examId}/sessions`,
+          method: 'POST',
+          body: JSON.stringify(session),
+        })
+      })
     }
   }, [phase, examId, plan, cardsReviewed, quizAnswered, quizCorrect])
 
   // ── Setup Phase ──
   if (phase === 'setup') {
     return (
-      <Card>
-        <div className="max-w-md mx-auto space-y-6">
+      <Card className="max-w-md mx-auto">
+        <div className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-text mb-2">
               How many minutes do you have?
@@ -194,9 +216,9 @@ export function TimedStudyTab() {
                 step={5}
                 value={minutes}
                 onChange={e => setMinutes(parseInt(e.target.value))}
-                className="flex-1"
+                className="flex-1 accent-sage"
               />
-              <span className="text-2xl font-bold text-primary tabular-nums w-16 text-right">
+              <span className="text-2xl font-bold text-sage-fg tabular-nums w-16 text-right">
                 {minutes}m
               </span>
             </div>
@@ -206,29 +228,25 @@ export function TimedStudyTab() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text mb-1">
-              Course (optional)
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. CSIT302"
-              value={courseCode}
-              onChange={e => setCourseCode(e.target.value)}
-              className="w-full px-3 py-2 border border-border bg-surface text-text rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-            />
-          </div>
+          <Input
+            id="timed-course"
+            label="Course (optional)"
+            placeholder="e.g. CSIT302"
+            value={courseCode}
+            onChange={e => setCourseCode(e.target.value)}
+          />
 
-          <button
+          <Button
+            size="lg"
+            className="w-full"
             onClick={handleStart}
-            disabled={timedPlanMutation.isPending}
-            className="w-full py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px]"
+            loading={timedPlanMutation.isPending}
           >
-            {timedPlanMutation.isPending ? 'Generating plan...' : `Start ${minutes}-minute session`}
-          </button>
+            {timedPlanMutation.isPending ? 'Generating plan…' : `Start ${minutes}-minute session`}
+          </Button>
 
           {timedPlanMutation.isError && (
-            <p className="text-sm text-danger">
+            <p className="text-sm text-red-fg" role="alert">
               {timedPlanMutation.error instanceof Error ? timedPlanMutation.error.message : 'Failed to generate plan'}
             </p>
           )}
@@ -253,16 +271,13 @@ export function TimedStudyTab() {
           <span>{currentIndex + 1} / {items.length}</span>
           <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
             <div
-              className="h-full bg-primary rounded-full transition-all duration-300"
+              className="h-full bg-sage rounded-full transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <button
-            onClick={() => setPaused(!paused)}
-            className="text-xs px-2 py-1 rounded border border-border text-text hover:bg-surface-alt min-h-[44px] min-w-[44px] flex items-center justify-center"
-          >
+          <Button variant="secondary" size="sm" onClick={() => setPaused(!paused)}>
             {paused ? 'Resume' : 'Pause'}
-          </button>
+          </Button>
         </div>
 
         {currentItem?.type === 'card' && currentCard && (
@@ -292,10 +307,10 @@ export function TimedStudyTab() {
                         onClick={() => handleCardRate(q)}
                         className={`w-11 h-11 rounded-lg font-medium text-sm transition-colors ${
                           q < 3
-                            ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300'
+                            ? 'bg-red-soft text-red-fg hover:bg-red/25'
                             : q < 4
-                              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300'
-                              : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-300'
+                              ? 'bg-amber-soft text-amber-fg hover:bg-amber/25'
+                              : 'bg-sage-soft text-sage-fg hover:bg-sage/25'
                         }`}
                       >
                         {q}
@@ -326,12 +341,12 @@ export function TimedStudyTab() {
                       className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors min-h-[44px] ${
                         showQuizAnswer
                           ? opt.charAt(0) === currentQuiz.correct_answer
-                            ? 'border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-300'
+                            ? 'border-sage/40 bg-sage-soft text-sage-fg'
                             : selectedAnswer === opt.charAt(0)
-                              ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-300'
+                              ? 'border-red/40 bg-red-soft text-red-fg'
                               : 'border-border text-text-muted'
                           : selectedAnswer === opt.charAt(0)
-                            ? 'border-primary bg-primary/5 text-primary'
+                            ? 'border-sage bg-sage-soft text-sage-fg'
                             : 'border-border hover:border-text-muted text-text'
                       }`}
                     >
@@ -343,36 +358,26 @@ export function TimedStudyTab() {
 
               {currentQuiz.question_type === 'short_answer' && (
                 <div className="mt-4">
-                  <input
-                    type="text"
-                    placeholder="Your answer..."
+                  <Input
+                    id="timed-short-answer"
+                    placeholder="Your answer…"
                     value={selectedAnswer}
                     onChange={e => setSelectedAnswer(e.target.value)}
                     disabled={showQuizAnswer}
-                    className="w-full px-3 py-2 border border-border bg-surface text-text rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none disabled:opacity-60"
                   />
                 </div>
               )}
 
               {!showQuizAnswer ? (
-                <button
-                  onClick={handleQuizSubmit}
-                  disabled={!selectedAnswer}
-                  className="mt-4 px-6 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px]"
-                >
-                  Submit Answer
-                </button>
+                <Button className="mt-4" onClick={handleQuizSubmit} disabled={!selectedAnswer}>
+                  Submit answer
+                </Button>
               ) : (
                 <div className="mt-4">
                   {currentQuiz.explanation && (
                     <p className="text-sm text-text-muted mb-3">{currentQuiz.explanation}</p>
                   )}
-                  <button
-                    onClick={advanceItem}
-                    className="px-6 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors min-h-[44px]"
-                  >
-                    Next
-                  </button>
+                  <Button onClick={advanceItem}>Next</Button>
                 </div>
               )}
             </div>
@@ -401,25 +406,25 @@ export function TimedStudyTab() {
           {plan?.total_minutes}-minute session complete
         </h2>
         <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
-          <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-4">
-            <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{cardsReviewed}</p>
-            <p className="text-xs text-blue-600 dark:text-blue-500">Cards reviewed</p>
+          <div className="bg-peri-soft rounded-lg p-4">
+            <p className="text-2xl font-bold text-peri-fg">{cardsReviewed}</p>
+            <p className="text-xs text-peri-fg/80">Cards reviewed</p>
           </div>
-          <div className="bg-purple-50 dark:bg-purple-950 rounded-lg p-4">
-            <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">{quizAnswered}</p>
-            <p className="text-xs text-purple-600 dark:text-purple-500">Quiz questions</p>
+          <div className="bg-amber-soft rounded-lg p-4">
+            <p className="text-2xl font-bold text-amber-fg">{quizAnswered}</p>
+            <p className="text-xs text-amber-fg/80">Quiz questions</p>
           </div>
           {quizAnswered > 0 && (
-            <div className="col-span-2 bg-green-50 dark:bg-green-950 rounded-lg p-4">
-              <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+            <div className="col-span-2 bg-sage-soft rounded-lg p-4">
+              <p className="text-2xl font-bold text-sage-fg">
                 {Math.round((quizCorrect / quizAnswered) * 100)}%
               </p>
-              <p className="text-xs text-green-600 dark:text-green-500">Quiz accuracy ({quizCorrect}/{quizAnswered})</p>
+              <p className="text-xs text-sage-fg/80">Quiz accuracy ({quizCorrect}/{quizAnswered})</p>
             </div>
           )}
         </div>
         <div className="flex justify-center gap-3">
-          <button
+          <Button
             onClick={() => {
               setPhase('setup')
               setCardsReviewed(0)
@@ -429,10 +434,9 @@ export function TimedStudyTab() {
               setItems([])
               setPlan(null)
             }}
-            className="px-6 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors min-h-[44px]"
           >
             Start another session
-          </button>
+          </Button>
         </div>
       </div>
     </Card>

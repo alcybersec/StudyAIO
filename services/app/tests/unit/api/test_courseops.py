@@ -21,6 +21,7 @@ def _mock_document(
     doc = MagicMock()
     doc.id = id
     doc.course_id = course_id
+    doc.assessment_id = None
     doc.document_type = document_type
     doc.title = title
     doc.original_filename = original_filename
@@ -77,6 +78,108 @@ def _mock_deadline(
 
 
 @pytest.mark.asyncio
+class TestUpdateAssessment:
+    """Tests for PATCH /api/courseops/assessments/{id}."""
+
+    async def test_updates_assessment_info(self, async_client):
+        """Edits an assessment's info and returns it."""
+        updated = _mock_assessment(title="Final Exam (updated)")
+        updated.weight_pct = 50.0
+        updated.description = "Now covers weeks 1-12"
+        with patch(
+            "app.api.courseops.courseops_service.update_assessment",
+            new_callable=AsyncMock,
+            return_value=updated,
+        ) as mock_update:
+            response = await async_client.patch(
+                "/api/courseops/assessments/assess-001",
+                json={"title": "Final Exam (updated)", "weight_pct": 50.0},
+            )
+        assert response.status_code == 200
+        assert response.json()["weight_pct"] == 50.0
+        mock_update.assert_called_once()
+
+    async def test_returns_404_for_missing(self, async_client):
+        """Unknown assessment yields 404."""
+        with patch(
+            "app.api.courseops.courseops_service.update_assessment",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = await async_client.patch(
+                "/api/courseops/assessments/nope", json={"title": "X"}
+            )
+        assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestAssessmentDocuments:
+    """Tests for assessment-scoped document attachments."""
+
+    async def test_lists_assessment_documents(self, async_client):
+        """Returns documents attached to an assessment."""
+        doc = _mock_document(document_type="brief")
+        doc.assessment_id = "assess-001"
+        with patch(
+            "app.api.courseops.courseops_service.list_assessment_documents",
+            new_callable=AsyncMock,
+            return_value=[doc],
+        ) as mock_list:
+            response = await async_client.get(
+                "/api/courseops/assessments/assess-001/documents"
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["document_type"] == "brief"
+        mock_list.assert_called_once()
+
+    async def test_upload_attaches_without_extraction(self, async_client):
+        """Uploading an assessment document attaches it and does NOT run the outline pipeline."""
+        doc = _mock_document(document_type="guideline")
+        doc.assessment_id = "assess-001"
+        with (
+            patch(
+                "app.api.courseops.courseops_service.attach_assessment_document",
+                new_callable=AsyncMock,
+                return_value=doc,
+            ) as mock_attach,
+            patch("app.pipeline.courseops_task.process_course_document") as mock_pipeline,
+        ):
+            response = await async_client.post(
+                "/api/courseops/assessments/assess-001/documents?document_type=guideline",
+                files={"file": ("guide.pdf", io.BytesIO(b"%PDF-1.4 test"), "application/pdf")},
+            )
+        assert response.status_code == 201
+        assert response.json()["assessment_id"] == "assess-001"
+        mock_attach.assert_called_once()
+        mock_pipeline.delay.assert_not_called()
+
+    async def test_upload_404_for_unknown_assessment(self, async_client):
+        """Unknown assessment yields 404 and cleans up the stored file."""
+        with patch(
+            "app.api.courseops.courseops_service.attach_assessment_document",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = await async_client.post(
+                "/api/courseops/assessments/nope/documents?document_type=brief",
+                files={"file": ("g.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+            )
+        assert response.status_code == 404
+
+    async def test_deletes_document(self, async_client):
+        """Deletes an attached document."""
+        with patch(
+            "app.api.courseops.courseops_service.delete_course_document",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            response = await async_client.delete("/api/courseops/documents/doc-001")
+        assert response.status_code == 204
+
+
+@pytest.mark.asyncio
 class TestListDocuments:
     """Tests for GET /api/courseops/documents."""
 
@@ -95,6 +198,85 @@ class TestListDocuments:
         assert len(data) == 1
         assert data[0]["id"] == "doc-001"
         assert data[0]["document_type"] == "outline"
+
+
+@pytest.mark.asyncio
+class TestCreateAssessment:
+    """Tests for POST /api/courseops/assessments."""
+
+    async def test_creates_manual_assessment(self, async_client):
+        """Creates an assessment for a course and returns 201."""
+        created = _mock_assessment(title="Midterm", assessment_type="exam")
+        created.source_document_id = None
+        with patch(
+            "app.api.courseops.courseops_service.create_assessment",
+            new_callable=AsyncMock,
+            return_value=created,
+        ) as mock_create:
+            response = await async_client.post(
+                "/api/courseops/assessments?course_code=CSIT302",
+                json={"title": "Midterm", "assessment_type": "exam", "weight_pct": 30.0},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["title"] == "Midterm"
+        assert data["source_document_id"] is None
+        mock_create.assert_called_once()
+        assert mock_create.call_args.kwargs["course_code"] == "CSIT302"
+        assert mock_create.call_args.kwargs["title"] == "Midterm"
+
+    async def test_returns_404_for_unknown_course(self, async_client):
+        """Unknown course code yields 404."""
+        with patch(
+            "app.api.courseops.courseops_service.create_assessment",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = await async_client.post(
+                "/api/courseops/assessments?course_code=NOPE",
+                json={"title": "X", "assessment_type": "exam"},
+            )
+        assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestCreateDeadline:
+    """Tests for POST /api/courseops/deadlines."""
+
+    async def test_creates_manual_deadline(self, async_client):
+        """Creates a deadline for a course and returns 201, confirmed by default."""
+        created = _mock_deadline(title="Lab report", is_confirmed=True)
+        created.source_document_id = None
+        with patch(
+            "app.api.courseops.courseops_service.create_deadline",
+            new_callable=AsyncMock,
+            return_value=created,
+        ) as mock_create:
+            response = await async_client.post(
+                "/api/courseops/deadlines?course_code=CSIT302",
+                json={"title": "Lab report", "due_date": "2026-05-01", "deadline_type": "assignment"},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["title"] == "Lab report"
+        assert data["is_confirmed"] is True
+        mock_create.assert_called_once()
+        assert mock_create.call_args.kwargs["course_code"] == "CSIT302"
+
+    async def test_returns_404_for_unknown_course(self, async_client):
+        """Unknown course code yields 404."""
+        with patch(
+            "app.api.courseops.courseops_service.create_deadline",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = await async_client.post(
+                "/api/courseops/deadlines?course_code=NOPE",
+                json={"title": "X", "due_date": "2026-05-01"},
+            )
+        assert response.status_code == 404
 
 
 @pytest.mark.asyncio

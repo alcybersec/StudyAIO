@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useExamDetail, useExamSchedule, useExamWeakTopics, useExamHistory, useDeleteExam } from '../../hooks/useApi'
-import { LoadingSpinner, ErrorBanner } from '../ui'
+import { LoadingSpinner, ErrorBanner, Modal, Button } from '../ui'
 
 interface ExamDetailInlineProps {
   examId: string
@@ -14,6 +15,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
   const { data: weakTopics } = useExamWeakTopics(examId)
   const { data: history } = useExamHistory(examId)
   const deleteExam = useDeleteExam()
+  const [archiveOpen, setArchiveOpen] = useState(false)
 
   if (isLoading) return <LoadingSpinner label="Loading exam..." />
   if (error) return <ErrorBanner message="Failed to load exam." onRetry={refetch} />
@@ -21,17 +23,17 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
 
   const urgencyColor =
     progress.days_remaining <= 3
-      ? 'text-red-600 dark:text-red-400'
+      ? 'text-red-fg'
       : progress.days_remaining <= 7
-        ? 'text-amber-600 dark:text-amber-400'
-        : 'text-blue-600 dark:text-blue-400'
+        ? 'text-amber-fg'
+        : 'text-peri-fg'
 
   const masteryPct = Math.round(progress.mastery_pct)
   const targetReached = masteryPct >= progress.target_mastery_pct
 
   async function handleArchive() {
-    if (!confirm('Archive this exam?')) return
     await deleteExam.mutateAsync(examId)
+    setArchiveOpen(false)
     onBack()
   }
 
@@ -43,7 +45,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
     <div>
       <button
         onClick={onBack}
-        className="text-sm text-text-muted hover:text-primary transition-colors mb-4"
+        className="text-sm text-text-muted hover:text-peri-fg transition-colors mb-4"
       >
         {'\u2190'} Back to Exams
       </button>
@@ -57,8 +59,8 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
             </span>
             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
               progress.status === 'active'
-                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400'
-                : 'bg-surface-alt text-text-muted'
+                ? 'bg-sage-soft text-sage-fg'
+                : 'bg-surface-0 text-text-muted'
             }`}>
               {progress.status}
             </span>
@@ -68,13 +70,13 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
         <div className="flex gap-2">
           <button
             onClick={handleStudy}
-            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary/90 transition-colors"
+            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-sage text-on-accent hover:bg-sage-hover transition-colors"
           >
             Start Studying
           </button>
           <button
-            onClick={handleArchive}
-            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-surface-alt text-text hover:bg-border transition-colors"
+            onClick={() => setArchiveOpen(true)}
+            className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-surface-0 text-text hover:bg-border transition-colors"
           >
             Archive
           </button>
@@ -83,19 +85,19 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
 
       {/* Progress Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="p-4 rounded-xl border border-border bg-surface">
+        <div className="p-4 rounded-xl border border-border bg-surface-1">
           <div className="text-xs text-text-muted mb-1">Mastery</div>
           <div className="text-2xl font-bold text-text">{masteryPct}%</div>
           <div className="w-full h-1.5 bg-border rounded-full mt-2">
             <div
-              className={`h-full rounded-full ${targetReached ? 'bg-green-500' : 'bg-primary'}`}
+              className={`h-full rounded-full ${targetReached ? 'bg-sage' : 'bg-peri'}`}
               style={{ width: `${Math.min(100, masteryPct)}%` }}
             />
           </div>
           <div className="text-xs text-text-muted mt-1">Target: {progress.target_mastery_pct}%</div>
         </div>
 
-        <div className="p-4 rounded-xl border border-border bg-surface">
+        <div className="p-4 rounded-xl border border-border bg-surface-1">
           <div className="text-xs text-text-muted mb-1">Quiz Accuracy</div>
           <div className="text-2xl font-bold text-text">{Math.round(progress.quiz_accuracy)}%</div>
           <div className="text-xs text-text-muted mt-1">
@@ -103,7 +105,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
           </div>
         </div>
 
-        <div className="p-4 rounded-xl border border-border bg-surface">
+        <div className="p-4 rounded-xl border border-border bg-surface-1">
           <div className="text-xs text-text-muted mb-1">Flashcards</div>
           <div className="text-2xl font-bold text-text">
             {progress.flashcard_mastered}/{progress.flashcard_total}
@@ -111,7 +113,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
           <div className="text-xs text-text-muted mt-1">mastered</div>
         </div>
 
-        <div className="p-4 rounded-xl border border-border bg-surface">
+        <div className="p-4 rounded-xl border border-border bg-surface-1">
           <div className="text-xs text-text-muted mb-1">Sessions</div>
           <div className="text-2xl font-bold text-text">{progress.session_count}</div>
           <div className="text-xs text-text-muted mt-1">study sessions</div>
@@ -121,18 +123,18 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Schedule */}
         {schedule && schedule.length > 0 && (
-          <div className="bg-surface border border-border rounded-xl p-5">
+          <div className="bg-surface-1 border border-border rounded-xl p-5">
             <h3 className="text-sm font-semibold text-text mb-4">Study Schedule</h3>
             <div className="space-y-2">
               {schedule.slice(0, 7).map((day) => {
                 const priorityColor =
-                  day.priority === 'critical' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400'
-                    : day.priority === 'high' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-400'
-                      : day.priority === 'medium' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-400'
-                        : 'bg-surface-alt text-text-muted'
+                  day.priority === 'critical' ? 'bg-red-soft text-red-fg'
+                    : day.priority === 'high' ? 'bg-amber-soft text-amber-fg'
+                      : day.priority === 'medium' ? 'bg-peri-soft text-peri-fg'
+                        : 'bg-surface-0 text-text-muted'
 
                 return (
-                  <div key={day.date} className="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
+                  <div key={day.date} className="flex items-center justify-between p-3 rounded-lg bg-surface-0">
                     <div>
                       <div className="text-sm font-medium text-text">
                         {new Date(day.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
@@ -152,7 +154,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
         )}
 
         {/* Weak Topics */}
-        <div className="bg-surface border border-border rounded-xl p-5">
+        <div className="bg-surface-1 border border-border rounded-xl p-5">
           <h3 className="text-sm font-semibold text-text mb-4">Weak Topics</h3>
           {!weakTopics || weakTopics.length === 0 ? (
             <div className="text-sm text-text-muted text-center py-6">
@@ -161,7 +163,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
           ) : (
             <div className="space-y-2">
               {weakTopics.map((topic) => (
-                <div key={topic.week} className="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
+                <div key={topic.week} className="flex items-center justify-between p-3 rounded-lg bg-surface-0">
                   <div>
                     <div className="text-sm font-medium text-text">Week {topic.week}</div>
                     <div className="text-xs text-text-muted">
@@ -184,19 +186,19 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
 
         {/* Study History */}
         {history && history.length > 0 && (
-          <div className="bg-surface border border-border rounded-xl p-5 lg:col-span-2">
+          <div className="bg-surface-1 border border-border rounded-xl p-5 lg:col-span-2">
             <h3 className="text-sm font-semibold text-text mb-4">Study History</h3>
             <div className="grid grid-cols-7 gap-1">
               {history.slice(0, 28).map((day) => {
                 const intensity = day.cards_reviewed + day.quiz_answered
                 const bg =
                   intensity === 0
-                    ? 'bg-surface-alt'
+                    ? 'bg-surface-0'
                     : intensity < 10
-                      ? 'bg-green-200 dark:bg-green-900'
+                      ? 'bg-sage/30'
                       : intensity < 25
-                        ? 'bg-green-400 dark:bg-green-700'
-                        : 'bg-green-600 dark:bg-green-500'
+                        ? 'bg-sage/60'
+                        : 'bg-sage'
 
                 return (
                   <div
@@ -210,6 +212,22 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
           </div>
         )}
       </div>
+
+      <Modal
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        title="Archive this exam?"
+        description="It moves out of your active exams. You can still find it in history."
+      >
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setArchiveOpen(false)}>
+            Cancel
+          </Button>
+          <Button size="sm" loading={deleteExam.isPending} onClick={handleArchive}>
+            Archive
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

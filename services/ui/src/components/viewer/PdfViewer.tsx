@@ -15,11 +15,13 @@ interface PdfViewerProps {
   fileUrl: string
   targetPage?: number
   navToken?: number
+  /** Zoom percentage (100 = fit container width). */
+  zoom?: number
   onPageChange?: (page: number) => void
   onTotalPages?: (total: number) => void
 }
 
-export function PdfViewer({ fileUrl, targetPage, navToken, onPageChange, onTotalPages }: PdfViewerProps) {
+export function PdfViewer({ fileUrl, targetPage, navToken, zoom = 100, onPageChange, onTotalPages }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0)
   const [containerWidth, setContainerWidth] = useState<number>(600)
   const [pagesRendered, setPagesRendered] = useState(false)
@@ -134,15 +136,17 @@ export function PdfViewer({ fileUrl, targetPage, navToken, onPageChange, onTotal
     }
   }, [])
 
+  const pageWidth = Math.max(1, Math.round((containerWidth - 16) * (zoom / 100)))
+
   return (
-    <div ref={containerRef} className="overflow-y-auto h-full bg-gray-100">
+    <div ref={containerRef} className="overflow-auto h-full bg-surface-0">
       <Document
         file={fileUrl}
         options={PDF_OPTIONS}
         onLoadSuccess={onDocumentLoadSuccess}
         loading={<LoadingSpinner label="Loading PDF..." />}
         error={
-          <div className="text-center py-8 text-red-600 text-sm">
+          <div className="text-center py-8 px-4 text-sm text-red-fg">
             Failed to load PDF. Try downloading the file instead.
           </div>
         }
@@ -153,12 +157,11 @@ export function PdfViewer({ fileUrl, targetPage, navToken, onPageChange, onTotal
             ref={(el) => setPageRef(pageNum, el)}
             data-page={pageNum}
             id={`pdf-page-${pageNum}`}
-            className="mb-2 shadow-sm bg-white mx-auto"
-            style={{ maxWidth: containerWidth }}
+            className="mb-2 shadow-sm bg-surface-1 mx-auto w-fit"
           >
             <Page
               pageNumber={pageNum}
-              width={containerWidth - 16}
+              width={pageWidth}
               renderTextLayer={true}
               renderAnnotationLayer={true}
             />

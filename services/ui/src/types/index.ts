@@ -113,6 +113,21 @@ export interface PipelineEvent {
   stage: string
   status: string
   message: string | null
+  /** Client-side receipt stamp (ms epoch), added by usePipelineEvents for stage timings. */
+  receivedAt?: number
+}
+
+export interface ReclassifyResponse {
+  artifact_id: string
+  course_code: string
+  week: number
+  summaries_enqueued: number
+}
+
+export interface RetryResponse {
+  artifact_id: string
+  status: string
+  retrying_from_stage: string
 }
 
 export interface PipelineRun {
@@ -154,12 +169,6 @@ export interface QAResponse {
   answer: string
   citations: Citation[]
   chunks_searched: number
-}
-
-export interface QAExchange {
-  question: string
-  response: QAResponse
-  timestamp: string
 }
 
 export interface Settings {
@@ -352,6 +361,7 @@ export interface StudyStats {
 export interface CourseDocument {
   id: string
   course_id: string
+  assessment_id?: string | null
   document_type: string
   title: string | null
   original_filename: string
@@ -397,6 +407,23 @@ export interface DeadlineUpdate {
   description?: string
   is_confirmed?: boolean
 }
+
+export interface DeadlineCreate {
+  title: string
+  due_date: string
+  deadline_type?: string
+  description?: string | null
+}
+
+export interface AssessmentCreate {
+  title: string
+  assessment_type?: string
+  weight_pct?: number | null
+  description?: string | null
+  weeks_relevant?: number[] | null
+}
+
+export type AssessmentUpdate = Partial<AssessmentCreate>
 
 export interface UpcomingDeadline {
   id: string
@@ -519,6 +546,14 @@ export interface CreateSessionRequest {
 
 export interface SendMessageRequest {
   content: string
+  course_code?: string | null
+  week?: number | null
+}
+
+/** Per-message RAG scope (chips on the Ask composer). */
+export interface MessageScope {
+  courseCode?: string | null
+  week?: number | null
 }
 
 export interface SendMessageResponse {
@@ -964,4 +999,110 @@ export interface ExamReadinessData {
   quiz_total: number
   quiz_correct: number
   study_days_last_week: number
+}
+
+// ── Readiness drill-down (GET /api/exams/{id}/readiness) ───────
+
+export interface ReadinessTopic {
+  topic: string
+  week: number
+  accuracy: number | null
+  weight: number
+  card_count: number
+}
+
+export interface ReadinessDetail {
+  exam_id: string
+  title: string
+  overall: number
+  topics: ReadinessTopic[]
+}
+
+// ── Weekly study plan ───────────────────────────────────────────
+
+export interface StudyPlanItem {
+  course_code: string
+  kind: 'cards' | 'quiz' | 'mock'
+  target: number
+  done: number
+}
+
+export interface StudyPlanDay {
+  /** ISO date (YYYY-MM-DD). */
+  day: string
+  items: StudyPlanItem[]
+}
+
+export interface WeekPlan {
+  days: StudyPlanDay[]
+}
+
+// ── Course management (E7) ─────────────────────────────────────
+
+export interface CourseUpdatePayload {
+  new_code?: string
+  name?: string
+}
+
+export interface CourseArchiveResult {
+  code: string
+  archived: boolean
+}
+
+export interface CourseDeleteResult {
+  code: string
+  deleted: boolean
+  counts: Record<string, number>
+}
+
+export interface CourseMergeResult {
+  moved_summaries: number
+  conflict_weeks: number[]
+  review_items_created: number
+}
+
+// ── Global search (E1) ─────────────────────────────────────────────
+
+export type GlobalSearchKind = 'course' | 'course_week' | 'flashcard' | 'chat_session'
+
+export interface GlobalSearchResult {
+  kind: GlobalSearchKind | string
+  title: string
+  snippet: string
+  href_meta: Record<string, string | number>
+}
+
+export interface GlobalSearchResponse {
+  query: string
+  results: GlobalSearchResult[]
+}
+
+// ── Notification inbox (E2) ────────────────────────────────────────
+
+export type InboxNotificationKind = 'pipeline' | 'review' | 'achievement' | 'deadline'
+
+export interface InboxNotification {
+  id: string
+  kind: InboxNotificationKind | string
+  title: string
+  body: string | null
+  href: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export interface UnreadCountResponse {
+  count: number
+}
+
+export interface MarkReadResponse {
+  updated: number
+}
+
+// ── Quick capture (E4) ─────────────────────────────────────────────
+
+export interface CaptureRequest {
+  text?: string
+  url?: string
+  title?: string
 }

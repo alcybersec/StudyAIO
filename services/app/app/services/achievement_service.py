@@ -121,6 +121,25 @@ async def check_achievements(
                     user_xp.total_xp += achievement.xp_reward
                     user_xp.level = calculate_level(user_xp.total_xp)
 
+            # Emit inbox notification (best-effort)
+            try:
+                from app.services import notification_service
+
+                await notification_service.notify_inbox(
+                    session,
+                    user_id,
+                    kind="achievement",
+                    title=f"Achievement unlocked: {achievement.name}",
+                    body=achievement.description,
+                    href="/achievements",
+                )
+            except Exception:
+                logger.warning(
+                    "achievement_inbox_notification_failed",
+                    achievement_code=achievement.code,
+                    exc_info=True,
+                )
+
             logger.info(
                 "achievement_unlocked",
                 user_id=user_id,

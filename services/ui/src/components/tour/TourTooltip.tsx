@@ -29,12 +29,12 @@ export function TourTooltip({
 
   return (
     <div
-      className="fixed z-[10001] w-80 bg-surface border border-border rounded-xl shadow-xl p-4"
+      className="fixed z-[10001] w-80 bg-surface-1 border border-border rounded-xl shadow-xl p-4"
       style={{ top: `${tooltipTop}px`, left: `${tooltipLeft}px` }}
     >
       {/* Arrow */}
       <div
-        className="absolute -top-2 w-4 h-4 bg-surface border-l border-t border-border rotate-45"
+        className="absolute -top-2 w-4 h-4 bg-surface-1 border-l border-t border-border rotate-45"
         style={{ left: `${Math.max(20, Math.min(position.left + position.width / 2 - tooltipLeft, 280))}px` }}
       />
 
@@ -58,7 +58,7 @@ export function TourTooltip({
               <button
                 type="button"
                 onClick={onPrev}
-                className="px-3 py-1.5 text-xs font-medium rounded-md border border-border text-text hover:bg-surface-alt transition-colors"
+                className="px-3 py-1.5 text-xs font-medium rounded-md border border-border text-text hover:bg-surface-2 transition-colors"
               >
                 Back
               </button>
@@ -66,7 +66,7 @@ export function TourTooltip({
             <button
               type="button"
               onClick={onNext}
-              className="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-white hover:bg-primary/90 transition-colors"
+              className="px-3 py-1.5 text-xs font-medium rounded-md bg-sage text-on-accent hover:bg-sage-hover transition-colors"
             >
               {isLast ? 'Done' : 'Next'}
             </button>
