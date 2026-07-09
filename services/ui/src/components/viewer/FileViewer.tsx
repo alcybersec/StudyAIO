@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Download, FileText, Presentation } from 'lucide-react'
 import { PdfViewer } from './PdfViewer'
 import type { Artifact } from '../../types'
@@ -47,8 +47,13 @@ export function FileViewer({ artifact, targetPage, navToken, zoom, onPageChange,
   const previewable = artifact.file_type === 'pdf' || CONVERTIBLE.has(artifact.file_type)
   const [failed, setFailed] = useState(false)
 
-  // Reset the failure state when switching to a different artifact.
-  useEffect(() => setFailed(false), [artifact.id])
+  // Reset the failure state when switching to a different artifact — done during
+  // render (React's supported pattern) rather than in an effect.
+  const [prevId, setPrevId] = useState(artifact.id)
+  if (artifact.id !== prevId) {
+    setPrevId(artifact.id)
+    setFailed(false)
+  }
 
   if (previewable && !failed) {
     // PDFs stream directly; Office files are converted to PDF server-side on first view.
