@@ -62,3 +62,7 @@ services/app/alembic/versions/__pycache__/
 
 # agent worktrees
 .claude/worktrees/
+
+# Local-only dev tooling — removed from the public repo, kept for local dev
+/CLAUDE.md
+/.claude/
