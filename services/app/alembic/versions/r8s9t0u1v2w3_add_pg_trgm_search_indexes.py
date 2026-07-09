@@ -20,12 +20,10 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_courses_code_trgm "
-        "ON courses USING gin (code gin_trgm_ops)"
+        "CREATE INDEX IF NOT EXISTS ix_courses_code_trgm ON courses USING gin (code gin_trgm_ops)"
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_courses_name_trgm "
-        "ON courses USING gin (name gin_trgm_ops)"
+        "CREATE INDEX IF NOT EXISTS ix_courses_name_trgm ON courses USING gin (name gin_trgm_ops)"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_summaries_content_md_trgm "

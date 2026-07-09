@@ -40,7 +40,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_course_documents_assessment_id", table_name="course_documents")
-    op.drop_constraint(
-        "fk_course_documents_assessment_id", "course_documents", type_="foreignkey"
-    )
+    op.drop_constraint("fk_course_documents_assessment_id", "course_documents", type_="foreignkey")
     op.drop_column("course_documents", "assessment_id")
