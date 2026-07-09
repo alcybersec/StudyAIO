@@ -56,9 +56,7 @@ class TestQuickCaptureText:
             "app.api.uploads.artifact_service.ingest_text_capture",
             new_callable=AsyncMock,
         ) as mock_ingest:
-            response = await async_client.post(
-                "/api/uploads/capture", json={"text": big_text}
-            )
+            response = await async_client.post("/api/uploads/capture", json={"text": big_text})
 
         assert response.status_code == 413
         mock_ingest.assert_not_called()
@@ -73,9 +71,7 @@ class TestQuickCaptureText:
             ),
             patch("app.api.uploads.resume_pipeline") as mock_resume,
         ):
-            response = await async_client.post(
-                "/api/uploads/capture", json={"text": "same text"}
-            )
+            response = await async_client.post("/api/uploads/capture", json={"text": "same text"})
 
         assert response.status_code == 409
         mock_resume.assert_not_called()
@@ -95,9 +91,7 @@ class TestQuickCaptureText:
             ),
             patch("app.api.uploads.resume_pipeline"),
         ):
-            response = await async_client.post(
-                "/api/uploads/capture", json={"text": "quota check"}
-            )
+            response = await async_client.post("/api/uploads/capture", json={"text": "quota check"})
 
         assert response.status_code == 201
         mock_quota.assert_awaited_once()

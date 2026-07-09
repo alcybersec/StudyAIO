@@ -125,9 +125,7 @@ class TestAssessmentDocuments:
             new_callable=AsyncMock,
             return_value=[doc],
         ) as mock_list:
-            response = await async_client.get(
-                "/api/courseops/assessments/assess-001/documents"
-            )
+            response = await async_client.get("/api/courseops/assessments/assess-001/documents")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
@@ -255,7 +253,11 @@ class TestCreateDeadline:
         ) as mock_create:
             response = await async_client.post(
                 "/api/courseops/deadlines?course_code=CSIT302",
-                json={"title": "Lab report", "due_date": "2026-05-01", "deadline_type": "assignment"},
+                json={
+                    "title": "Lab report",
+                    "due_date": "2026-05-01",
+                    "deadline_type": "assignment",
+                },
             )
 
         assert response.status_code == 201
