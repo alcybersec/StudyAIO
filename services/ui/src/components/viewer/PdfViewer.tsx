@@ -19,9 +19,13 @@ interface PdfViewerProps {
   zoom?: number
   onPageChange?: (page: number) => void
   onTotalPages?: (total: number) => void
+  /** Called when the document fails to load (e.g. conversion failed). */
+  onError?: () => void
+  /** Shown while the document loads (override the default spinner). */
+  loadingLabel?: string
 }
 
-export function PdfViewer({ fileUrl, targetPage, navToken, zoom = 100, onPageChange, onTotalPages }: PdfViewerProps) {
+export function PdfViewer({ fileUrl, targetPage, navToken, zoom = 100, onPageChange, onTotalPages, onError, loadingLabel = 'Loading PDF...' }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0)
   const [containerWidth, setContainerWidth] = useState<number>(600)
   const [pagesRendered, setPagesRendered] = useState(false)
@@ -144,7 +148,8 @@ export function PdfViewer({ fileUrl, targetPage, navToken, zoom = 100, onPageCha
         file={fileUrl}
         options={PDF_OPTIONS}
         onLoadSuccess={onDocumentLoadSuccess}
-        loading={<LoadingSpinner label="Loading PDF..." />}
+        onLoadError={onError}
+        loading={<LoadingSpinner label={loadingLabel} />}
         error={
           <div className="text-center py-8 px-4 text-sm text-red-fg">
             Failed to load PDF. Try downloading the file instead.

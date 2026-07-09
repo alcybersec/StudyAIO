@@ -171,3 +171,61 @@ class TestDownloadCourseDocument:
         ):
             response = await async_client.get("/api/files/courseops/documents/nope")
         assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestPreviewArtifact:
+    """Tests for GET /api/files/uploads/artifacts/{id}/preview (pptx/docx → pdf)."""
+
+    async def test_pptx_preview_serves_converted_pdf(self, async_client, tmp_path):
+        pdf_file = tmp_path / "converted.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4 converted")
+        art = AsyncMock()
+        art.file_type = "pptx"
+        art.file_path = "uploads/x.pptx"
+        with (
+            patch("app.api.files.artifact_service.get_artifact", return_value=art),
+            patch(
+                "app.services.preview_service.ensure_preview_pdf",
+                new=AsyncMock(return_value=str(pdf_file)),
+            ),
+        ):
+            response = await async_client.get("/api/files/uploads/artifacts/a1/preview")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/pdf")
+
+    async def test_pdf_preview_serves_original(self, async_client, tmp_path):
+        pdf_file = tmp_path / "orig.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4 orig")
+        art = AsyncMock()
+        art.file_type = "pdf"
+        art.file_path = str(pdf_file)
+        with patch("app.api.files.artifact_service.get_artifact", return_value=art):
+            response = await async_client.get("/api/files/uploads/artifacts/a1/preview")
+        assert response.status_code == 200
+
+    async def test_unsupported_type_returns_415(self, async_client):
+        art = AsyncMock()
+        art.file_type = "xlsx"
+        with patch("app.api.files.artifact_service.get_artifact", return_value=art):
+            response = await async_client.get("/api/files/uploads/artifacts/a1/preview")
+        assert response.status_code == 415
+
+    async def test_conversion_failure_returns_422(self, async_client):
+        art = AsyncMock()
+        art.file_type = "docx"
+        art.file_path = "uploads/x.docx"
+        with (
+            patch("app.api.files.artifact_service.get_artifact", return_value=art),
+            patch(
+                "app.services.preview_service.ensure_preview_pdf",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            response = await async_client.get("/api/files/uploads/artifacts/a1/preview")
+        assert response.status_code == 422
+
+    async def test_missing_artifact_returns_404(self, async_client):
+        with patch("app.api.files.artifact_service.get_artifact", return_value=None):
+            response = await async_client.get("/api/files/uploads/artifacts/nope/preview")
+        assert response.status_code == 404

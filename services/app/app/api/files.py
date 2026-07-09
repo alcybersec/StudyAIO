@@ -121,6 +121,37 @@ async def view_artifact(
 
 
 @router.get(
+    "/files/uploads/artifacts/{artifact_id}/preview",
+    response_model=None,
+    summary="Inline preview of an artifact as PDF",
+    description="Serves a PDF for inline preview — the original for PDFs, or a cached LibreOffice conversion for PPTX/DOCX.",
+)
+async def preview_artifact(
+    artifact_id: str,
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Serve a PDF suitable for inline preview (converts Office files on demand)."""
+    from app.services import preview_service
+
+    artifact = await artifact_service.get_artifact(session, artifact_id, user_id=user.id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    if artifact.file_type == "pdf":
+        key = normalize_storage_key(artifact.file_path)
+        return await _serve_storage_key(key, media_type="application/pdf")
+
+    if artifact.file_type not in preview_service.CONVERTIBLE_TYPES:
+        raise HTTPException(status_code=415, detail="No inline preview for this file type")
+
+    key = await preview_service.ensure_preview_pdf(session, artifact_id, user_id=user.id)
+    if not key:
+        raise HTTPException(status_code=422, detail="Preview could not be generated")
+    return await _serve_storage_key(key, media_type="application/pdf")
+
+
+@router.get(
     "/files/{file_type}/{path:path}",
     response_model=None,
     summary="Serve a file",
