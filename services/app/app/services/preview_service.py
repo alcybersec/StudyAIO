@@ -27,8 +27,13 @@ CONVERT_TIMEOUT_SECONDS = 60
 MAX_CONVERT_BYTES = 60 * 1024 * 1024  # 60 MB
 
 
+# Bump when conversion output changes (e.g. new fonts) so cached previews are
+# regenerated instead of serving stale/mis-rendered PDFs.
+PREVIEW_CACHE_VERSION = 2
+
+
 def _preview_key(artifact_id: str) -> str:
-    return f"previews/{artifact_id}.pdf"
+    return f"previews/v{PREVIEW_CACHE_VERSION}/{artifact_id}.pdf"
 
 
 async def _convert_to_pdf(src: Path, out_dir: Path) -> Path | None:

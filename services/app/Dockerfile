@@ -21,7 +21,10 @@ WORKDIR /app
 
 # Only runtime C libs (no compiler, no headers)
 # nodejs + npm needed for Claude Code CLI
-# libreoffice-{impress,writer} + fonts render PPTX/DOCX to PDF for inline preview
+# libreoffice-{impress,writer} render PPTX/DOCX to PDF for inline preview.
+# Fonts: liberation (Arial/Times/Courier metrics), carlito (=Calibri) and
+# caladea (=Cambria) so Office decks substitute with matching glyph widths —
+# without these, LibreOffice picks a mismatched fallback and text renders gappy.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     nodejs \
@@ -29,6 +32,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-impress \
     libreoffice-writer \
     fonts-liberation \
+    fonts-crosextra-carlito \
+    fonts-crosextra-caladea \
+    fonts-dejavu-core \
+    && fc-cache -f \
     && npm install -g @anthropic-ai/claude-code \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
