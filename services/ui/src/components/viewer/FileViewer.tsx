@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Download, FileText, Presentation } from 'lucide-react'
 import { PdfViewer } from './PdfViewer'
 import type { Artifact } from '../../types'
@@ -10,6 +11,9 @@ interface FileViewerProps {
   onPageChange?: (page: number) => void
   onTotalPages?: (total: number) => void
 }
+
+/** Office types LibreOffice converts to PDF for inline preview (mirrors the backend). */
+const CONVERTIBLE = new Set(['pptx', 'docx', 'ppt', 'doc'])
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -27,7 +31,7 @@ function FallbackViewer({ artifact }: { artifact: Artifact }) {
       <span className="inline-block px-2 py-0.5 font-mono text-[11px] rounded bg-surface-2 text-text-muted mb-4">
         {artifact.file_type.toUpperCase()}
       </span>
-      <p className="text-xs text-text-faint mb-3">Inline preview not available for this file type</p>
+      <p className="text-xs text-text-faint mb-3">Inline preview not available for this file</p>
       <a
         href={`/api/files/uploads/artifacts/${artifact.id}`}
         download
@@ -40,15 +44,25 @@ function FallbackViewer({ artifact }: { artifact: Artifact }) {
 }
 
 export function FileViewer({ artifact, targetPage, navToken, zoom, onPageChange, onTotalPages }: FileViewerProps) {
-  if (artifact.file_type === 'pdf') {
+  const previewable = artifact.file_type === 'pdf' || CONVERTIBLE.has(artifact.file_type)
+  const [failed, setFailed] = useState(false)
+
+  // Reset the failure state when switching to a different artifact.
+  useEffect(() => setFailed(false), [artifact.id])
+
+  if (previewable && !failed) {
+    // PDFs stream directly; Office files are converted to PDF server-side on first view.
+    const isConverted = artifact.file_type !== 'pdf'
     return (
       <PdfViewer
-        fileUrl={`/api/files/uploads/artifacts/${artifact.id}/view`}
+        fileUrl={`/api/files/uploads/artifacts/${artifact.id}/preview`}
         targetPage={targetPage}
         navToken={navToken}
         zoom={zoom}
         onPageChange={onPageChange}
         onTotalPages={onTotalPages}
+        onError={() => setFailed(true)}
+        loadingLabel={isConverted ? 'Preparing preview…' : 'Loading PDF...'}
       />
     )
   }
