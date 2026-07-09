@@ -284,9 +284,7 @@ class TestInboxNotifications:
 
     async def test_mark_notifications_read_empty_ids(self, mock_session):
         """Empty id list is a no-op."""
-        updated = await notification_service.mark_notifications_read(
-            mock_session, "user-001", []
-        )
+        updated = await notification_service.mark_notifications_read(mock_session, "user-001", [])
         assert updated == 0
         mock_session.execute.assert_not_called()
 
@@ -296,9 +294,7 @@ class TestInboxNotifications:
         count_result.scalar_one.return_value = 3
         mock_session.execute = AsyncMock(return_value=count_result)
 
-        count = await notification_service.count_unread_notifications(
-            mock_session, "user-001"
-        )
+        count = await notification_service.count_unread_notifications(mock_session, "user-001")
         assert count == 3
 
 

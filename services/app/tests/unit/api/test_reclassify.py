@@ -54,8 +54,7 @@ class TestReclassify:
         # Summarize enqueued for both affected weeks (target + source)
         assert mock_summarize.apply_async.call_count == 2
         enqueued_ids = [
-            c.kwargs["args"][0]["artifact_id"]
-            for c in mock_summarize.apply_async.call_args_list
+            c.kwargs["args"][0]["artifact_id"] for c in mock_summarize.apply_async.call_args_list
         ]
         assert set(enqueued_ids) == {"art-001", "art-002"}
 
@@ -122,7 +121,5 @@ class TestReclassify:
 
     async def test_reclassify_validates_body(self, async_client):
         """Missing course_code/week fails validation."""
-        response = await async_client.post(
-            "/api/artifacts/art-001/reclassify", json={"week": 4}
-        )
+        response = await async_client.post("/api/artifacts/art-001/reclassify", json={"week": 4})
         assert response.status_code == 422

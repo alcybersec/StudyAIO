@@ -226,10 +226,10 @@ class TestReclassify:
 
         mock_session.execute = AsyncMock(
             side_effect=[
-                artifact_result,   # load artifact
-                course_result,     # resolve target course
-                update_result,     # flashcards update
-                update_result,     # quiz update
+                artifact_result,  # load artifact
+                course_result,  # resolve target course
+                update_result,  # flashcards update
+                update_result,  # quiz update
                 remaining_result,  # remaining source-week artifact
             ]
         )

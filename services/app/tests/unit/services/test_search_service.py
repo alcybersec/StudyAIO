@@ -216,9 +216,7 @@ class TestSearchAll:
         empty = self._result_with_rows([])
 
         session = AsyncMock()
-        session.execute = AsyncMock(
-            side_effect=[empty, empty, empty, self._result_with_rows(rows)]
-        )
+        session.execute = AsyncMock(side_effect=[empty, empty, empty, self._result_with_rows(rows)])
 
         results = await search_all(session, "user-001", "forensics", limit=5)
         assert len(results) == 5

@@ -395,7 +395,9 @@ async def attach_assessment_document(
     session.add(doc)
     await session.commit()
     await session.refresh(doc)
-    logger.info("assessment_document_attached", assessment_id=assessment_id, document_type=document_type)
+    logger.info(
+        "assessment_document_attached", assessment_id=assessment_id, document_type=document_type
+    )
     return doc
 
 

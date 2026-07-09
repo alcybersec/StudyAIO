@@ -156,9 +156,7 @@ class TestRenameCourse:
         mock_session.execute = AsyncMock(return_value=not_found)
 
         with pytest.raises(LookupError):
-            await course_service.rename_course(
-                mock_session, "user-001", "NOPE", name="x"
-            )
+            await course_service.rename_course(mock_session, "user-001", "NOPE", name="x")
 
 
 @pytest.mark.asyncio
@@ -217,9 +215,7 @@ class TestListCoursesArchivedFilter:
             return mock_result
 
         mock_session.execute = AsyncMock(side_effect=capture)
-        await course_service.list_courses(
-            mock_session, user_id="user-001", include_archived=True
-        )
+        await course_service.list_courses(mock_session, user_id="user-001", include_archived=True)
         assert "archived_at IS NULL" not in captured["sql"]
 
 
@@ -252,9 +248,7 @@ class TestDeleteCourse:
         mock_session.execute = AsyncMock(side_effect=dispatch)
 
         with patch("app.services.course_service.get_storage", create=True) as mock_storage:
-            counts = await course_service.delete_course(
-                mock_session, "user-001", "CSIT302"
-            )
+            counts = await course_service.delete_course(mock_session, "user-001", "CSIT302")
             mock_storage.assert_not_called()
 
         assert counts["artifacts"] == 2

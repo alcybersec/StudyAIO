@@ -61,9 +61,7 @@ class TestGlobalSearch:
             new_callable=AsyncMock,
             return_value=[],
         ) as mock_search:
-            response = await async_client.get(
-                "/api/search", params={"q": "foo", "limit": 5}
-            )
+            response = await async_client.get("/api/search", params={"q": "foo", "limit": 5})
 
         assert response.status_code == 200
         assert response.json()["results"] == []

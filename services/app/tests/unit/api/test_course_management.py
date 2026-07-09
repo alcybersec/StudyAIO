@@ -63,9 +63,7 @@ class TestRenameCourse:
             new_callable=AsyncMock,
             side_effect=LookupError("Course not found"),
         ):
-            response = await async_client.patch(
-                "/api/courses/OTHERS101", json={"name": "x"}
-            )
+            response = await async_client.patch("/api/courses/OTHERS101", json={"name": "x"})
         assert response.status_code == 404
 
 
@@ -108,9 +106,7 @@ class TestArchiveCourse:
             new_callable=AsyncMock,
             return_value=[],
         ) as mock_list:
-            response = await async_client.get(
-                "/api/courses", params={"include_archived": "1"}
-            )
+            response = await async_client.get("/api/courses", params={"include_archived": "1"})
 
         assert response.status_code == 200
         _, kwargs = mock_list.call_args
@@ -220,9 +216,7 @@ class TestMergeCourse:
             new_callable=AsyncMock,
             side_effect=LookupError("Course 'NOPE' not found"),
         ):
-            response = await async_client.post(
-                "/api/courses/CSIT302/merge", json={"into": "NOPE"}
-            )
+            response = await async_client.post("/api/courses/CSIT302/merge", json={"into": "NOPE"})
         assert response.status_code == 404
 
     async def test_merge_into_itself_400(self, async_client):
