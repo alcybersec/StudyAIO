@@ -49,6 +49,7 @@ async def update_settings(
     try:
         result = await settings_service.update_user_settings(session, user.id, updates)
     except ValueError as e:
+        logger.error("settings_update_failed", error=str(e), updates=list(updates.keys()))
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     return SettingsResponse(**result)
