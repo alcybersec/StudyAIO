@@ -79,7 +79,10 @@ services:
       - ./data:/app/data
     env_file:
       - .env
-    command: celery -A app.worker:celery_app beat --loglevel=info
+    # Write the schedule DB into the writable data dir — the image runs as the
+    # non-root `studyaio` user and CWD (/app) is root-owned, so the default
+    # ./celerybeat-schedule would fail with Permission denied.
+    command: celery -A app.worker:celery_app beat --loglevel=info --schedule /app/data/celerybeat-schedule
 
   db:
     image: pgvector/pgvector:pg16
