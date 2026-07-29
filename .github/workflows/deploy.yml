@@ -101,9 +101,10 @@ jobs:
     name: Deploy to Self-Hosted Server
     needs: [build-api, build-ui]
     runs-on: [self-hosted, homelab]
-    if: |
-      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-      && vars.DEPLOY_TARGET == 'selfhosted'
+    # Deploy on every push to main (or a version tag). The server runs the
+    # production overlay (docker-compose.prod.yml) behind Caddy and pulls the
+    # GHCR images CI just built — it never builds locally.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Fix workspace permissions
         run: docker run --rm -v "${{ github.workspace }}:/__w" alpine chown -R $(id -u):$(id -g) /__w || true
@@ -117,7 +118,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ vars.DEPLOY_SSH_PORT || '22' }}
-          source: "docker-compose.yml,docker-compose.selfhosted.yml"
+          source: "docker-compose.yml,docker-compose.prod.yml"
           target: ${{ vars.DEPLOY_DIR || '~/studyaio' }}
 
       - name: Deploy via SSH
@@ -136,68 +137,34 @@ jobs:
             export API_IMAGE="ghcr.io/${GHCR_OWNER}/studyaio-api:${IMAGE_TAG}"
             export UI_IMAGE="ghcr.io/${GHCR_OWNER}/studyaio-ui:${IMAGE_TAG}"
 
+            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+
             # Log in to GHCR to pull private images
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${GHCR_OWNER}" --password-stdin
 
-            # Pull latest images
+            # Pull the exact images CI built for this commit
             docker pull "${API_IMAGE}"
             docker pull "${UI_IMAGE}"
 
-            # Tag as latest so compose uses them
+            # Tag as latest for convenience / manual fallback
             docker tag "${API_IMAGE}" "ghcr.io/${GHCR_OWNER}/studyaio-api:latest"
             docker tag "${UI_IMAGE}" "ghcr.io/${GHCR_OWNER}/studyaio-ui:latest"
 
-            # Remove Traefik if left over from previous config
-            docker rm -f studyaio-traefik-1 2>/dev/null || true
+            # Pin the deployed build in .env so any later manual `up` reproduces
+            # this exact SHA instead of drifting to a stale image or local build.
+            touch .env
+            sed -i '/^GHCR_OWNER=/d;/^IMAGE_TAG=/d' .env
+            printf 'GHCR_OWNER=%s\nIMAGE_TAG=%s\n' "${GHCR_OWNER}" "${IMAGE_TAG}" >> .env
 
-            # Restart services
-            docker compose -f docker-compose.yml \
-              -f docker-compose.selfhosted.yml \
-              up -d --no-build --remove-orphans
+            # Roll the stack to the pinned images (no local build)
+            $COMPOSE up -d --no-build --remove-orphans
 
             # Run any pending migrations
-            docker compose -f docker-compose.yml \
-              -f docker-compose.selfhosted.yml \
-              exec -T api alembic upgrade head
+            $COMPOSE exec -T api alembic upgrade head
 
-            # Verify health
+            # Verify health — API readiness AND the UI is actually served on
+            # its published port (what Caddy proxies to).
             sleep 5
-            docker compose -f docker-compose.yml \
-              -f docker-compose.selfhosted.yml \
-              exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
+            $COMPOSE exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
+            curl -fsS -o /dev/null "http://localhost:${UI_PORT:-3001}/"
             echo "Deployment successful"
-
-  deploy-ecs:
-    name: Deploy to ECS
-    needs: [build-api, build-ui]
-    runs-on: [self-hosted, homelab]
-    if: |
-      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-      && vars.DEPLOY_TARGET == 'ecs'
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
-
-      - name: Update ECS API service
-        run: |
-          aws ecs update-service \
-            --cluster ${{ vars.ECS_CLUSTER || 'studyaio-prod-cluster' }} \
-            --service ${{ vars.ECS_API_SERVICE || 'studyaio-prod-api' }} \
-            --force-new-deployment
-
-      - name: Update ECS Worker service
-        run: |
-          aws ecs update-service \
-            --cluster ${{ vars.ECS_CLUSTER || 'studyaio-prod-cluster' }} \
-            --service ${{ vars.ECS_WORKER_SERVICE || 'studyaio-prod-worker' }} \
-            --force-new-deployment
-
-      - name: Wait for API deployment
-        run: |
-          aws ecs wait services-stable \
-            --cluster ${{ vars.ECS_CLUSTER || 'studyaio-prod-cluster' }} \
-            --services ${{ vars.ECS_API_SERVICE || 'studyaio-prod-api' }}
