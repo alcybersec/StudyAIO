@@ -1,17 +1,26 @@
 # Production overrides — use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Differences from base (dev) compose:
+#   - Services run prebuilt GHCR images (no local build) — CI builds once, the
+#     server just pulls. Set IMAGE_TAG to pin a specific build (defaults latest).
 #   - No source code bind mounts (images contain all code)
 #   - API runs multi-worker uvicorn without --reload
 #   - Worker runs with higher concurrency
 #   - DB and Redis ports not exposed to host
 #   - All services restart automatically
+#
+# GHCR_OWNER / IMAGE_TAG are read from the environment (or .env). The deploy
+# pipeline pins IMAGE_TAG to the built commit SHA.
 
 services:
   ui:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-ui:${IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
 
   api:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     stop_grace_period: 35s
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --timeout-graceful-shutdown 30
@@ -19,6 +28,8 @@ services:
       - ./data:/app/data
 
   worker:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=4
     volumes: !override
@@ -26,6 +37,13 @@ services:
       - ${CLAUDE_CLI_PATH:-~/.local/bin/claude}:/usr/local/bin/claude:ro
       - ${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json:/root/.claude/.credentials.json:ro
       - ${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json:/root/.claude/settings.json:ro
+
+  beat:
+    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    volumes: !override
+      - ./data:/app/data
 
   db:
     restart: unless-stopped
