@@ -25,13 +25,15 @@ npm install -g @anthropic-ai/claude-code
 claude
 ```
 
-This creates `~/.claude/.credentials.json` which the worker container needs. If your Claude binary is elsewhere:
+This creates `~/.claude/.credentials.json`, which the worker container mounts.
+The CLI binary itself is installed in the image, so only the credentials (and
+optionally `~/.claude/settings.json`) come from the host. Do not bind-mount a
+host `claude` binary over `/usr/local/bin/claude` — that path is a symlink into
+the npm package, and Docker resolves it onto `bin/claude.exe`, which node then
+refuses to load.
 
-```bash
-which claude
-# Add to .env:
-CLAUDE_CLI_PATH=/usr/local/bin/claude
-```
+Per-user credentials configured in Settings → AI take precedence over the
+mounted file; they are written to a temporary `CLAUDE_CONFIG_DIR` per call.
 
 ### Environment Configuration
 
@@ -44,8 +46,7 @@ Key variables:
 - `DB_PORT` — host port for Postgres (default: `5433`, avoids conflict with host Postgres)
 - `REDIS_PORT` — host port for Redis (default: `6380`)
 - `UI_PORT` — host port for the UI (default: `3001`)
-- `CLAUDE_CLI_PATH` — path to Claude binary on host (default: `~/.local/bin/claude`)
-- `CLAUDE_CONFIG_DIR` — path to Claude config directory (default: `~/.claude`)
+- `CLAUDE_CONFIG_DIR` — path to Claude config directory on host (default: `~/.claude`)
 
 ### First Launch
 
@@ -314,10 +315,13 @@ Each stage is a Celery task chained via `orchestrator.run_pipeline()`. Tasks rec
 **Symptom:** `claude: command not found` or authentication errors in worker logs.
 
 **Fix:**
-1. Verify Claude CLI is installed: `which claude`
+1. Verify the CLI works *inside* the container: `docker compose exec worker claude --version`
+   (if this fails with `ERR_UNKNOWN_FILE_EXTENSION ".exe"`, a host binary is
+   being bind-mounted over `/usr/local/bin/claude` — remove that volume)
 2. Verify credentials exist: `ls ~/.claude/.credentials.json`
-3. Check mount paths in `.env`: `CLAUDE_CLI_PATH`, `CLAUDE_CONFIG_DIR`
-4. Re-authenticate: run `claude` on host, complete OAuth flow
+3. Check `CLAUDE_CONFIG_DIR` in `.env`
+4. Re-authenticate: run `claude` on host, complete OAuth flow — or paste
+   credentials per-user under Settings → AI
 
 ### Port Conflicts
 

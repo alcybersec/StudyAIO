@@ -34,7 +34,8 @@ services:
     command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=4
     volumes: !override
       - ./data:/app/data
-      - ${CLAUDE_CLI_PATH:-~/.local/bin/claude}:/usr/local/bin/claude:ro
+      # Claude CLI comes from the image — never bind-mount a host binary here
+      # (see the note in docker-compose.yml). Credentials only.
       - ${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json:/root/.claude/.credentials.json:ro
       - ${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json:/root/.claude/settings.json:ro
 

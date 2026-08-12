@@ -40,6 +40,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 
+# Fail the build if the CLI is not runnable. The npm package ships a stub at
+# bin/claude.exe that its postinstall replaces with the native binary for this
+# platform; if that step is skipped the stub stays in place — a JS file with a
+# .exe extension — and every invocation dies with ERR_UNKNOWN_FILE_EXTENSION.
+RUN claude --version
+
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
