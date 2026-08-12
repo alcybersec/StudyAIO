@@ -27,7 +27,6 @@ services:
       - ./services/app/tests:/app/tests
       - ./services/app/pytest.ini:/app/pytest.ini
       - ./data:/app/data
-      - ${CLAUDE_CLI_PATH:-~/.local/bin/claude}:/usr/local/bin/claude:ro
     env_file:
       - .env
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -42,7 +41,7 @@ services:
     build:
       context: ./services/app
       dockerfile: Dockerfile
-    user: "0:0"  # Root required for Claude CLI mount
+    user: "0:0"  # Root required for the Claude credential mounts below
     depends_on:
       db:
         condition: service_healthy
@@ -52,7 +51,11 @@ services:
       - ./services/app/app:/app/app
       - ./services/app/prompts:/app/prompts
       - ./data:/app/data
-      - ${CLAUDE_CLI_PATH:-~/.local/bin/claude}:/usr/local/bin/claude:ro
+      # The Claude CLI is installed in the image (see services/app/Dockerfile) —
+      # do NOT bind-mount a host binary over /usr/local/bin/claude. That path is
+      # a symlink to .../claude-code/bin/claude.exe; Docker resolves the symlink
+      # and mounts onto the .exe target, so node then refuses to load it
+      # (ERR_UNKNOWN_FILE_EXTENSION). Only credentials come from the host.
       - ${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json:/root/.claude/.credentials.json:ro
       - ${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json:/root/.claude/settings.json:ro
     env_file:
