@@ -1,5 +1,6 @@
 """Tests for ClaudeCodeAdapter."""
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -68,6 +69,35 @@ class TestRunClaudeCode:
             pytest.raises(AgentError, match="failed"),
         ):
             await adapter._run_claude_code("test prompt")
+
+    async def test_prompt_sent_on_stdin_not_argv(self, adapter):
+        """Prompt goes to stdin so it never counts against ARG_MAX."""
+        mock_process = AsyncMock()
+        mock_process.communicate.return_value = (b"output text", b"")
+        mock_process.returncode = 0
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
+            await adapter._run_claude_code("test prompt")
+
+        args = mock_exec.call_args[0]
+        assert "test prompt" not in args
+        assert args == ("/usr/bin/claude", "-p", "--output-format", "text")
+        assert mock_exec.call_args[1]["stdin"] is asyncio.subprocess.PIPE
+        assert mock_process.communicate.call_args[1]["input"] == b"test prompt"
+
+    async def test_large_prompt_does_not_hit_arg_max(self, adapter):
+        """A prompt far larger than ARG_MAX is accepted (regression: Errno 7)."""
+        huge_prompt = "x" * (4 * 1024 * 1024)
+        mock_process = AsyncMock()
+        mock_process.communicate.return_value = (b"ok", b"")
+        mock_process.returncode = 0
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
+            result = await adapter._run_claude_code(huge_prompt)
+
+        assert result == "ok"
+        assert all(len(arg) < 1024 for arg in mock_exec.call_args[0])
+        assert mock_process.communicate.call_args[1]["input"] == huge_prompt.encode()
 
 
 class TestParseJsonResponse:

@@ -70,7 +70,10 @@ class ClaudeCodeAdapter(AgentAdapter):
         Raises:
             AgentError: If the CLI fails or times out.
         """
-        cmd = [self._cli_path, "-p", prompt, "--output-format", "text"]
+        # The prompt goes on stdin, not argv: rendered lecture prompts routinely
+        # exceed ARG_MAX and exec() then fails with "[Errno 7] Argument list too
+        # long". `claude -p` with no positional prompt reads it from stdin.
+        cmd = [self._cli_path, "-p", "--output-format", "text"]
         logger.info(
             "claude_code_call",
             prompt_length=len(prompt),
@@ -99,11 +102,14 @@ class ClaudeCodeAdapter(AgentAdapter):
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
             )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(input=prompt.encode()), timeout=timeout
+            )
         except TimeoutError:
             process.kill()
             raise AgentError(f"Claude Code timed out after {timeout}s") from None
