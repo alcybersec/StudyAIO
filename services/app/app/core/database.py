@@ -61,9 +61,11 @@ def run_async(coro):
     'attached to a different loop' errors when Celery reuses
     worker processes across tasks.
     """
-    # Dispose stale connections synchronously — avoids trying to
-    # close asyncpg connections on a dead event loop.
-    engine.sync_engine.dispose()
+    # Drop the pool without closing its connections. They belong to an event
+    # loop that is already gone, so closing them would await on asyncpg outside
+    # a greenlet context — SQLAlchemy logs that as MissingGreenlet on every
+    # task. close=False swaps in a fresh pool and abandons the old sockets.
+    engine.sync_engine.dispose(close=False)
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(coro)

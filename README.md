@@ -115,7 +115,8 @@ claude
 ls ~/.claude/.credentials.json
 ```
 
-If your Claude binary is not at `~/.local/bin/claude`, set `CLAUDE_CLI_PATH` in `.env`.
+Only the credentials are read from the host — the Claude CLI itself is installed
+inside the API/worker image, so the host binary's version doesn't matter.
 
 ## Quick Start
 
