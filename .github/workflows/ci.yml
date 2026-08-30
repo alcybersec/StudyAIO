@@ -1,20 +1,29 @@
 name: CI
 
+# Runs on pull requests (the gate) and on pushes to long-lived branches (the
+# post-merge safety net). Every job runs on GitHub-hosted runners so the single
+# self-hosted homelab runner stays free for image builds and deploys.
+
 on:
+  pull_request:
+    branches: [main, master, develop]
   push:
     branches: [main, master, develop]
   workflow_dispatch:
 
+# Only one CI run per branch. A new push cancels the superseded PR run; runs on
+# main are left alone so the post-merge check always completes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   python-lint:
     name: Python Lint
-    runs-on: [self-hosted, homelab]
+    runs-on: ubuntu-latest
     container:
       image: python:3.12-slim
     steps:
-      - name: Fix workspace permissions
-        run: chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE || true
-
       - uses: actions/checkout@v4
 
       - name: Install ruff
@@ -31,13 +40,10 @@ jobs:
   backend-tests:
     name: Backend Tests
     needs: python-lint
-    runs-on: [self-hosted, homelab]
+    runs-on: ubuntu-latest
     container:
       image: python:3.12-slim
     steps:
-      - name: Fix workspace permissions
-        run: chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE || true
-
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
@@ -46,9 +52,18 @@ jobs:
             build-essential libpq-dev \
           && rm -rf /var/lib/apt/lists/*
 
+      # The torch CPU wheel alone is ~200MB; caching it keeps every run from
+      # re-downloading the whole dependency set.
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: /root/.cache/pip
+          key: pip-${{ hashFiles('services/app/requirements.txt') }}
+          restore-keys: pip-
+
       - name: Install dependencies (CPU-only PyTorch)
         working-directory: services/app
-        run: pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
       - name: Run unit tests with coverage
         working-directory: services/app
@@ -68,7 +83,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     needs: python-lint
-    runs-on: [self-hosted, homelab]
+    runs-on: ubuntu-latest
     container:
       image: python:3.12-slim
     services:
@@ -95,9 +110,6 @@ jobs:
       DATABASE_URL_SYNC: postgresql://testuser:testpass@postgres:5432/testdb
       REDIS_URL: redis://redis:6379/0
     steps:
-      - name: Fix workspace permissions
-        run: chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE || true
-
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
@@ -106,9 +118,16 @@ jobs:
             build-essential libpq-dev postgresql-client \
           && rm -rf /var/lib/apt/lists/*
 
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: /root/.cache/pip
+          key: pip-${{ hashFiles('services/app/requirements.txt') }}
+          restore-keys: pip-
+
       - name: Install dependencies (CPU-only PyTorch)
         working-directory: services/app
-        run: pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
       - name: Enable pgvector extension
         run: PGPASSWORD=testpass psql -h postgres -U testuser -d testdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
@@ -119,13 +138,10 @@ jobs:
 
   frontend-checks:
     name: Frontend Checks
-    runs-on: [self-hosted, homelab]
+    runs-on: ubuntu-latest
     container:
       image: node:20-slim
     steps:
-      - name: Fix workspace permissions
-        run: chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE || true
-
       - uses: actions/checkout@v4
 
       - name: Npm cache
@@ -162,3 +178,142 @@ jobs:
       - name: Bundle size budget
         working-directory: services/ui
         run: bash scripts/check-bundle.sh
+
+      # Hand the built bundle to the E2E job so it isn't rebuilt from scratch.
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: services/ui/dist
+          retention-days: 1
+
+  e2e-tests:
+    name: E2E Tests
+    needs: frontend-checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: studyaio
+          POSTGRES_PASSWORD: studyaio
+          POSTGRES_DB: studyaio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U studyaio -d studyaio"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # This job runs on the runner host (not in a container) so that Playwright
+      # and the API can talk to each other over localhost; service containers are
+      # reached through their published ports.
+      DATABASE_URL: postgresql+asyncpg://studyaio:studyaio@localhost:5432/studyaio
+      DATABASE_URL_SYNC: postgresql://studyaio:studyaio@localhost:5432/studyaio
+      REDIS_URL: redis://localhost:6379/0
+      SELF_HOSTED: "true"
+      JWT_SECRET_KEY: e2e-ephemeral-secret-not-used-outside-ci
+      DATA_DIR: ${{ github.workspace }}/e2e-data
+      LOG_FORMAT: json
+      E2E_BASE_URL: http://localhost:3001
+      E2E_API_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/app/requirements.txt
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev
+
+      - name: Install backend dependencies (CPU-only PyTorch)
+        working-directory: services/app
+        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+
+      - name: Enable pgvector extension
+        run: PGPASSWORD=studyaio psql -h localhost -U studyaio -d studyaio -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Run migrations
+        working-directory: services/app
+        run: alembic upgrade head
+
+      # No Celery worker: the suite asserts that uploads are accepted and queued,
+      # never that the pipeline finishes, so the broker alone is enough.
+      - name: Start API
+        working-directory: services/app
+        run: |
+          mkdir -p "$DATA_DIR"
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$GITHUB_WORKSPACE/api.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health/ready > /dev/null; then
+              echo "API ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API failed to become ready"
+          cat "$GITHUB_WORKSPACE/api.log"
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: services/ui/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: services/ui
+        run: npm ci
+
+      - name: Download build output
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: services/ui/dist
+
+      - name: Install Playwright browser
+        working-directory: services/ui
+        run: npx playwright install --with-deps chromium
+
+      - name: Serve the built UI
+        working-directory: services/ui
+        run: |
+          nohup npx vite preview --port 3001 > "$GITHUB_WORKSPACE/ui.log" 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3001/ > /dev/null; then
+              echo "UI ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "UI failed to become ready"
+          cat "$GITHUB_WORKSPACE/ui.log"
+          exit 1
+
+      - name: Run Playwright tests
+        working-directory: services/ui
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            services/ui/playwright-report
+            api.log
+            ui.log
+          retention-days: 7
