@@ -7,10 +7,12 @@ on:
   push:
     tags:
       - 'v*'
+    # develop is deliberately absent: only main/tags deploy (see the `if` on
+    # deploy-selfhosted), so building images for develop only queued work on the
+    # single self-hosted runner that real deploys were waiting behind.
     branches:
       - main
       - master
-      - develop
     paths:
       - 'services/**'
       - 'infra/**'
@@ -18,6 +20,12 @@ on:
       - 'docker-compose.prod.yml'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
+
+# Serialize deploys rather than cancelling them — an interrupted deploy would
+# leave the server half-updated.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
