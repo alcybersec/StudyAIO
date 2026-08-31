@@ -16,6 +16,33 @@ Check API server status.
 { "status": "ok" }
 ```
 
+### `GET /health/live`
+
+Liveness probe — confirms the process is running. Never touches the database.
+
+**Response** `200`
+```json
+{ "status": "ok" }
+```
+
+### `GET /health/ready`
+
+Readiness probe — verifies Postgres and Redis connectivity. Used by the Docker
+Compose healthchecks and by the deploy workflow's post-deploy check.
+
+**Response** `200` when both are reachable, `503` when either is not:
+```json
+{
+  "status": "degraded",
+  "checks": { "database": "ok", "redis": "unavailable" }
+}
+```
+
+### `GET /metrics`
+
+Prometheus exposition endpoint. Only mounted when `PROMETHEUS_ENABLED=true`
+(default `false`).
+
 ---
 
 ## Authentication
@@ -45,7 +72,7 @@ Auto-authenticate as the demo user and redirect to dashboard. Rate limited: 10/m
 
 ### `POST /api/auth/register`
 
-Register a new user. Rate limited: 10/minute.
+Register a new user. Rate limited: 3/minute.
 
 **Body** `RegisterRequest`
 **Response** `201` `UserProfileResponse` + Set-Cookie (access_token, refresh_token)
@@ -91,14 +118,14 @@ Change password. Requires authentication.
 
 ### `POST /api/auth/forgot-password`
 
-Request password reset. Always returns 202 (no email leak). Rate limited: 5/minute.
+Request password reset. Always returns 202 (no email leak). Rate limited: 3/minute.
 
 **Body** `ForgotPasswordRequest`
 **Response** `202`
 
 ### `POST /api/auth/reset-password`
 
-Reset password with magic link token.
+Reset password with magic link token. Rate limited: 3/minute.
 
 **Body** `ResetPasswordRequest`
 **Response** `200` | `401` invalid/expired/used token
@@ -132,11 +159,17 @@ Disable MFA. Requires authentication.
 
 ### `GET /api/auth/oauth/{provider}`
 
-OAuth redirect (placeholder — M21).
+Start an OAuth login. Generates a CSRF state token, stores it in Redis for 10 minutes, and redirects to the provider's consent screen. `provider` must be `google` or `github`.
+
+**Response** `302` Redirect to the provider | `400` unknown provider or provider not configured
 
 ### `GET /api/auth/oauth/{provider}/callback`
 
-OAuth callback (placeholder — M21).
+Provider callback. Validates the state token, exchanges the code for an access token, fetches user info, creates or links the account (filling in the avatar if missing), sets auth cookies, and redirects to `/`.
+
+**Query** `code`, `state` — or `error` when the user declines
+
+**Response** `302` to `/` with Set-Cookie | `302` to `/login?error=oauth_failed` on a provider error or missing code/state | `400` unknown provider, or no email returned by the provider | `403` invalid or expired state
 
 ### `POST /api/auth/magic-link`
 
@@ -145,9 +178,13 @@ Request a magic link. Rate limited: 5/minute. Always returns 202.
 **Body** `MagicLinkRequest`
 **Response** `202`
 
+> **Not implemented.** This currently sends a *password reset* email, and
+> `GET /api/auth/magic/{token}` below does not log anyone in. Passwordless login
+> is not wired up; nothing in the UI links to it.
+
 ### `GET /api/auth/magic/{token}`
 
-Login via magic link (placeholder — M21).
+Placeholder. Returns `200 {"detail": "Magic link login not yet fully implemented"}` without authenticating.
 
 ---
 
@@ -325,7 +362,7 @@ Upload a lecture file and start the processing pipeline. Accepts PDF, DOCX, and 
 
 ### `POST /api/uploads/batch`
 
-Batch upload multiple lecture files in a single request. Returns per-file results with succeeded/failed/duplicate counts.
+Batch upload multiple lecture files in a single request. Returns per-file results with succeeded/failed/duplicate counts. Rate limited: `RATE_LIMIT_UPLOADS` (default 10/minute).
 
 **Request** — `multipart/form-data`
 | Field | Type | Description |
@@ -384,6 +421,27 @@ Get pipeline run history for an uploaded artifact.
 **Errors**
 | Status | Detail |
 |--------|--------|
+| 404 | Artifact not found |
+
+---
+
+### `POST /api/uploads/{artifact_id}/retry`
+
+Retry a failed artifact, resuming from the stage that failed rather than from the start. The artifact status is reset to the state that precedes that stage (`classify` → `ingested`, `extract` → `classified`, `summarize` → `extracted`, `index` → `summarized`, `assets` → `indexed`).
+
+**Response** `200` `RetryResponse`
+```json
+{
+  "artifact_id": "0192...",
+  "status": "extracted",
+  "retrying_from_stage": "summarize"
+}
+```
+
+**Errors**
+| Status | Detail |
+|--------|--------|
+| 400 | Artifact status is not `failed`, or no failed pipeline run exists |
 | 404 | Artifact not found |
 
 ---
@@ -519,14 +577,48 @@ Dismiss a review item without applying changes.
 
 ## Files
 
+Files are read through the storage backend, so these endpoints work the same on
+local disk and on S3.
+
+### `GET /api/files/uploads/artifacts/{artifact_id}`
+
+Download the original uploaded file for an artifact, with its original filename.
+
+**Response** `200` — File download | `404` artifact not found
+
+### `GET /api/files/uploads/artifacts/{artifact_id}/view`
+
+Serve the original file inline with its real MIME type (PDF/DOCX/PPTX), for viewing in the browser rather than downloading.
+
+**Response** `200` — File | `404` artifact not found
+
+### `GET /api/files/uploads/artifacts/{artifact_id}/preview`
+
+Serve a PDF suitable for inline preview: the original for PDFs, or a cached LibreOffice conversion for PPTX/DOCX.
+
+**Response** `200` — `application/pdf`
+
+**Errors**
+| Status | Detail |
+|--------|--------|
+| 404 | Artifact not found |
+| 415 | No inline preview for this file type |
+| 422 | Preview could not be generated |
+
+### `GET /api/files/courseops/documents/{document_id}`
+
+Download a course or assessment document by ID, with its original filename.
+
+**Response** `200` — File download | `404` document not found
+
 ### `GET /api/files/{file_type}/{path}`
 
-Serve a file from data directories. Used for rendering images in summaries and downloading artifacts.
+Serve a file from the data directories by relative path. Used for rendering images embedded in summaries.
 
 **Path Parameters**
 | Param | Type | Description |
 |-------|------|-------------|
-| `file_type` | string | One of: `uploads`, `extractions`, `summaries` |
+| `file_type` | string | One of: `uploads`, `extractions`, `summaries`, `courseops` |
 | `path` | string | Relative path within the type directory |
 
 **Response** `200` — File download (FileResponse)
@@ -1010,11 +1102,21 @@ List course documents.
 
 ---
 
-### `GET /api/courseops/documents/{id}`
+### `GET /api/courseops/documents/{document_id}`
 
 Get a course document with its extracted assessments and deadlines.
 
 **Response** `200` — `CourseDocumentDetailResponse`
+
+**Errors:** `404` if document not found.
+
+---
+
+### `DELETE /api/courseops/documents/{document_id}`
+
+Delete a course or assessment document.
+
+**Response** `204` — No content.
 
 **Errors:** `404` if document not found.
 
@@ -1033,6 +1135,78 @@ List extracted assessments for a course.
 
 ---
 
+### `POST /api/courseops/assessments`
+
+Manually add an assessment to a course, rather than having it extracted from an outline.
+
+**Query Parameters**
+| Param | Type | Description |
+|-------|------|-------------|
+| `course_code` | string | Course code (required) |
+
+**Request Body** `AssessmentCreateRequest`
+```json
+{
+  "title": "Assignment 2",
+  "assessment_type": "other",
+  "weight_pct": 25,
+  "description": "Group report",
+  "weeks_relevant": [5, 6]
+}
+```
+Only `title` is required; `weight_pct` must be 0–100.
+
+**Response** `201` — `AssessmentResponse`
+
+**Errors:** `404` if course not found.
+
+---
+
+### `PATCH /api/courseops/assessments/{assessment_id}`
+
+Edit an assessment's title, type, weight, description, or relevant weeks. All fields optional.
+
+**Request Body** `AssessmentUpdateRequest`
+
+**Response** `200` — `AssessmentResponse`
+
+**Errors:** `404` if assessment not found.
+
+---
+
+### `GET /api/courseops/assessments/{assessment_id}/documents`
+
+List the reference documents attached to an assessment (brief, rubric, guideline, …).
+
+**Response** `200` — `CourseDocumentResponse[]`
+
+---
+
+### `POST /api/courseops/assessments/{assessment_id}/documents`
+
+Attach a reference document to an assessment. Unlike `POST /api/courseops/documents`, no AI extraction is run — the file is stored and linked. Rate limited like uploads.
+
+**Request** — `multipart/form-data`
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | binary | Document (.pdf, .docx, .pptx) |
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `document_type` | string | `brief` | One of: `brief`, `rubric`, `guideline`, `handbook`, `other` |
+
+**Response** `201` — `CourseDocumentResponse`
+
+**Errors**
+| Status | Detail |
+|--------|--------|
+| 400 | Missing filename or unsupported file type |
+| 404 | Assessment not found |
+| 409 | Duplicate document (SHA-256 match) |
+
+---
+
 ### `GET /api/courseops/deadlines`
 
 List extracted deadlines for a course.
@@ -1047,7 +1221,33 @@ List extracted deadlines for a course.
 
 ---
 
-### `PUT /api/courseops/deadlines/{id}`
+### `POST /api/courseops/deadlines`
+
+Manually add a deadline to a course. Created confirmed by default.
+
+**Query Parameters**
+| Param | Type | Description |
+|-------|------|-------------|
+| `course_code` | string | Course code (required) |
+
+**Request Body** `DeadlineCreateRequest`
+```json
+{
+  "title": "Assignment 2 due",
+  "due_date": "2026-04-20",
+  "deadline_type": "other",
+  "description": null
+}
+```
+`title` and `due_date` are required.
+
+**Response** `201` — `DeadlineResponse`
+
+**Errors:** `404` if course not found.
+
+---
+
+### `PUT /api/courseops/deadlines/{deadline_id}`
 
 Update or confirm a deadline.
 
@@ -1068,7 +1268,7 @@ Update or confirm a deadline.
 
 ---
 
-### `DELETE /api/courseops/deadlines/{id}`
+### `DELETE /api/courseops/deadlines/{deadline_id}`
 
 Delete an AI-extracted deadline.
 
@@ -1078,7 +1278,7 @@ Delete an AI-extracted deadline.
 
 ---
 
-### `POST /api/courseops/deadlines/{id}/create-exam`
+### `POST /api/courseops/deadlines/{deadline_id}/create-exam`
 
 Create an Exam entity from a deadline. Marks the deadline as confirmed.
 
@@ -1395,7 +1595,7 @@ Update notification preferences.
 
 ### `POST /api/notifications/telegram/link`
 
-Generate a Telegram deep-link token for account linking.
+Generate a Telegram deep-link token for account linking. Rate limited: 5/minute.
 
 **Response** `200` `{ "link_url": "https://t.me/..." }`
 
@@ -1433,7 +1633,7 @@ Unsubscribe from Web Push notifications.
 
 ### `POST /api/notifications/test`
 
-Send a test notification via a specified channel (email, telegram, push).
+Send a test notification via a specified channel (email, telegram, push). Rate limited: 3/minute.
 
 **Body** `{ "channel": "email" }`
 **Response** `200`
@@ -1562,14 +1762,14 @@ Get weighted exam readiness score for a specific exam.
 
 ### `POST /api/billing/checkout`
 
-Create a Stripe Checkout session for upgrading to Pro plan.
+Create a Stripe Checkout session for upgrading to Pro plan. Rate limited: 5/minute.
 
 **Body** `{ "plan": "pro" }`
 **Response** `200` `{ "checkout_url": "https://checkout.stripe.com/..." }`
 
 ### `POST /api/billing/portal`
 
-Create a Stripe Customer Portal session for subscription management.
+Create a Stripe Customer Portal session for subscription management. Rate limited: 5/minute.
 
 **Response** `200` `{ "portal_url": "https://billing.stripe.com/..." }`
 
@@ -1604,6 +1804,12 @@ Update a user's role, tier, or active status.
 **Body** `UpdateUserRequest`
 **Response** `200` `AdminUserResponse`
 
+### `GET /api/admin/users/{user_id}/details`
+
+Comprehensive detail for a single user: profile, subscription, storage, usage, pipeline, study, content, gamification and chat sections (every section but `profile` may be null). Cached in Redis for the dashboard TTL.
+
+**Response** `200` `UserDetailResponse` | `404` user not found
+
 ### `GET /api/admin/metrics`
 
 Get aggregate system metrics (user count, course count, artifact count, pipeline runs, storage).
@@ -1626,6 +1832,21 @@ Partially update application settings.
 
 **Body** `UpdateSettingsRequest`
 **Response** `200` `SettingsResponse`
+
+### `POST /api/settings/test-ai`
+
+Verify the current user's AI credentials by sending a minimal classification prompt through the configured backend. Takes no body.
+
+**Response** `200` `TestAIResponse`
+```json
+{
+  "status": "ok",
+  "backend": "claude_code",
+  "message": "Connection successful (confidence: 0.9)"
+}
+```
+
+**Response** `502` — `AI connection failed (<backend>): <error>` when the credentials are rejected or the call fails.
 
 ---
 
@@ -1668,6 +1889,53 @@ Global search across courses, week summaries, flashcards, and chat sessions for 
 **Response** `400` empty query
 
 Result `kind` values: `course`, `course_week`, `flashcard`, `chat_session`. `href_meta` carries the identifiers the frontend needs to build a link.
+
+---
+
+## Q&A
+
+### `POST /api/qa/ask`
+
+Ask a question about indexed lecture content. The question is embedded, matched against chunks with pgvector, and answered by the configured agent with citations back to the source chunks. Counts against the AI quota. Rate limited: `RATE_LIMIT_QA` (default 20/minute).
+
+**Body** `QARequest`
+```json
+{
+  "question": "What is a race condition?",
+  "course_code": "CSIT302",
+  "week": 3,
+  "top_k": 10
+}
+```
+Only `question` is required. `top_k` defaults to 10.
+
+**Response** `200` `QAResponse`
+```json
+{
+  "answer": "A race condition is ...",
+  "citations": [
+    {
+      "ref": 1,
+      "chunk_id": "0192...",
+      "text_snippet": "...",
+      "course_code": "CSIT302",
+      "week": 3,
+      "page_ref": 12,
+      "artifact_id": "0192..."
+    }
+  ],
+  "chunks_searched": 8
+}
+```
+
+When nothing relevant is indexed, the call still returns `200` with an explanatory `answer`, no citations, and `chunks_searched: 0`.
+
+**Errors**
+| Status | Detail |
+|--------|--------|
+| 404 | `course_code` given but no such course |
+| 500 | Failed to embed the question, or the agent errored |
+| 501 | The configured agent does not implement Q&A |
 
 ---
 

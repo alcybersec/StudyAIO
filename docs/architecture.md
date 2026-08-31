@@ -4,7 +4,7 @@
 
 StudyAIO follows a **modular monolith** architecture. A single Python codebase runs as both the FastAPI web server and the Celery worker. Internal boundaries are enforced by module structure, not separate deployments.
 
-**v2 stats:** 38 models, 111 API endpoints, 20 frontend pages, ~1200 tests (579 backend + 30 E2E).
+**v2 stats:** 39 models, 137 API endpoints, 20 frontend pages, 1942 tests (1484 backend + 394 frontend unit + 64 E2E).
 
 ## System Diagram (v2)
 
@@ -126,7 +126,14 @@ graph LR
 
 Each task accepts `str | dict` input. Dict inputs from previous stages carry status flags (`duplicate`, `waiting_review`, `failed`) that cause downstream tasks to skip without error. Pipeline user_id is threaded through dict payloads for multi-tenant isolation.
 
-## Data Model (v2 — 38 models)
+## Data Model (v2 — 39 models)
+
+The diagram below covers the 22 entities that carry the core relationships. The
+remaining 17 are leaf or join tables that hang off `User`: `OAuthAccount`,
+`MagicLink`, `Extraction`, `ReviewItem`, `FlashcardReview`, `QuizAttempt`,
+`Assessment`, `Deadline`, `Achievement`, `UserAchievement`, `DailyChallenge`,
+`UserDailyChallenge`, `UserXP`, `XPEvent`, `Notification`, `TelegramLink`,
+`AnalyticsSnapshot`.
 
 ```mermaid
 erDiagram

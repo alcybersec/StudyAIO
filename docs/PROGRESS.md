@@ -1,7 +1,9 @@
 # StudyAIO — Progress Tracker
 
-> **Current Milestone:** Per-User AI Credentials (Complete)
-> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M27 ✅, M28 ✅, Gap Fill ✅, M29 ✅, M30 ✅, Per-User Credentials ✅
+> **Current Status:** Feature-complete against both PRDs — no milestone in progress.
+> **Overall Status:** v1 Complete through M15. v2: M16 ✅, M17 ✅, M18 ✅, M19 ✅, M20 ✅, M21 ✅, M22 ✅, M23 ✅, M24 ✅, M25 ✅, M26 ✅, M27 ✅, M28 ✅, Gap Fill ✅, M29 ✅, M30 ✅, Technical Hardening ✅, Production Launch Readiness ✅, OAuth ✅, Per-User Credentials ✅, Frontend Rework A–F ✅, CI Hardening ✅
+> **Test suite:** 1484 backend (1157 unit + 299 golden + 28 integration) + 394 frontend unit + 64 E2E = 1942.
+> **Known unbuilt:** magic-link login is a stub; lecture diff, Canvas/LMS import, Notion and GitHub Issues export, per-task model routing, and PWA share-target are not implemented. See `docs/PRD.md` §6 and §24 for the full annotated list.
 
 ---
 
@@ -415,8 +417,20 @@ Full stream log: `docs/frontend-rework/PROGRESS.md`. Design brief and plan: `doc
 | FR.E | Backend features (TDD) | ✅ Done | 7 new endpoint groups: global search, notification inbox, study plan, quick capture, exam readiness, artifact reclassify, course management (rename/archive/delete/merge). Documented in `docs/api.md`. |
 | FR.F | Hardening | ✅ Done | Color allowlist emptied and removed (guard fails on any raw palette class). 10 new Playwright specs incl. axe a11y gate (6 pages × 2 themes) and failure-mode tests (forced 500s, offline). Bundle budget (500KB) in CI. Fixed: dark-theme CSS cascade bug, WCAG AA contrast tokens, nested-interactive session rail, sonner toast palette. Suite: 1136 backend, 380 vitest, 59 e2e passed / 5 data-skips. |
 
+## CI Hardening
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| CI.1 | Gate pull requests | ✅ Done | `ci.yml` triggered only on pushes to main/master/develop, so PRs merged with no checks. Added a `pull_request` trigger plus a concurrency group that cancels superseded PR runs (main pushes are never cancelled). |
+| CI.2 | Run the E2E suite in CI | ✅ Done | 64 Playwright specs existed but no workflow ran them. New `e2e-tests` job: Postgres/Redis service containers, API under uvicorn with `SELF_HOSTED=true` after `alembic upgrade head`, and the production bundle from `frontend-checks` served by `vite preview`. Needed a `preview.proxy` for `/api` in `vite.config.ts` (nginx plays that role in deployments). No Celery worker — the suite asserts uploads are accepted and queued, not that the pipeline completes. |
+| CI.3 | Free the self-hosted runner | ✅ Done | All CI jobs moved to `ubuntu-latest`; the homelab runner is reserved for `deploy.yml`. Deploy no longer triggers on `develop` pushes (they built images that could never deploy) and got a serializing concurrency group. Dropped `--no-cache-dir` so the added pip cache retains the CPU torch wheel. |
+| CI.4 | Docs | ✅ Done | `make test-e2e`; developer guide sections on the E2E suite and on what CI runs. |
+
+**Verified:** first run on the PR was green — Python Lint 12s, Backend Tests 2m36s, Integration Tests 2m13s, Frontend Checks 1m44s, E2E Tests 4m22s (64 tests: 54 passed, 10 conditional skips).
+
 ## Issues & Blockers
 
 | Date | Issue | Status | Resolution |
 |------|-------|--------|------------|
-| | | | |
+| 2026-09-01 | Golden summary test asserts the v1 8-section format | 🔶 Open | `tests/golden/test_summary_structure.py` and its fixture still encode `## Potential Exam Topics` / `## Summary` / `## Diagrams & Figures`, but `prompts/summarize.txt` v2.0 produces Overview / Key Concepts / Definitions / Diagrams & Visual Descriptions / Code Examples / Formulas & Algorithms / Key Takeaways / Connections. The test passes against its own fixture, so it guards nothing. Fix the fixture and patterns. |
+| 2026-09-01 | Magic-link login is a stub | 🔶 Open | `POST /api/auth/magic-link` sends a password-reset email and `GET /api/auth/magic/{token}` returns "not yet fully implemented" without authenticating. Deferred to "M21", which shipped without it. Either finish it (the email plumbing now exists) or remove both endpoints. Not user-facing — nothing in the UI links to it. |

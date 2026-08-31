@@ -4,7 +4,7 @@
 
 A local-first, fully dockerized AI study workspace that turns raw university lecture files (PDF, DOCX, PPTX) into organized, searchable, exam-ready study materials.
 
-**v2:** 38 models, 111 API endpoints, 20 pages, ~1200 tests (579 backend + 30 E2E).
+**v2:** 39 models, 137 API endpoints, 20 pages, 1942 tests (1484 backend + 394 frontend unit + 64 E2E).
 
 ## Features
 
@@ -95,7 +95,7 @@ graph LR
 | Auth | Argon2id + JWT + TOTP + OAuth (PyJWT, pyotp) |
 | Storage | Local filesystem or AWS S3 via StorageBackend ABC |
 | Infrastructure | Docker Compose, Traefik, AWS ECS Fargate (Terraform) |
-| Testing | pytest (579 tests), Playwright (30 E2E tests) |
+| Testing | pytest (1484 tests), vitest + Testing Library (394 tests), Playwright (64 E2E tests) |
 
 ## Prerequisites
 
@@ -192,22 +192,22 @@ studyaio/
 ├── services/
 │   ├── app/                    # FastAPI + Celery backend
 │   │   ├── app/
-│   │   │   ├── api/            # REST endpoints (22 routers, 111 endpoints)
+│   │   │   ├── api/            # REST endpoints (25 routers, 133 endpoints)
 │   │   │   ├── agents/         # AI adapter pattern (4 backends + embeddings)
 │   │   │   ├── extractors/     # PDF/DOCX/PPTX parsers
-│   │   │   ├── models/         # SQLAlchemy ORM (38 models)
+│   │   │   ├── models/         # SQLAlchemy ORM (39 models)
 │   │   │   ├── pipeline/       # Celery task stages (6)
 │   │   │   ├── services/       # Business logic layer
 │   │   │   └── core/           # DB, config, storage, rate limiting
 │   │   ├── prompts/            # Jinja2 AI prompt templates
-│   │   └── tests/              # 579 tests (unit + golden + integration)
+│   │   └── tests/              # 1484 tests (unit + golden + integration)
 │   └── ui/                     # React frontend (20 pages)
 │       ├── src/
 │       │   ├── pages/          # Route-level code-split pages
 │       │   ├── components/     # Reusable UI components
 │       │   ├── hooks/          # React Query + custom hooks
 │       │   └── api/            # Typed API client
-│       └── e2e/                # Playwright E2E tests (30 tests)
+│       └── e2e/                # Playwright E2E tests (64 tests)
 ├── infra/
 │   ├── docker-compose.yml
 │   ├── cloud/aws/              # Terraform (VPC, ECS, RDS, S3, ALB)
@@ -216,7 +216,7 @@ studyaio/
 ├── docs/
 │   ├── PRD.md                  # Product requirements
 │   ├── PROGRESS.md             # Milestone tracker
-│   ├── api.md                  # API reference (111 endpoints)
+│   ├── api.md                  # API reference (137 endpoints)
 │   ├── architecture.md         # Architecture guide
 │   ├── deployment.md           # Deployment guide
 │   └── migration-v1-v2.md     # v1 → v2 migration guide
@@ -225,7 +225,7 @@ studyaio/
 
 ## Documentation
 
-- [API Reference](docs/api.md) — All 111 endpoints
+- [API Reference](docs/api.md) — All 137 endpoints
 - [Architecture](docs/architecture.md) — System design, data model, AI integration
 - [Deployment](docs/deployment.md) — Self-hosted, AWS, CI/CD
 - [Migration Guide](docs/migration-v1-v2.md) — Upgrading from v1 to v2
