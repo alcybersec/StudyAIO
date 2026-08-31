@@ -249,3 +249,96 @@ class TestForgotPassword:
         )
         # Always 202 regardless of whether user exists (no email leak)
         assert response.status_code == 202
+
+    @pytest.mark.asyncio
+    async def test_forgot_password_unknown_email_sends_nothing(self, async_client, mock_session):
+        """No user means no token and no email."""
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = result
+
+        with patch(
+            "app.api.auth.user_service.deliver_password_reset", new_callable=AsyncMock
+        ) as mock_deliver:
+            response = await async_client.post(
+                "/api/auth/forgot-password",
+                json={"email": "nobody@example.com"},
+            )
+
+        assert response.status_code == 202
+        mock_deliver.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_forgot_password_known_email_delivers_link(self, async_client, mock_session):
+        """A real user gets the reset link delivered with their token."""
+        link = MagicMock()
+        link.token = "reset-token-123"
+
+        with (
+            patch(
+                "app.api.auth.user_service.request_password_reset", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "app.api.auth.user_service.deliver_password_reset", new_callable=AsyncMock
+            ) as mock_deliver,
+        ):
+            mock_request.return_value = link
+
+            response = await async_client.post(
+                "/api/auth/forgot-password",
+                json={"email": "real@example.com"},
+            )
+
+        assert response.status_code == 202
+        mock_deliver.assert_awaited_once_with("real@example.com", "reset-token-123")
+
+    @pytest.mark.asyncio
+    async def test_forgot_password_still_202_when_delivery_fails(self, async_client, mock_session):
+        """A broken mail server must not leak through as a 500."""
+        link = MagicMock()
+        link.token = "reset-token-123"
+
+        with (
+            patch(
+                "app.api.auth.user_service.request_password_reset", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "app.api.auth.user_service.deliver_password_reset", new_callable=AsyncMock
+            ) as mock_deliver,
+        ):
+            mock_request.return_value = link
+            mock_deliver.side_effect = RuntimeError("smtp exploded")
+
+            response = await async_client.post(
+                "/api/auth/forgot-password",
+                json={"email": "real@example.com"},
+            )
+
+        assert response.status_code == 202
+
+    @pytest.mark.asyncio
+    async def test_forgot_password_delivers_after_commit(self, async_client, mock_session):
+        """The token must be committed before the email goes out."""
+        link = MagicMock()
+        link.token = "reset-token-123"
+        order: list[str] = []
+
+        mock_session.commit = AsyncMock(side_effect=lambda: order.append("commit"))
+
+        with (
+            patch(
+                "app.api.auth.user_service.request_password_reset", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "app.api.auth.user_service.deliver_password_reset", new_callable=AsyncMock
+            ) as mock_deliver,
+        ):
+            mock_request.return_value = link
+            mock_deliver.side_effect = lambda *a: order.append("deliver")
+
+            await async_client.post(
+                "/api/auth/forgot-password",
+                json={"email": "real@example.com"},
+            )
+
+        assert order == ["commit", "deliver"]

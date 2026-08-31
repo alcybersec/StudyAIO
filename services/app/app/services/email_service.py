@@ -127,6 +127,26 @@ async def send_pipeline_complete(
     )
 
 
+async def send_password_reset(to_email: str, reset_url: str, expires_hours: int = 1) -> bool:
+    """Send a password reset link.
+
+    Args:
+        to_email: Recipient email.
+        reset_url: Fully-qualified link to the frontend reset page, token included.
+        expires_hours: How long the link stays valid, for the copy.
+
+    Returns:
+        True if sent successfully.
+    """
+    return await send_templated_email(
+        to_email=to_email,
+        subject="StudyAIO: Reset your password",
+        template_name="password_reset.html",
+        reset_url=reset_url,
+        expires_hours=expires_hours,
+    )
+
+
 async def send_exam_reminder(
     to_email: str, exam_title: str, course_code: str, exam_date: str
 ) -> bool:
