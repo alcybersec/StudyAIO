@@ -76,13 +76,16 @@ One place to upload lectures, automatically produce study materials, study with 
 
 ## 4. What Exists Today (v0)
 
-### Current System
+### Current System (v0)
 
-A Claude Code-powered lecture management repo with two slash commands:
+A Claude Code-powered lecture management repo with two slash commands. They still
+exist, as `.claude/commands/sort-lectures.md` and `summarize-lectures.md` (plus
+`resummarize.md`), and are invoked with hyphens: `/sort-lectures`,
+`/summarize-lectures`. Their directories now live under `lecture_manager/`.
 
-**`/sort_lectures`** — Scans `new_lectures/`, uses Claude Code to identify the subject code and week number from file content, moves files to `raw_lectures/<subject>/<subject>_Week#.ext` with clean naming.
+**`/sort-lectures`** — Scans `new_lectures/`, uses Claude Code to identify the subject code and week number from file content, moves files to `raw_lectures/<subject>/<subject>_Week#.ext` with clean naming.
 
-**`/summarize_lectures`** — Compares `raw_lectures/` against `lectures_summary/`, finds lectures without summaries, reads/parses them, and generates comprehensive markdown summaries.
+**`/summarize-lectures`** — Compares `raw_lectures/` against `lectures_summary/`, finds lectures without summaries, reads/parses them, and generates comprehensive markdown summaries.
 
 ### Current Repo Structure
 
@@ -145,54 +148,61 @@ The key architectural shift is moving from **filesystem as source of truth** to 
 | **Basic Quizzes** | Auto-generated multiple choice and short answer questions from lecture content. |
 | **Image Embedding** | Extracted images from lectures are embedded in markdown summaries. |
 | **Idempotent Re-processing** | Re-uploading the same file updates existing records; no duplicates. |
-| **Claude Code Slash Commands** | Existing `/sort_lectures` and `/summarize_lectures` remain functional. |
+| **Claude Code Slash Commands** | Existing `/sort-lectures` and `/summarize-lectures` remain functional. |
 | **Docker Compose Deployment** | Entire stack runs via `docker compose up`. |
 
 ### Out of Scope (v1)
 
-| Feature | Rationale |
-|---|---|
-| Exam Mode (scheduling, weak-topic adaptation) | Complex feature; build after core pipeline is solid. |
-| CourseOps (deadline extraction, calendar export) | Depends on structured course outline parsing; add after v1. |
-| Spaced Repetition (SM-2 algorithm) | v1 flashcards are simple decks; SRS added when usage data exists. |
-| Ollama / Local Model Support | Adapter interface designed in; implementation deferred. |
-| Direct Anthropic API Adapter | Designed in; v1 uses Claude Code CLI exclusively. |
-| Multi-user / Authentication | Single user; no auth needed. |
-| Mobile PWA | UI will be responsive but not installable offline. |
-| MinIO Object Storage | Docker volumes are sufficient for v1 scale. |
+> **Status (2026-09-01):** every item below was deferred out of v1 and has since
+> shipped in v2. The table is kept as a record of the v1 boundary.
+
+| Feature | Rationale | Shipped as |
+|---|---|---|
+| Exam Mode (scheduling, weak-topic adaptation) | Complex feature; build after core pipeline is solid. | `exam_service.py`, `schedule_service.py`, `/api/exams/*` |
+| CourseOps (deadline extraction, calendar export) | Depends on structured course outline parsing; add after v1. | `courseops_service.py`, `/api/courseops/*`, `.ics` export |
+| Spaced Repetition (SM-2 algorithm) | v1 flashcards are simple decks; SRS added when usage data exists. | `srs_service.py` (`calculate_sm2`), `flashcard_reviews` |
+| Ollama / Local Model Support | Adapter interface designed in; implementation deferred. | `agents/ollama_adapter.py` |
+| Direct Anthropic API Adapter | Designed in; v1 uses Claude Code CLI exclusively. | `agents/anthropic_api.py` (plus `openai_adapter.py`) |
+| Multi-user / Authentication | Single user; no auth needed. | Argon2id + JWT + TOTP + OAuth; `user_id` on every owned table |
+| Mobile PWA | UI will be responsive but not installable offline. | `vite-plugin-pwa` (installable, offline SW, Web Push) |
+| MinIO Object Storage | Docker volumes are sufficient for v1 scale. | `core/storage.py` — S3-compatible backend (not MinIO specifically) |
 
 ---
 
 ## 6. Deferred Scope (v1.5+)
 
-### v1.5 — Exam Mode
+> **Status (2026-09-01):** all of v1.5 shipped. Of the v2+ list, three of the five
+> items are still unbuilt — they are the only remaining lines in this PRD that
+> describe work not yet done.
 
-- Define exam date and topic scope
-- Auto-generate a study schedule with daily sessions
-- Flashcards with spaced repetition (SM-2 or similar)
-- Quiz-based weak topic detection and adaptive scheduling
-- Progress tracking and streak mechanics
+### v1.5 — Exam Mode — **shipped**
 
-### v1.5 — CourseOps
+- ✅ Define exam date and topic scope — `models/exam.py`, `/api/exams`
+- ✅ Auto-generate a study schedule with daily sessions — `schedule_service.py`, `GET /api/exams/{id}/today`
+- ✅ Flashcards with spaced repetition (SM-2) — `srs_service.py`
+- ✅ Quiz-based weak topic detection and adaptive scheduling — `GET /api/exams/{id}/weak-topics`
+- ✅ Progress tracking and streak mechanics — `streak_service.py`, `xp_service.py`, `achievement_service.py`
 
-- Upload course outlines, rubrics, tutorial sheets
-- Extract deadlines, assessment weights, deliverables
-- Export to `calendar.ics` and markdown task plan
-- Optional GitHub Issues export
+### v1.5 — CourseOps — **shipped, minus the optional item**
 
-### v2 — Agent Adapters
+- ✅ Upload course outlines, rubrics, tutorial sheets — `POST /api/courseops/documents`
+- ✅ Extract deadlines, assessment weights, deliverables — `courseops_task.py`, `extract_course_ops.txt`
+- ✅ Export to `calendar.ics` and markdown task plan — `GET /api/courseops/export/{calendar,task-plan}/…`
+- ❌ Optional GitHub Issues export — not built; `/api/exports` only produces an Obsidian vault
 
-- Direct Anthropic API adapter (cleaner, pay-per-token)
-- Ollama adapter for fully local AI (no external API calls)
-- Model routing: cheap model for extraction/flashcards, powerful model for summarization/Q&A
+### v2 — Agent Adapters — **shipped, minus routing**
+
+- ✅ Direct Anthropic API adapter — `agents/anthropic_api.py` (an OpenAI adapter was added too)
+- ✅ Ollama adapter for fully local AI — `agents/ollama_adapter.py`
+- ❌ Model routing (cheap model for extraction/flashcards, powerful for summarization/Q&A) — not built; one model per backend (`CLAUDE_MODEL`, `OPENAI_MODEL`, `OLLAMA_MODEL`), applied to every task
 
 ### v2+ — Integrations & UX
 
-- Obsidian markdown export
-- "I have 45 minutes" session generator
-- Lecture diff on re-upload
-- Canvas iCal merge
-- Duplicate detection and merge suggestions
+- ✅ Obsidian markdown export — `export_service.py`, `GET /api/exports/obsidian/{course_code}`
+- ✅ "I have 45 minutes" session generator — `timed_session_service.py`
+- ❌ Lecture diff on re-upload — not built
+- ❌ Canvas iCal merge — not built (there is `.ics` *export* and Google Calendar two-way sync, but no LMS import)
+- ⚠️ Duplicate detection and merge suggestions — detection only: SHA-256 dedup per user returns `409`; no merge suggestions
 
 ---
 
@@ -469,26 +479,36 @@ class ClaudeCodeAdapter(AgentAdapter):
         return stdout.decode()
 ```
 
-### Future Adapters (Designed In, Not Implemented)
+### Additional Adapters (Implemented)
 
-**AnthropicAPIAdapter** — Calls the Anthropic API directly via the Python SDK. Cleaner than shelling out. Billed per token (separate from Max plan). Would support model routing (Sonnet for cheap tasks, Opus for complex ones).
+Selected with `AGENT_BACKEND`; per-user credentials in `user_settings` override the
+environment defaults.
 
-**OllamaAdapter** — Calls a local Ollama instance. Fully offline, no API costs. Quality depends on model choice. Suitable for extraction and simple tasks; may not match Claude quality for summarization.
+**AnthropicAPIAdapter** (`agents/anthropic_api.py`, `AGENT_BACKEND=anthropic_api`) — Calls the Anthropic API directly via the Python SDK. Cleaner than shelling out. Billed per token. Uses a single model (`CLAUDE_MODEL`) for every task; the per-task model routing sketched here was never built.
+
+**OpenAIAdapter** (`agents/openai_adapter.py`, `AGENT_BACKEND=openai`) — Added after this PRD was written. Single model via `OPENAI_MODEL`.
+
+**OllamaAdapter** (`agents/ollama_adapter.py`, `AGENT_BACKEND=ollama`) — Calls a local Ollama instance at `OLLAMA_BASE_URL`. Fully offline, no API costs. Quality depends on model choice.
 
 ### Prompt Management
 
 All prompts live in a `prompts/` directory as versioned text/Jinja2 templates:
 
 ```
-prompts/
+services/app/prompts/
 ├── classify.txt
 ├── summarize.txt
 ├── summarize_update.txt
-├── flashcards.txt
-├── quiz.txt
+├── generate_flashcards.txt
+├── generate_quiz.txt
 ├── answer_question.txt
-└── README.md
+├── extract_concepts.txt
+├── extract_course_ops.txt
+└── study_companion_system.txt
 ```
+
+Adapters load these from `/app/prompts/` inside the container, so one prompt file
+serves all four AI backends.
 
 This allows prompt iteration without code changes, and makes prompt versions trackable in git.
 
@@ -1497,36 +1517,37 @@ v1 is considered complete when all of the following are true:
 
 ## 24. Backlog (Future Ideas)
 
-These are captured for future consideration. None are committed.
+Captured for future consideration; none were committed. Reviewed against the code
+on 2026-09-01 — most of this list shipped during v2. ✅ built · ⚠️ partial · ❌ not built.
 
 **Study UX**
-- Spaced repetition for flashcards (SM-2 algorithm)
-- "I have 45 minutes" session generator
-- Streaks and weekly goals
-- Weak topic detection from quiz performance
+- ✅ Spaced repetition for flashcards (SM-2 algorithm) — `srs_service.py`
+- ✅ "I have 45 minutes" session generator — `timed_session_service.py`
+- ✅ Streaks and weekly goals — `streak_service.py`, `challenge_service.py`
+- ✅ Weak topic detection from quiz performance — `GET /api/exams/{id}/weak-topics`
 
 **Automation & Quality**
-- Lecture diff when a file is re-uploaded (show what changed)
-- Confidence scores displayed on all derived content
-- Duplicate detection and merge suggestions
-- Batch import from a folder (drag entire semester)
+- ❌ Lecture diff when a file is re-uploaded (show what changed)
+- ⚠️ Confidence scores displayed on all derived content — shown on review items and concepts, not on summaries/flashcards/quizzes
+- ⚠️ Duplicate detection and merge suggestions — per-user SHA-256 dedup returns `409`; no merge suggestions
+- ✅ Batch import from a folder (drag entire semester) — `POST /api/uploads/batch`, `webkitdirectory` drop zone
 
 **Integrations**
-- Obsidian export (markdown vault structure)
-- GitHub Issues export for deadlines
-- Canvas iCal merge
-- Notion export
+- ✅ Obsidian export (markdown vault structure) — `GET /api/exports/obsidian/{course_code}`
+- ❌ GitHub Issues export for deadlines
+- ❌ Canvas iCal merge — `.ics` export and Google Calendar two-way sync exist; no LMS import
+- ❌ Notion export
 
 **Infrastructure**
-- MinIO for object storage (clean separation from app containers)
-- Nginx reverse proxy with HTTPS
-- Prometheus + Grafana monitoring
-- Backup strategy for Postgres
+- ⚠️ MinIO for object storage — an S3-compatible backend exists (`core/storage.py`); MinIO itself is not wired into any compose file
+- ✅ Nginx reverse proxy with HTTPS — nginx serves the SPA and proxies `/api`; TLS terminates at Caddy (homelab) or Traefik (self-host overlay)
+- ⚠️ Prometheus + Grafana monitoring — `/metrics` is exposed behind `PROMETHEUS_ENABLED`; no Grafana dashboards in this repo
+- ✅ Backup strategy for Postgres — nightly `app.pipeline.backup_task.run_backup`, `scripts/backup.sh` + `restore.sh`, `make backup` / `make restore`
 
 **Mobile**
-- PWA with offline caching for summaries and flashcards
-- Push notifications for Review Items
-- Share sheet integration (upload from phone camera/files)
+- ✅ PWA with offline caching for summaries and flashcards — `vite-plugin-pwa`, `src/sw.ts`, persistent study-write queue
+- ✅ Push notifications for Review Items — `push_service.py`, `notify_review_created`, inbox kind `review`
+- ❌ Share sheet integration (upload from phone camera/files) — no `share_target` in the manifest
 
 ---
 
