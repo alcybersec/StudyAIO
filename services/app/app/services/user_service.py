@@ -2,11 +2,13 @@
 
 import json
 from datetime import UTC, datetime, timedelta
+from urllib.parse import quote_plus
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.auth import (
     generate_magic_link_token,
     hash_password,
@@ -249,6 +251,44 @@ async def request_password_reset(
     await session.flush()
     logger.info("password_reset_requested", user_id=user.id)
     return link
+
+
+async def deliver_password_reset(email: str, token: str) -> bool:
+    """Email the password reset link for a freshly minted token.
+
+    Best-effort by design: the caller has already returned 202 to avoid leaking
+    whether an account exists, so a mail failure must not surface as an error.
+
+    Call this *after* the session has been committed — otherwise the link can
+    reach the user before the token row is durable.
+
+    Args:
+        email: Recipient address.
+        token: The magic link token from `request_password_reset`.
+
+    Returns:
+        True if the email was sent.
+    """
+    from app.services import email_service
+
+    reset_url = f"{settings.app_base_url.rstrip('/')}/reset-password?token={quote_plus(token)}"
+
+    try:
+        sent = await email_service.send_password_reset(email, reset_url)
+    except Exception:
+        logger.warning("password_reset_email_error", exc_info=True)
+        sent = False
+
+    if not sent:
+        if settings.self_hosted:
+            # No mail server on a single-user box is normal. The link is the only
+            # way back into the account, so put it where the operator can find it.
+            logger.info("password_reset_link_not_emailed", reset_url=reset_url)
+        else:
+            # Never log the URL in SaaS — it is a bearer credential for the account.
+            logger.warning("password_reset_email_undeliverable")
+
+    return sent
 
 
 async def reset_password_with_token(

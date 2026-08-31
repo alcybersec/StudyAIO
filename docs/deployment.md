@@ -297,6 +297,7 @@ curl https://your-domain.com/health
 | `DATABASE_URL_SYNC` | `postgresql://...` | Sync Postgres connection |
 | `REDIS_URL` | `redis://redis:6379/0` | Redis connection |
 | `DATA_DIR` | `/app/data` | Base data directory |
+| `APP_BASE_URL` | `http://localhost:3001` | Public frontend origin. **Set this in production** — password reset links are built from it, so a wrong value emails users a link they cannot open. |
 | `STORAGE_BACKEND` | `local` | `local` or `s3` |
 | `S3_BUCKET` | | S3 bucket name |
 | `S3_REGION` | `us-east-1` | AWS region |
@@ -308,6 +309,30 @@ curl https://your-domain.com/health
 | `MAX_UPLOAD_SIZE_MB` | `100` | Max upload file size |
 | `AGENT_BACKEND` | `claude_code` | AI backend |
 | `PROMETHEUS_ENABLED` | `false` | Enable `/metrics` |
+
+---
+
+## Transactional Email
+
+Password reset is the one flow that cannot work without email. `POST /api/auth/forgot-password`
+mints a one-hour, single-use token and emails a link to `APP_BASE_URL/reset-password?token=…`.
+
+Both of these must be set for it to work in a multi-user deployment:
+
+- `APP_BASE_URL` — the origin the user's browser can reach.
+- `SMTP_HOST` and `SMTP_FROM_EMAIL` (plus `SMTP_USERNAME` / `SMTP_PASSWORD` if the
+  server needs auth). Without them `send_email` short-circuits and nothing is sent.
+
+The endpoint always returns 202, whether or not the address belongs to an account
+and whether or not the mail server accepted the message — that is deliberate, so it
+cannot be used to enumerate users. Check the logs to see what actually happened:
+
+- `email_sent` — delivered to the SMTP server.
+- `password_reset_email_undeliverable` — SMTP is unconfigured or refused it. In
+  SaaS mode (`SELF_HOSTED=false`) the link is deliberately **not** logged; it is a
+  bearer credential for the account.
+- `password_reset_link_not_emailed` — self-hosted only. The link is included in
+  this log line so a single-user operator with no mail server can still get in.
 
 ---
 

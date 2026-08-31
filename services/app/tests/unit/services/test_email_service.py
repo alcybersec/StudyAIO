@@ -8,6 +8,7 @@ from app.services.email_service import (
     render_template,
     send_cards_due,
     send_email,
+    send_password_reset,
     send_pipeline_complete,
     send_templated_email,
     send_weekly_digest,
@@ -111,3 +112,50 @@ class TestEmailService:
 
             await send_weekly_digest("to@test.com", 50, 10, 5, 7, 3)
             assert mock.call_count == 3
+
+
+class TestPasswordResetEmail:
+    """Tests for the password reset email."""
+
+    def test_render_template_password_reset(self) -> None:
+        """render_template embeds the reset URL and expiry."""
+        html = render_template(
+            "password_reset.html",
+            reset_url="https://study.example.com/reset-password?token=abc123",
+            expires_hours=1,
+        )
+        assert "https://study.example.com/reset-password?token=abc123" in html
+        assert "1 hour" in html
+
+    def test_render_template_password_reset_escapes_url(self) -> None:
+        """The URL is HTML-escaped — a token can never inject markup."""
+        html = render_template(
+            "password_reset.html",
+            reset_url='https://x.test/reset-password?token=a"><script>alert(1)</script>',
+            expires_hours=1,
+        )
+        assert "<script>" not in html
+
+    @pytest.mark.asyncio
+    async def test_send_password_reset_uses_template(self) -> None:
+        """send_password_reset passes the URL through to the template."""
+        with patch(
+            "app.services.email_service.send_templated_email", new_callable=AsyncMock
+        ) as mock:
+            mock.return_value = True
+
+            result = await send_password_reset("to@test.com", "https://x.test/r?token=t")
+
+            assert result is True
+            kwargs = mock.call_args.kwargs
+            assert kwargs["to_email"] == "to@test.com"
+            assert kwargs["template_name"] == "password_reset.html"
+            assert kwargs["reset_url"] == "https://x.test/r?token=t"
+            assert "reset" in kwargs["subject"].lower()
+
+    @pytest.mark.asyncio
+    async def test_send_password_reset_returns_false_without_smtp(self) -> None:
+        """No SMTP configured means no send — the caller decides what to do."""
+        with patch("app.services.email_service._smtp_configured", return_value=False):
+            result = await send_password_reset("to@test.com", "https://x.test/r?token=t")
+            assert result is False
