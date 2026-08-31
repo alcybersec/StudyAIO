@@ -47,6 +47,11 @@ Key variables:
 - `REDIS_PORT` — host port for Redis (default: `6380`)
 - `UI_PORT` — host port for the UI (default: `3001`)
 - `CLAUDE_CONFIG_DIR` — path to Claude config directory on host (default: `~/.claude`)
+- `AGENT_BACKEND` — which AI adapter to use: `claude_code` (default), `anthropic_api`, `openai`, or `ollama`. Each has its own key/model variables in `.env.example`. Credentials saved per user in Settings override these.
+- `SELF_HOSTED` — `true` (default) skips auth and uses a single default admin user; `false` enforces login
+
+`.env.example` lists every setting in `app/config.py`, commented out where the
+default is fine.
 
 ### First Launch
 
@@ -303,7 +308,7 @@ async def test_list_courses(async_client, mock_session):
 | `app/agents/` | AI adapter interface + implementations |
 | `app/extractors/` | File parsers (PDF/DOCX/PPTX → ExtractionResult) |
 | `app/models/` | SQLAlchemy ORM models (one per file) |
-| `app/core/` | Database engine, utilities, exception hierarchy |
+| `app/core/` | `database.py` (async engine + `run_async`), `cache.py`/`redis.py`, `storage.py` (local/S3), `auth.py` + `security.py` + `oauth.py`, `quota.py`, `rate_limit.py`, `logging.py`, `exceptions.py` |
 
 ### Request Flow
 
@@ -321,7 +326,14 @@ Upload → ingest_file → classify_artifact → extract_artifact
   → summarize_artifact → index_artifact → generate_assets
 ```
 
-Each stage is a Celery task chained via `orchestrator.run_pipeline()`. Tasks receive `artifact_id` as a string and create their own database sessions.
+Each stage is a Celery task chained via `orchestrator.run_pipeline(file_path, user_id)`.
+Stages pass a dict along the chain — `{"file_path", "user_id"}` into `ingest_file`,
+then `{"artifact_id", "user_id"}` onward — so ownership is threaded through for
+multi-tenant isolation. `resolve_pipeline_input()` accepts either that dict or a
+bare `artifact_id` string, and each task opens its own database session.
+
+`orchestrator.resume_pipeline(artifact_id, from_stage=...)` restarts the chain from
+any stage; that is what `POST /api/uploads/{artifact_id}/retry` calls.
 
 ### Key Patterns
 

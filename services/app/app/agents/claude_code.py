@@ -34,8 +34,9 @@ _SUMMARY_TIMEOUT = 600
 class ClaudeCodeAdapter(AgentAdapter):
     """Calls Claude Code CLI via subprocess.
 
-    Uses `claude -p <prompt>` to run prompts. Parses JSON responses
-    from Claude for structured output.
+    Runs `claude -p` with the prompt on stdin (never on argv — rendered lecture
+    prompts exceed ARG_MAX). Parses JSON responses from Claude for structured
+    output.
 
     When credentials_json is provided, creates a temporary config directory
     with the credential file so the CLI uses per-user auth. After each call,
