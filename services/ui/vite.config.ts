@@ -82,4 +82,18 @@ export default defineConfig({
       },
     },
   },
+  // `vite preview` serves the production bundle for the Playwright suite. It
+  // does not inherit `server.proxy`, and the API client calls the relative
+  // path /api, so the proxy has to be declared again here. In real deployments
+  // nginx does this (see services/ui/nginx.conf).
+  preview: {
+    host: '0.0.0.0',
+    port: 3001,
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 })

@@ -233,6 +233,39 @@ docker compose exec api pytest tests/unit -x -v
 docker compose exec api pytest tests/golden -x -v
 ```
 
+### End-to-End Tests
+
+The Playwright suite lives in `services/ui/e2e/` and drives a running stack — it
+does **not** start one for you.
+
+```bash
+make up                 # API on :8000, UI on :3001
+make test-e2e           # or: cd services/ui && npm run test:e2e
+cd services/ui && npm run test:e2e:ui   # interactive runner
+```
+
+Override the targets with `E2E_BASE_URL` and `E2E_API_URL` if your ports differ.
+Several specs call `test.skip()` when the data or the auth mode they need isn't
+present (self-hosted vs SaaS), so skipped tests are expected, not failures.
+
+### Continuous Integration
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to
+`main`/`master`/`develop`: Python lint, backend unit + golden tests with a 75%
+coverage floor, integration tests against real Postgres + Redis, frontend
+typecheck/lint/unit/build with the color-token and bundle-size guards, and the
+Playwright suite. A newer push to a PR cancels the run it supersedes.
+
+CI runs on GitHub-hosted runners. The self-hosted homelab runner is reserved for
+`.github/workflows/deploy.yml`, which builds and pushes the GHCR images and
+deploys — so a long test run never sits in front of a deploy.
+
+The E2E job reproduces the stack without Docker: Postgres and Redis as service
+containers, the API under uvicorn, and the production bundle from the frontend
+job served by `vite preview` (its `/api` proxy is configured in
+`vite.config.ts`). No Celery worker runs there — the suite asserts that uploads
+are accepted and queued, never that the pipeline completes.
+
 ### Key Testing Patterns
 
 **Mocking async services in pipeline tests:**
