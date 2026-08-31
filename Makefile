@@ -1,4 +1,4 @@
-.PHONY: up down logs test test-unit test-integration test-golden migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup restore preflight
+.PHONY: up down logs test test-unit test-integration test-golden test-e2e migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup restore preflight
 
 # === Docker ===
 up:
@@ -71,6 +71,11 @@ test-integration:
 
 test-golden:
 	cd services/app && pytest tests/golden -x -v
+
+# Playwright suite. Needs the stack running (`make up`) — it drives the UI on
+# :3001 and seeds data through the API on :8000.
+test-e2e:
+	cd services/ui && npm run test:e2e
 
 coverage:
 	cd services/app && pytest tests/unit --cov=app --cov-report=term-missing --cov-fail-under=70
