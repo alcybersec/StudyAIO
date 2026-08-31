@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://redis:6379/0"
 
+    # Public origin of the frontend. Used to build links that are emailed to
+    # users (password reset, and any future magic link), so it must be the URL
+    # the user's browser can reach — not the container hostname.
+    app_base_url: str = "http://localhost:3001"
+
     # File storage
     data_dir: str = "/app/data"
     storage_backend: str = "local"  # "local" or "s3"
