@@ -118,7 +118,14 @@ Change password. Requires authentication.
 
 ### `POST /api/auth/forgot-password`
 
-Request password reset. Always returns 202 (no email leak). Rate limited: 3/minute.
+Request password reset. Mints a one-hour, single-use token and emails a link to
+`{APP_BASE_URL}/reset-password?token=…`. Always returns 202 — whether or not the
+address belongs to an account, and whether or not the mail server accepted the
+message — so it cannot be used to enumerate users. Rate limited: 3/minute.
+
+Requires `SMTP_HOST` + `SMTP_FROM_EMAIL` to actually deliver; see
+`docs/deployment.md` § Transactional Email for the log lines that tell you what
+happened.
 
 **Body** `ForgotPasswordRequest`
 **Response** `202`
