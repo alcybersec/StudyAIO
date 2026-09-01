@@ -6,6 +6,7 @@ import pytest
 
 from app.core.auth import hash_password
 from app.models.user import User
+from app.services import user_service
 
 
 def _make_db_user(**overrides) -> User:
@@ -271,8 +272,7 @@ class TestForgotPassword:
     @pytest.mark.asyncio
     async def test_forgot_password_known_email_delivers_link(self, async_client, mock_session):
         """A real user gets the reset link delivered with their token."""
-        link = MagicMock()
-        link.token = "reset-token-123"
+        minted = user_service.MintedMagicLink(link=MagicMock(), raw_token="reset-token-123")
 
         with (
             patch(
@@ -282,7 +282,7 @@ class TestForgotPassword:
                 "app.api.auth.user_service.deliver_password_reset", new_callable=AsyncMock
             ) as mock_deliver,
         ):
-            mock_request.return_value = link
+            mock_request.return_value = minted
 
             response = await async_client.post(
                 "/api/auth/forgot-password",
@@ -295,8 +295,7 @@ class TestForgotPassword:
     @pytest.mark.asyncio
     async def test_forgot_password_still_202_when_delivery_fails(self, async_client, mock_session):
         """A broken mail server must not leak through as a 500."""
-        link = MagicMock()
-        link.token = "reset-token-123"
+        minted = user_service.MintedMagicLink(link=MagicMock(), raw_token="reset-token-123")
 
         with (
             patch(
@@ -306,7 +305,7 @@ class TestForgotPassword:
                 "app.api.auth.user_service.deliver_password_reset", new_callable=AsyncMock
             ) as mock_deliver,
         ):
-            mock_request.return_value = link
+            mock_request.return_value = minted
             mock_deliver.side_effect = RuntimeError("smtp exploded")
 
             response = await async_client.post(
@@ -319,8 +318,7 @@ class TestForgotPassword:
     @pytest.mark.asyncio
     async def test_forgot_password_delivers_after_commit(self, async_client, mock_session):
         """The token must be committed before the email goes out."""
-        link = MagicMock()
-        link.token = "reset-token-123"
+        minted = user_service.MintedMagicLink(link=MagicMock(), raw_token="reset-token-123")
         order: list[str] = []
 
         mock_session.commit = AsyncMock(side_effect=lambda: order.append("commit"))
@@ -333,7 +331,7 @@ class TestForgotPassword:
                 "app.api.auth.user_service.deliver_password_reset", new_callable=AsyncMock
             ) as mock_deliver,
         ):
-            mock_request.return_value = link
+            mock_request.return_value = minted
             mock_deliver.side_effect = lambda *a: order.append("deliver")
 
             await async_client.post(

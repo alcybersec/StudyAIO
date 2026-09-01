@@ -1,5 +1,6 @@
 """Authentication utilities: password hashing, JWT creation/verification."""
 
+import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -131,3 +132,20 @@ def generate_magic_link_token() -> str:
         URL-safe random token string (43 chars).
     """
     return secrets.token_urlsafe(32)
+
+
+def hash_magic_link_token(token: str) -> str:
+    """Hash a magic link token for storage and lookup.
+
+    SHA-256 rather than a slow KDF on purpose: the token is a 256-bit random
+    value, so there is nothing to brute-force offline. Hashing exists so that
+    reading the database (backup, replica, dump, SQL injection) does not yield
+    a usable credential.
+
+    Args:
+        token: The raw magic link token.
+
+    Returns:
+        Lowercase hex SHA-256 digest (64 chars).
+    """
+    return hashlib.sha256(token.encode()).hexdigest()

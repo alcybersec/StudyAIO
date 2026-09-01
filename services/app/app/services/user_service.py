@@ -2,15 +2,17 @@
 
 import json
 from datetime import UTC, datetime, timedelta
+from typing import NamedTuple
 from urllib.parse import quote_plus
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.auth import (
     generate_magic_link_token,
+    hash_magic_link_token,
     hash_password,
     verify_password,
 )
@@ -25,6 +27,17 @@ logger = structlog.get_logger()
 
 # Password validation
 MIN_PASSWORD_LENGTH = 8
+
+
+class MintedMagicLink(NamedTuple):
+    """A freshly minted magic link plus its raw token.
+
+    Only the token's hash is persisted on the link; the raw value exists in
+    memory solely so the caller can build the delivery URL.
+    """
+
+    link: MagicLink
+    raw_token: str
 
 
 def _validate_password(password: str) -> None:
@@ -226,31 +239,50 @@ async def change_password(
 async def request_password_reset(
     session: AsyncSession,
     email: str,
-) -> MagicLink | None:
+) -> MintedMagicLink | None:
     """Create a password reset magic link for a user.
+
+    Invalidates any earlier unused password reset links for the same user, so
+    only the most recently requested token is redeemable. Persists only the
+    SHA-256 hash of the token; the raw token is returned for delivery and is
+    never stored.
 
     Args:
         session: Database session.
         email: User email.
 
     Returns:
-        MagicLink if user exists, None otherwise (no email leak).
+        MintedMagicLink if user exists, None otherwise (no email leak).
     """
     user = await get_user_by_email(session, email)
     if not user:
         return None
 
+    now = datetime.now(UTC)
+
+    # Revoke outstanding reset links so N requests never leave N usable tokens.
+    await session.execute(
+        update(MagicLink)
+        .where(
+            MagicLink.user_id == user.id,
+            MagicLink.link_type == "password_reset",
+            MagicLink.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+
+    raw_token = generate_magic_link_token()
     link = MagicLink(
         id=generate_id(),
         user_id=user.id,
-        token=generate_magic_link_token(),
+        token_hash=hash_magic_link_token(raw_token),
         link_type="password_reset",
-        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        expires_at=now + timedelta(hours=1),
     )
     session.add(link)
     await session.flush()
     logger.info("password_reset_requested", user_id=user.id)
-    return link
+    return MintedMagicLink(link=link, raw_token=raw_token)
 
 
 async def deliver_password_reset(email: str, token: str) -> bool:
@@ -309,7 +341,7 @@ async def reset_password_with_token(
     """
     result = await session.execute(
         select(MagicLink).where(
-            MagicLink.token == token,
+            MagicLink.token_hash == hash_magic_link_token(token),
             MagicLink.link_type == "password_reset",
         )
     )
@@ -349,7 +381,7 @@ async def verify_email_token(session: AsyncSession, token: str) -> None:
     """
     result = await session.execute(
         select(MagicLink).where(
-            MagicLink.token == token,
+            MagicLink.token_hash == hash_magic_link_token(token),
             MagicLink.link_type == "email_verification",
         )
     )
