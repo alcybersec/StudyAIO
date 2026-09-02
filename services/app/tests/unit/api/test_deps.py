@@ -7,7 +7,7 @@ import pytest
 
 from app.api.deps import get_current_user, get_optional_user, require_plan, require_role
 from app.core.auth import create_access_token, decode_token
-from app.core.exceptions import AuthenticationError, AuthorizationError
+from app.core.exceptions import AuthenticationError, AuthorizationError, SessionRevokedError
 from app.models.user import User
 
 
@@ -185,6 +185,16 @@ class TestGetCurrentUserSessionInvalidation:
         assert returned.id == "user-001"
 
     @pytest.mark.asyncio
+    async def test_revoked_session_raises_the_dedicated_subclass(self):
+        """The type carries the reason: self-hosted's fallback keys off it."""
+        token = create_access_token("user-001", "user", "free")
+        request = _make_request_with_cookie(token)
+        user = _make_mock_user(tokens_valid_from=datetime.now(UTC))
+
+        with pytest.raises(SessionRevokedError):
+            await get_current_user(request, self._session_returning(user))
+
+    @pytest.mark.asyncio
     async def test_cutoff_from_change_password_applies_to_access_tokens(self):
         """The cutoff change_password stamps rejects older access tokens too."""
         token = create_access_token("user-001", "user", "free")
@@ -219,6 +229,20 @@ class TestGetOptionalUser:
 
         returned = await get_optional_user(request, session)
         assert returned.id == "user-001"
+
+    @pytest.mark.asyncio
+    async def test_revoked_session_returns_none(self):
+        """None grants no identity, so a revoked token needs no special case."""
+        user = _make_mock_user(tokens_valid_from=datetime.now(UTC))
+        token = create_access_token("user-001", "user", "free")
+        request = _make_request_with_cookie(token)
+
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = user
+        session.execute.return_value = result
+
+        assert await get_optional_user(request, session) is None
 
 
 class TestRequireRole:
