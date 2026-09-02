@@ -115,8 +115,16 @@ Update current user profile. Requires authentication.
 
 Change password. Requires authentication.
 
+**Ends every session, including the caller's.** The change stamps
+`users.tokens_valid_from`, revoking every token issued up to that moment — the
+right posture when the reason for the change is that somebody else has the old
+password. The endpoint therefore clears the auth cookies and returns
+`session_ended: true`; the client is expected to drop its cached user and send
+the caller to `/login` with an explanation. The UI redirects to
+`/login?reason=password_changed`.
+
 **Body** `ChangePasswordRequest`
-**Response** `200` `{ "detail": "Password changed" }` | `401` wrong current password
+**Response** `200` `{ "detail": "Password changed; please sign in again", "session_ended": true }` with cookie-clearing `Set-Cookie` headers | `401` wrong current password (session left intact)
 
 ### `POST /api/auth/forgot-password`
 
@@ -176,8 +184,12 @@ Verify TOTP code and enable MFA. Returns backup codes. Requires authentication.
 
 Disable MFA. Requires authentication.
 
+**Ends every session, including the caller's** — same mechanism and same
+contract as `change-password` above. The UI redirects to
+`/login?reason=mfa_disabled`.
+
 **Body** `MFADisableRequest`
-**Response** `200`
+**Response** `200` `{ "detail": "MFA disabled; please sign in again", "session_ended": true }` with cookie-clearing `Set-Cookie` headers | `403` invalid TOTP code (session left intact)
 
 ### `GET /api/auth/oauth/{provider}`
 

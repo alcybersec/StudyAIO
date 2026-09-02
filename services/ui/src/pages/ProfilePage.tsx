@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useAuth, useChangePassword, useUpdateProfile } from '../hooks/useAuth'
+import { useAuth, useChangePassword, useSessionHandoff, useUpdateProfile } from '../hooks/useAuth'
 import { MFASetup } from '../components/auth/MFASetup'
 import { ApiError } from '../api/client'
 
@@ -7,6 +7,7 @@ export function ProfilePage() {
   const { user } = useAuth()
   const updateProfile = useUpdateProfile()
   const changePassword = useChangePassword()
+  const endSession = useSessionHandoff()
 
   const [username, setUsername] = useState(user?.username ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url ?? '')
@@ -47,14 +48,18 @@ export function ProfilePage() {
     }
 
     try {
-      await changePassword.mutateAsync({
+      const result = await changePassword.mutateAsync({
         old_password: oldPassword,
         new_password: newPassword,
       })
-      setPasswordMsg('Password changed')
       setOldPassword('')
       setNewPassword('')
       setConfirmPassword('')
+      if (result.session_ended) {
+        endSession('password_changed')
+        return
+      }
+      setPasswordMsg('Password changed')
     } catch (err) {
       setPasswordError(err instanceof ApiError ? err.message : 'Change failed')
     }
