@@ -81,6 +81,19 @@ class UpdateProfileRequest(BaseModel):
     avatar_url: str | None = None
 
 
+class SessionEndedResponse(BaseModel):
+    """Response for an action that deliberately signs the caller out.
+
+    The action stamped ``users.tokens_valid_from``, so the cookies the caller
+    sent are already dead. ``session_ended`` lets the client tell that
+    intentional sign-out apart from the 401 it would otherwise discover on its
+    next request, and hand the user an explanation instead of a bare bounce.
+    """
+
+    detail: str
+    session_ended: bool = True
+
+
 class AuthConfigResponse(BaseModel):
     """Public auth configuration response."""
 

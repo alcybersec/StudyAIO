@@ -14,6 +14,13 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   oauth_failed: 'Sign-in with your provider failed. Please try again.',
 }
 
+// Set by useSessionHandoff when the server ended the session on purpose, so
+// the bounce back here reads as a consequence rather than a glitch.
+const SESSION_ENDED_MESSAGES: Record<string, string> = {
+  password_changed: 'Password changed — please sign in again with your new password.',
+  mfa_disabled: 'Two-factor authentication disabled — please sign in again.',
+}
+
 const LOGIN_FIELDS = ['email', 'password', 'totp_code'] as const
 type LoginField = (typeof LOGIN_FIELDS)[number]
 
@@ -41,6 +48,11 @@ export function LoginPage() {
     return errKey
       ? OAUTH_ERROR_MESSAGES[errKey] ?? 'Authentication failed. Please try again.'
       : null
+  }, [searchParams])
+
+  const sessionNotice = useMemo(() => {
+    const reason = searchParams.get('reason')
+    return reason ? SESSION_ENDED_MESSAGES[reason] ?? null : null
   }, [searchParams])
 
   const onSubmit = handleSubmit(async (data) => {
@@ -85,6 +97,14 @@ export function LoginPage() {
   return (
     <div>
       <h2 className="text-lg font-semibold text-text mb-5">Sign in</h2>
+      {sessionNotice && (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-text-muted"
+        >
+          {sessionNotice}
+        </p>
+      )}
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <Input
           id="email"

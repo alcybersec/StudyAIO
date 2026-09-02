@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMFASetup, useMFAVerify, useMFADisable } from '../../hooks/useAuth'
+import { useMFASetup, useMFAVerify, useMFADisable, useSessionHandoff } from '../../hooks/useAuth'
 
 interface MFASetupProps {
   mfaEnabled: boolean
@@ -16,6 +16,7 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
   const setupMutation = useMFASetup()
   const verifyMutation = useMFAVerify()
   const disableMutation = useMFADisable()
+  const endSession = useSessionHandoff()
 
   const handleSetup = async () => {
     setError('')
@@ -42,9 +43,12 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
   const handleDisable = async () => {
     setError('')
     try {
-      await disableMutation.mutateAsync(disableCode)
+      const result = await disableMutation.mutateAsync(disableCode)
       setStep('idle')
       setDisableCode('')
+      if (result.session_ended) {
+        endSession('mfa_disabled')
+      }
     } catch {
       setError('Invalid code. Please try again.')
     }
