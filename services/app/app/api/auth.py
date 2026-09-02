@@ -112,14 +112,14 @@ async def register(
 ) -> UserProfileResponse:
     """Register a new user account."""
     user = await user_service.register_user(session, body.email, body.username, body.password)
-    link = await user_service.create_email_verification_link(session, user)
+    minted = await user_service.create_email_verification_link(session, user)
     await session.commit()
     _set_auth_cookies(response, user)
 
     # Deliver after the commit so the link can never arrive before its token is
     # durable. Failures are swallowed — registration must not fail over email.
     try:
-        await user_service.deliver_email_verification(body.email, link.token)
+        await user_service.deliver_email_verification(body.email, minted.raw_token)
     except Exception:
         logger.warning("email_verification_delivery_failed", exc_info=True)
 
@@ -220,15 +220,15 @@ async def forgot_password(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
     """Request a password reset email. Always returns 202 (no email leak)."""
-    link = await user_service.request_password_reset(session, body.email)
+    minted = await user_service.request_password_reset(session, body.email)
     await session.commit()
 
     # Deliver after the commit so the link can never arrive before its token is
     # durable. Failures are swallowed — the response must look identical whether
     # or not the account exists, and a dead mail server is not the caller's problem.
-    if link is not None:
+    if minted is not None:
         try:
-            await user_service.deliver_password_reset(body.email, link.token)
+            await user_service.deliver_password_reset(body.email, minted.raw_token)
         except Exception:
             logger.warning("password_reset_delivery_failed", exc_info=True)
 
@@ -275,11 +275,11 @@ async def resend_verification(
     if user.email_verified:
         return {"detail": "Email is already verified"}
 
-    link = await user_service.create_email_verification_link(session, user)
+    minted = await user_service.create_email_verification_link(session, user)
     await session.commit()
 
     try:
-        await user_service.deliver_email_verification(user.email, link.token)
+        await user_service.deliver_email_verification(user.email, minted.raw_token)
     except Exception:
         logger.warning("email_verification_delivery_failed", exc_info=True)
 
