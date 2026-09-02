@@ -31,6 +31,7 @@ def _make_user(**overrides) -> User:
         "backup_codes": None,
         "avatar_url": None,
         "last_login_at": None,
+        "tokens_valid_from": None,
     }
     defaults.update(overrides)
     user = MagicMock(spec=User)
@@ -237,6 +238,19 @@ class TestChangePassword:
         with pytest.raises(AuthenticationError, match="Current password"):
             await user_service.change_password(session, "user-001", "WrongOld!", "NewPass1!")
 
+    @pytest.mark.asyncio
+    async def test_change_password_revokes_existing_tokens(self):
+        """Changing the password must end every session, not just this one."""
+        from app.core.auth import hash_password
+
+        user = _make_user(hashed_password=hash_password("OldPass1!"))
+        session = _mock_session_returning(user)
+
+        before = datetime.now(UTC)
+        await user_service.change_password(session, "user-001", "OldPass1!", "NewPass1!")
+        assert user.tokens_valid_from is not None
+        assert user.tokens_valid_from >= before
+
 
 class TestPasswordReset:
     """Password reset flow."""
@@ -420,6 +434,26 @@ class TestVerifyEmail:
         with pytest.raises(AuthenticationError, match="expired"):
             await user_service.verify_email_token(session, RAW_TEST_TOKEN)
 
+    @pytest.mark.asyncio
+    async def test_reset_revokes_existing_tokens(self):
+        """A reset must revoke every token issued before it — that is the
+        one action a compromised user takes to lock the attacker out."""
+        link = _make_magic_link()
+        user = _make_user()
+
+        session = AsyncMock()
+        result_link = MagicMock()
+        result_link.scalar_one_or_none.return_value = link
+        result_user = MagicMock()
+        result_user.scalar_one_or_none.return_value = user
+        session.execute.side_effect = [result_link, result_user]
+
+        before = datetime.now(UTC)
+        await user_service.reset_password_with_token(session, "test-token-abc", "NewSecure1!")
+        assert link.used_at is not None
+        assert user.tokens_valid_from is not None
+        assert user.tokens_valid_from >= before
+
 
 class TestMFA:
     """MFA enable/disable."""
@@ -445,6 +479,20 @@ class TestMFA:
             pytest.raises(AuthorizationError, match="Invalid TOTP"),
         ):
             await user_service.enable_mfa(session, "user-001", "000000", "JBSWY3DPEHPK3PXP")
+
+    @pytest.mark.asyncio
+    async def test_disable_mfa_clears_secret_and_revokes_tokens(self):
+        """Dropping the second factor must revoke existing sessions too."""
+        user = _make_user(mfa_enabled=True, mfa_secret="JBSWY3DPEHPK3PXP")
+        session = _mock_session_returning(user)
+
+        before = datetime.now(UTC)
+        with patch("app.services.user_service.verify_totp", return_value=True):
+            await user_service.disable_mfa(session, "user-001", "123456")
+        assert user.mfa_enabled is False
+        assert user.mfa_secret is None
+        assert user.tokens_valid_from is not None
+        assert user.tokens_valid_from >= before
 
 
 class TestOAuth:

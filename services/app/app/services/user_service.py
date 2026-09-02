@@ -232,6 +232,9 @@ async def change_password(
 
     _validate_password(new_password)
     user.hashed_password = hash_password(new_password)
+    # Revoke every token issued before now — a password change ends all
+    # sessions, not just the one that requested it.
+    user.tokens_valid_from = datetime.now(UTC)
     await session.flush()
     logger.info("password_changed", user_id=user_id)
 
@@ -365,6 +368,10 @@ async def reset_password_with_token(
     user = await get_user_by_id(session, link.user_id)
     if user:
         user.hashed_password = hash_password(new_password)
+        # Revoke every token issued before now — resetting the password is
+        # how a compromised account locks an attacker out, so any session
+        # that predates the reset must die with it.
+        user.tokens_valid_from = datetime.now(UTC)
         await session.flush()
         logger.info("password_reset_completed", user_id=user.id)
 
@@ -471,6 +478,9 @@ async def disable_mfa(
     user.mfa_secret = None
     user.mfa_enabled = False
     user.backup_codes = None
+    # Dropping the second factor lowers account security — revoke existing
+    # sessions so any token stolen before this change cannot be replayed.
+    user.tokens_valid_from = datetime.now(UTC)
     await session.flush()
     logger.info("mfa_disabled", user_id=user_id)
 

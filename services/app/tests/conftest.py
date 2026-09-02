@@ -195,6 +195,9 @@ def make_user():
         user.avatar_url = None
         user.backup_codes = None
         user.last_login_at = None
+        # None = no token cutoff; pass tokens_valid_from=... to simulate a
+        # password reset/change having revoked earlier tokens.
+        user.tokens_valid_from = None
         user.created_at = MagicMock()
         user.updated_at = MagicMock()
         for k, v in kwargs.items():

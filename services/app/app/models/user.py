@@ -27,6 +27,13 @@ class User(Base):
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     backup_codes: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Cutoff for JWT validity: tokens whose `iat` is not newer than this are
+    # rejected. Set when the password is reset/changed or MFA is disabled, so
+    # those actions revoke every session that existed before them. NULL means
+    # no restriction (users created before this column existed).
+    tokens_valid_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

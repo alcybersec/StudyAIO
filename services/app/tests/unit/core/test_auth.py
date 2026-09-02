@@ -2,6 +2,7 @@
 
 import hashlib
 import time
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -15,6 +16,7 @@ from app.core.auth import (
     generate_magic_link_token,
     hash_magic_link_token,
     hash_password,
+    is_token_invalidated,
     verify_password,
 )
 from app.core.exceptions import AuthenticationError
@@ -118,6 +120,56 @@ class TestJWT:
         assert "iat" in payload
         assert "exp" in payload
         assert payload["exp"] > payload["iat"]
+
+
+class TestIsTokenInvalidated:
+    """Session cutoff checks against users.tokens_valid_from."""
+
+    def test_no_cutoff_never_invalidates(self):
+        """tokens_valid_from=None (users predating the column) = unrestricted."""
+        payload = decode_token(create_access_token("user-1", "user", "free"))
+        assert is_token_invalidated(payload, None) is False
+
+    def test_token_issued_before_cutoff_is_invalid(self):
+        """A token minted before the reset second must not survive it."""
+        cutoff = datetime.now(UTC)
+        payload = {"sub": "user-1", "type": "access", "iat": int(cutoff.timestamp()) - 3600}
+        assert is_token_invalidated(payload, cutoff) is True
+
+    def test_token_issued_after_cutoff_is_valid(self):
+        """Tokens minted after the reset keep working (fresh login)."""
+        cutoff = datetime.now(UTC) - timedelta(hours=1)
+        payload = {"sub": "user-1", "type": "access", "iat": int(cutoff.timestamp()) + 3600}
+        assert is_token_invalidated(payload, cutoff) is False
+
+    def test_token_minted_in_same_second_as_cutoff_is_invalid(self):
+        """iat has 1s granularity: a same-second token must NOT survive.
+
+        Deterministic by construction — the cutoff is derived from the
+        token's own iat, so the two share a second regardless of timing.
+        """
+        token = create_access_token("user-1", "user", "free")
+        payload = decode_token(token)
+        cutoff = datetime.fromtimestamp(payload["iat"], tz=UTC)
+        assert is_token_invalidated(payload, cutoff) is True
+
+    def test_subsecond_cutoff_still_rejects_same_second_token(self):
+        """A cutoff with microsecond precision still floors into the token's second."""
+        now = datetime.now(UTC)  # e.g. ...10.742s
+        payload = {"sub": "user-1", "type": "access", "iat": int(now.timestamp())}  # ...10
+        assert is_token_invalidated(payload, now) is True
+
+    def test_token_without_iat_fails_closed(self):
+        """Every token we mint carries iat; one without it is rejected."""
+        cutoff = datetime.now(UTC)
+        assert is_token_invalidated({"sub": "user-1", "type": "access"}, cutoff) is True
+
+    def test_naive_cutoff_datetime_treated_as_utc(self):
+        """A driver that drops the tz offset must not break the comparison."""
+        now_utc = datetime.now(UTC)
+        naive_cutoff = now_utc.replace(tzinfo=None)
+        payload = {"sub": "user-1", "type": "access", "iat": int(now_utc.timestamp()) + 10}
+        assert is_token_invalidated(payload, naive_cutoff) is False
 
 
 class TestMagicLinkToken:
