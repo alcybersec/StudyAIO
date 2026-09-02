@@ -474,6 +474,12 @@ export interface ChangePasswordRequest {
   new_password: string
 }
 
+/** Returned by actions that revoke every session, the caller's included. */
+export interface SessionEndedResponse {
+  detail: string
+  session_ended: boolean
+}
+
 export interface ForgotPasswordRequest {
   email: string
 }

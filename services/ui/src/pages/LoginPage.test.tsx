@@ -25,9 +25,9 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => navigate }
 })
 
-function setup() {
+function setup(entry = '/login') {
   render(
-    <MemoryRouter initialEntries={['/login']}>
+    <MemoryRouter initialEntries={[entry]}>
       <LoginPage />
     </MemoryRouter>,
   )
@@ -103,5 +103,26 @@ describe('LoginPage error mapping', () => {
     setup()
     await submitCredentials()
     expect(navigate).toHaveBeenCalledWith('/')
+  })
+})
+
+describe('LoginPage session-ended notice', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('explains why a password change bounced the user here', () => {
+    setup('/login?reason=password_changed')
+    expect(screen.getByRole('status')).toHaveTextContent(/password changed/i)
+  })
+
+  it('explains why disabling MFA bounced the user here', () => {
+    setup('/login?reason=mfa_disabled')
+    expect(screen.getByRole('status')).toHaveTextContent(/two-factor/i)
+  })
+
+  it('shows nothing for a plain visit or an unknown reason', () => {
+    setup('/login?reason=banana')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })

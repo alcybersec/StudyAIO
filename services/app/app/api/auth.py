@@ -16,6 +16,7 @@ from app.api.auth_schemas import (
     MFAVerifyRequest,
     RegisterRequest,
     ResetPasswordRequest,
+    SessionEndedResponse,
     UpdateProfileRequest,
     UserProfileResponse,
     VerifyEmailRequest,
@@ -210,13 +211,23 @@ async def update_me(
 @router.post("/change-password")
 async def change_password(
     body: ChangePasswordRequest,
+    response: Response,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> dict[str, str]:
-    """Change password for the current user."""
+) -> SessionEndedResponse:
+    """Change password for the current user, ending every session.
+
+    ``change_password`` stamps ``tokens_valid_from``, which revokes the
+    caller's own cookies along with every other session — the right posture
+    when the reason for the change is that somebody else has the old password.
+    Clearing the cookies here makes that deliberate: the client gets a flagged
+    sign-out to act on instead of discovering a 401 on its next request.
+    """
     await user_service.change_password(session, user.id, body.old_password, body.new_password)
     await session.commit()
-    return {"detail": "Password changed"}
+    _clear_auth_cookies(response)
+    logger.info("password_changed_session_ended", user_id=user.id)
+    return SessionEndedResponse(detail="Password changed; please sign in again")
 
 
 @router.post("/forgot-password", status_code=202)
@@ -322,13 +333,21 @@ async def mfa_verify(
 @router.post("/mfa/disable")
 async def mfa_disable(
     body: MFADisableRequest,
+    response: Response,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> dict[str, str]:
-    """Disable MFA for the current user."""
+) -> SessionEndedResponse:
+    """Disable MFA for the current user, ending every session.
+
+    Same shape as change-password: ``disable_mfa`` stamps
+    ``tokens_valid_from``, so the caller's cookies are dead the moment it
+    returns. Clear them rather than leaving the client to trip over a 401.
+    """
     await user_service.disable_mfa(session, user.id, body.totp_code)
     await session.commit()
-    return {"detail": "MFA disabled"}
+    _clear_auth_cookies(response)
+    logger.info("mfa_disabled_session_ended", user_id=user.id)
+    return SessionEndedResponse(detail="MFA disabled; please sign in again")
 
 
 @router.get("/oauth/{provider}")
