@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Verify your email</h2>
+<p>Welcome to StudyAIO! Confirm this email address to finish setting up your account.</p>
+<p style="margin: 24px 0;">
+  <a class="btn" href="{{ verify_url }}">Verify my email</a>
+</p>
+<p>This link expires in {{ expires_hours }} hour{{ 's' if expires_hours != 1 else '' }} and can be used once.</p>
+<p>If you didn't create this account, you can safely ignore this email.</p>
+<p style="font-size: 12px; color: #999; margin-top: 24px;">
+  If the button doesn't work, paste this into your browser:<br>
+  {{ verify_url }}
+</p>
+{% endblock %}

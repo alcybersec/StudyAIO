@@ -9,6 +9,7 @@ import { CommandPalette } from '../CommandPalette'
 import { ShortcutOverlay } from '../ShortcutOverlay'
 import { ErrorBoundary } from '../ErrorBoundary'
 import { DemoBanner } from '../demo/DemoBanner'
+import { EmailVerificationBanner } from '../auth/EmailVerificationBanner'
 import { OnboardingTour } from '../tour/OnboardingTour'
 import { Toaster } from '../ui/Toast'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
@@ -44,6 +45,9 @@ export function AppLayout() {
 
       {/* Demo account banner */}
       {isDemo && <DemoBanner />}
+
+      {/* Unverified-email notice (password-registered users only) */}
+      <EmailVerificationBanner />
 
       <div className="flex flex-1 min-h-0">
         {/* Desktop sidebar */}

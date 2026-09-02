@@ -72,7 +72,9 @@ Auto-authenticate as the demo user and redirect to dashboard. Rate limited: 10/m
 
 ### `POST /api/auth/register`
 
-Register a new user. Rate limited: 3/minute.
+Register a new user. Rate limited: 3/minute. Mints a 24-hour email verification
+token and delivers the link best-effort after the commit — delivery failures
+never fail registration (see `POST /api/auth/resend-verification`).
 
 **Body** `RegisterRequest`
 **Response** `201` `UserProfileResponse` + Set-Cookie (access_token, refresh_token)
@@ -139,10 +141,23 @@ Reset password with magic link token. Rate limited: 3/minute.
 
 ### `POST /api/auth/verify-email`
 
-Verify email with magic link token.
+Verify email with magic link token. Tokens come from registration or
+`POST /api/auth/resend-verification`; they last 24 hours, are single-use, and
+arrive as links to `{APP_BASE_URL}/verify-email?token=…`. OAuth accounts are
+verified at signup and never receive one. Nothing gates on the flag — it is a
+trust signal.
 
 **Body** `VerifyEmailRequest`
-**Response** `200`
+**Response** `200` | `401` invalid/expired/used token
+
+### `POST /api/auth/resend-verification`
+
+Resend the email verification link to the current user. Requires
+authentication (so it cannot be used to enumerate or spam arbitrary
+addresses). No-op with the same 202 when the email is already verified. Rate
+limited: 3/minute. Delivery is best-effort and never changes the response.
+
+**Response** `202` | `401` not authenticated
 
 ### `POST /api/auth/mfa/setup`
 

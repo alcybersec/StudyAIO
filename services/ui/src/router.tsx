@@ -23,6 +23,7 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(m => ({ defa
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
 const RegisterPage = lazy(() => import('./pages/RegisterPage').then(m => ({ default: m.RegisterPage })))
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })))
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage').then(m => ({ default: m.VerifyEmailPage })))
 const ReviewInboxPage = lazy(() => import('./pages/ReviewInboxPage').then(m => ({ default: m.ReviewInboxPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 const StudyHubPage = lazy(() => import('./pages/StudyHubPage').then(m => ({ default: m.StudyHubPage })))
@@ -79,6 +80,20 @@ export const router = createBrowserRouter([
                 ],
               },
             ],
+          },
+        ],
+      },
+      // Email verification is reachable with or without a session — the link
+      // is usually clicked from a mail client while already logged in, so it
+      // must not sit under PublicOnlyRoute.
+      {
+        element: <AuthLayout />,
+        errorElement: <RouteErrorBoundary />,
+        children: [
+          {
+            element: <SuspenseOutlet />,
+            errorElement: <RouteErrorBoundary />,
+            children: [{ path: '/verify-email', element: <VerifyEmailPage /> }],
           },
         ],
       },
