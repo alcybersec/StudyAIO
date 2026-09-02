@@ -10,6 +10,7 @@ import type {
   MFAVerifyResponse,
   RegisterRequest,
   ResetPasswordRequest,
+  SessionEndedResponse,
   UpdateProfileRequest,
   VerifyEmailRequest,
 } from '../types'
@@ -28,7 +29,7 @@ export const authApi = {
   refresh: () => api.post<{ detail: string }>('/auth/refresh'),
 
   changePassword: (data: ChangePasswordRequest) =>
-    api.post<{ detail: string }>('/auth/change-password', data),
+    api.post<SessionEndedResponse>('/auth/change-password', data),
 
   forgotPassword: (data: ForgotPasswordRequest) =>
     api.post<{ detail: string }>('/auth/forgot-password', data),
@@ -49,5 +50,5 @@ export const authApi = {
     api.post<MFAVerifyResponse>('/auth/mfa/verify', data),
 
   mfaDisable: (code: string) =>
-    api.post<{ detail: string }>('/auth/mfa/disable', { totp_code: code }),
+    api.post<SessionEndedResponse>('/auth/mfa/disable', { totp_code: code }),
 }
