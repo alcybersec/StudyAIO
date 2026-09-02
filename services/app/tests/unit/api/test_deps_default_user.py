@@ -1,12 +1,12 @@
 """Tests for get_current_user_or_default dependency in self-hosted vs SaaS mode."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.api.deps import DEFAULT_ADMIN_ID
-from app.core.auth import create_access_token
+from app.core.auth import create_access_token, decode_token
 from app.models.user import User
 
 
@@ -78,11 +78,19 @@ class TestSelfHostedSessionRevocation:
         from app.core.exceptions import SessionRevokedError
 
         app.api.deps._default_user_cache = None
-        user = make_user(id="user-001", tokens_valid_from=datetime.now(UTC))
+        user = make_user(id="user-001")
+        token = create_access_token(user.id, user.role, user.tier)
+        # Anchor the cutoff to the token's own `iat`. `iat` is a whole-second
+        # epoch value, so a cutoff read off the wall clock just before minting
+        # sits *below* the token's second whenever the two straddle a boundary,
+        # and the token then reads as still valid — a real flake, seen on main.
+        user.tokens_valid_from = datetime.fromtimestamp(
+            decode_token(token)["iat"], tz=UTC
+        ) + timedelta(seconds=1)
         self._session_returning(mock_session, user)
 
         request = MagicMock()
-        request.cookies = {"access_token": create_access_token(user.id, user.role, user.tier)}
+        request.cookies = {"access_token": token}
 
         with patch("app.api.deps.settings") as mock_settings:
             mock_settings.self_hosted = True
