@@ -27,10 +27,14 @@ def _make_user(email_verified: bool) -> User:
 
 
 def _make_link() -> MagicMock:
-    """Create a mock freshly-minted verification link."""
-    link = MagicMock()
-    link.token = "verify-token-123"
-    return link
+    """Create a mock freshly-minted verification link.
+
+    `create_email_verification_link` returns a MintedMagicLink — the persisted
+    row plus the raw token, which is never stored on the row itself.
+    """
+    minted = MagicMock()
+    minted.raw_token = "verify-token-123"
+    return minted
 
 
 def _make_auth_client(mock_session, user: User):

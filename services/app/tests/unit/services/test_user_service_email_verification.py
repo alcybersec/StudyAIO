@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.auth import hash_magic_link_token
 from app.models.user import User
 from app.services.user_service import (
     EMAIL_VERIFICATION_TOKEN_HOURS,
@@ -43,18 +44,18 @@ class TestCreateEmailVerificationLink:
         session = AsyncMock()
         user = _make_user()
 
-        link = await create_email_verification_link(session, user)
+        minted = await create_email_verification_link(session, user)
 
-        assert link.link_type == "email_verification"
+        assert minted.link.link_type == "email_verification"
 
     @pytest.mark.asyncio
     async def test_link_belongs_to_the_user(self) -> None:
         session = AsyncMock()
         user = _make_user(id="user-42")
 
-        link = await create_email_verification_link(session, user)
+        minted = await create_email_verification_link(session, user)
 
-        assert link.user_id == "user-42"
+        assert minted.link.user_id == "user-42"
 
     @pytest.mark.asyncio
     async def test_link_expires_in_24_hours(self) -> None:
@@ -63,22 +64,25 @@ class TestCreateEmailVerificationLink:
         user = _make_user()
         before = datetime.now(UTC)
 
-        link = await create_email_verification_link(session, user)
+        minted = await create_email_verification_link(session, user)
 
         assert EMAIL_VERIFICATION_TOKEN_HOURS == 24
         lower = before + timedelta(hours=24)
         upper = datetime.now(UTC) + timedelta(hours=24)
-        assert lower <= link.expires_at <= upper
+        assert lower <= minted.link.expires_at <= upper
 
     @pytest.mark.asyncio
     async def test_link_is_fresh_and_unused(self) -> None:
         session = AsyncMock()
         user = _make_user()
 
-        link = await create_email_verification_link(session, user)
+        minted = await create_email_verification_link(session, user)
 
-        assert link.used_at is None
-        assert link.token  # a token was minted, not left empty
+        assert minted.link.used_at is None
+        # A raw token is returned for the URL, and only its hash is persisted.
+        assert minted.raw_token
+        assert minted.link.token_hash == hash_magic_link_token(minted.raw_token)
+        assert not hasattr(minted.link, "token")
 
     @pytest.mark.asyncio
     async def test_link_is_persisted(self) -> None:
@@ -241,15 +245,17 @@ class TestVerificationRoundTrip:
         session = AsyncMock()
         session.add = MagicMock()
 
-        link = await create_email_verification_link(session, user)
+        minted = await create_email_verification_link(session, user)
         # Simulate the lookup verify_email_token performs
         result_link = MagicMock()
-        result_link.scalar_one_or_none.return_value = link
+        result_link.scalar_one_or_none.return_value = minted.link
         result_user = MagicMock()
         result_user.scalar_one_or_none.return_value = user
         session.execute = AsyncMock(side_effect=[result_link, result_user])
 
-        await verify_email_token(session, link.token)
+        # The raw token from the URL is what the verifier receives; it hashes
+        # it to find the row.
+        await verify_email_token(session, minted.raw_token)
 
-        assert link.used_at is not None
+        assert minted.link.used_at is not None
         assert user.email_verified is True
