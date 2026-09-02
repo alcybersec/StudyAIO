@@ -483,6 +483,10 @@ export interface ResetPasswordRequest {
   new_password: string
 }
 
+export interface VerifyEmailRequest {
+  token: string
+}
+
 export interface UpdateProfileRequest {
   username?: string
   avatar_url?: string
