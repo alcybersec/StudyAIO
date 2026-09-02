@@ -140,6 +140,12 @@ def is_token_invalidated(payload: dict, tokens_valid_from: datetime | None) -> b
     rejected. The tradeoff is that a token minted in the same second *after*
     the cutoff is also rejected; the next login (a second later) works fine.
 
+    Enforced by ``get_current_user`` and ``POST /api/auth/refresh``. Both
+    signal a hit with ``SessionRevokedError`` rather than a plain
+    ``AuthenticationError``, so self-hosted's default-admin fallback
+    (``get_current_user_or_default``) re-raises it instead of treating the
+    request as unauthenticated — the cutoff holds in both deployment modes.
+
     Args:
         payload: Decoded JWT payload (must contain 'iat' for tokens we minted).
         tokens_valid_from: Cutoff datetime in UTC, or None for no cutoff.
