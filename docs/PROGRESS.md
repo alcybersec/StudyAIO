@@ -297,6 +297,7 @@
 | 2026-02-28 | Local embeddings via sentence-transformers (all-MiniLM-L6-v2) | Avoid API keys/costs; EmbeddingProvider ABC is swappable for OpenAI/Voyage later |
 | 2026-02-28 | Vector(384) for chunk embeddings | Matches all-MiniLM-L6-v2 output; Alembic migration from Vector(1536) |
 | 2026-02-28 | EmbeddingProvider separate from AgentAdapter | Embeddings are deterministic, not generative; different concern from AI agents |
+| 2026-09-01 | Email verification delivered but ungated (issue #10, option b) | Full producer pipeline (link minting, email, resend, UI) so the existing consumer is reachable; the flag stays a trust signal — gating uploads or the app would change product behavior beyond the issue's scope |
 
 ## Milestone 24 — Demo Account + Onboarding Tour
 
@@ -427,6 +428,12 @@ Full stream log: `docs/frontend-rework/PROGRESS.md`. Design brief and plan: `doc
 | CI.4 | Docs | ✅ Done | `make test-e2e`; developer guide sections on the E2E suite and on what CI runs. |
 
 **Verified:** first run on the PR was green — Python Lint 12s, Backend Tests 2m36s, Integration Tests 2m13s, Frontend Checks 1m44s, E2E Tests 4m22s (64 tests: 54 passed, 10 conditional skips).
+
+## Auth Email Verification
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| EV.1 | Email verification producer pipeline (issue #10) | ✅ Done | `register` now mints a 24h `email_verification` MagicLink and delivers it post-commit (best-effort, self-hosted logs the link / SaaS never does). New `POST /api/auth/resend-verification` (auth required, 3/min) for the "didn't get it" case; minting a new link does not revoke old ones, matching password reset. `templates/verify_email.html` + `email_service.send_email_verification`. Frontend: `/verify-email` route (works logged-in or not) and a dismissible unverified-email banner with resend. OAuth users keep getting `email_verified=True` directly; nothing gates on the flag. |
 
 ## Issues & Blockers
 

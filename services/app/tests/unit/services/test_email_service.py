@@ -8,6 +8,7 @@ from app.services.email_service import (
     render_template,
     send_cards_due,
     send_email,
+    send_email_verification,
     send_password_reset,
     send_pipeline_complete,
     send_templated_email,
@@ -158,4 +159,51 @@ class TestPasswordResetEmail:
         """No SMTP configured means no send — the caller decides what to do."""
         with patch("app.services.email_service._smtp_configured", return_value=False):
             result = await send_password_reset("to@test.com", "https://x.test/r?token=t")
+            assert result is False
+
+
+class TestVerifyEmailEmail:
+    """Tests for the email verification email."""
+
+    def test_render_template_verify_email(self) -> None:
+        """render_template embeds the verify URL and expiry."""
+        html = render_template(
+            "verify_email.html",
+            verify_url="https://study.example.com/verify-email?token=abc123",
+            expires_hours=24,
+        )
+        assert "https://study.example.com/verify-email?token=abc123" in html
+        assert "24 hours" in html
+
+    def test_render_template_verify_email_escapes_url(self) -> None:
+        """The URL is HTML-escaped — a token can never inject markup."""
+        html = render_template(
+            "verify_email.html",
+            verify_url='https://x.test/verify-email?token=a"><script>alert(1)</script>',
+            expires_hours=24,
+        )
+        assert "<script>" not in html
+
+    @pytest.mark.asyncio
+    async def test_send_email_verification_uses_template(self) -> None:
+        """send_email_verification passes the URL through to the template."""
+        with patch(
+            "app.services.email_service.send_templated_email", new_callable=AsyncMock
+        ) as mock:
+            mock.return_value = True
+
+            result = await send_email_verification("to@test.com", "https://x.test/v?token=t")
+
+            assert result is True
+            kwargs = mock.call_args.kwargs
+            assert kwargs["to_email"] == "to@test.com"
+            assert kwargs["template_name"] == "verify_email.html"
+            assert kwargs["verify_url"] == "https://x.test/v?token=t"
+            assert "verify" in kwargs["subject"].lower()
+
+    @pytest.mark.asyncio
+    async def test_send_email_verification_returns_false_without_smtp(self) -> None:
+        """No SMTP configured means no send — the caller decides what to do."""
+        with patch("app.services.email_service._smtp_configured", return_value=False):
+            result = await send_email_verification("to@test.com", "https://x.test/v?token=t")
             assert result is False

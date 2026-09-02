@@ -26,6 +26,10 @@ logger = structlog.get_logger()
 # Password validation
 MIN_PASSWORD_LENGTH = 8
 
+# Email verification links live longer than reset links: nothing gates on the
+# flag, so a slower journey through the inbox costs nothing.
+EMAIL_VERIFICATION_TOKEN_HOURS = 24
+
 
 def _validate_password(password: str) -> None:
     """Validate password meets minimum requirements.
@@ -335,6 +339,71 @@ async def reset_password_with_token(
         user.hashed_password = hash_password(new_password)
         await session.flush()
         logger.info("password_reset_completed", user_id=user.id)
+
+
+async def create_email_verification_link(session: AsyncSession, user: User) -> MagicLink:
+    """Create an email verification magic link for a user.
+
+    Like `request_password_reset`, minting a new link does not revoke earlier
+    ones — each stays valid until used or expired.
+
+    Args:
+        session: Database session.
+        user: The user to verify.
+
+    Returns:
+        The created MagicLink.
+    """
+    link = MagicLink(
+        id=generate_id(),
+        user_id=user.id,
+        token=generate_magic_link_token(),
+        link_type="email_verification",
+        expires_at=datetime.now(UTC) + timedelta(hours=EMAIL_VERIFICATION_TOKEN_HOURS),
+    )
+    session.add(link)
+    await session.flush()
+    logger.info("email_verification_link_created", user_id=user.id)
+    return link
+
+
+async def deliver_email_verification(email: str, token: str) -> bool:
+    """Email the verification link for a freshly minted token.
+
+    Best-effort by design, mirroring `deliver_password_reset`: the caller has
+    already responded, so a mail failure must not surface as an error.
+
+    Call this *after* the session has been committed — otherwise the link can
+    reach the user before the token row is durable.
+
+    Args:
+        email: Recipient address.
+        token: The magic link token from `create_email_verification_link`.
+
+    Returns:
+        True if the email was sent.
+    """
+    from app.services import email_service
+
+    verify_url = f"{settings.app_base_url.rstrip('/')}/verify-email?token={quote_plus(token)}"
+
+    try:
+        sent = await email_service.send_email_verification(email, verify_url)
+    except Exception:
+        logger.warning("email_verification_email_error", exc_info=True)
+        sent = False
+
+    if not sent:
+        if settings.self_hosted:
+            # No mail server on a single-user box is normal. Verification gates
+            # nothing today, but the operator can still follow the link to set
+            # the flag.
+            logger.info("email_verification_link_not_emailed", verify_url=verify_url)
+        else:
+            # Never log the URL in SaaS — it proves control of the address.
+            logger.warning("email_verification_undeliverable")
+
+    return sent
 
 
 async def verify_email_token(session: AsyncSession, token: str) -> None:
