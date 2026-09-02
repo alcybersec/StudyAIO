@@ -5,7 +5,7 @@ whose `iat` is not newer than the cutoff are rejected by get_current_user and
 the refresh endpoint. NULL (all existing rows) means no restriction.
 
 Revision ID: x4y5z6a7b8c9
-Revises: v2w3x4y5z6a7
+Revises: w3x4y5z6a7b8
 Create Date: 2026-09-01 09:00:00.000000
 
 """
@@ -17,7 +17,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "x4y5z6a7b8c9"
-down_revision: str | None = "v2w3x4y5z6a7"
+down_revision: str | None = "w3x4y5z6a7b8"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
