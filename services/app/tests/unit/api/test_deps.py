@@ -11,6 +11,17 @@ from app.core.exceptions import AuthenticationError, AuthorizationError, Session
 from app.models.user import User
 
 
+def _cutoff_after(token: str) -> datetime:
+    """A session cutoff guaranteed to postdate `token`.
+
+    `iat` is a whole-second epoch value, so comparing against a wall-clock
+    cutoff taken microseconds earlier is a coin flip whenever the two land on
+    opposite sides of a second boundary. Anchoring to the token's own `iat`
+    makes "the reset happened after this token was issued" exact.
+    """
+    return datetime.fromtimestamp(decode_token(token)["iat"], tz=UTC) + timedelta(seconds=1)
+
+
 def _make_mock_user(**overrides):
     defaults = {
         "id": "user-001",
@@ -233,8 +244,12 @@ class TestGetOptionalUser:
     @pytest.mark.asyncio
     async def test_revoked_session_returns_none(self):
         """None grants no identity, so a revoked token needs no special case."""
-        user = _make_mock_user(tokens_valid_from=datetime.now(UTC))
         token = create_access_token("user-001", "user", "free")
+        # Derive the cutoff from the token's own `iat` rather than wall clock:
+        # PyJWT truncates `iat` to whole seconds, so a cutoff taken just before
+        # minting lands *below* the token's second whenever the two straddle a
+        # boundary, and the token reads as still valid.
+        user = _make_mock_user(tokens_valid_from=_cutoff_after(token))
         request = _make_request_with_cookie(token)
 
         session = AsyncMock()
