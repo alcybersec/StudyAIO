@@ -4,11 +4,15 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy import Update
 
+from app.core.auth import hash_magic_link_token
 from app.core.exceptions import AuthenticationError, AuthorizationError, UserExistsError
 from app.models.magic_link import MagicLink
 from app.models.user import User
 from app.services import user_service
+
+RAW_TEST_TOKEN = "test-token-abc"
 
 
 def _make_user(**overrides) -> User:
@@ -37,11 +41,11 @@ def _make_user(**overrides) -> User:
 
 
 def _make_magic_link(**overrides) -> MagicLink:
-    """Create a mock MagicLink."""
+    """Create a mock MagicLink whose token_hash matches RAW_TEST_TOKEN."""
     defaults = {
         "id": "link-001",
         "user_id": "user-001",
-        "token": "test-token-abc",
+        "token_hash": hash_magic_link_token(RAW_TEST_TOKEN),
         "link_type": "password_reset",
         "expires_at": datetime.now(UTC) + timedelta(hours=1),
         "used_at": None,
@@ -256,15 +260,56 @@ class TestPasswordReset:
         user = _make_user()
         session = _mock_session_returning(user)
 
-        link = await user_service.request_password_reset(session, "test@example.com")
-        assert link is not None
+        minted = await user_service.request_password_reset(session, "test@example.com")
+        assert minted is not None
         session.add.assert_called_once()
+        assert session.add.call_args[0][0] is minted.link
+        assert minted.link.link_type == "password_reset"
+        assert minted.raw_token
 
     @pytest.mark.asyncio
     async def test_request_reset_unknown_email(self):
         session = _mock_session_returning(None)
-        link = await user_service.request_password_reset(session, "nobody@example.com")
-        assert link is None
+        minted = await user_service.request_password_reset(session, "nobody@example.com")
+        assert minted is None
+
+    @pytest.mark.asyncio
+    async def test_request_reset_persists_only_the_hash(self):
+        """The raw token must never appear on the persisted row."""
+        user = _make_user()
+        session = _mock_session_returning(user)
+
+        minted = await user_service.request_password_reset(session, "test@example.com")
+
+        persisted = session.add.call_args[0][0]
+        assert persisted.token_hash == hash_magic_link_token(minted.raw_token)
+        assert persisted.token_hash != minted.raw_token
+        # No attribute on the ORM object carries the raw token.
+        assert not hasattr(persisted, "token")
+        assert not hasattr(persisted, "raw_token")
+
+    @pytest.mark.asyncio
+    async def test_request_reset_invalidates_previous_links(self):
+        """Minting a new reset link marks the user's earlier unused links used."""
+        user = _make_user()
+        session = _mock_session_returning(user)
+
+        await user_service.request_password_reset(session, "test@example.com")
+
+        update_stmts = [
+            call.args[0]
+            for call in session.execute.call_args_list
+            if isinstance(call.args[0], Update)
+        ]
+        assert len(update_stmts) == 1
+        stmt = update_stmts[0]
+        assert stmt.table.name == "magic_links"
+        compiled = str(stmt.compile())
+        assert "used_at" in compiled
+        assert "IS NULL" in compiled  # only unused links are invalidated
+        params = stmt.compile().params
+        assert "user-001" in params.values()
+        assert "password_reset" in params.values()
 
     @pytest.mark.asyncio
     async def test_reset_with_valid_token(self):
@@ -278,8 +323,29 @@ class TestPasswordReset:
         result_user.scalar_one_or_none.return_value = user
         session.execute.side_effect = [result_link, result_user]
 
-        await user_service.reset_password_with_token(session, "test-token-abc", "NewSecure1!")
+        await user_service.reset_password_with_token(session, RAW_TEST_TOKEN, "NewSecure1!")
         assert link.used_at is not None
+
+    @pytest.mark.asyncio
+    async def test_reset_lookup_matches_on_hash_not_raw_token(self):
+        """The lookup hashes the presented token; the raw value never hits SQL."""
+        link = _make_magic_link()
+        user = _make_user()
+
+        session = AsyncMock()
+        result_link = MagicMock()
+        result_link.scalar_one_or_none.return_value = link
+        result_user = MagicMock()
+        result_user.scalar_one_or_none.return_value = user
+        session.execute.side_effect = [result_link, result_user]
+
+        await user_service.reset_password_with_token(session, RAW_TEST_TOKEN, "NewSecure1!")
+
+        select_stmt = session.execute.call_args_list[0].args[0]
+        params = select_stmt.compile().params
+        assert hash_magic_link_token(RAW_TEST_TOKEN) in params.values()
+        assert RAW_TEST_TOKEN not in params.values()
+        assert link.token_hash == hash_magic_link_token(RAW_TEST_TOKEN)
 
     @pytest.mark.asyncio
     async def test_reset_with_expired_token(self):
@@ -287,7 +353,7 @@ class TestPasswordReset:
         session = _mock_session_returning(link)
 
         with pytest.raises(AuthenticationError, match="expired"):
-            await user_service.reset_password_with_token(session, "test-token-abc", "NewSecure1!")
+            await user_service.reset_password_with_token(session, RAW_TEST_TOKEN, "NewSecure1!")
 
     @pytest.mark.asyncio
     async def test_reset_with_used_token(self):
@@ -295,7 +361,78 @@ class TestPasswordReset:
         session = _mock_session_returning(link)
 
         with pytest.raises(AuthenticationError, match="already used"):
-            await user_service.reset_password_with_token(session, "test-token-abc", "NewSecure1!")
+            await user_service.reset_password_with_token(session, RAW_TEST_TOKEN, "NewSecure1!")
+
+    @pytest.mark.asyncio
+    async def test_reset_with_unknown_token(self):
+        session = _mock_session_returning(None)
+
+        with pytest.raises(AuthenticationError, match="Invalid reset token"):
+            await user_service.reset_password_with_token(session, "no-such-token", "NewSecure1!")
+
+
+class TestVerifyEmail:
+    """Email verification via magic link token."""
+
+    @pytest.mark.asyncio
+    async def test_verify_email_with_valid_token(self):
+        link = _make_magic_link(link_type="email_verification")
+        user = _make_user(email_verified=False)
+
+        session = AsyncMock()
+        result_link = MagicMock()
+        result_link.scalar_one_or_none.return_value = link
+        result_user = MagicMock()
+        result_user.scalar_one_or_none.return_value = user
+        session.execute.side_effect = [result_link, result_user]
+
+        await user_service.verify_email_token(session, RAW_TEST_TOKEN)
+        assert user.email_verified is True
+        assert link.used_at is not None
+
+    @pytest.mark.asyncio
+    async def test_verify_email_lookup_matches_on_hash(self):
+        link = _make_magic_link(link_type="email_verification")
+        user = _make_user()
+
+        session = AsyncMock()
+        result_link = MagicMock()
+        result_link.scalar_one_or_none.return_value = link
+        result_user = MagicMock()
+        result_user.scalar_one_or_none.return_value = user
+        session.execute.side_effect = [result_link, result_user]
+
+        await user_service.verify_email_token(session, RAW_TEST_TOKEN)
+
+        select_stmt = session.execute.call_args_list[0].args[0]
+        params = select_stmt.compile().params
+        assert hash_magic_link_token(RAW_TEST_TOKEN) in params.values()
+        assert RAW_TEST_TOKEN not in params.values()
+
+    @pytest.mark.asyncio
+    async def test_verify_email_with_unknown_token(self):
+        session = _mock_session_returning(None)
+
+        with pytest.raises(AuthenticationError, match="Invalid verification token"):
+            await user_service.verify_email_token(session, "no-such-token")
+
+    @pytest.mark.asyncio
+    async def test_verify_email_with_used_token(self):
+        link = _make_magic_link(link_type="email_verification", used_at=datetime.now(UTC))
+        session = _mock_session_returning(link)
+
+        with pytest.raises(AuthenticationError, match="already used"):
+            await user_service.verify_email_token(session, RAW_TEST_TOKEN)
+
+    @pytest.mark.asyncio
+    async def test_verify_email_with_expired_token(self):
+        link = _make_magic_link(
+            link_type="email_verification", expires_at=datetime.now(UTC) - timedelta(hours=1)
+        )
+        session = _mock_session_returning(link)
+
+        with pytest.raises(AuthenticationError, match="expired"):
+            await user_service.verify_email_token(session, RAW_TEST_TOKEN)
 
     @pytest.mark.asyncio
     async def test_reset_revokes_existing_tokens(self):

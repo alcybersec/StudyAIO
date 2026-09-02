@@ -1,5 +1,6 @@
 """Tests for core auth module (password hashing + JWT)."""
 
+import hashlib
 import time
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
@@ -13,6 +14,7 @@ from app.core.auth import (
     create_refresh_token,
     decode_token,
     generate_magic_link_token,
+    hash_magic_link_token,
     hash_password,
     is_token_invalidated,
     verify_password,
@@ -181,6 +183,29 @@ class TestMagicLinkToken:
     def test_generate_unique_tokens(self):
         tokens = {generate_magic_link_token() for _ in range(100)}
         assert len(tokens) == 100
+
+
+class TestHashMagicLinkToken:
+    """Magic link token hashing for storage."""
+
+    def test_hash_is_64_lowercase_hex_chars(self):
+        digest = hash_magic_link_token(generate_magic_link_token())
+        assert len(digest) == 64
+        assert digest == digest.lower()
+        int(digest, 16)  # raises if not valid hex
+
+    def test_hash_is_deterministic(self):
+        assert hash_magic_link_token("some-token") == hash_magic_link_token("some-token")
+
+    def test_hash_matches_plain_sha256(self):
+        assert hash_magic_link_token("some-token") == hashlib.sha256(b"some-token").hexdigest()
+
+    def test_different_tokens_hash_differently(self):
+        assert hash_magic_link_token("token-one") != hash_magic_link_token("token-two")
+
+    def test_hash_differs_from_raw_token(self):
+        token = generate_magic_link_token()
+        assert hash_magic_link_token(token) != token
 
 
 class TestCookieConstants:
