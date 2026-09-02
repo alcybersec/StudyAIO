@@ -10,7 +10,12 @@ from app.core.utils import generate_id
 
 
 class MagicLink(Base):
-    """A one-time-use token for passwordless login or password reset."""
+    """A one-time-use token for passwordless login or password reset.
+
+    Only a SHA-256 hash of the token is stored (`token_hash`); the raw token
+    lives solely in the delivery URL. Lookups hash the presented token and
+    match on `token_hash`.
+    """
 
     __tablename__ = "magic_links"
 
@@ -18,7 +23,7 @@ class MagicLink(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     link_type: Mapped[str] = mapped_column(String(30), nullable=False, default="password_reset")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -30,6 +35,6 @@ class MagicLink(Base):
     user: Mapped["User"] = relationship(back_populates="magic_links")
 
     __table_args__ = (
-        Index("ix_magic_links_token", "token", unique=True),
+        Index("ix_magic_links_token_hash", "token_hash", unique=True),
         Index("ix_magic_links_user_id", "user_id"),
     )
