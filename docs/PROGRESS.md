@@ -428,6 +428,12 @@ Full stream log: `docs/frontend-rework/PROGRESS.md`. Design brief and plan: `doc
 
 **Verified:** first run on the PR was green — Python Lint 12s, Backend Tests 2m36s, Integration Tests 2m13s, Frontend Checks 1m44s, E2E Tests 4m22s (64 tests: 54 passed, 10 conditional skips).
 
+## Security Fixes
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| S.1 | Hash magic link tokens (#11) | ✅ Done | `magic_links.token` replaced by `token_hash` (SHA-256 hex, unique index); the raw token lives only in the delivery URL. `reset_password_with_token` and `verify_email_token` look up by hash. `request_password_reset` now marks the user's earlier unused password_reset links used, so only the newest token is redeemable. Migration `w3x4y5z6a7b8` hashes existing rows in place then drops the plaintext column — outstanding links keep working across the deploy. 10 new unit tests. |
+
 ## Issues & Blockers
 
 | Date | Issue | Status | Resolution |
