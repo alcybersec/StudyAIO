@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.auth import ACCESS_TOKEN_COOKIE, decode_token, is_token_invalidated
 from app.core.database import get_session
-from app.core.exceptions import AuthenticationError, AuthorizationError
+from app.core.exceptions import AuthenticationError, AuthorizationError, SessionRevokedError
 from app.models.user import User
 from app.services import user_service
 
@@ -33,6 +33,7 @@ async def get_current_user(
 
     Raises:
         AuthenticationError: If no token, invalid token, or user not found.
+        SessionRevokedError: If the token predates the user's session cutoff.
     """
     token = request.cookies.get(ACCESS_TOKEN_COOKIE)
     if not token:
@@ -55,9 +56,11 @@ async def get_current_user(
         raise AuthenticationError("Account is deactivated")
 
     # Reject tokens minted before the last password reset/change or MFA
-    # disable (user.tokens_valid_from). None means no restriction.
+    # disable (user.tokens_valid_from). None means no restriction. This is a
+    # distinct exception type so self-hosted's default-admin fallback cannot
+    # swallow it — see get_current_user_or_default.
     if is_token_invalidated(payload, user.tokens_valid_from):
-        raise AuthenticationError("Session invalidated by password change; please sign in again")
+        raise SessionRevokedError("Session invalidated by password change; please sign in again")
 
     return user
 
@@ -66,7 +69,16 @@ async def get_optional_user(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> User | None:
-    """Same as get_current_user but returns None instead of raising."""
+    """Same as get_current_user but returns None instead of raising.
+
+    A revoked session is no exception: returning None grants no identity, so
+    the caller sees an anonymous request, which is exactly what a revoked
+    token should get on an endpoint where authentication is optional.
+
+    Returns:
+        The authenticated User, or None if authentication failed for any
+        reason (including a revoked session).
+    """
     try:
         return await get_current_user(request, session)
     except AuthenticationError:
@@ -122,11 +134,22 @@ async def get_current_user_or_default(
 
     Returns:
         A User instance (always real, never None).
+
+    Raises:
+        AuthenticationError: In SaaS mode, if authentication fails.
+        SessionRevokedError: In either mode, if the presented token was
+            revoked by a password reset/change or MFA disable.
     """
     if settings.self_hosted:
         # Try JWT auth first (user may have logged in even in self-hosted)
         try:
             return await get_current_user(request, session)
+        except SessionRevokedError:
+            # A revoked session is a deliberate act by the user, not the
+            # "never logged in" case the fallback exists for. Falling back
+            # here would hand the caller the (admin) default identity — an
+            # upgrade, not a rejection.
+            raise
         except AuthenticationError:
             return await _get_or_create_default_user(session)
     else:
