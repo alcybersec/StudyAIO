@@ -147,6 +147,26 @@ async def send_password_reset(to_email: str, reset_url: str, expires_hours: int 
     )
 
 
+async def send_email_verification(to_email: str, verify_url: str, expires_hours: int = 24) -> bool:
+    """Send an email verification link.
+
+    Args:
+        to_email: Recipient email.
+        verify_url: Fully-qualified link to the frontend verify page, token included.
+        expires_hours: How long the link stays valid, for the copy.
+
+    Returns:
+        True if sent successfully.
+    """
+    return await send_templated_email(
+        to_email=to_email,
+        subject="StudyAIO: Verify your email",
+        template_name="verify_email.html",
+        verify_url=verify_url,
+        expires_hours=expires_hours,
+    )
+
+
 async def send_exam_reminder(
     to_email: str, exam_title: str, course_code: str, exam_date: str
 ) -> bool:

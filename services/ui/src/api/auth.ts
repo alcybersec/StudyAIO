@@ -11,6 +11,7 @@ import type {
   RegisterRequest,
   ResetPasswordRequest,
   UpdateProfileRequest,
+  VerifyEmailRequest,
 } from '../types'
 
 export const authApi = {
@@ -34,6 +35,11 @@ export const authApi = {
 
   resetPassword: (data: ResetPasswordRequest) =>
     api.post<{ detail: string }>('/auth/reset-password', data),
+
+  verifyEmail: (data: VerifyEmailRequest) =>
+    api.post<{ detail: string }>('/auth/verify-email', data),
+
+  resendVerification: () => api.post<{ detail: string }>('/auth/resend-verification'),
 
   updateProfile: (data: UpdateProfileRequest) => api.put<AuthUser>('/auth/me', data),
 

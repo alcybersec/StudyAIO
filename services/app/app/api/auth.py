@@ -113,8 +113,17 @@ async def register(
 ) -> UserProfileResponse:
     """Register a new user account."""
     user = await user_service.register_user(session, body.email, body.username, body.password)
+    minted = await user_service.create_email_verification_link(session, user)
     await session.commit()
     _set_auth_cookies(response, user)
+
+    # Deliver after the commit so the link can never arrive before its token is
+    # durable. Failures are swallowed — registration must not fail over email.
+    try:
+        await user_service.deliver_email_verification(body.email, minted.raw_token)
+    except Exception:
+        logger.warning("email_verification_delivery_failed", exc_info=True)
+
     return UserProfileResponse.model_validate(user)
 
 
@@ -255,6 +264,33 @@ async def verify_email(
     await user_service.verify_email_token(session, body.token)
     await session.commit()
     return {"detail": "Email verified"}
+
+
+@router.post("/resend-verification", status_code=202)
+@limiter.limit(lambda: "3/minute")
+async def resend_verification(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    """Resend the email verification link for the current user.
+
+    Always 202 for an unverified account so mail outages stay invisible; an
+    already-verified account is told so, since the caller is authenticated and
+    there is nothing to hide from them.
+    """
+    if user.email_verified:
+        return {"detail": "Email is already verified"}
+
+    minted = await user_service.create_email_verification_link(session, user)
+    await session.commit()
+
+    try:
+        await user_service.deliver_email_verification(user.email, minted.raw_token)
+    except Exception:
+        logger.warning("email_verification_delivery_failed", exc_info=True)
+
+    return {"detail": "Verification email sent"}
 
 
 @router.post("/mfa/setup")

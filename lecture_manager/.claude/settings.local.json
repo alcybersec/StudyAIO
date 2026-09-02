@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/extract_text.py:*)",
+      "Bash(python3 -c:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(rm -rf /tmp/claude:*)",
+      "Read",
+      "Write(lectures_summary/**)",
+      "Write(/tmp/claude/**)",
+      "Glob",
+      "Grep"
+    ]
+  }
+}
