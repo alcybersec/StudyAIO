@@ -72,6 +72,17 @@ class AuthenticationError(StudyAIOError):
     pass
 
 
+class SessionRevokedError(AuthenticationError):
+    """Raised when a token predates the user's session cutoff.
+
+    A distinct subclass so that callers which deliberately tolerate a failed
+    login (self-hosted's default-admin fallback) can still refuse a session
+    the user explicitly revoked by resetting or changing their password.
+    """
+
+    pass
+
+
 class AuthorizationError(StudyAIOError):
     """Raised when a user lacks permission for an action."""
 

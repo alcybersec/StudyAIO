@@ -261,6 +261,22 @@ class TestGetMe:
         response = await async_client.get("/api/auth/me")
         assert response.status_code == 401
 
+    @pytest.mark.asyncio
+    async def test_get_me_with_revoked_session_returns_401(
+        self, async_client, mock_session, auth_cookies, make_user
+    ):
+        """SessionRevokedError must reach the client as 401, not a 500."""
+        user = make_user()
+        cookies, _ = auth_cookies(user=user)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = user
+        mock_session.execute.return_value = result
+        user.tokens_valid_from = datetime.now(UTC)
+
+        response = await async_client.get("/api/auth/me", cookies=cookies)
+        assert response.status_code == 401
+        assert "invalidated" in response.json()["detail"]
+
 
 class TestCookieSecureFlag:
     """Verify Secure flag propagation from settings."""

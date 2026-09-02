@@ -32,7 +32,7 @@ from app.core.auth import (
     is_token_invalidated,
 )
 from app.core.database import get_session
-from app.core.exceptions import AuthenticationError, AuthorizationError
+from app.core.exceptions import AuthenticationError, AuthorizationError, SessionRevokedError
 from app.core.oauth import (
     VALID_PROVIDERS,
     build_authorize_url,
@@ -182,7 +182,7 @@ async def refresh_tokens(
     # or MFA disable — otherwise a stolen refresh token would keep minting
     # fresh access tokens after the user tried to lock it out.
     if is_token_invalidated(payload, user.tokens_valid_from):
-        raise AuthenticationError("Session invalidated by password change; please sign in again")
+        raise SessionRevokedError("Session invalidated by password change; please sign in again")
 
     _set_auth_cookies(response, user)
     return {"detail": "Tokens refreshed"}
