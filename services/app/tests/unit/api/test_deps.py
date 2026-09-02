@@ -1,11 +1,12 @@
 """Tests for auth dependency functions."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.api.deps import get_current_user, get_optional_user, require_plan, require_role
-from app.core.auth import create_access_token
+from app.core.auth import create_access_token, decode_token
 from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.models.user import User
 
@@ -18,6 +19,7 @@ def _make_mock_user(**overrides):
         "role": "user",
         "tier": "free",
         "is_active": True,
+        "tokens_valid_from": None,
     }
     defaults.update(overrides)
     user = MagicMock(spec=User)
@@ -124,6 +126,74 @@ class TestGetCurrentUser:
 
         with pytest.raises(AuthenticationError, match="Invalid token type"):
             await get_current_user(request, session)
+
+
+class TestGetCurrentUserSessionInvalidation:
+    """get_current_user must reject tokens that predate users.tokens_valid_from."""
+
+    def _session_returning(self, user):
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = user
+        session.execute.return_value = result
+        return session
+
+    @pytest.mark.asyncio
+    async def test_access_token_minted_before_password_reset_is_rejected(self):
+        """An access token issued before the reset must not survive it."""
+        token = create_access_token("user-001", "user", "free")
+        request = _make_request_with_cookie(token)
+        # Reset happened after the token was minted (a moment ago is enough).
+        user = _make_mock_user(tokens_valid_from=datetime.now(UTC))
+
+        with pytest.raises(AuthenticationError, match="invalidated"):
+            await get_current_user(request, self._session_returning(user))
+
+    @pytest.mark.asyncio
+    async def test_access_token_minted_in_reset_second_is_rejected(self):
+        """Worst case: token and reset share a second — fail closed.
+
+        The cutoff is derived from the token's own iat so both share a
+        second deterministically, regardless of when the test runs.
+        """
+        token = create_access_token("user-001", "user", "free")
+        iat = decode_token(token)["iat"]
+        request = _make_request_with_cookie(token)
+        user = _make_mock_user(tokens_valid_from=datetime.fromtimestamp(iat, tz=UTC))
+
+        with pytest.raises(AuthenticationError, match="invalidated"):
+            await get_current_user(request, self._session_returning(user))
+
+    @pytest.mark.asyncio
+    async def test_access_token_minted_after_password_reset_still_works(self):
+        """Tokens minted after the reset (a fresh login) keep working."""
+        token = create_access_token("user-001", "user", "free")
+        request = _make_request_with_cookie(token)
+        user = _make_mock_user(tokens_valid_from=datetime.now(UTC) - timedelta(hours=1))
+
+        returned = await get_current_user(request, self._session_returning(user))
+        assert returned.id == "user-001"
+
+    @pytest.mark.asyncio
+    async def test_no_cutoff_keeps_tokens_working(self):
+        """tokens_valid_from=None (all pre-existing users) = unrestricted."""
+        token = create_access_token("user-001", "user", "free")
+        request = _make_request_with_cookie(token)
+        user = _make_mock_user(tokens_valid_from=None)
+
+        returned = await get_current_user(request, self._session_returning(user))
+        assert returned.id == "user-001"
+
+    @pytest.mark.asyncio
+    async def test_cutoff_from_change_password_applies_to_access_tokens(self):
+        """The cutoff change_password stamps rejects older access tokens too."""
+        token = create_access_token("user-001", "user", "free")
+        request = _make_request_with_cookie(token)
+        # change_password stamps now(); the token above was minted just before.
+        user = _make_mock_user(tokens_valid_from=datetime.now(UTC))
+
+        with pytest.raises(AuthenticationError, match="invalidated"):
+            await get_current_user(request, self._session_returning(user))
 
 
 class TestGetOptionalUser:

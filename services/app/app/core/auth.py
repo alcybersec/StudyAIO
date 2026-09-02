@@ -124,6 +124,46 @@ def decode_token(token: str) -> dict:
         raise AuthenticationError(f"Invalid token: {e}") from e
 
 
+def is_token_invalidated(payload: dict, tokens_valid_from: datetime | None) -> bool:
+    """Check whether a token predates a user's session cutoff.
+
+    ``tokens_valid_from`` is stamped on the user when their password is reset
+    or changed, or MFA is disabled, revoking every token issued up to that
+    moment. ``None`` (all users created before the column existed) means no
+    restriction: every token stays valid.
+
+    ``iat`` has one-second granularity while the cutoff keeps sub-second
+    precision, so a token minted in the same second as the cutoff cannot be
+    distinguished from one minted a moment before it. The comparison is
+    therefore ``iat <= cutoff`` — fail closed: same-second tokens are
+    rejected. The tradeoff is that a token minted in the same second *after*
+    the cutoff is also rejected; the next login (a second later) works fine.
+
+    Args:
+        payload: Decoded JWT payload (must contain 'iat' for tokens we minted).
+        tokens_valid_from: Cutoff datetime in UTC, or None for no cutoff.
+
+    Returns:
+        True if the token must be treated as revoked.
+    """
+    if tokens_valid_from is None:
+        return False
+
+    iat = payload.get("iat")
+    if not isinstance(iat, (int, float)):
+        # Every token we mint carries `iat`; one without it was not minted by
+        # us. Fail closed.
+        return True
+
+    cutoff = tokens_valid_from
+    if cutoff.tzinfo is None:
+        # Timestamptz columns come back tz-aware via asyncpg, but treat a
+        # naive datetime as UTC rather than crashing on the comparison.
+        cutoff = cutoff.replace(tzinfo=UTC)
+
+    return iat <= cutoff.timestamp()
+
+
 def generate_magic_link_token() -> str:
     """Generate a cryptographically secure token for magic links.
 
