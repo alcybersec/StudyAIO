@@ -281,6 +281,7 @@
 | P.1 | Mount Claude binary into worker container | ✅ Done | Bind mount /home/alex/.local/bin/claude:/usr/local/bin/claude:ro in docker-compose.yml worker service. |
 | P.2 | Fix original_filename bug | ✅ Done | Replaced tempfile.NamedTemporaryFile with direct file write using sanitize_filename(). Collision handling with counter. |
 | P.3 | Settings page (backend + frontend) | ✅ Done | JSON file at data/settings.json. 7 configurable settings (CLI path, model, threshold, counts, chunk sizes). GET/PUT /api/settings endpoints. SettingsPage with form, validation, success/error feedback. 26 new tests (212 total). Pipeline consumers (claude_code.py, classify.py, assets.py) read from settings service. |
+| P.4 | Password reset/change invalidates existing sessions | ✅ Done | New `users.tokens_valid_from` (timestamptz, NULL = unrestricted) stamped by `reset_password_with_token`, `change_password` and MFA disable; `get_current_user` and `POST /api/auth/refresh` reject tokens whose `iat` is not newer than the cutoff (`<=`, so same-second tokens fail closed). Stolen sessions now die at the reset instead of living out the 7-day refresh window. |
 
 ---
 

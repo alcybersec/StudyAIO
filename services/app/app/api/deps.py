@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core.auth import ACCESS_TOKEN_COOKIE, decode_token
+from app.core.auth import ACCESS_TOKEN_COOKIE, decode_token, is_token_invalidated
 from app.core.database import get_session
 from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.models.user import User
@@ -53,6 +53,11 @@ async def get_current_user(
 
     if not user.is_active:
         raise AuthenticationError("Account is deactivated")
+
+    # Reject tokens minted before the last password reset/change or MFA
+    # disable (user.tokens_valid_from). None means no restriction.
+    if is_token_invalidated(payload, user.tokens_valid_from):
+        raise AuthenticationError("Session invalidated by password change; please sign in again")
 
     return user
 

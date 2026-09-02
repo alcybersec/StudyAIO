@@ -28,6 +28,7 @@ from app.core.auth import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    is_token_invalidated,
 )
 from app.core.database import get_session
 from app.core.exceptions import AuthenticationError, AuthorizationError
@@ -166,6 +167,12 @@ async def refresh_tokens(
     user = await user_service.get_user_by_id(session, user_id)
     if not user or not user.is_active:
         raise AuthenticationError("User not found or inactive")
+
+    # The refresh token itself must postdate the last password reset/change
+    # or MFA disable — otherwise a stolen refresh token would keep minting
+    # fresh access tokens after the user tried to lock it out.
+    if is_token_invalidated(payload, user.tokens_valid_from):
+        raise AuthenticationError("Session invalidated by password change; please sign in again")
 
     _set_auth_cookies(response, user)
     return {"detail": "Tokens refreshed"}

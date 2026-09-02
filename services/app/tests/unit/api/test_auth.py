@@ -1,10 +1,11 @@
 """Tests for auth API endpoints."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.core.auth import hash_password
+from app.core.auth import create_refresh_token, decode_token, hash_password
 from app.models.user import User
 from app.services import user_service
 
@@ -27,6 +28,7 @@ def _make_db_user(**overrides) -> User:
         "avatar_url": None,
         "backup_codes": None,
         "last_login_at": None,
+        "tokens_valid_from": None,
         "created_at": datetime(2026, 1, 1),
         "updated_at": datetime(2026, 1, 1),
     }
@@ -167,6 +169,75 @@ class TestRefresh:
     @pytest.mark.asyncio
     async def test_refresh_no_token(self, async_client):
         response = await async_client.post("/api/auth/refresh")
+        assert response.status_code == 401
+
+
+class TestRefreshSessionInvalidation:
+    """POST /api/auth/refresh must honor users.tokens_valid_from.
+
+    A stolen refresh token must stop minting access tokens the moment the
+    victim resets or changes their password.
+    """
+
+    def _session_returning(self, mock_session, user):
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = user
+        mock_session.execute.return_value = result
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_minted_before_password_reset_is_rejected(
+        self, async_client, mock_session, make_user
+    ):
+        user = make_user()
+        refresh = create_refresh_token(user.id)
+        # Reset happened after the refresh token was minted.
+        self._session_returning(mock_session, user)
+        user.tokens_valid_from = datetime.now(UTC)
+
+        response = await async_client.post("/api/auth/refresh", cookies={"refresh_token": refresh})
+        assert response.status_code == 401
+        assert "invalidated" in response.json()["detail"]
+        # No fresh access token may be handed out.
+        assert "access_token" not in response.cookies
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_minted_in_reset_second_is_rejected(
+        self, async_client, mock_session, make_user
+    ):
+        """Worst case: refresh token and reset share a second — fail closed."""
+        user = make_user()
+        refresh = create_refresh_token(user.id)
+        self._session_returning(mock_session, user)
+        user.tokens_valid_from = datetime.fromtimestamp(decode_token(refresh)["iat"], tz=UTC)
+
+        response = await async_client.post("/api/auth/refresh", cookies={"refresh_token": refresh})
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_minted_after_password_reset_still_mints_access_token(
+        self, async_client, mock_session, make_user
+    ):
+        user = make_user()
+        refresh = create_refresh_token(user.id)
+        # Reset happened an hour before this refresh token was minted.
+        self._session_returning(mock_session, user)
+        user.tokens_valid_from = datetime.now(UTC) - timedelta(hours=1)
+
+        response = await async_client.post("/api/auth/refresh", cookies={"refresh_token": refresh})
+        assert response.status_code == 200
+        assert "access_token" in response.cookies
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_from_change_password_rejects_older_tokens(
+        self, async_client, mock_session, make_user
+    ):
+        """change_password stamps the same cutoff as a reset."""
+        user = make_user()
+        refresh = create_refresh_token(user.id)
+        self._session_returning(mock_session, user)
+        user.tokens_valid_from = datetime.now(UTC)
+
+        response = await async_client.post("/api/auth/refresh", cookies={"refresh_token": refresh})
         assert response.status_code == 401
 
 
