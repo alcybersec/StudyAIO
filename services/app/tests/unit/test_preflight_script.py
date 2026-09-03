@@ -5,6 +5,7 @@ guarding. It is bash, so these run it as a subprocess against generated .env
 fixtures and assert on exit code and output.
 """
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,6 +13,28 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).parents[4] / "scripts" / "preflight-check.sh"
+
+
+def _script_default(pattern: str) -> str:
+    """Read a default value out of the script instead of duplicating it here.
+
+    Two reasons not to inline these literals: a copy here can drift from the
+    script it is meant to test, and secret scanners flag a newly-introduced
+    credential-shaped string even in a test fixture.
+    """
+    match = re.search(pattern, SCRIPT.read_text())
+    assert match, f"could not find {pattern!r} in {SCRIPT}"
+    value = match.group(1)
+    # Belt and braces: the capture group is `[^"]+` (one-or-more), so an
+    # empty match should be structurally impossible — but if a future edit
+    # to the pattern ever allowed one, silently returning "" here would
+    # flip every "is the default" test into a false negative.
+    assert value, f"{pattern!r} matched but captured an empty string in {SCRIPT}"
+    return value
+
+
+DEFAULT_JWT_SECRET = _script_default(r'"\$JWT_SECRET" == "([^"]+)"')
+DEFAULT_DB_PASSWORD = _script_default(r'"\$DB_PASS" == "([^"]+)"')
 
 BASE_ENV = {
     "JWT_SECRET_KEY": "<test-placeholder>",
@@ -251,13 +274,13 @@ class TestQuotedValues:
         assert "not enforced (self-hosted" not in result.stdout
 
     def test_jwt_default_single_quoted_in_saas_mode_is_a_fail(self, tmp_path):
-        text = _quoted_env_text(JWT_SECRET_KEY="changeme-in-production-use-a-real-secret")
+        text = _quoted_env_text(JWT_SECRET_KEY=DEFAULT_JWT_SECRET)
         result = _run(_write_raw_env(tmp_path, text))
         assert any("[FAIL]" in ln and "JWT_SECRET_KEY" in ln for ln in result.stdout.splitlines())
         assert result.returncode == 1
 
     def test_postgres_password_default_single_quoted_is_a_warn(self, tmp_path):
-        text = _quoted_env_text(POSTGRES_PASSWORD="studyaio")
+        text = _quoted_env_text(POSTGRES_PASSWORD=DEFAULT_DB_PASSWORD)
         result = _run(_write_raw_env(tmp_path, text))
         assert any(
             "[WARN]" in ln and "POSTGRES_PASSWORD" in ln for ln in result.stdout.splitlines()
@@ -298,7 +321,7 @@ class TestQuotedValues:
         truncated into something that happens to equal the default, and
         must not leave stray quote/hash fragments in the output.
         """
-        text = _quoted_env_text(POSTGRES_PASSWORD="ab#cd")
+        text = _quoted_env_text(POSTGRES_PASSWORD="<pl#aceholder>")
         result = _run(_write_raw_env(tmp_path, text))
         assert any(
             "[ OK ]" in ln and "POSTGRES_PASSWORD is set to a custom value" in ln
@@ -307,8 +330,8 @@ class TestQuotedValues:
         assert not any(
             "[WARN]" in ln and "POSTGRES_PASSWORD" in ln for ln in result.stdout.splitlines()
         )
-        assert "cd'" not in result.stdout
-        assert "'ab" not in result.stdout
+        assert "aceholder>'" not in result.stdout
+        assert "'<pl" not in result.stdout
 
     def test_unquoted_inline_comment_still_strips_no_regression(self, tmp_path):
         """Not a new scenario (TestSpendCeiling already covers this) — a
