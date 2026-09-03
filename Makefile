@@ -1,4 +1,4 @@
-.PHONY: up down logs test test-unit test-integration test-golden test-e2e migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup restore preflight
+.PHONY: up down logs test test-unit test-integration test-golden test-e2e migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup restore preflight ensure-admin
 
 # === Docker ===
 up:
@@ -38,6 +38,10 @@ restore:
 # === Pre-flight ===
 preflight:
 	bash scripts/preflight-check.sh
+
+ensure-admin:
+	@if [ -z "$(email)" ]; then echo "Usage: make ensure-admin email=you@example.com"; exit 1; fi
+	docker compose exec api python -m app.cli ensure-admin --email $(email)
 
 logs:
 	docker compose logs -f
