@@ -60,6 +60,7 @@ class TestProviderCredential:
     def test_zai_with_a_key_passes(self, tmp_path):
         result = _run(_write_env(tmp_path, AGENT_BACKEND="zai", ZAI_API_KEY="zk-live-x"))
         assert result.returncode == 0, result.stdout
+        assert "AGENT_BACKEND=zai with ZAI_API_KEY set" in result.stdout
 
     def test_openai_without_a_key_fails(self, tmp_path):
         result = _run(_write_env(tmp_path, AGENT_BACKEND="openai"))
@@ -74,20 +75,38 @@ class TestProviderCredential:
     def test_claude_code_needs_no_key(self, tmp_path):
         result = _run(_write_env(tmp_path, AGENT_BACKEND="claude_code"))
         assert result.returncode == 0, result.stdout
+        assert "mounted ~/.claude" in result.stdout
 
     def test_ollama_needs_no_key(self, tmp_path):
         result = _run(_write_env(tmp_path, AGENT_BACKEND="ollama"))
         assert result.returncode == 0, result.stdout
+        assert "no API key required" in result.stdout
 
     def test_unset_backend_defaults_to_claude_code(self, tmp_path):
         """An operator who never set AGENT_BACKEND is on the CLI default."""
         result = _run(_write_env(tmp_path, AGENT_BACKEND=None))
         assert result.returncode == 0, result.stdout
+        assert "AGENT_BACKEND=claude_code" in result.stdout
 
     def test_an_unknown_backend_fails(self, tmp_path):
         result = _run(_write_env(tmp_path, AGENT_BACKEND="gpt5-turbo-max"))
         assert result.returncode == 1
-        assert "AGENT_BACKEND" in result.stdout
+        assert "[FAIL]" in result.stdout
+        assert "is not one of" in result.stdout
+
+    def test_a_trailing_inline_comment_does_not_break_a_valid_backend(self, tmp_path):
+        """.env.example ships AGENT_BACKEND commented out with a trailing
+        `# claude_code | anthropic_api | ...` hint; uncommenting it as-is is
+        the obvious operator action and must not be read as part of the value.
+        """
+        result = _run(
+            _write_env(
+                tmp_path,
+                AGENT_BACKEND="claude_code   # claude_code | anthropic_api | openai | zai | ollama",
+            )
+        )
+        assert result.returncode == 0, result.stdout
+        assert "AGENT_BACKEND=claude_code" in result.stdout
 
 
 class TestSpendCeiling:
@@ -103,8 +122,7 @@ class TestSpendCeiling:
             )
         )
         assert result.returncode == 0, result.stdout
-        assert "WARN" in result.stdout
-        assert "GLOBAL_MAX_AI" in result.stdout
+        assert any("[WARN]" in ln and "GLOBAL_MAX_AI" in ln for ln in result.stdout.splitlines())
 
     def test_warns_when_both_ceilings_are_zero(self, tmp_path):
         """0 means unlimited, which is the same exposure as unset."""
@@ -145,4 +163,23 @@ class TestSpendCeiling:
                 GLOBAL_MAX_AI_CALLS_PER_DAY=None,
             )
         )
+        assert result.returncode == 0, result.stdout
         assert "GLOBAL_MAX_AI" not in result.stdout
+        assert "Spend ceiling not enforced" in result.stdout
+
+    def test_an_inline_comment_on_zero_still_warns(self, tmp_path):
+        """A whitespace-preceded inline comment must not defeat the "0 counts
+        as unlimited" comparison — this is the exact failure mode the fix in
+        get_val exists to close.
+        """
+        result = _run(
+            _write_env(
+                tmp_path,
+                AGENT_BACKEND="zai",
+                ZAI_API_KEY="zk-live-x",
+                GLOBAL_MAX_AI_CALLS_PER_DAY="0   # 0 = unlimited",
+                GLOBAL_MAX_AI_TOKENS_PER_DAY="0   # 0 = unlimited",
+            )
+        )
+        assert result.returncode == 0, result.stdout
+        assert any("[WARN]" in ln and "GLOBAL_MAX_AI" in ln for ln in result.stdout.splitlines())
