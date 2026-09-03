@@ -120,13 +120,51 @@ class ConceptExtractionResult:
     relations: list[ConceptRelationData] = field(default_factory=list)
 
 
+@dataclass
+class TokenUsage:
+    """What the most recent AI call consumed.
+
+    Call counts are known for every backend; token counts are only available
+    from providers that report them. The Claude Code CLI runs in text mode and
+    returns no usage, so it leaves tokens at 0 rather than guessing.
+    """
+
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    def add(self, input_tokens: int = 0, output_tokens: int = 0) -> None:
+        """Record one completed call."""
+        self.calls += 1
+        self.input_tokens += input_tokens
+        self.output_tokens += output_tokens
+
+
 class AgentAdapter(ABC):
     """Abstract interface for AI operations.
 
     All AI calls go through this interface. v1 implements ClaudeCodeAdapter
     (subprocess to `claude -p`). Future adapters: AnthropicAPIAdapter,
     OllamaAdapter.
+
+    Adapters accumulate consumption in `usage` as they run. Callers read it
+    afterwards to meter the work — the same post-call attribute pattern the
+    pipeline already uses for `refreshed_credentials`.
     """
+
+    #: Set lazily so subclasses need no cooperating __init__.
+    _usage: "TokenUsage | None" = None
+
+    @property
+    def usage(self) -> "TokenUsage":
+        """Consumption accumulated by this adapter instance."""
+        if self._usage is None:
+            self._usage = TokenUsage()
+        return self._usage
+
+    def reset_usage(self) -> None:
+        """Clear the accumulated usage."""
+        self._usage = TokenUsage()
 
     @abstractmethod
     async def classify_lecture(

@@ -122,6 +122,12 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
                 count=get_effective_setting("quiz_question_count_per_week"),
             )
 
+            # Meter the AI spend. Usage accumulates on the adapter, so one call
+            # here records every request this stage made.
+            from app.services.billing_service import record_agent_usage
+
+            await record_agent_usage(session, user_id or artifact.user_id, agent)
+
             quiz_questions = await asset_service.save_quiz_questions(
                 session=session,
                 course_id=artifact.course_id,

@@ -1,7 +1,7 @@
 """Tests for admin service — user management and system metrics."""
 
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -154,13 +154,43 @@ class TestGetSystemMetrics:
 
         mock_session.execute = AsyncMock(side_effect=results)
 
-        metrics = await admin_service.get_system_metrics(mock_session)
+        with patch(
+            "app.services.admin_service.quota_service.get_global_usage_today",
+            AsyncMock(return_value=(0, 0)),
+        ):
+            metrics = await admin_service.get_system_metrics(mock_session)
+
         assert metrics["total_users"] == 10
         assert metrics["total_artifacts"] == 50
         assert metrics["total_courses"] == 3
         assert metrics["pipeline_runs_24h"] == 7
         assert metrics["total_storage_bytes"] == 1024 * 1024 * 100
         assert metrics["total_storage_mb"] == 100.0
+
+    async def test_reports_todays_ai_spend_and_ceiling(self, mock_session):
+        """The ceiling must be visible before it fires, not only when it does."""
+        results = []
+        for val in [1, 1, 1, 1, 0]:
+            r = MagicMock()
+            r.scalar_one.return_value = val
+            results.append(r)
+        mock_session.execute = AsyncMock(side_effect=results)
+
+        with (
+            patch(
+                "app.services.admin_service.quota_service.get_global_usage_today",
+                AsyncMock(return_value=(42, 12345)),
+            ),
+            patch("app.services.admin_service.settings") as cfg,
+        ):
+            cfg.global_max_ai_calls_per_day = 500
+            cfg.global_max_ai_tokens_per_day = 0
+            metrics = await admin_service.get_system_metrics(mock_session)
+
+        assert metrics["ai_calls_today"] == 42
+        assert metrics["ai_tokens_today"] == 12345
+        assert metrics["ai_calls_ceiling"] == 500
+        assert metrics["ai_tokens_ceiling"] == 0
 
 
 @pytest.mark.asyncio

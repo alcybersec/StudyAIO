@@ -97,6 +97,38 @@ class UserExistsError(StudyAIOError):
         super().__init__(f"A user with this {field} already exists")
 
 
+class LastAdminError(StudyAIOError):
+    """Raised when a change would leave the instance with no active admin.
+
+    Covers deletion, demotion and deactivation alike: any of them applied to the
+    last active admin locks everyone out with no recovery short of SQL.
+    """
+
+    def __init__(self, action: str = "change"):
+        self.action = action
+        super().__init__(
+            f"Cannot {action} the last active admin — the instance would have "
+            "no one able to administer it."
+        )
+
+
+class GlobalCeilingError(StudyAIOError):
+    """Raised when the instance-wide daily AI ceiling is reached.
+
+    Unlike per-user quotas this is an operator cost guard, so it applies to
+    every tier and in self-hosted mode too.
+    """
+
+    def __init__(self, resource: str, limit: int, retry_after_seconds: int):
+        self.resource = resource
+        self.limit = limit
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(
+            f"This instance has reached its daily {resource} ceiling of {limit}. "
+            "Service resumes at 00:00 UTC."
+        )
+
+
 class InviteError(StudyAIOError):
     """Raised when an invite code is missing, unknown, expired, or used up."""
 
