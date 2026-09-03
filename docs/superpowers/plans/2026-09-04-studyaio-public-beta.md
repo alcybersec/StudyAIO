@@ -10,6 +10,35 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-03-studyaio-public-beta-design.md`
 
+## Before you write any Python: the format gate
+
+`.github/workflows/ci.yml` runs **two** separate ruff steps in `services/app`, and
+`backend-tests` has `needs: python-lint`, so either one failing blocks the whole
+build before a single test runs:
+
+```
+ruff check .
+ruff format --check .
+```
+
+`ruff check` passing does not imply `ruff format --check` passing. The code blocks
+in this plan are wrapped at 88 columns; this project sets `line-length = 100`
+(`services/app/pyproject.toml:3`). So **pasting a block from this plan verbatim
+will fail the format gate.** After every Python change:
+
+```bash
+cd services/app
+RUFF_CACHE_DIR="$CLAUDE_JOB_DIR/tmp/ruff" ruff format .
+RUFF_CACHE_DIR="$CLAUDE_JOB_DIR/tmp/ruff" ruff format --check .
+```
+
+The `RUFF_CACHE_DIR` override is required — the repo's checked-in `.ruff_cache` is
+not writable in the agent sandbox and ruff aborts with a permission error that
+looks like a ruff bug rather than a cache problem.
+
+If `ruff format` wants to reformat a file your task did not touch, stop: that is a
+pre-existing violation and reformatting it would bury your change in noise.
+
 ---
 
 ## Phase boundaries
@@ -318,7 +347,7 @@ async def ensure_admin(
     return user, minted.raw_token
 ```
 
-`DEFAULT_ADMIN_ID` is imported inside the function on purpose: `app.api.deps` imports from the service layer, so a module-level import would be circular.
+`DEFAULT_ADMIN_ID` is imported inside the function to keep the service layer from taking a module-level dependency on `app.api`, which is the layer above it. Note this is a layering choice, not a necessity: `app/api/deps.py` imports only `user_service`, so hoisting the import would *not* actually cycle — verified empirically. Do not repeat a circularity claim about it.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
