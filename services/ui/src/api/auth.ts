@@ -1,5 +1,7 @@
 import { api } from './client'
 import type {
+  AccountDeletedResponse,
+  AccountDeleteRequest,
   AuthConfig,
   AuthUser,
   ChangePasswordRequest,
@@ -12,6 +14,7 @@ import type {
   ResetPasswordRequest,
   SessionEndedResponse,
   UpdateProfileRequest,
+  UserDataExport,
   VerifyEmailRequest,
 } from '../types'
 
@@ -51,4 +54,14 @@ export const authApi = {
 
   mfaDisable: (code: string) =>
     api.post<SessionEndedResponse>('/auth/mfa/disable', { totp_code: code }),
+
+  exportData: () => api.get<UserDataExport>('/auth/account/export'),
+
+  // DELETE with a body — `api.delete` sends none, so use the escape hatch.
+  deleteAccount: (data: AccountDeleteRequest) =>
+    api.request<AccountDeletedResponse>('/auth/account', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
 }

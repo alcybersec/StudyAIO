@@ -1,15 +1,18 @@
 """Admin API endpoints — user management and system metrics."""
 
+from datetime import datetime
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_role
 from app.core.cache import DASHBOARD_TTL_SECONDS, cache_get, cache_set
 from app.core.database import get_session
+from app.models.invite_code import InviteCode
 from app.models.user import User
-from app.services import admin_service
+from app.services import admin_service, invite_service
 
 logger = structlog.get_logger()
 
@@ -293,3 +296,117 @@ async def get_user_details(
     response = UserDetailResponse(**result)
     await cache_set(cache_key, response.model_dump(mode="json"), ttl=DASHBOARD_TTL_SECONDS)
     return response
+
+
+# ── Invite codes ──────────────────────────────────────────────────
+
+
+class InviteCreateRequest(BaseModel):
+    """Request to mint an invite code."""
+
+    max_uses: int = Field(default=1, ge=1, le=1000)
+    expires_in_days: int | None = Field(default=30, ge=1, le=365)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class InviteResponse(BaseModel):
+    """An invite code and its redemption state."""
+
+    id: str
+    code: str
+    note: str | None
+    max_uses: int
+    used_count: int
+    uses_remaining: int
+    is_redeemable: bool
+    expires_at: datetime | None
+    revoked_at: datetime | None
+    created_at: datetime
+
+
+class InviteListResponse(BaseModel):
+    """A list of invite codes."""
+
+    invites: list[InviteResponse]
+    total: int
+
+
+def _invite_to_response(invite: InviteCode) -> InviteResponse:
+    """Serialize an invite, including its derived redemption state."""
+    return InviteResponse(
+        id=invite.id,
+        code=invite.code,
+        note=invite.note,
+        max_uses=invite.max_uses,
+        used_count=invite.used_count,
+        uses_remaining=invite.uses_remaining,
+        is_redeemable=invite.is_redeemable(),
+        expires_at=invite.expires_at,
+        revoked_at=invite.revoked_at,
+        created_at=invite.created_at,
+    )
+
+
+@router.post(
+    "/admin/invites",
+    response_model=InviteResponse,
+    status_code=201,
+    summary="Create an invite code",
+    description="Mint a registration invite code. Admin only.",
+)
+async def create_invite(
+    body: InviteCreateRequest,
+    admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> InviteResponse:
+    """Mint a new invite code (admin only)."""
+    invite = await invite_service.create_invite(
+        session,
+        created_by=admin.id,
+        max_uses=body.max_uses,
+        expires_in_days=body.expires_in_days,
+        note=body.note,
+    )
+    await session.commit()
+    return _invite_to_response(invite)
+
+
+@router.get(
+    "/admin/invites",
+    response_model=InviteListResponse,
+    summary="List invite codes",
+    description="List all invite codes and their usage. Admin only.",
+)
+async def list_invites(
+    _admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> InviteListResponse:
+    """List every invite code with its redemption state (admin only)."""
+    invites = await invite_service.list_invites(session)
+    return InviteListResponse(
+        invites=[_invite_to_response(i) for i in invites],
+        total=len(invites),
+    )
+
+
+@router.delete(
+    "/admin/invites/{invite_id}",
+    response_model=InviteResponse,
+    summary="Revoke an invite code",
+    description="Revoke an invite code so it can no longer be redeemed. Admin only.",
+)
+async def revoke_invite(
+    invite_id: str,
+    _admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> InviteResponse:
+    """Revoke an invite code (admin only).
+
+    Revoking does not delete the row — the audit trail of who registered with
+    which code is worth more than the tidiness.
+    """
+    invite = await invite_service.revoke_invite(session, invite_id)
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Invite code not found")
+    await session.commit()
+    return _invite_to_response(invite)

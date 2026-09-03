@@ -9,6 +9,10 @@ vi.mock('../hooks/useApi', () => ({
   useAdminUsers: vi.fn(),
   useSystemMetrics: vi.fn(),
   useUpdateAdminUser: vi.fn(),
+  // The invite panel is exercised in its own tests; here it just needs to render.
+  useInvites: vi.fn(() => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })),
+  useCreateInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useRevokeInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }))
 
 const mockUsers = vi.mocked(useAdminUsers)
