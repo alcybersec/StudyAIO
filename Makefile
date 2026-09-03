@@ -41,7 +41,7 @@ preflight:
 
 ensure-admin:
 	@if [ -z "$(email)" ]; then echo "Usage: make ensure-admin email=you@example.com"; exit 1; fi
-	docker compose exec api python -m app.cli ensure-admin --email $(email)
+	docker compose exec -T api python -m app.cli ensure-admin --email "$(email)"
 
 logs:
 	docker compose logs -f

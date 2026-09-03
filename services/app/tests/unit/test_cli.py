@@ -97,6 +97,23 @@ class TestEnsureAdminCommand:
 
         assert ensure.await_args.args[1:] == ("me@example.com", "alex")
 
+    def test_warns_that_earlier_links_are_now_void(self, fake_session_factory, capsys):
+        """A second run (e.g. fixing a typo'd --email) must not read as a hijack."""
+        factory, _ = fake_session_factory
+        with (
+            patch.object(cli, "async_session_factory", factory),
+            patch.object(
+                cli.admin_service,
+                "ensure_admin",
+                AsyncMock(return_value=(_user(), "tok-123")),
+            ),
+            patch.object(cli.settings, "app_base_url", "https://studyaio.example.com"),
+        ):
+            cli.main(["ensure-admin", "--email", "me@example.com"])
+
+        out = capsys.readouterr().out
+        assert "Any link printed by an earlier run of this command is now void" in out
+
     def test_no_subcommand_exits_nonzero(self, capsys):
         """Bare `python -m app.cli` should explain itself, not traceback."""
         assert cli.main([]) == 2

@@ -15,33 +15,54 @@ import asyncio
 import sys
 from urllib.parse import quote_plus
 
+from sqlalchemy.exc import InterfaceError, OperationalError
+
 from app.config import settings
-from app.core.database import async_session_factory
+from app.core.database import async_session_factory, engine
 from app.core.exceptions import StudyAIOError
+from app.core.logging import configure_logging
 from app.services import admin_service
+from app.services.user_service import ACCOUNT_SETUP_TOKEN_HOURS
 
 
 async def _ensure_admin(email: str, username: str | None) -> int:
     """Bootstrap an admin account and print its set-password link."""
-    async with async_session_factory() as session:
-        try:
-            user, token = await admin_service.ensure_admin(session, email, username)
-        except (StudyAIOError, ValueError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        await session.commit()
+    try:
+        async with async_session_factory() as session:
+            try:
+                user, token = await admin_service.ensure_admin(session, email, username)
+            except (StudyAIOError, ValueError) as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            await session.commit()
+    finally:
+        await engine.dispose()
 
     base = settings.app_base_url.rstrip("/")
     print(f"admin:  {user.email}  (id {user.id}, role {user.role})")
     print(f"open:   {base}/reset-password?token={quote_plus(token)}")
-    print("")
-    print("The link is single-use and expires in 24 hours. It is a credential —")
-    print("do not paste it into a shared channel or an issue tracker.")
+    print(
+        f"base:   {base} (from APP_BASE_URL) — the token is not origin-bound; "
+        "if that host is unreachable from your browser, keep the ?token= and "
+        "substitute the origin you use."
+    )
+    if base.split("://")[-1].split(":")[0].split("/")[0] in ("localhost", "127.0.0.1", "0.0.0.0"):
+        print(f"warning: {base} is a local address — it will not load from another machine.")
+    print()
+    print(
+        f"The link is single-use and expires in {ACCOUNT_SETUP_TOKEN_HOURS} hours. "
+        "It is a credential — do not paste it into a shared channel or an issue tracker."
+    )
+    print(
+        "Any link printed by an earlier run of this command is now void — use only the newest one."
+    )
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and dispatch. Returns a process exit code."""
+    configure_logging("WARNING")
+
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command")
 
@@ -59,7 +80,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "ensure-admin":
-        return asyncio.run(_ensure_admin(args.email, args.username))
+        try:
+            return asyncio.run(_ensure_admin(args.email, args.username))
+        except (OSError, OperationalError, InterfaceError) as exc:
+            print(
+                f"error: cannot reach the database ({type(exc).__name__}: {exc}) — "
+                "is the db service up, and are you running this inside the api "
+                "container?",
+                file=sys.stderr,
+            )
+            return 1
 
     parser.print_usage(sys.stderr)
     print("error: a command is required (ensure-admin)", file=sys.stderr)
