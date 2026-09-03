@@ -598,6 +598,90 @@ async def create_user(
     return user, minted.raw_token
 
 
+async def ensure_admin(
+    session: AsyncSession,
+    email: str,
+    username: str | None = None,
+) -> tuple[User, str]:
+    """Guarantee one reachable admin account and mint its set-password link.
+
+    Targets the self-hosted default admin row if it exists at all, regardless
+    of its current role, so every course and artifact it already owns keeps
+    its owner and no data migration is needed. Falls back to any other admin,
+    and creates one only when the instance has none.
+
+    This is the only path to a first admin credential: `require_role("admin")`
+    needs a real JWT, and the default row is created with no password and an
+    undeliverable address, so neither the admin API nor a self-service reset
+    can produce one.
+
+    Args:
+        session: Database session.
+        email: Address the admin should be reachable at.
+        username: Display name, used only when creating a new account.
+
+    Returns:
+        (user, raw_setup_token)
+
+    The caller must commit. Neither the repointed row nor the returned token
+    is durable until then.
+
+    Raises:
+        UserExistsError: If `email` already belongs to a different account.
+            On the create path (no existing admin), also raised if
+            `username` collides with an existing account.
+    """
+    # Layering: the service layer should not import the API layer at module
+    # scope, so this stays a local import even though there is no cycle.
+    from app.api.deps import DEFAULT_ADMIN_ID
+
+    user = await session.get(User, DEFAULT_ADMIN_ID)
+    if user is None:
+        result = await session.execute(
+            select(User)
+            .where(User.role == "admin")
+            .order_by(User.created_at.nulls_last(), User.id)
+            .limit(1)
+        )
+        user = result.scalar_one_or_none()
+
+    if user is None:
+        return await create_user(session, email, username or "admin", role="admin", tier="pro")
+
+    was_repointed = user.email != email
+    was_promoted = user.role != "admin"
+    was_reactivated = not user.is_active
+
+    if was_repointed:
+        clash = await session.execute(select(User).where(User.email == email, User.id != user.id))
+        if clash.scalar_one_or_none():
+            raise UserExistsError("email")
+        user.email = email
+        # A new address is unproven until its owner follows a link.
+        user.email_verified = False
+
+    # Demotion or deactivation is one of the lockouts this recovers from.
+    user.role = "admin"
+    user.is_active = True
+    user.updated_at = datetime.now(UTC)
+    await session.flush()
+
+    minted = await user_service.request_password_reset(
+        session, user.email, expires_in_hours=user_service.ACCOUNT_SETUP_TOKEN_HOURS
+    )
+    if minted is None:  # pragma: no cover - the row was just flushed
+        raise RuntimeError("Could not mint a setup link for the admin account")
+
+    logger.info(
+        "admin_ensured",
+        user_id=user.id,
+        repointed=was_repointed,
+        promoted=was_promoted,
+        reactivated=was_reactivated,
+    )
+    return user, minted.raw_token
+
+
 async def count_active_admins(session: AsyncSession, excluding: str | None = None) -> int:
     """Count active admin accounts, optionally ignoring one.
 
