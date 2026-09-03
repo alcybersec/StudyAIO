@@ -600,6 +600,33 @@ export function useUpdateAdminUser() {
   })
 }
 
+export function useInvites() {
+  return useQuery({
+    queryKey: ['admin', 'invites'],
+    queryFn: adminApi.listInvites,
+  })
+}
+
+export function useCreateInvite() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminApi.createInvite,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'invites'] })
+    },
+  })
+}
+
+export function useRevokeInvite() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminApi.revokeInvite,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'invites'] })
+    },
+  })
+}
+
 export function useSystemMetrics() {
   return useQuery({
     queryKey: ['admin', 'metrics'],

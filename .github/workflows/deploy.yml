@@ -106,6 +106,12 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Vite inlines VITE_* at build time, so frontend Sentry has to be
+          # configured here. Unset secret -> empty -> monitoring stays off.
+          build-args: |
+            VITE_SENTRY_DSN=${{ secrets.VITE_SENTRY_DSN }}
+            VITE_SENTRY_ENVIRONMENT=production
+            VITE_SENTRY_RELEASE=${{ github.sha }}
 
   deploy-selfhosted:
     name: Deploy to Self-Hosted Server

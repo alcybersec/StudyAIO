@@ -23,6 +23,10 @@ async def test_auth_config_detects_oauth_providers(async_client):
         mock_settings.self_hosted = False
         mock_settings.google_client_id = "google-id-123"
         mock_settings.github_client_id = "github-id-456"
+        # Patching `settings` wholesale means every attribute the endpoint
+        # reads must be set — a MagicMock fails the response model.
+        mock_settings.registration_mode = "open"
+        mock_settings.demo_enabled = False
         resp = await async_client.get("/api/auth/config")
     assert resp.status_code == 200
     data = resp.json()

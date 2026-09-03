@@ -1,6 +1,6 @@
 """Application configuration loaded from environment variables."""
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -99,6 +99,14 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
     self_hosted: bool = True
+    # "open" | "invite" | "closed" — gates POST /api/auth/register
+    registration_mode: str = "open"
+
+    # Error monitoring (Sentry). Inert when sentry_dsn is empty.
+    sentry_dsn: str = ""
+    sentry_environment: str = "development"
+    sentry_traces_sample_rate: float = 0.0
+    sentry_release: str = ""
 
     # Stripe billing
     stripe_api_key: SecretStr = SecretStr("")
@@ -146,6 +154,20 @@ class Settings(BaseSettings):
     @property
     def summaries_dir(self) -> str:
         return f"{self.data_dir}/summaries"
+
+    @field_validator("registration_mode")
+    @classmethod
+    def _validate_registration_mode(cls, value: str) -> str:
+        """Reject an unrecognized registration mode at startup.
+
+        Without this, `REGISTRATION_MODE=invit` would fall through every check
+        and silently behave as `open` — a typo would throw a closed beta open.
+        """
+        allowed = {"open", "invite", "closed"}
+        normalized = value.strip().lower()
+        if normalized not in allowed:
+            raise ValueError(f"REGISTRATION_MODE must be one of {sorted(allowed)}, got {value!r}")
+        return normalized
 
 
 settings = Settings()

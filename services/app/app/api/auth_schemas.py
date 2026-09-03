@@ -11,6 +11,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     username: str = Field(min_length=3, max_length=100)
     password: str = Field(min_length=8, max_length=128)
+    # Required only when REGISTRATION_MODE=invite; ignored otherwise.
+    invite_code: str | None = Field(default=None, max_length=32)
 
 
 class LoginRequest(BaseModel):
@@ -68,12 +70,6 @@ class MFADisableRequest(BaseModel):
     totp_code: str = Field(min_length=6, max_length=6)
 
 
-class MagicLinkRequest(BaseModel):
-    """Magic link request."""
-
-    email: EmailStr
-
-
 class UpdateProfileRequest(BaseModel):
     """Profile update request."""
 
@@ -101,6 +97,9 @@ class AuthConfigResponse(BaseModel):
     registration_enabled: bool
     oauth_providers: list[str]
     demo_enabled: bool = False
+    # "open" | "invite" | "closed"
+    registration_mode: str = "open"
+    invite_required: bool = False
 
 
 class UserProfileResponse(BaseModel):
@@ -117,5 +116,27 @@ class UserProfileResponse(BaseModel):
     avatar_url: str | None
     last_login_at: datetime | None
     created_at: datetime
+    # False for OAuth-only accounts. The client uses this to decide whether a
+    # destructive action re-authenticates with a password or a typed username.
+    has_password: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class AccountDeleteRequest(BaseModel):
+    """Confirmation for irreversible account deletion.
+
+    Password-based accounts re-authenticate with `password`. OAuth-only
+    accounts have no password to check, so they confirm by typing their own
+    username into `confirm_username`.
+    """
+
+    password: str | None = Field(default=None, max_length=128)
+    confirm_username: str | None = Field(default=None, max_length=100)
+
+
+class AccountDeletedResponse(BaseModel):
+    """Result of deleting an account."""
+
+    detail: str
+    rows_deleted: int
