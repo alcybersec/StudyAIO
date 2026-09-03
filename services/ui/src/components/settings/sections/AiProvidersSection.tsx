@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Globe, Server, Sparkles, Terminal, type LucideIcon } from 'lucide-react'
+import { Cpu, Globe, Server, Sparkles, Terminal, type LucideIcon } from 'lucide-react'
 import { Badge, Button, Card, ErrorState, Input, Select, SkeletonCard, Textarea } from '../../ui'
 import { FieldSavedNote } from '../FieldSavedNote'
 import { useSavedFields } from '../useSavedFields'
@@ -57,6 +57,16 @@ const PROVIDERS: ProviderMeta[] = [
         : { text: 'no key configured', ok: false },
   },
   {
+    id: 'zai',
+    name: 'Z.ai',
+    icon: Cpu,
+    desc: 'GLM models via Z.ai — OpenAI-compatible, pay per token.',
+    status: (s) =>
+      s.zai_api_key
+        ? { text: `key configured (${s.zai_model || 'glm-5.3'})`, ok: true }
+        : { text: 'no key configured', ok: false },
+  },
+  {
     id: 'ollama',
     name: 'Ollama',
     icon: Server,
@@ -81,6 +91,7 @@ const PROVIDER_TITLES: Record<AgentBackend, string> = {
   claude_code: 'Claude Code CLI configuration',
   anthropic_api: 'Anthropic API configuration',
   openai: 'OpenAI configuration',
+  zai: 'Z.ai configuration',
   ollama: 'Ollama configuration',
 }
 
@@ -99,6 +110,9 @@ function toFormValues(s: Settings): AiProviderSettingsFormData {
     anthropic_api_key: s.anthropic_api_key ?? '',
     openai_api_key: s.openai_api_key ?? '',
     openai_model: s.openai_model ?? '',
+    zai_api_key: s.zai_api_key ?? '',
+    zai_model: s.zai_model ?? '',
+    zai_base_url: s.zai_base_url ?? '',
     ollama_base_url: s.ollama_base_url ?? '',
     ollama_model: s.ollama_model ?? '',
     embedding_backend: embedding,
@@ -362,6 +376,56 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {...registerWithSave('openai_model')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">e.g. gpt-4o, gpt-4o-mini, o1</p>
+              </div>
+            </>
+          )}
+
+          {backend === 'zai' && (
+            <>
+              <div>
+                <LabelRow htmlFor="zai_api_key" label="API key" saved={!!saved.zai_api_key} />
+                <Input
+                  id="zai_api_key"
+                  type="password"
+                  placeholder="your Z.ai API key"
+                  className="font-mono"
+                  autoComplete="off"
+                  error={errors.zai_api_key?.message}
+                  {...registerWithSave('zai_api_key')}
+                />
+                <p className="mt-1.5 text-xs text-text-faint">
+                  From the Z.ai console at z.ai/model-api
+                </p>
+              </div>
+              <div>
+                <LabelRow htmlFor="zai_model" label="Model" saved={!!saved.zai_model} />
+                <Input
+                  id="zai_model"
+                  placeholder="glm-5.3"
+                  className="font-mono"
+                  error={errors.zai_model?.message}
+                  {...registerWithSave('zai_model')}
+                />
+                <p className="mt-1.5 text-xs text-text-faint">
+                  e.g. glm-5.3 (flagship), glm-5.3-flash (cheaper), glm-4.6
+                </p>
+              </div>
+              <div>
+                <LabelRow
+                  htmlFor="zai_base_url"
+                  label="Endpoint"
+                  saved={!!saved.zai_base_url}
+                />
+                <Input
+                  id="zai_base_url"
+                  placeholder="https://api.z.ai/api/paas/v4/"
+                  className="font-mono"
+                  error={errors.zai_base_url?.message}
+                  {...registerWithSave('zai_base_url')}
+                />
+                <p className="mt-1.5 text-xs text-text-faint">
+                  Leave blank unless you use a regional or self-hosted endpoint.
+                </p>
               </div>
             </>
           )}

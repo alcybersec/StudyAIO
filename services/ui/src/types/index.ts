@@ -179,6 +179,9 @@ export interface Settings {
   claude_cli_credentials: string
   openai_api_key: string
   openai_model: string
+  zai_api_key: string
+  zai_model: string
+  zai_base_url: string
   ollama_base_url: string
   ollama_model: string
   embedding_backend: string
@@ -1163,4 +1166,31 @@ export interface InviteCreateRequest {
   max_uses?: number
   expires_in_days?: number | null
   note?: string
+}
+
+// ── Admin: user provisioning ──────────────────────────────────────
+
+export interface AdminUserCreateRequest {
+  email: string
+  username: string
+  role?: string
+  tier?: string
+}
+
+export interface AdminUserCreated {
+  user: AdminUser
+  /** Single-use set-password link; always returned so it can be relayed. */
+  setup_url: string
+  email_sent: boolean
+}
+
+export interface AdminUserLink {
+  detail: string
+  url: string
+  email_sent: boolean
+}
+
+export interface AdminUserDeleted {
+  detail: string
+  rows_deleted: number
 }

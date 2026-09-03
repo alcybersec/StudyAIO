@@ -1,18 +1,20 @@
 """Admin API endpoints — user management and system metrics."""
 
 from datetime import datetime
+from urllib.parse import quote_plus
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_role
+from app.config import settings
 from app.core.cache import DASHBOARD_TTL_SECONDS, cache_get, cache_set
 from app.core.database import get_session
 from app.models.invite_code import InviteCode
 from app.models.user import User
-from app.services import admin_service, invite_service
+from app.services import admin_service, invite_service, user_service
 
 logger = structlog.get_logger()
 
@@ -410,3 +412,192 @@ async def revoke_invite(
         raise HTTPException(status_code=404, detail="Invite code not found")
     await session.commit()
     return _invite_to_response(invite)
+
+
+# ── User provisioning and lifecycle ───────────────────────────────
+
+
+class UserCreateRequest(BaseModel):
+    """Request to create a user account."""
+
+    email: EmailStr
+    username: str = Field(min_length=3, max_length=100)
+    role: str = Field(default="user")
+    tier: str = Field(default="free")
+
+
+class UserCreatedResponse(BaseModel):
+    """A newly created account plus the link that activates it."""
+
+    user: UserResponse
+    #: Single-use link for the new user to set their password. Always returned
+    #: so an admin can relay it when SMTP is not configured.
+    setup_url: str
+    email_sent: bool
+
+
+class UserLinkResponse(BaseModel):
+    """A freshly minted link for an existing account."""
+
+    detail: str
+    url: str
+    email_sent: bool
+
+
+class UserDeletedResponse(BaseModel):
+    """Result of deleting a user."""
+
+    detail: str
+    rows_deleted: int
+
+
+def _absolute(path: str) -> str:
+    """Build a user-facing URL from a path."""
+    return f"{settings.app_base_url.rstrip('/')}{path}"
+
+
+def _user_to_response(user: User) -> UserResponse:
+    """Serialize an ORM user the way the list/patch endpoints already do.
+
+    `UserResponse` carries ISO-8601 strings, not datetimes, and has no
+    `from_attributes`, so an ORM instance cannot be validated directly.
+    """
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        role=user.role,
+        tier=user.tier,
+        is_active=user.is_active,
+        created_at=user.created_at.isoformat() if user.created_at else None,
+        last_login_at=user.last_login_at.isoformat() if user.last_login_at else None,
+    )
+
+
+@router.post(
+    "/admin/users",
+    response_model=UserCreatedResponse,
+    status_code=201,
+    summary="Create a user",
+    description="Create an account and return a single-use set-password link. Admin only.",
+)
+async def create_user(
+    body: UserCreateRequest,
+    admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> UserCreatedResponse:
+    """Create an account and mint its setup link (admin only)."""
+    try:
+        user, token = await admin_service.create_user(
+            session, body.email, body.username, role=body.role, tier=body.tier
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await session.commit()
+
+    setup_url = _absolute(f"/reset-password?token={quote_plus(token)}")
+    # Deliver after the commit so the link can never arrive before its token
+    # is durable. Failure is not fatal: the URL is in the response either way.
+    email_sent = False
+    try:
+        email_sent = await user_service.deliver_password_reset(user.email, token)
+    except Exception:
+        logger.warning("admin_create_user_email_failed", user_id=user.id, exc_info=True)
+
+    logger.info("admin_user_created", user_id=user.id, by=admin.id, email_sent=email_sent)
+    return UserCreatedResponse(
+        user=_user_to_response(user),
+        setup_url=setup_url,
+        email_sent=email_sent,
+    )
+
+
+@router.delete(
+    "/admin/users/{user_id}",
+    response_model=UserDeletedResponse,
+    summary="Delete a user",
+    description="Permanently delete a user and all their data. Admin only.",
+)
+async def delete_user(
+    user_id: str,
+    admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> UserDeletedResponse:
+    """Permanently delete a user and everything they own (admin only)."""
+    try:
+        counts = await admin_service.delete_user(session, user_id, acting_admin_id=admin.id)
+    except ValueError as exc:
+        message = str(exc)
+        raise HTTPException(
+            status_code=404 if message == "User not found" else 400, detail=message
+        ) from exc
+
+    await session.commit()
+    return UserDeletedResponse(
+        detail="Account and all of its data permanently deleted",
+        rows_deleted=sum(counts.values()),
+    )
+
+
+@router.post(
+    "/admin/users/{user_id}/password-reset",
+    response_model=UserLinkResponse,
+    summary="Send a password reset",
+    description="Mint a password reset link for a user. Admin only.",
+)
+async def send_password_reset(
+    user_id: str,
+    admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> UserLinkResponse:
+    """Mint a reset link for a locked-out user (admin only)."""
+    try:
+        user, token = await admin_service.issue_password_reset(session, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    await session.commit()
+
+    url = _absolute(f"/reset-password?token={quote_plus(token)}")
+    email_sent = False
+    try:
+        email_sent = await user_service.deliver_password_reset(user.email, token)
+    except Exception:
+        logger.warning("admin_password_reset_email_failed", user_id=user_id, exc_info=True)
+
+    logger.info("admin_password_reset_issued", user_id=user_id, by=admin.id)
+    return UserLinkResponse(detail="Password reset link created", url=url, email_sent=email_sent)
+
+
+@router.post(
+    "/admin/users/{user_id}/resend-verification",
+    response_model=UserLinkResponse,
+    summary="Resend email verification",
+    description="Mint a fresh email verification link for a user. Admin only.",
+)
+async def resend_verification(
+    user_id: str,
+    admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> UserLinkResponse:
+    """Re-issue an email verification link (admin only)."""
+    try:
+        user, token = await admin_service.issue_email_verification(session, user_id)
+    except ValueError as exc:
+        message = str(exc)
+        raise HTTPException(
+            status_code=404 if message == "User not found" else 400, detail=message
+        ) from exc
+
+    await session.commit()
+
+    url = _absolute(f"/verify-email?token={quote_plus(token)}")
+    email_sent = False
+    try:
+        email_sent = await user_service.deliver_email_verification(user.email, token)
+    except Exception:
+        logger.warning("admin_verification_email_failed", user_id=user_id, exc_info=True)
+
+    logger.info("admin_verification_issued", user_id=user_id, by=admin.id)
+    return UserLinkResponse(detail="Verification link created", url=url, email_sent=email_sent)

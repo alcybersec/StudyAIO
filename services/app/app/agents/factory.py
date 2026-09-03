@@ -16,6 +16,7 @@ def get_agent(user_settings: dict[str, Any] | None = None) -> AgentAdapter:
         user_settings: Optional per-user AI config from get_user_agent_config().
             Keys: agent_backend, claude_code_path, claude_model,
             anthropic_api_key, openai_api_key, openai_model,
+            zai_api_key, zai_model, zai_base_url,
             ollama_base_url, ollama_model, claude_cli_credentials.
 
     Returns:
@@ -45,6 +46,17 @@ def get_agent(user_settings: dict[str, Any] | None = None) -> AgentAdapter:
                 model=user_settings.get("openai_model", ""),
             )
         return OpenAIAdapter()
+
+    if backend == "zai":
+        from app.agents.zai_adapter import ZaiAdapter
+
+        if user_settings and user_settings.get("zai_api_key"):
+            return ZaiAdapter(
+                api_key=user_settings["zai_api_key"],
+                model=user_settings.get("zai_model", ""),
+                base_url=user_settings.get("zai_base_url", ""),
+            )
+        return ZaiAdapter()
 
     if backend == "ollama":
         from app.agents.ollama_adapter import OllamaAdapter

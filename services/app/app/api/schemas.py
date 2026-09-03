@@ -325,6 +325,13 @@ class SettingsResponse(BaseModel):
     agent_backend: str
     anthropic_api_key: str
     claude_cli_credentials: str = ""
+    openai_api_key: str = ""
+    openai_model: str = ""
+    zai_api_key: str = ""
+    zai_model: str = ""
+    zai_base_url: str = ""
+    ollama_base_url: str = ""
+    ollama_model: str = ""
     embedding_backend: str = "sentence_transformers"
     classification_confidence_threshold: float
     flashcard_count_per_week: int
@@ -344,6 +351,13 @@ class SettingsUpdateRequest(BaseModel):
     agent_backend: str | None = None
     anthropic_api_key: str | None = None
     claude_cli_credentials: str | None = None
+    openai_api_key: str | None = None
+    openai_model: str | None = None
+    zai_api_key: str | None = None
+    zai_model: str | None = None
+    zai_base_url: str | None = None
+    ollama_base_url: str | None = None
+    ollama_model: str | None = None
     embedding_backend: str | None = None
     classification_confidence_threshold: float | None = None
     flashcard_count_per_week: int | None = None
