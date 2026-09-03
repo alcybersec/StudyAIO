@@ -3,7 +3,7 @@
 from datetime import UTC, date, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -14,6 +14,7 @@ from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.course import Course
 from app.models.exam import Exam
+from app.models.magic_link import MagicLink
 from app.models.pipeline_run import PipelineRun
 from app.models.study_session import StudySession
 from app.models.subscription import Subscription
@@ -84,14 +85,40 @@ async def list_users(
     ], total
 
 
+async def _repoint_email(session: AsyncSession, user: User, email: str) -> None:
+    """Move a user's login address, invalidating anything addressed to the old one.
+
+    Every unused MagicLink for this user is marked used: password-reset and
+    verification tokens are keyed on user_id and validated by hash, never
+    against the address they were sent to, so a link already delivered to the
+    old inbox would otherwise still redeem against the corrected account.
+
+    Raises:
+        UserExistsError: If `email` already belongs to a different account.
+    """
+    clash = await session.execute(select(User).where(User.email == email, User.id != user.id))
+    if clash.scalar_one_or_none():
+        raise UserExistsError("email")
+    user.email = email
+    # A new address is unproven until its owner follows a link.
+    user.email_verified = False
+    await session.execute(
+        update(MagicLink)
+        .where(MagicLink.user_id == user.id, MagicLink.used_at.is_(None))
+        .values(used_at=datetime.now(UTC))
+    )
+
+
 async def update_user(
     session: AsyncSession,
     user_id: str,
     role: str | None = None,
     tier: str | None = None,
     is_active: bool | None = None,
+    email: str | None = None,
+    acting_admin_id: str | None = None,
 ) -> dict | None:
-    """Update user role, tier, or active status.
+    """Update user role, tier, active status, or email.
 
     Args:
         session: Database session.
@@ -99,9 +126,14 @@ async def update_user(
         role: New role (admin, user, demo).
         tier: New tier (free, pro).
         is_active: New active status.
+        email: New email address.
+        acting_admin_id: The admin performing the update, for the audit log.
 
     Returns:
         Updated user dict or None if not found.
+
+    Raises:
+        UserExistsError: If email is already used by another user.
     """
     user = await session.get(User, user_id)
     if not user:
@@ -116,6 +148,10 @@ async def update_user(
     # Guarding only `delete_user` would leave two open paths to a locked-out
     # instance, recoverable only with direct SQL access.
     await _guard_last_admin(session, user, role=role, is_active=is_active)
+
+    old_email = user.email
+    if email is not None and email != user.email:
+        await _repoint_email(session, user, email)
 
     if role is not None:
         user.role = role
@@ -133,6 +169,9 @@ async def update_user(
         role=role,
         tier=tier,
         is_active=is_active,
+        old_email=old_email if user.email != old_email else None,
+        new_email=user.email if user.email != old_email else None,
+        by=acting_admin_id,
     )
 
     return {
@@ -595,6 +634,85 @@ async def create_user(
         raise RuntimeError("Could not mint a setup link for the new account")
 
     logger.info("admin_created_user", user_id=user.id, role=role, tier=tier)
+    return user, minted.raw_token
+
+
+async def ensure_admin(
+    session: AsyncSession,
+    email: str,
+    username: str | None = None,
+) -> tuple[User, str]:
+    """Guarantee one reachable admin account and mint its set-password link.
+
+    Targets the self-hosted default admin row if it exists at all, regardless
+    of its current role, so every course and artifact it already owns keeps
+    its owner and no data migration is needed. Falls back to any other admin,
+    and creates one only when the instance has none.
+
+    This is the only path to a first admin credential: `require_role("admin")`
+    needs a real JWT, and the default row is created with no password and an
+    undeliverable address, so neither the admin API nor a self-service reset
+    can produce one.
+
+    Args:
+        session: Database session.
+        email: Address the admin should be reachable at.
+        username: Display name, used only when creating a new account.
+
+    Returns:
+        (user, raw_setup_token)
+
+    The caller must commit. Neither the repointed row nor the returned token
+    is durable until then.
+
+    Raises:
+        UserExistsError: If `email` already belongs to a different account.
+            On the create path (no existing admin), also raised if
+            `username` collides with an existing account.
+    """
+    # Layering: the service layer should not import the API layer at module
+    # scope, so this stays a local import even though there is no cycle.
+    from app.api.deps import DEFAULT_ADMIN_ID
+
+    user = await session.get(User, DEFAULT_ADMIN_ID)
+    if user is None:
+        result = await session.execute(
+            select(User)
+            .where(User.role == "admin")
+            .order_by(User.created_at.nulls_last(), User.id)
+            .limit(1)
+        )
+        user = result.scalar_one_or_none()
+
+    if user is None:
+        return await create_user(session, email, username or "admin", role="admin", tier="pro")
+
+    was_repointed = user.email != email
+    was_promoted = user.role != "admin"
+    was_reactivated = not user.is_active
+
+    if was_repointed:
+        await _repoint_email(session, user, email)
+
+    # Demotion or deactivation is one of the lockouts this recovers from.
+    user.role = "admin"
+    user.is_active = True
+    user.updated_at = datetime.now(UTC)
+    await session.flush()
+
+    minted = await user_service.request_password_reset(
+        session, user.email, expires_in_hours=user_service.ACCOUNT_SETUP_TOKEN_HOURS
+    )
+    if minted is None:  # pragma: no cover - the row was just flushed
+        raise RuntimeError("Could not mint a setup link for the admin account")
+
+    logger.info(
+        "admin_ensured",
+        user_id=user.id,
+        repointed=was_repointed,
+        promoted=was_promoted,
+        reactivated=was_reactivated,
+    )
     return user, minted.raw_token
 
 

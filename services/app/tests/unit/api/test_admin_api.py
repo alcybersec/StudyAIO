@@ -193,6 +193,46 @@ class TestAdminUpdateUser:
         )
         assert response.status_code == 400
 
+    async def test_update_user_email_only(self, admin_client):
+        """Admin can correct a user's address with no other field set."""
+        mock_result = {
+            "id": "u-1",
+            "email": "real@example.com",
+            "username": "alice",
+            "role": "user",
+            "tier": "free",
+            "is_active": True,
+            "created_at": "2025-01-01T00:00:00",
+            "last_login_at": None,
+        }
+        with patch(
+            "app.api.admin.admin_service.update_user",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ) as mock_update:
+            response = await admin_client.patch(
+                "/api/admin/users/u-1",
+                json={"email": "real@example.com"},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["email"] == "real@example.com"
+        assert mock_update.call_args.kwargs["email"] == "real@example.com"
+
+    async def test_update_user_invalid_email_returns_422(self, admin_client):
+        """A malformed address is rejected before it ever reaches the service."""
+        with patch(
+            "app.api.admin.admin_service.update_user",
+            new_callable=AsyncMock,
+        ) as mock_update:
+            response = await admin_client.patch(
+                "/api/admin/users/u-1",
+                json={"email": "not-an-email"},
+            )
+
+        assert response.status_code == 422
+        mock_update.assert_not_called()
+
 
 @pytest.mark.asyncio
 class TestAdminMetrics:
