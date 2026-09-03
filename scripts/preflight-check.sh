@@ -31,8 +31,14 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 # Load .env (without exporting to avoid polluting shell)
+# The trailing `|| true` matters: under `set -euo pipefail`, a key that is
+# absent from the env file makes grep exit 1, which (via pipefail) makes this
+# whole function return 1. Callers assign the result with `VAR=$(get_val ...)`,
+# and that assignment failing trips `set -e` and kills the script right there
+# — silently, with no error printed. `|| true` keeps a missing key behaving
+# the same as get_val's own documented contract: empty string, not a crash.
 get_val() {
-    grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/^"//' | sed 's/"$//'
+    grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/^"//' | sed 's/"$//' || true
 }
 
 # ── JWT Secret ────────────────────────────────────────────────────
@@ -117,6 +123,37 @@ if [[ -z "$SMTP_HOST" || -z "$SMTP_FROM" ]]; then
 else
     ok "SMTP configured ($SMTP_HOST)"
 fi
+
+# ── AI provider credentials ───────────────────────────────────────
+
+AGENT_BACKEND=$(get_val "AGENT_BACKEND")
+AGENT_BACKEND=${AGENT_BACKEND:-claude_code}
+
+# A backend selected without its key fails at the first pipeline stage, and the
+# symptom (uploads that never produce a summary) points nowhere near the cause.
+require_key() {
+    local backend="$1" var="$2"
+    if [[ -z "$(get_val "$var")" ]]; then
+        error "AGENT_BACKEND=$backend but $var is unset — every pipeline run will fail."
+    else
+        ok "AGENT_BACKEND=$backend with $var set"
+    fi
+}
+
+case "$AGENT_BACKEND" in
+    zai)           require_key zai ZAI_API_KEY ;;
+    openai)        require_key openai OPENAI_API_KEY ;;
+    anthropic_api) require_key anthropic_api ANTHROPIC_API_KEY ;;
+    claude_code)
+        ok "AGENT_BACKEND=claude_code — credentials come from the mounted ~/.claude"
+        ;;
+    ollama)
+        ok "AGENT_BACKEND=ollama — no API key required"
+        ;;
+    *)
+        error "AGENT_BACKEND='$AGENT_BACKEND' is not one of: claude_code, anthropic_api, openai, zai, ollama"
+        ;;
+esac
 
 # ── Cookie Secure ─────────────────────────────────────────────────
 
