@@ -36,22 +36,40 @@ if [[ ! -r "$ENV_FILE" ]]; then
 fi
 
 # Load .env (without exporting to avoid polluting shell)
-# The trailing `|| true` matters: under `set -euo pipefail`, a key that is
-# absent from the env file makes grep exit 1, which (via pipefail) makes this
-# whole function return 1. Callers assign the result with `VAR=$(get_val ...)`,
-# and that assignment failing trips `set -e` and kills the script right there
-# — silently, with no error printed. `|| true` keeps a missing key behaving
-# the same as get_val's own documented contract: empty string, not a crash.
-# The sed strips a whitespace-preceded `#...` inline comment on unquoted
-# values, matching python-dotenv's rule (config.py's env_file loader uses
-# python-dotenv, and .env.example ships commented-out lines like
+# The trailing `|| true` on the grep pipeline matters: under `set -euo
+# pipefail`, a key that is absent from the env file makes grep exit 1, which
+# (via pipefail) makes that pipeline return 1. Callers assign the result with
+# `VAR=$(get_val ...)`, and that assignment failing trips `set -e` and kills
+# the script right there — silently, with no error printed. `|| true` keeps a
+# missing key behaving the same as get_val's own documented contract: empty
+# string, not a crash. (The `local raw` declaration below is a separate
+# statement from the assignment that follows it, so it does not swallow that
+# assignment's exit status the way `local raw=$(...)` would.)
+#
+# Quoting mirrors python-dotenv's actual rules (config.py's env_file loader
+# uses python-dotenv, and .env.example ships commented-out lines like
 # `AGENT_BACKEND=claude_code   # claude_code | anthropic_api | ...` that an
-# operator uncomments as-is) — without this, a value like
-# `GLOBAL_MAX_AI_CALLS_PER_DAY=0   # 0 = unlimited` would compare unequal to
-# both "0" and "", and the comment text would leak into every message.
+# operator uncomments as-is, plus `infisical export --format=dotenv` — the
+# secret-management pattern on hosts this script runs against — which
+# single-quotes every value it emits):
+#   - A single- or double-quoted value: the quotes delimit the value.
+#     Anything after the closing quote (e.g. a trailing comment) is
+#     discarded, but a `#` *inside* the quotes is literal value content, not
+#     a comment marker — `POSTGRES_PASSWORD='ab#cd'` must not be truncated.
+#   - An unquoted value: a whitespace-preceded `#...` inline comment is
+#     stripped, along with trailing whitespace. Without this, a value like
+#     `GLOBAL_MAX_AI_CALLS_PER_DAY=0   # 0 = unlimited` would compare unequal
+#     to both "0" and "", and the comment text would leak into every message.
 get_val() {
-    grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- \
-        | sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]+$//; s/^"//; s/"$//' || true
+    local raw
+    raw=$(grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true)
+    if [[ "$raw" =~ ^[[:space:]]*\'(.*)\'[[:space:]]*(#.*)?$ ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+    elif [[ "$raw" =~ ^[[:space:]]*\"(.*)\"[[:space:]]*(#.*)?$ ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+    else
+        printf '%s' "$raw" | sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]+$//'
+    fi
 }
 
 # ── JWT Secret ────────────────────────────────────────────────────
