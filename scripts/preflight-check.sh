@@ -155,6 +155,24 @@ case "$AGENT_BACKEND" in
         ;;
 esac
 
+# ── Spend ceiling ─────────────────────────────────────────────────
+
+GLOBAL_CALLS=$(get_val "GLOBAL_MAX_AI_CALLS_PER_DAY")
+GLOBAL_TOKENS=$(get_val "GLOBAL_MAX_AI_TOKENS_PER_DAY")
+GLOBAL_CALLS=${GLOBAL_CALLS:-0}
+GLOBAL_TOKENS=${GLOBAL_TOKENS:-0}
+
+# Per-user quotas cannot bound the operator's bill: N testers times their
+# individual limits is unbounded in aggregate. Only in SaaS mode — a
+# self-hosted box is paying for its own usage.
+if [[ "$SELF_HOSTED" == "false" ]]; then
+    if [[ "$GLOBAL_CALLS" == "0" && "$GLOBAL_TOKENS" == "0" ]]; then
+        warn "GLOBAL_MAX_AI_CALLS_PER_DAY and GLOBAL_MAX_AI_TOKENS_PER_DAY are both 0 (unlimited) — nothing caps what the instance spends."
+    else
+        ok "Spend ceiling set (calls=$GLOBAL_CALLS, tokens=$GLOBAL_TOKENS; 0 = unlimited)"
+    fi
+fi
+
 # ── Cookie Secure ─────────────────────────────────────────────────
 
 COOKIE_SECURE=$(get_val "COOKIE_SECURE")

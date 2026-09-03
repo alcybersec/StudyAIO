@@ -88,3 +88,61 @@ class TestProviderCredential:
         result = _run(_write_env(tmp_path, AGENT_BACKEND="gpt5-turbo-max"))
         assert result.returncode == 1
         assert "AGENT_BACKEND" in result.stdout
+
+
+class TestSpendCeiling:
+    """SaaS mode without a ceiling is a warning, not an error."""
+
+    def test_warns_when_both_ceilings_are_unset(self, tmp_path):
+        result = _run(
+            _write_env(
+                tmp_path,
+                AGENT_BACKEND="zai",
+                ZAI_API_KEY="zk-live-x",
+                GLOBAL_MAX_AI_CALLS_PER_DAY=None,
+            )
+        )
+        assert result.returncode == 0, result.stdout
+        assert "WARN" in result.stdout
+        assert "GLOBAL_MAX_AI" in result.stdout
+
+    def test_warns_when_both_ceilings_are_zero(self, tmp_path):
+        """0 means unlimited, which is the same exposure as unset."""
+        result = _run(
+            _write_env(
+                tmp_path,
+                AGENT_BACKEND="zai",
+                ZAI_API_KEY="zk-live-x",
+                GLOBAL_MAX_AI_CALLS_PER_DAY="0",
+                GLOBAL_MAX_AI_TOKENS_PER_DAY="0",
+            )
+        )
+        assert result.returncode == 0, result.stdout
+        assert "GLOBAL_MAX_AI" in result.stdout
+
+    def test_a_token_ceiling_alone_is_enough(self, tmp_path):
+        result = _run(
+            _write_env(
+                tmp_path,
+                AGENT_BACKEND="zai",
+                ZAI_API_KEY="zk-live-x",
+                GLOBAL_MAX_AI_CALLS_PER_DAY="0",
+                GLOBAL_MAX_AI_TOKENS_PER_DAY="2000000",
+            )
+        )
+        assert result.returncode == 0, result.stdout
+        assert "Spend ceiling set" in result.stdout
+
+    def test_self_hosted_is_not_warned(self, tmp_path):
+        """A single-user box paying its own bill needs no ceiling."""
+        result = _run(
+            _write_env(
+                tmp_path,
+                SELF_HOSTED="true",
+                AGENT_BACKEND="claude_code",
+                SMTP_HOST=None,
+                SMTP_FROM_EMAIL=None,
+                GLOBAL_MAX_AI_CALLS_PER_DAY=None,
+            )
+        )
+        assert "GLOBAL_MAX_AI" not in result.stdout
