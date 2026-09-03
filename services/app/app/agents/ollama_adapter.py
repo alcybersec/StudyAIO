@@ -63,6 +63,12 @@ class OllamaAdapter(AgentAdapter):
             raise AgentError(f"Ollama API call failed: {e}") from e
 
         result = (response.message.content or "").strip()
+        # Local inference costs no API spend, but the call is still counted so
+        # quotas and metering behave the same across backends.
+        self.usage.add(
+            input_tokens=getattr(response, "prompt_eval_count", 0) or 0,
+            output_tokens=getattr(response, "eval_count", 0) or 0,
+        )
         logger.info(
             "ollama_api_response",
             response_length=len(result),

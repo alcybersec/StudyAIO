@@ -6,7 +6,8 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import UserExistsError
+from app.config import settings
+from app.core.exceptions import LastAdminError, UserExistsError
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.chat_message import ChatMessage
@@ -20,7 +21,7 @@ from app.models.usage_record import UsageRecord
 from app.models.user import User
 from app.models.user_achievement import UserAchievement
 from app.models.user_xp import UserXP
-from app.services import account_service, user_service
+from app.services import account_service, quota_service, user_service
 
 logger = structlog.get_logger()
 
@@ -106,13 +107,19 @@ async def update_user(
     if not user:
         return None
 
+    if role is not None and role not in ("admin", "user", "demo"):
+        raise ValueError(f"Invalid role: {role}")
+    if tier is not None and tier not in ("free", "pro"):
+        raise ValueError(f"Invalid tier: {tier}")
+
+    # Demotion and deactivation strip an admin just as surely as deletion does.
+    # Guarding only `delete_user` would leave two open paths to a locked-out
+    # instance, recoverable only with direct SQL access.
+    await _guard_last_admin(session, user, role=role, is_active=is_active)
+
     if role is not None:
-        if role not in ("admin", "user", "demo"):
-            raise ValueError(f"Invalid role: {role}")
         user.role = role
     if tier is not None:
-        if tier not in ("free", "pro"):
-            raise ValueError(f"Invalid tier: {tier}")
         user.tier = tier
     if is_active is not None:
         user.is_active = is_active
@@ -169,6 +176,8 @@ async def get_system_metrics(session: AsyncSession) -> dict:
         await session.execute(select(func.coalesce(func.sum(LectureArtifact.file_size_bytes), 0)))
     ).scalar_one()
 
+    ai_calls_today, ai_tokens_today = await quota_service.get_global_usage_today(session)
+
     return {
         "total_users": total_users,
         "total_artifacts": total_artifacts,
@@ -176,6 +185,12 @@ async def get_system_metrics(session: AsyncSession) -> dict:
         "pipeline_runs_24h": pipeline_runs_24h,
         "total_storage_bytes": total_storage_bytes,
         "total_storage_mb": round(total_storage_bytes / (1024 * 1024), 2),
+        # Today's instance-wide AI spend, so the ceiling is visible before it
+        # fires rather than only when a user is turned away.
+        "ai_calls_today": ai_calls_today,
+        "ai_tokens_today": ai_tokens_today,
+        "ai_calls_ceiling": int(settings.global_max_ai_calls_per_day or 0),
+        "ai_tokens_ceiling": int(settings.global_max_ai_tokens_per_day or 0),
     }
 
 
@@ -601,6 +616,35 @@ async def count_active_admins(session: AsyncSession, excluding: str | None = Non
     return (await session.execute(query)).scalar_one()
 
 
+async def _guard_last_admin(
+    session: AsyncSession,
+    user: User,
+    role: str | None = None,
+    is_active: bool | None = None,
+) -> None:
+    """Refuse a change that would leave the instance with no active admin.
+
+    Args:
+        session: Database session.
+        user: The user being changed.
+        role: Requested new role, if any.
+        is_active: Requested new active status, if any.
+
+    Raises:
+        LastAdminError: If the change removes the last active admin.
+    """
+    if user.role != "admin" or not user.is_active:
+        return  # Not currently an active admin — nothing to protect.
+
+    losing_role = role is not None and role != "admin"
+    losing_access = is_active is False
+    if not (losing_role or losing_access):
+        return
+
+    if await count_active_admins(session, excluding=user.id) == 0:
+        raise LastAdminError("demote" if losing_role else "deactivate")
+
+
 async def delete_user(session: AsyncSession, user_id: str, acting_admin_id: str) -> dict[str, int]:
     """Permanently delete a user and everything they own.
 
@@ -625,8 +669,12 @@ async def delete_user(session: AsyncSession, user_id: str, acting_admin_id: str)
     if user is None:
         raise ValueError("User not found")
 
-    if user.role == "admin" and await count_active_admins(session, excluding=user_id) == 0:
-        raise ValueError("Cannot delete the last active admin")
+    if (
+        user.role == "admin"
+        and user.is_active
+        and await count_active_admins(session, excluding=user_id) == 0
+    ):
+        raise LastAdminError("delete")
 
     counts = await account_service.delete_user_account(session, user_id)
     logger.info("admin_deleted_user", user_id=user_id, by=acting_admin_id)

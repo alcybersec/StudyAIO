@@ -182,6 +182,12 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
                 known_courses=known_courses,
             )
 
+            # Meter the AI spend. Usage accumulates on the adapter, so one call
+            # here records every request this stage made.
+            from app.services.billing_service import record_agent_usage
+
+            await record_agent_usage(session, user_id or artifact.user_id, agent)
+
             # Persist refreshed CLI credentials if applicable
             if hasattr(agent, "refreshed_credentials") and agent.refreshed_credentials:
                 try:

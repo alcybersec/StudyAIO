@@ -76,8 +76,14 @@ async def upload_file(
             detail=f"Unsupported file type: {ext}. Supported: {sorted(SUPPORTED_EXTENSIONS)}",
         )
 
-    # Check upload quota (free tier: 5/month)
+    # Check upload quota, and that the user can afford the whole pipeline run
+    # this upload will trigger. Checking here rather than per stage keeps an
+    # accepted upload whole — a stage failing on quota would leave an artifact
+    # with a summary and no flashcards.
     await quota_service.check_upload_quota(session, user.id, user.tier)
+    await quota_service.check_ai_quota(
+        session, user.id, user.tier, calls=quota_service.PIPELINE_AI_CALLS_PER_UPLOAD
+    )
 
     # Save to storage backend
     try:
@@ -317,8 +323,11 @@ async def quick_capture(
             detail=f"Captured text exceeds {MAX_CAPTURE_BYTES // (1024 * 1024)} MB limit",
         )
 
-    # Quick capture counts as an upload for quota purposes
+    # Quick capture counts as an upload, and triggers the same pipeline.
     await quota_service.check_upload_quota(session, user.id, user.tier)
+    await quota_service.check_ai_quota(
+        session, user.id, user.tier, calls=quota_service.PIPELINE_AI_CALLS_PER_UPLOAD
+    )
 
     try:
         artifact = await artifact_service.ingest_text_capture(

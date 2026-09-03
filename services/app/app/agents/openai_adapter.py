@@ -93,11 +93,15 @@ class OpenAIAdapter(AgentAdapter):
         result = (choice.message.content or "").strip()
 
         usage = response.usage
+        input_tokens = usage.prompt_tokens if usage else 0
+        output_tokens = usage.completion_tokens if usage else 0
+        # Metered by the caller (pipeline stages, API endpoints) after the call.
+        self.usage.add(input_tokens=input_tokens, output_tokens=output_tokens)
         logger.info(
             "openai_api_response",
             response_length=len(result),
-            input_tokens=usage.prompt_tokens if usage else 0,
-            output_tokens=usage.completion_tokens if usage else 0,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
         return result
 

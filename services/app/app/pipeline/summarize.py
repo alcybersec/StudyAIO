@@ -100,6 +100,12 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
             agent = get_agent(user_settings=user_agent_config)
             summary_result = await agent.generate_summary(extraction_data, existing_md)
 
+            # Meter the AI spend. Usage accumulates on the adapter, so one call
+            # here records every request this stage made.
+            from app.services.billing_service import record_agent_usage
+
+            await record_agent_usage(session, user_id or artifact.user_id, agent)
+
             # Persist refreshed CLI credentials if applicable
             if hasattr(agent, "refreshed_credentials") and agent.refreshed_credentials:
                 try:

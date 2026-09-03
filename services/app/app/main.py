@@ -48,7 +48,9 @@ from app.core.exceptions import (
     AuthorizationError,
     DemoRestrictionError,
     DuplicateFileError,
+    GlobalCeilingError,
     InviteError,
+    LastAdminError,
     QuotaExceededError,
     RegistrationClosedError,
     StudyAIOError,
@@ -295,6 +297,26 @@ async def demo_restriction_handler(request: Request, exc: DemoRestrictionError) 
             "detail": exc.message,
             "upgrade_url": "/register",
         },
+    )
+
+
+@app.exception_handler(LastAdminError)
+async def last_admin_handler(request: Request, exc: LastAdminError) -> JSONResponse:
+    """Handle last-admin protection with 400."""
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(GlobalCeilingError)
+async def global_ceiling_handler(request: Request, exc: GlobalCeilingError) -> JSONResponse:
+    """Handle the instance-wide daily AI ceiling with 429 + Retry-After."""
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": str(exc),
+            "resource": exc.resource,
+            "limit": exc.limit,
+        },
+        headers={"Retry-After": str(exc.retry_after_seconds)},
     )
 
 

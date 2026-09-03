@@ -302,3 +302,39 @@ async def record_usage(
         session.add(record)
 
     await session.flush()
+
+
+async def record_agent_usage(session: AsyncSession, user_id: str, agent: object) -> None:
+    """Record what an agent consumed, then reset its counter.
+
+    Pipeline stages call this after an AI call so the expensive bulk work shows
+    up in `usage_records` — historically it did not, which left
+    `*_max_ai_calls_per_day` bounding almost nothing and the token columns
+    permanently empty.
+
+    Best-effort: metering must never fail a pipeline stage that has already
+    produced its output.
+
+    Args:
+        session: Database session.
+        user_id: The owner of the work.
+        agent: An AgentAdapter whose `usage` holds the pending consumption.
+    """
+    usage = getattr(agent, "usage", None)
+    if usage is None or not getattr(usage, "calls", 0):
+        return
+
+    try:
+        await record_usage(
+            session,
+            user_id,
+            ai_calls=usage.calls,
+            tokens_input=usage.input_tokens,
+            tokens_output=usage.output_tokens,
+        )
+    except Exception:
+        logger.warning("agent_usage_record_failed", user_id=user_id, exc_info=True)
+        return
+
+    if hasattr(agent, "reset_usage"):
+        agent.reset_usage()
