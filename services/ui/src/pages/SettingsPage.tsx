@@ -44,6 +44,12 @@ const AccountSection = lazy(() =>
   })),
 )
 
+const DataPrivacySection = lazy(() =>
+  import('../components/settings/sections/DataPrivacySection').then((m) => ({
+    default: m.DataPrivacySection,
+  })),
+)
+
 const SECTION_COMPONENTS: Record<SettingsSectionId, React.LazyExoticComponent<() => React.JSX.Element | null>> = {
   appearance: AppearanceSection,
   ai: AiProvidersSection,
@@ -52,6 +58,7 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, React.LazyExoticComponent<()
   calendar: CalendarSection,
   billing: BillingSettingsSection,
   account: AccountSection,
+  privacy: DataPrivacySection,
 }
 
 export function SettingsPage() {

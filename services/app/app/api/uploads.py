@@ -456,7 +456,15 @@ async def pipeline_events(
         # Send initial comment so EventSource.onopen fires immediately
         yield {"comment": "connected"}
 
-        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        # Connect timeout only: this is a long-lived subscriber, and a socket
+        # read timeout would fight the explicit `get_message(timeout=...)`
+        # below. The connect timeout is what stops an unreachable Redis from
+        # hanging the request forever.
+        redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=settings.redis_socket_timeout,
+        )
         pubsub = redis.pubsub()
         await pubsub.subscribe(PIPELINE_EVENTS_CHANNEL)
         heartbeat_interval = 15

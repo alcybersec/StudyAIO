@@ -4,6 +4,10 @@ from celery import Celery
 from celery.schedules import crontab
 
 from app.config import settings
+from app.core.observability import init_sentry
+
+# Error monitoring for the worker process (no-op unless SENTRY_DSN is set).
+init_sentry("worker")
 
 celery_app = Celery(
     "studyaio",

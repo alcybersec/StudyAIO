@@ -280,6 +280,33 @@ Metrics endpoint: `GET /metrics` (Prometheus text format).
 
 Includes standard FastAPI metrics: request count, latency histograms, in-progress requests.
 
+### Error Monitoring (Sentry)
+
+Off unless a DSN is set — no DSN means the SDK is never initialized, in the API,
+the worker, or the browser.
+
+```env
+SENTRY_DSN=            # the DSN from your Sentry project settings
+SENTRY_ENVIRONMENT=production
+SENTRY_TRACES_SAMPLE_RATE=0.1   # 0 disables performance tracing
+SENTRY_RELEASE=                  # optional, e.g. the git SHA
+```
+
+The frontend DSN is compiled in at **build** time, not read at runtime:
+
+```bash
+docker build --build-arg VITE_SENTRY_DSN=https://... services/ui
+```
+
+In CI this comes from the `VITE_SENTRY_DSN` repository secret (see
+`.github/workflows/deploy.yml`); leaving the secret unset builds a UI with
+monitoring disabled.
+
+**What is scrubbed.** `send_default_pii=False`, plus a `before_send` hook that
+filters `Authorization`/`Cookie`/`x-api-key` headers, drops cookies entirely, and
+replaces `?token=` in URLs. Password-reset and email-verification links are bearer
+credentials for the account — they must never reach a third-party service.
+
 ### Health Check
 
 ```bash
@@ -309,6 +336,12 @@ curl https://your-domain.com/health
 | `MAX_UPLOAD_SIZE_MB` | `100` | Max upload file size |
 | `AGENT_BACKEND` | `claude_code` | AI backend |
 | `PROMETHEUS_ENABLED` | `false` | Enable `/metrics` |
+| `REGISTRATION_MODE` | `open` | `open`, `invite` (a valid code is required), or `closed`. Enforced server-side on `POST /api/auth/register`. |
+| `SENTRY_DSN` | | Error monitoring for API + worker. Empty disables it entirely. |
+| `SENTRY_ENVIRONMENT` | `development` | Environment tag on Sentry events |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Performance trace sampling; `0` disables |
+| `SENTRY_RELEASE` | | Release tag, e.g. the git SHA |
+| `VITE_SENTRY_DSN` | | Frontend DSN — a **build arg**, not runtime |
 
 ---
 
@@ -333,6 +366,61 @@ cannot be used to enumerate users. Check the logs to see what actually happened:
   bearer credential for the account.
 - `password_reset_link_not_emailed` — self-hosted only. The link is included in
   this log line so a single-user operator with no mail server can still get in.
+
+---
+
+## Running a Closed Beta
+
+Before inviting anyone, run `make preflight` — it now fails on the two
+configurations that break a beta silently.
+
+**1. Multi-user mode.** `SELF_HOSTED=false`. Left at `true`, the API falls back
+to a single shared admin identity and there are no real accounts.
+
+**2. Working outbound email.** Set `SMTP_HOST` and `SMTP_FROM_EMAIL`. With them
+empty, `send_email()` returns `False` without sending, so password resets and
+verification emails quietly do nothing — a tester who forgets their password has
+no way back into their account. Preflight treats this as an error in SaaS mode.
+
+**3. Gate registration.**
+
+```env
+REGISTRATION_MODE=invite
+```
+
+Then mint a code per tester (Admin → Invite codes, or the API):
+
+```bash
+curl -X POST https://your-domain.com/api/admin/invites \
+  -H 'Content-Type: application/json' \
+  --cookie 'access_token=<admin token>' \
+  -d '{"max_uses": 1, "expires_in_days": 30, "note": "Sam"}'
+# {"code": "BETA-7F3KQ2MN", ...}
+```
+
+Codes are single-use by default and revocable (`DELETE /api/admin/invites/{id}`).
+`users.invite_code_id` records which code each account used, so a code that leaks
+can be traced to the accounts it created.
+
+**4. Raise the free-tier limits.** `app/services/quota_service.py` caps the free
+tier at 1 course, 5 uploads/month and 20 AI calls/day. A real student hits that in
+one sitting — give beta testers `tier=pro` (Admin → Users) or raise the constants.
+
+**5. Decide who pays for AI.** `AGENT_BACKEND=claude_code` shells out to the CLI
+using the credentials mounted into the worker — every tester's usage bills to that
+account. Either accept that behind the quota limits, or set `AGENT_BACKEND=anthropic_api`
+with your own key. Testers *can* supply their own credentials in Settings → AI
+Providers, but it is a rough first-run experience.
+
+**6. Turn on Sentry.** See *Error Monitoring* above. Without it, "it broke" reports
+arrive with no timestamp and no stack.
+
+### Deleting a tester's data
+
+`DELETE /api/auth/account` (Settings → Data & Privacy) hard-deletes the account,
+every row it owns across all 40 tables, and its files in storage. There is no
+grace period and no recovery. `GET /api/auth/account/export` returns the same
+data as JSON, minus credentials — worth suggesting before anyone deletes.
 
 ---
 

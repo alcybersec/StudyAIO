@@ -79,6 +79,45 @@ else
     ok "CORS_ORIGINS: $CORS"
 fi
 
+# ── Registration gate ─────────────────────────────────────────────
+
+REG_MODE=$(get_val "REGISTRATION_MODE")
+REG_MODE=${REG_MODE:-open}
+
+case "$REG_MODE" in
+    invite)
+        ok "REGISTRATION_MODE=invite — an invite code is required to sign up"
+        ;;
+    closed)
+        ok "REGISTRATION_MODE=closed — nobody can create an account"
+        ;;
+    open)
+        if [[ "$SELF_HOSTED" == "false" ]]; then
+            warn "REGISTRATION_MODE=open — anyone who finds the URL can create an account. Use 'invite' for a closed beta."
+        else
+            ok "REGISTRATION_MODE=open (self-hosted mode)"
+        fi
+        ;;
+    *)
+        error "REGISTRATION_MODE='$REG_MODE' is not one of: open, invite, closed"
+        ;;
+esac
+
+# ── Outbound email ────────────────────────────────────────────────
+
+SMTP_HOST=$(get_val "SMTP_HOST")
+SMTP_FROM=$(get_val "SMTP_FROM_EMAIL")
+
+if [[ -z "$SMTP_HOST" || -z "$SMTP_FROM" ]]; then
+    if [[ "$SELF_HOSTED" == "false" ]]; then
+        error "SMTP_HOST/SMTP_FROM_EMAIL are unset — password resets and email verification will silently do nothing, locking out any user who forgets their password."
+    else
+        warn "SMTP is not configured — reset links are written to the API log instead of emailed."
+    fi
+else
+    ok "SMTP configured ($SMTP_HOST)"
+fi
+
 # ── Cookie Secure ─────────────────────────────────────────────────
 
 COOKIE_SECURE=$(get_val "COOKIE_SECURE")

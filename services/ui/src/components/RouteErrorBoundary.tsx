@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { useNavigate, useRouteError } from 'react-router-dom'
+import { captureError } from '../lib/monitoring'
 import { RefreshCw } from 'lucide-react'
 import { Button } from './ui/Button'
 import { ErrorState } from './ui/ErrorState'
@@ -27,8 +29,14 @@ function errorDetail(error: unknown): string {
 export function RouteErrorBoundary() {
   const error = useRouteError()
   const navigate = useNavigate()
+  const isStaleChunk = isChunkLoadError(error)
 
-  if (isChunkLoadError(error)) {
+  useEffect(() => {
+    // A stale chunk means the user is on an old build, not that the app broke.
+    if (!isStaleChunk) captureError(error, { boundary: 'route' })
+  }, [error, isStaleChunk])
+
+  if (isStaleChunk) {
     return (
       <div role="alert" className="max-w-lg mx-auto mt-16 px-6 text-center space-y-3">
         <p className="text-sm font-medium text-text">New version available — reload to update</p>

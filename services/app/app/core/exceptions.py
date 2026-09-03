@@ -97,6 +97,19 @@ class UserExistsError(StudyAIOError):
         super().__init__(f"A user with this {field} already exists")
 
 
+class InviteError(StudyAIOError):
+    """Raised when an invite code is missing, unknown, expired, or used up."""
+
+    pass
+
+
+class RegistrationClosedError(StudyAIOError):
+    """Raised when registration is disabled entirely (REGISTRATION_MODE=closed)."""
+
+    def __init__(self, message: str = "Registration is currently closed"):
+        super().__init__(message)
+
+
 class QuotaExceededError(StudyAIOError):
     """Raised when a user exceeds their tier's usage quota."""
 

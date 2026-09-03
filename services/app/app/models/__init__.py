@@ -22,6 +22,7 @@ from app.models.exam import Exam
 from app.models.extraction import Extraction
 from app.models.flashcard import Flashcard
 from app.models.flashcard_review import FlashcardReview
+from app.models.invite_code import InviteCode
 from app.models.magic_link import MagicLink
 from app.models.notification import Notification
 from app.models.notification_preference import NotificationPreference
@@ -63,6 +64,7 @@ __all__ = [
     "Flashcard",
     "FlashcardReview",
     "LectureArtifact",
+    "InviteCode",
     "MagicLink",
     "Notification",
     "NotificationPreference",

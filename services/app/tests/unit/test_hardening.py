@@ -196,3 +196,32 @@ class TestCORSConfiguration:
             },
         )
         assert response.headers.get("access-control-allow-origin") != "http://attacker.com"
+
+
+class TestRegistrationModeValidation:
+    """An unrecognized REGISTRATION_MODE must fail loudly at startup.
+
+    A typo like `invit` would otherwise fall through every check and behave as
+    `open`, throwing a closed beta open without any signal.
+    """
+
+    @pytest.mark.parametrize("mode", ["open", "invite", "closed"])
+    def test_accepts_the_valid_modes(self, mode):
+        from app.config import Settings
+
+        assert Settings(registration_mode=mode).registration_mode == mode
+
+    @pytest.mark.parametrize("mode", ["OPEN", "  Invite  ", "CLOSED"])
+    def test_normalizes_case_and_whitespace(self, mode):
+        from app.config import Settings
+
+        assert Settings(registration_mode=mode).registration_mode == mode.strip().lower()
+
+    @pytest.mark.parametrize("mode", ["invit", "opened", "", "invite-only", "true"])
+    def test_rejects_anything_else(self, mode):
+        from pydantic import ValidationError
+
+        from app.config import Settings
+
+        with pytest.raises(ValidationError):
+            Settings(registration_mode=mode)

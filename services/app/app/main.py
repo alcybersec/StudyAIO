@@ -48,11 +48,14 @@ from app.core.exceptions import (
     AuthorizationError,
     DemoRestrictionError,
     DuplicateFileError,
+    InviteError,
     QuotaExceededError,
+    RegistrationClosedError,
     StudyAIOError,
     UserExistsError,
 )
 from app.core.logging import configure_logging
+from app.core.observability import init_sentry
 from app.core.rate_limit import limiter
 
 logger = structlog.get_logger()
@@ -134,6 +137,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
     logger.info("studyaio_shutting_down")
 
+
+# Error monitoring — must run before the app is built so startup errors are caught.
+init_sentry("api")
 
 # Prometheus metrics (conditional)
 if settings.prometheus_enabled:
@@ -290,6 +296,20 @@ async def demo_restriction_handler(request: Request, exc: DemoRestrictionError) 
             "upgrade_url": "/register",
         },
     )
+
+
+@app.exception_handler(InviteError)
+async def invite_error_handler(request: Request, exc: InviteError) -> JSONResponse:
+    """Handle invalid invite codes with 400."""
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(RegistrationClosedError)
+async def registration_closed_handler(
+    request: Request, exc: RegistrationClosedError
+) -> JSONResponse:
+    """Handle registration being disabled with 403."""
+    return JSONResponse(status_code=403, content={"detail": str(exc)})
 
 
 @app.exception_handler(QuotaExceededError)
