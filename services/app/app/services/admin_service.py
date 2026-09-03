@@ -3,7 +3,7 @@
 from datetime import UTC, date, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -14,6 +14,7 @@ from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.course import Course
 from app.models.exam import Exam
+from app.models.magic_link import MagicLink
 from app.models.pipeline_run import PipelineRun
 from app.models.study_session import StudySession
 from app.models.subscription import Subscription
@@ -84,6 +85,30 @@ async def list_users(
     ], total
 
 
+async def _repoint_email(session: AsyncSession, user: User, email: str) -> None:
+    """Move a user's login address, invalidating anything addressed to the old one.
+
+    Every unused MagicLink for this user is marked used: password-reset and
+    verification tokens are keyed on user_id and validated by hash, never
+    against the address they were sent to, so a link already delivered to the
+    old inbox would otherwise still redeem against the corrected account.
+
+    Raises:
+        UserExistsError: If `email` already belongs to a different account.
+    """
+    clash = await session.execute(select(User).where(User.email == email, User.id != user.id))
+    if clash.scalar_one_or_none():
+        raise UserExistsError("email")
+    user.email = email
+    # A new address is unproven until its owner follows a link.
+    user.email_verified = False
+    await session.execute(
+        update(MagicLink)
+        .where(MagicLink.user_id == user.id, MagicLink.used_at.is_(None))
+        .values(used_at=datetime.now(UTC))
+    )
+
+
 async def update_user(
     session: AsyncSession,
     user_id: str,
@@ -91,6 +116,7 @@ async def update_user(
     tier: str | None = None,
     is_active: bool | None = None,
     email: str | None = None,
+    acting_admin_id: str | None = None,
 ) -> dict | None:
     """Update user role, tier, active status, or email.
 
@@ -101,6 +127,7 @@ async def update_user(
         tier: New tier (free, pro).
         is_active: New active status.
         email: New email address.
+        acting_admin_id: The admin performing the update, for the audit log.
 
     Returns:
         Updated user dict or None if not found.
@@ -122,13 +149,9 @@ async def update_user(
     # instance, recoverable only with direct SQL access.
     await _guard_last_admin(session, user, role=role, is_active=is_active)
 
+    old_email = user.email
     if email is not None and email != user.email:
-        clash = await session.execute(select(User).where(User.email == email, User.id != user.id))
-        if clash.scalar_one_or_none():
-            raise UserExistsError("email")
-        user.email = email
-        # A new address is unproven until its owner follows a link.
-        user.email_verified = False
+        await _repoint_email(session, user, email)
 
     if role is not None:
         user.role = role
@@ -146,6 +169,9 @@ async def update_user(
         role=role,
         tier=tier,
         is_active=is_active,
+        old_email=old_email if user.email != old_email else None,
+        new_email=user.email if user.email != old_email else None,
+        by=acting_admin_id,
     )
 
     return {
@@ -666,12 +692,7 @@ async def ensure_admin(
     was_reactivated = not user.is_active
 
     if was_repointed:
-        clash = await session.execute(select(User).where(User.email == email, User.id != user.id))
-        if clash.scalar_one_or_none():
-            raise UserExistsError("email")
-        user.email = email
-        # A new address is unproven until its owner follows a link.
-        user.email_verified = False
+        await _repoint_email(session, user, email)
 
     # Demotion or deactivation is one of the lockouts this recovers from.
     user.role = "admin"

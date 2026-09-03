@@ -131,7 +131,9 @@ class TestEnsureAdmin:
         found_result.scalar_one_or_none = MagicMock(return_value=found)
         empty_result = MagicMock()
         empty_result.scalar_one_or_none = MagicMock(return_value=None)
-        mock_session.execute = AsyncMock(side_effect=[found_result, empty_result])
+        # Calls: find-fallback-admin select, email-clash select, then the
+        # MagicLink revocation update — its result value is never read.
+        mock_session.execute = AsyncMock(side_effect=[found_result, empty_result, MagicMock()])
 
         with patch.object(
             admin_service.user_service,

@@ -379,3 +379,41 @@ class TestUpdateUserEmail:
 
         assert user.email == "keep@example.com"
         assert user.email_verified is True
+
+    async def test_revokes_outstanding_magic_links_on_email_change(self, mock_session):
+        """A setup/reset link already sitting in the old inbox must stop working.
+
+        Both password_reset and email_verification links are keyed on user_id
+        and validated by token hash alone, never against the address they were
+        sent to — so without this, a link mailed to a mistyped or hostile
+        address would still redeem against the corrected account.
+        """
+        user = _make_user_model(email="admin@studyaio.local", email_verified=True)
+        mock_session.get = AsyncMock(return_value=user)
+        clash = MagicMock()
+        clash.scalar_one_or_none = MagicMock(return_value=None)
+        mock_session.execute = AsyncMock(side_effect=[clash, MagicMock()])
+
+        await admin_service.update_user(mock_session, "user-001", email="real@example.com")
+
+        assert mock_session.execute.call_count == 2
+        revoke_stmt = mock_session.execute.call_args_list[1].args[0]
+        compiled = str(revoke_stmt)
+        assert "magic_links" in compiled
+        assert "used_at" in compiled
+
+    async def test_matching_the_current_email_is_a_noop(self, mock_session):
+        """A PATCH echoing the current address must not reset verification.
+
+        If the `email != user.email` short-circuit regressed, every no-op
+        PATCH that merely includes the user's own address would silently
+        un-verify them.
+        """
+        user = _make_user_model(email="same@example.com", email_verified=True)
+        mock_session.get = AsyncMock(return_value=user)
+        mock_session.execute = AsyncMock()
+
+        await admin_service.update_user(mock_session, "user-001", email="same@example.com")
+
+        assert user.email_verified is True
+        mock_session.execute.assert_not_called()

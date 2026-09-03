@@ -240,12 +240,16 @@ async def list_users(
     "/admin/users/{user_id}",
     response_model=UserResponse,
     summary="Update user",
-    description="Update a user's role, tier, or active status. Admin only.",
+    description=(
+        "Update a user's role, tier, active status, or email. Admin only. "
+        "Correcting the email resets email_verified to false — follow up with "
+        "POST /admin/users/{user_id}/resend-verification to re-verify it."
+    ),
 )
 async def update_user(
     user_id: str,
     body: UserUpdateRequest,
-    _admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> UserResponse:
     """Update user role, tier, active status, or email (admin only)."""
@@ -260,6 +264,7 @@ async def update_user(
             tier=body.tier,
             is_active=body.is_active,
             email=body.email,
+            acting_admin_id=admin.id,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
