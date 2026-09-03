@@ -6,6 +6,8 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import UserExistsError
+from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
@@ -18,8 +20,12 @@ from app.models.usage_record import UsageRecord
 from app.models.user import User
 from app.models.user_achievement import UserAchievement
 from app.models.user_xp import UserXP
+from app.services import account_service, user_service
 
 logger = structlog.get_logger()
+
+VALID_ROLES = {"admin", "user", "demo"}
+VALID_TIERS = {"free", "pro"}
 
 
 async def list_users(
@@ -507,3 +513,172 @@ async def get_user_details(session: AsyncSession, user_id: str) -> dict | None:
         "gamification": gamification,
         "chat": chat,
     }
+
+
+# ── User provisioning and lifecycle ───────────────────────────────
+
+
+async def create_user(
+    session: AsyncSession,
+    email: str,
+    username: str,
+    role: str = "user",
+    tier: str = "free",
+) -> tuple[User, str]:
+    """Create an account with no password and mint its setup link.
+
+    The admin never chooses or sees a password: the account is created with
+    `hashed_password = None` (the same shape as an OAuth-only account) and a
+    single-use link lets the new user set their own. The link is returned so
+    the caller can hand it over directly — beta instances often have no working
+    SMTP yet, and an admin who cannot deliver the link cannot onboard anyone.
+
+    Args:
+        session: Database session.
+        email: New user's email.
+        username: New user's display name.
+        role: "admin" or "user".
+        tier: "free" or "pro".
+
+    Returns:
+        (user, raw_setup_token)
+
+    Raises:
+        UserExistsError: If the email or username is taken.
+        ValueError: If role or tier is not recognized.
+    """
+    if role not in VALID_ROLES:
+        raise ValueError(f"role must be one of {sorted(VALID_ROLES)}")
+    if tier not in VALID_TIERS:
+        raise ValueError(f"tier must be one of {sorted(VALID_TIERS)}")
+
+    existing = await session.execute(select(User).where(User.email == email))
+    if existing.scalar_one_or_none():
+        raise UserExistsError("email")
+
+    existing = await session.execute(select(User).where(User.username == username))
+    if existing.scalar_one_or_none():
+        raise UserExistsError("username")
+
+    user = User(
+        id=generate_id(),
+        email=email,
+        username=username,
+        hashed_password=None,
+        role=role,
+        tier=tier,
+        is_active=True,
+        email_verified=False,
+    )
+    session.add(user)
+    await session.flush()
+
+    minted = await user_service.request_password_reset(
+        session, email, expires_in_hours=user_service.ACCOUNT_SETUP_TOKEN_HOURS
+    )
+    if minted is None:  # pragma: no cover - the user was just flushed
+        raise RuntimeError("Could not mint a setup link for the new account")
+
+    logger.info("admin_created_user", user_id=user.id, role=role, tier=tier)
+    return user, minted.raw_token
+
+
+async def count_active_admins(session: AsyncSession, excluding: str | None = None) -> int:
+    """Count active admin accounts, optionally ignoring one.
+
+    Args:
+        session: Database session.
+        excluding: User ID to leave out of the count.
+
+    Returns:
+        Number of active admins.
+    """
+    query = (
+        select(func.count()).select_from(User).where(User.role == "admin", User.is_active.is_(True))
+    )
+    if excluding:
+        query = query.where(User.id != excluding)
+    return (await session.execute(query)).scalar_one()
+
+
+async def delete_user(session: AsyncSession, user_id: str, acting_admin_id: str) -> dict[str, int]:
+    """Permanently delete a user and everything they own.
+
+    Args:
+        session: Database session.
+        user_id: The account to delete.
+        acting_admin_id: The admin performing the deletion.
+
+    Returns:
+        Rows deleted per table.
+
+    Raises:
+        ValueError: If the target does not exist, is the acting admin, or is
+            the last active admin.
+    """
+    if user_id == acting_admin_id:
+        # Deleting yourself from the admin panel leaves a half-dead session and
+        # is almost always a misclick; /api/auth/account is the deliberate path.
+        raise ValueError("You cannot delete your own account from the admin panel")
+
+    user = await session.get(User, user_id)
+    if user is None:
+        raise ValueError("User not found")
+
+    if user.role == "admin" and await count_active_admins(session, excluding=user_id) == 0:
+        raise ValueError("Cannot delete the last active admin")
+
+    counts = await account_service.delete_user_account(session, user_id)
+    logger.info("admin_deleted_user", user_id=user_id, by=acting_admin_id)
+    return counts
+
+
+async def issue_password_reset(session: AsyncSession, user_id: str) -> tuple[User, str]:
+    """Mint a password reset link for a user on their behalf.
+
+    Args:
+        session: Database session.
+        user_id: The account to reset.
+
+    Returns:
+        (user, raw_token)
+
+    Raises:
+        ValueError: If the user does not exist.
+    """
+    user = await session.get(User, user_id)
+    if user is None:
+        raise ValueError("User not found")
+
+    minted = await user_service.request_password_reset(
+        session, user.email, expires_in_hours=user_service.ACCOUNT_SETUP_TOKEN_HOURS
+    )
+    if minted is None:  # pragma: no cover - user was just loaded
+        raise ValueError("User not found")
+
+    logger.info("admin_issued_password_reset", user_id=user_id)
+    return user, minted.raw_token
+
+
+async def issue_email_verification(session: AsyncSession, user_id: str) -> tuple[User, str]:
+    """Mint a fresh email verification link for a user.
+
+    Args:
+        session: Database session.
+        user_id: The account to verify.
+
+    Returns:
+        (user, raw_token)
+
+    Raises:
+        ValueError: If the user does not exist or is already verified.
+    """
+    user = await session.get(User, user_id)
+    if user is None:
+        raise ValueError("User not found")
+    if user.email_verified:
+        raise ValueError("This email is already verified")
+
+    minted = await user_service.create_email_verification_link(session, user)
+    logger.info("admin_issued_email_verification", user_id=user_id)
+    return user, minted.raw_token

@@ -255,6 +255,51 @@ username in `confirm_username`.
 
 All three require `role=admin`.
 
+### `POST /api/admin/users`
+
+Create an account. The admin never chooses or sees a password: the account is
+created with none, and a single-use link lets the new user set their own. The
+link is **always** returned, not only emailed — a beta instance often has no
+working SMTP, and an admin who cannot deliver the link cannot onboard anyone.
+
+**Body** `{ email, username, role?: "user"|"admin", tier?: "free"|"pro" }`
+**Response** `201` `{ user, setup_url, email_sent }` — `setup_url` is a
+`/reset-password?token=…` link valid for 24 hours, single use
+**Response** `409` email or username already taken
+**Response** `400` unknown role or tier
+
+### `DELETE /api/admin/users/{user_id}`
+
+Permanently delete a user and every row they own, reusing the same purge as
+`DELETE /api/auth/account`. Irreversible.
+
+Refuses to delete the acting admin (that is what Settings → Data & Privacy is
+for) or the last active admin — an admin panel that can lock everyone out of
+the instance is a footgun, not a feature.
+
+**Response** `200` `{ detail, rows_deleted }`
+**Response** `400` self-deletion, or the last active admin
+**Response** `404` unknown user
+
+### `POST /api/admin/users/{user_id}/password-reset`
+
+Mint a password reset link for a locked-out user. Valid 24 hours (longer than a
+self-service reset, since an admin has to relay it).
+
+**Response** `200` `{ detail, url, email_sent }`
+**Response** `404` unknown user
+
+### `POST /api/admin/users/{user_id}/resend-verification`
+
+Re-issue an email verification link.
+
+**Response** `200` `{ detail, url, email_sent }`
+**Response** `400` the email is already verified
+**Response** `404` unknown user
+
+> Role, tier and active status are changed through the existing
+> `PATCH /api/admin/users/{user_id}`.
+
 ### `POST /api/admin/invites`
 
 Mint a registration invite code.
