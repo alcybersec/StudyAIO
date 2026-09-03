@@ -383,6 +383,41 @@ cannot be used to enumerate users. Check the logs to see what actually happened:
 Before inviting anyone, run `make preflight` — it now fails on the two
 configurations that break a beta silently.
 
+**0. Create an admin account.** Every step below needs one, and a fresh
+instance has none you can log in to: the self-hosted default admin is created
+with no password and an undeliverable `admin@studyaio.local` address, and the
+admin API requires a real session. Bootstrap one while still in self-hosted
+mode:
+
+```bash
+make ensure-admin email=you@example.com
+```
+
+On a deployed host there is no checkout and no Makefile — only the compose
+files are copied there — so use the underlying command directly:
+
+```bash
+docker compose exec -T api python -m app.cli ensure-admin --email you@example.com
+```
+
+The command prints a single-use set-password link valid for 24 hours. It
+targets the existing default admin row when there is one, so everything that
+account already owns keeps its owner. It also prints the base URL the link was
+built from: if `APP_BASE_URL` is still an internal hostname or `localhost`, the
+token is not origin-bound, so substitute an origin your browser can reach and
+keep the `?token=` intact.
+
+Follow the link, set a password, and confirm you can log in **before** changing
+`SELF_HOSTED` — after the flip the default identity no longer exists and there
+is no other way in.
+
+Re-running the command is safe, but it voids any link an earlier run printed.
+If you run it twice, use only the newest link — an older one fails with
+"Reset token already used", which is supersession, not a compromise.
+
+The link is a bearer credential for an admin account. Do not paste it into a
+shared channel.
+
 **1. Multi-user mode.** `SELF_HOSTED=false`. Left at `true`, the API falls back
 to a single shared admin identity and there are no real accounts.
 
@@ -417,9 +452,29 @@ and always shown on screen so you can relay it directly — useful before SMTP i
 working. The same panel can reset a tester's password, resend their verification
 email, change their tier, or delete them outright.
 
-**4. Raise the free-tier limits.** `app/services/quota_service.py` caps the free
-tier at 1 course, 5 uploads/month and 20 AI calls/day. A real student hits that in
-one sitting — give beta testers `tier=pro` (Admin → Users) or raise the constants.
+If you mistype a tester's address, an admin can correct it with
+`PATCH /api/admin/users/{id}` (`{"email": "..."}`), which also revokes any
+outstanding setup or verification link addressed to the old inbox. The admin UI
+cannot send this field yet, so use `curl` or `/docs`.
+
+**4. Raise the free-tier limits.** The defaults are shaped for a paywall, not a
+beta: 1 course and 5 uploads/month. Keep testers on the **free** tier and raise
+the limits by environment instead of promoting them to `pro`, which
+short-circuits every per-user check and leaves only the global ceiling:
+
+```env
+FREE_MAX_COURSES=10
+FREE_MAX_UPLOADS_PER_MONTH=60
+FREE_MAX_AI_CALLS_PER_DAY=200
+```
+
+`0` means unlimited for any of these. `PRO_MAX_*` exist too, if you would rather
+raise the pro tier than the free one.
+
+The three do not need to balance: at roughly four pipeline calls per upload, 200
+calls/day would allow ~50 uploads in a day, so the monthly upload cap is what
+actually bounds pipeline usage. The daily call limit is there to bound chat and
+Q&A, which no upload cap touches.
 
 **4b. Bound the bill.** Per-user limits do not cap what the *instance* spends:
 five testers on 100 calls/day is 500 calls/day. Set a ceiling:
@@ -439,10 +494,31 @@ OpenAI, Z.ai and Anthropic; the Claude Code CLI reports no usage, so its calls a
 counted with zero tokens.
 
 **5. Decide who pays for AI.** `AGENT_BACKEND=claude_code` shells out to the CLI
-using the credentials mounted into the worker — every tester's usage bills to that
-account. Either accept that behind the quota limits, or set `AGENT_BACKEND=anthropic_api`
-with your own key. Testers *can* supply their own credentials in Settings → AI
-Providers, but it is a rough first-run experience.
+using the credentials mounted into the worker, so every tester's usage bills to
+that personal account — fine for a single-user box, wrong for a beta serving
+other people. For a closed beta prefer a metered key:
+
+```env
+AGENT_BACKEND=zai
+ZAI_MODEL=glm-5.3-flash
+ZAI_API_KEY=...
+```
+
+`anthropic_api` is the higher-quality, higher-cost alternative. Preflight now
+fails if the backend you select has no credential, rather than letting every
+pipeline run break with a symptom far from the cause.
+
+Cap spend at the provider account level as well as in the app — the in-app
+ceiling can be defeated by a bug, and two independent limits are the point.
+
+Prompts were tuned against Claude. Before inviting anyone, run one real lecture
+end to end on your chosen model and read the summary against the eight sections
+`prompts/summarize.txt` requires — the golden test derives its section list from
+that prompt but asserts against a fixture, so a model swap can change the output
+structure with the suite green.
+
+Testers *can* supply their own credentials in Settings → AI Providers, which
+moves the cost to them, but it is a rough first-run experience.
 
 **6. Turn on Sentry.** See *Error Monitoring* above. Without it, "it broke" reports
 arrive with no timestamp and no stack.

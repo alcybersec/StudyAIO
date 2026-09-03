@@ -30,9 +30,28 @@ if [[ ! -f "$ENV_FILE" ]]; then
     exit 1
 fi
 
+if [[ ! -r "$ENV_FILE" ]]; then
+    error "$ENV_FILE exists but is not readable — run as its owner, or fix its mode."
+    exit 1
+fi
+
 # Load .env (without exporting to avoid polluting shell)
+# The trailing `|| true` matters: under `set -euo pipefail`, a key that is
+# absent from the env file makes grep exit 1, which (via pipefail) makes this
+# whole function return 1. Callers assign the result with `VAR=$(get_val ...)`,
+# and that assignment failing trips `set -e` and kills the script right there
+# — silently, with no error printed. `|| true` keeps a missing key behaving
+# the same as get_val's own documented contract: empty string, not a crash.
+# The sed strips a whitespace-preceded `#...` inline comment on unquoted
+# values, matching python-dotenv's rule (config.py's env_file loader uses
+# python-dotenv, and .env.example ships commented-out lines like
+# `AGENT_BACKEND=claude_code   # claude_code | anthropic_api | ...` that an
+# operator uncomments as-is) — without this, a value like
+# `GLOBAL_MAX_AI_CALLS_PER_DAY=0   # 0 = unlimited` would compare unequal to
+# both "0" and "", and the comment text would leak into every message.
 get_val() {
-    grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/^"//' | sed 's/"$//'
+    grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- \
+        | sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]+$//; s/^"//; s/"$//' || true
 }
 
 # ── JWT Secret ────────────────────────────────────────────────────
@@ -116,6 +135,59 @@ if [[ -z "$SMTP_HOST" || -z "$SMTP_FROM" ]]; then
     fi
 else
     ok "SMTP configured ($SMTP_HOST)"
+fi
+
+# ── AI provider credentials ───────────────────────────────────────
+
+AGENT_BACKEND=$(get_val "AGENT_BACKEND")
+AGENT_BACKEND=${AGENT_BACKEND:-claude_code}
+
+# A backend selected without its key fails at the first pipeline stage, and the
+# symptom (uploads that never produce a summary) points nowhere near the cause.
+# Takes only the variable name — the backend label always comes from
+# $AGENT_BACKEND, so there is no second copy of it to drift out of sync.
+require_key() {
+    local var="$1"
+    if [[ -z "$(get_val "$var")" ]]; then
+        error "AGENT_BACKEND=$AGENT_BACKEND but $var is unset — every pipeline run will fail."
+    else
+        ok "AGENT_BACKEND=$AGENT_BACKEND with $var set"
+    fi
+}
+
+case "$AGENT_BACKEND" in
+    zai)           require_key ZAI_API_KEY ;;
+    openai)        require_key OPENAI_API_KEY ;;
+    anthropic_api) require_key ANTHROPIC_API_KEY ;;
+    claude_code)
+        ok "AGENT_BACKEND=claude_code — credentials come from the mounted ~/.claude"
+        ;;
+    ollama)
+        ok "AGENT_BACKEND=ollama — no API key required"
+        ;;
+    *)
+        error "AGENT_BACKEND='$AGENT_BACKEND' is not one of: claude_code, anthropic_api, openai, zai, ollama"
+        ;;
+esac
+
+# ── Spend ceiling ─────────────────────────────────────────────────
+
+GLOBAL_CALLS=$(get_val "GLOBAL_MAX_AI_CALLS_PER_DAY")
+GLOBAL_TOKENS=$(get_val "GLOBAL_MAX_AI_TOKENS_PER_DAY")
+GLOBAL_CALLS=${GLOBAL_CALLS:-0}
+GLOBAL_TOKENS=${GLOBAL_TOKENS:-0}
+
+# Per-user quotas cannot bound the operator's bill: N testers times their
+# individual limits is unbounded in aggregate. Only in SaaS mode — a
+# self-hosted box is paying for its own usage.
+if [[ "$SELF_HOSTED" == "false" ]]; then
+    if [[ "$GLOBAL_CALLS" == "0" && "$GLOBAL_TOKENS" == "0" ]]; then
+        warn "GLOBAL_MAX_AI_CALLS_PER_DAY and GLOBAL_MAX_AI_TOKENS_PER_DAY are both 0 (unlimited) — nothing caps what the instance spends."
+    else
+        ok "Spend ceiling set (calls=$GLOBAL_CALLS, tokens=$GLOBAL_TOKENS; 0 = unlimited)"
+    fi
+else
+    ok "Spend ceiling not enforced (self-hosted — you are paying your own bill)"
 fi
 
 # ── Cookie Secure ─────────────────────────────────────────────────

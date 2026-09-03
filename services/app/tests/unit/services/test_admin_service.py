@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.exceptions import UserExistsError
 from app.services import admin_service
 
 
@@ -337,3 +338,82 @@ class TestGetUserDetails:
         result = await admin_service.get_user_details(mock_session, "user-001")
         assert result is not None
         assert result["profile"]["avatar_url"] == "https://example.com/avatar.png"
+
+
+@pytest.mark.asyncio
+class TestUpdateUserEmail:
+    """Tests for update_user(email=...)."""
+
+    async def test_changes_the_email(self, mock_session):
+        """An operator must be able to fix an unroutable address."""
+        # `_make_user_model` defaults email_verified to False, so it must be set
+        # explicitly here or the assertion below passes without the code running.
+        user = _make_user_model(email="admin@studyaio.local", email_verified=True)
+        mock_session.get = AsyncMock(return_value=user)
+        empty = MagicMock()
+        empty.scalar_one_or_none = MagicMock(return_value=None)
+        mock_session.execute = AsyncMock(return_value=empty)
+
+        result = await admin_service.update_user(mock_session, "user-001", email="real@example.com")
+
+        assert result["email"] == "real@example.com"
+        assert user.email_verified is False
+
+    async def test_rejects_an_email_already_in_use(self, mock_session):
+        """Two accounts sharing an address would make login ambiguous."""
+        user = _make_user_model()
+        mock_session.get = AsyncMock(return_value=user)
+        taken = MagicMock()
+        taken.scalar_one_or_none = MagicMock(return_value=_make_user_model(id="u-2"))
+        mock_session.execute = AsyncMock(return_value=taken)
+
+        with pytest.raises(UserExistsError):
+            await admin_service.update_user(mock_session, "user-001", email="taken@example.com")
+
+    async def test_leaves_the_email_alone_when_not_passed(self, mock_session):
+        """The existing role/tier/is_active calls must not change behaviour."""
+        user = _make_user_model(email="keep@example.com", email_verified=True)
+        mock_session.get = AsyncMock(return_value=user)
+
+        await admin_service.update_user(mock_session, "user-001", tier="pro")
+
+        assert user.email == "keep@example.com"
+        assert user.email_verified is True
+
+    async def test_revokes_outstanding_magic_links_on_email_change(self, mock_session):
+        """A setup/reset link already sitting in the old inbox must stop working.
+
+        Both password_reset and email_verification links are keyed on user_id
+        and validated by token hash alone, never against the address they were
+        sent to — so without this, a link mailed to a mistyped or hostile
+        address would still redeem against the corrected account.
+        """
+        user = _make_user_model(email="admin@studyaio.local", email_verified=True)
+        mock_session.get = AsyncMock(return_value=user)
+        clash = MagicMock()
+        clash.scalar_one_or_none = MagicMock(return_value=None)
+        mock_session.execute = AsyncMock(side_effect=[clash, MagicMock()])
+
+        await admin_service.update_user(mock_session, "user-001", email="real@example.com")
+
+        assert mock_session.execute.call_count == 2
+        revoke_stmt = mock_session.execute.call_args_list[1].args[0]
+        compiled = str(revoke_stmt)
+        assert "magic_links" in compiled
+        assert "used_at" in compiled
+
+    async def test_matching_the_current_email_is_a_noop(self, mock_session):
+        """A PATCH echoing the current address must not reset verification.
+
+        If the `email != user.email` short-circuit regressed, every no-op
+        PATCH that merely includes the user's own address would silently
+        un-verify them.
+        """
+        user = _make_user_model(email="same@example.com", email_verified=True)
+        mock_session.get = AsyncMock(return_value=user)
+        mock_session.execute = AsyncMock()
+
+        await admin_service.update_user(mock_session, "user-001", email="same@example.com")
+
+        assert user.email_verified is True
+        mock_session.execute.assert_not_called()
