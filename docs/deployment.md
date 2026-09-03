@@ -334,7 +334,10 @@ curl https://your-domain.com/health
 | `JWT_SECRET_KEY` | (insecure default) | **Change in production** |
 | `CORS_ORIGINS` | `http://localhost:3001` | Comma-separated origins |
 | `MAX_UPLOAD_SIZE_MB` | `100` | Max upload file size |
-| `AGENT_BACKEND` | `claude_code` | AI backend |
+| `AGENT_BACKEND` | `claude_code` | AI backend: `claude_code`, `anthropic_api`, `openai`, `zai`, `ollama` |
+| `ZAI_API_KEY` | | Z.ai (GLM) API key, when `AGENT_BACKEND=zai` |
+| `ZAI_MODEL` | `glm-5.3` | GLM model id, e.g. `glm-5.3`, `glm-5.3-flash`, `glm-4.6` |
+| `ZAI_BASE_URL` | `https://api.z.ai/api/paas/v4/` | Override only for a regional or self-hosted endpoint |
 | `PROMETHEUS_ENABLED` | `false` | Enable `/metrics` |
 | `REGISTRATION_MODE` | `open` | `open`, `invite` (a valid code is required), or `closed`. Enforced server-side on `POST /api/auth/register`. |
 | `SENTRY_DSN` | | Error monitoring for API + worker. Empty disables it entirely. |
@@ -401,6 +404,12 @@ curl -X POST https://your-domain.com/api/admin/invites \
 Codes are single-use by default and revocable (`DELETE /api/admin/invites/{id}`).
 `users.invite_code_id` records which code each account used, so a code that leaks
 can be traced to the accounts it created.
+
+Alternatively, create the account yourself in **Admin → Users → Add user**. That
+returns a single-use set-password link which is emailed when SMTP is configured
+and always shown on screen so you can relay it directly — useful before SMTP is
+working. The same panel can reset a tester's password, resend their verification
+email, change their tier, or delete them outright.
 
 **4. Raise the free-tier limits.** `app/services/quota_service.py` caps the free
 tier at 1 course, 5 uploads/month and 20 AI calls/day. A real student hits that in

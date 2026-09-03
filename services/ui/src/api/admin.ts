@@ -1,7 +1,11 @@
 import { api } from './client'
 import type {
   AdminUser,
+  AdminUserCreated,
+  AdminUserCreateRequest,
+  AdminUserDeleted,
   AdminUserDetail,
+  AdminUserLink,
   AdminUserList,
   AdminUserUpdate,
   InviteCode,
@@ -38,6 +42,22 @@ export const adminApi = {
 
   getUserDetails(userId: string): Promise<AdminUserDetail> {
     return api.get<AdminUserDetail>(`/admin/users/${userId}/details`)
+  },
+
+  createUser(data: AdminUserCreateRequest): Promise<AdminUserCreated> {
+    return api.post<AdminUserCreated>('/admin/users', data)
+  },
+
+  deleteUser(userId: string): Promise<AdminUserDeleted> {
+    return api.request<AdminUserDeleted>(`/admin/users/${userId}`, { method: 'DELETE' })
+  },
+
+  sendPasswordReset(userId: string): Promise<AdminUserLink> {
+    return api.post<AdminUserLink>(`/admin/users/${userId}/password-reset`)
+  },
+
+  resendVerification(userId: string): Promise<AdminUserLink> {
+    return api.post<AdminUserLink>(`/admin/users/${userId}/resend-verification`)
   },
 
   listInvites(): Promise<InviteCodeList> {

@@ -19,6 +19,9 @@ import {
 } from '../components/ui'
 import type { AdminUser } from '../types'
 import { InvitePanel } from '../components/admin/InvitePanel'
+import { AddUserForm } from '../components/admin/AddUserForm'
+import { UserRowActions } from '../components/admin/UserRowActions'
+import { useAuth } from '../hooks/useAuth'
 
 const PAGE_SIZE = 25
 
@@ -76,7 +79,15 @@ function MetricsGrid() {
   )
 }
 
-function UserRow({ user, onUpdate }: { user: AdminUser; onUpdate: (id: string, field: string, value: string | boolean) => void }) {
+function UserRow({
+  user,
+  onUpdate,
+  currentUserId,
+}: {
+  user: AdminUser
+  onUpdate: (id: string, field: string, value: string | boolean) => void
+  currentUserId: string | undefined
+}) {
   const navigate = useNavigate()
   return (
     <TRow onClick={() => navigate(`/admin/users/${user.id}`)}>
@@ -109,6 +120,9 @@ function UserRow({ user, onUpdate }: { user: AdminUser; onUpdate: (id: string, f
       </TCell>
       <TCell className="font-mono text-[11px] text-text-faint">
         {user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'never'}
+      </TCell>
+      <TCell>
+        <UserRowActions user={user} currentUserId={currentUserId} />
       </TCell>
     </TRow>
   )
@@ -147,6 +161,7 @@ export function AdminPage() {
     limit: PAGE_SIZE,
   })
   const updateUser = useUpdateAdminUser()
+  const { user: currentUser } = useAuth()
 
   const handleUpdate = (userId: string, field: string, value: string | boolean) => {
     updateUser.mutate({ userId, data: { [field]: value } })
@@ -186,6 +201,8 @@ export function AdminPage() {
           />
         </div>
 
+        <AddUserForm />
+
         {usersLoading && !usersData ? (
           <UsersSkeleton />
         ) : usersError && !usersData ? (
@@ -204,10 +221,16 @@ export function AdminPage() {
                   <TCell header>Status</TCell>
                   <TCell header>Created</TCell>
                   <TCell header>Last login</TCell>
+                  <TCell header>Actions</TCell>
                 </THead>
                 <TBody>
                   {usersData.users.map((user) => (
-                    <UserRow key={user.id} user={user} onUpdate={handleUpdate} />
+                    <UserRow
+                      key={user.id}
+                      user={user}
+                      onUpdate={handleUpdate}
+                      currentUserId={currentUser?.id}
+                    />
                   ))}
                 </TBody>
               </Table>

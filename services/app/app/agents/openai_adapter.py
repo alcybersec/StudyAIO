@@ -28,11 +28,34 @@ _SUMMARY_MAX_TOKENS = 8192
 
 
 class OpenAIAdapter(AgentAdapter):
-    """Calls the OpenAI Chat Completions API via the official SDK."""
+    """Calls the OpenAI Chat Completions API via the official SDK.
 
-    def __init__(self, api_key: str = "", model: str = ""):
+    Subclassable for OpenAI-compatible providers: override the constructor to
+    supply a different key, model and `base_url`. Every request goes through
+    `_client()`, so a subclass never has to reimplement the prompt methods.
+    """
+
+    #: Shown in errors, so a misconfigured provider names itself.
+    provider_name = "OpenAI"
+
+    def __init__(self, api_key: str = "", model: str = "", base_url: str = ""):
         self._api_key = api_key or get_effective_setting("openai_api_key")
         self._model = model or get_effective_setting("openai_model")
+        # Empty means "the SDK default", i.e. api.openai.com.
+        self._base_url = base_url or ""
+
+    def _client(self) -> AsyncOpenAI:
+        """Build a client, pointed at a custom base URL when one is set."""
+        if self._base_url:
+            return AsyncOpenAI(api_key=self._api_key, base_url=self._base_url)
+        return AsyncOpenAI(api_key=self._api_key)
+
+    def _require_api_key(self) -> None:
+        """Raise a provider-specific error when no key is configured."""
+        if not self._api_key:
+            raise AgentError(
+                f"{self.provider_name} API key not configured. Set it in Settings > AI Providers."
+            )
 
     async def _call_api(self, prompt: str, max_tokens: int = _DEFAULT_MAX_TOKENS) -> str:
         """Send a prompt to the OpenAI API and return the text response.
@@ -47,12 +70,9 @@ class OpenAIAdapter(AgentAdapter):
         Raises:
             AgentError: If the API call fails.
         """
-        if not self._api_key:
-            raise AgentError(
-                "OpenAI API key not configured. Set it in Settings > AI Configuration."
-            )
+        self._require_api_key()
 
-        client = AsyncOpenAI(api_key=self._api_key)
+        client = self._client()
         logger.info(
             "openai_api_call",
             prompt_length=len(prompt),
@@ -67,7 +87,7 @@ class OpenAIAdapter(AgentAdapter):
                 messages=[{"role": "user", "content": prompt}],
             )
         except Exception as e:
-            raise AgentError(f"OpenAI API call failed: {e}") from e
+            raise AgentError(f"{self.provider_name} API call failed: {e}") from e
 
         choice = response.choices[0]
         result = (choice.message.content or "").strip()
@@ -370,12 +390,9 @@ Respond with ONLY a JSON object:
   "citations": [{{"ref": 1, "chunk_id": "", "text_snippet": "brief quote", "course_code": "CSIT302", "week": 5, "page_ref": 1}}]
 }}"""
 
-        if not self._api_key:
-            raise AgentError(
-                "OpenAI API key not configured. Set it in Settings > AI Configuration."
-            )
+        self._require_api_key()
 
-        client = AsyncOpenAI(api_key=self._api_key)
+        client = self._client()
         logger.info(
             "openai_stream_start",
             prompt_length=len(prompt),
