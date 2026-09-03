@@ -30,6 +30,9 @@ ALLOWED_KEYS = {
     "anthropic_api_key",
     "openai_api_key",
     "openai_model",
+    "zai_api_key",
+    "zai_model",
+    "zai_base_url",
     "ollama_base_url",
     "ollama_model",
     "embedding_backend",
@@ -43,7 +46,7 @@ ALLOWED_KEYS = {
 }
 
 VALID_MODELS = {"opus", "sonnet", "haiku"}
-VALID_BACKENDS = {"claude_code", "anthropic_api", "openai", "ollama"}
+VALID_BACKENDS = {"claude_code", "anthropic_api", "openai", "zai", "ollama"}
 VALID_EMBEDDING_BACKENDS = {"sentence_transformers", "openai", "ollama"}
 
 # Validation rules: (type, min, max)
@@ -55,6 +58,9 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
     "claude_cli_credentials": (str, None, None),
     "openai_api_key": (str, None, None),
     "openai_model": (str, None, None),
+    "zai_api_key": (str, None, None),
+    "zai_model": (str, None, None),
+    "zai_base_url": (str, None, None),
     "ollama_base_url": (str, None, None),
     "ollama_model": (str, None, None),
     "embedding_backend": (str, None, None),
@@ -76,6 +82,9 @@ def _defaults() -> dict[str, Any]:
         "anthropic_api_key": settings.anthropic_api_key.get_secret_value(),
         "openai_api_key": settings.openai_api_key.get_secret_value(),
         "openai_model": settings.openai_model,
+        "zai_api_key": settings.zai_api_key.get_secret_value(),
+        "zai_model": settings.zai_model,
+        "zai_base_url": settings.zai_base_url,
         "ollama_base_url": settings.ollama_base_url,
         "ollama_model": settings.ollama_model,
         "embedding_backend": settings.embedding_backend,
@@ -328,6 +337,9 @@ _AGENT_CONFIG_KEYS = {
     "anthropic_api_key",
     "openai_api_key",
     "openai_model",
+    "zai_api_key",
+    "zai_model",
+    "zai_base_url",
     "ollama_base_url",
     "ollama_model",
     "claude_cli_credentials",

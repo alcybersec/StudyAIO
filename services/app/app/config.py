@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4o"
 
+    # Z.ai (GLM) — OpenAI-compatible endpoint
+    zai_api_key: SecretStr = SecretStr("")
+    zai_model: str = "glm-5.3"
+    zai_base_url: str = "https://api.z.ai/api/paas/v4/"
+
     # Ollama
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llama3.2"
