@@ -775,8 +775,8 @@ import pytest
 SCRIPT = Path(__file__).parents[4] / "scripts" / "preflight-check.sh"
 
 BASE_ENV = {
-    "JWT_SECRET_KEY": "a-real-secret-value-not-the-default-one",
-    "POSTGRES_PASSWORD": "not-studyaio",
+    "JWT_SECRET_KEY": "<test-placeholder>",
+    "POSTGRES_PASSWORD": "<test-placeholder>",
     "CORS_ORIGINS": "https://studyaio.example.com",
     "SELF_HOSTED": "false",
     "REGISTRATION_MODE": "invite",
@@ -821,7 +821,7 @@ class TestProviderCredential:
         assert "ZAI_API_KEY" in result.stdout
 
     def test_zai_with_a_key_passes(self, tmp_path):
-        result = _run(_write_env(tmp_path, AGENT_BACKEND="zai", ZAI_API_KEY="zk-live-x"))
+        result = _run(_write_env(tmp_path, AGENT_BACKEND="zai", ZAI_API_KEY="<test-placeholder>"))
         assert result.returncode == 0, result.stdout
 
     def test_openai_without_a_key_fails(self, tmp_path):
@@ -932,7 +932,7 @@ class TestSpendCeiling:
             _write_env(
                 tmp_path,
                 AGENT_BACKEND="zai",
-                ZAI_API_KEY="zk-live-x",
+                ZAI_API_KEY="<test-placeholder>",
                 GLOBAL_MAX_AI_CALLS_PER_DAY=None,
             )
         )
@@ -946,7 +946,7 @@ class TestSpendCeiling:
             _write_env(
                 tmp_path,
                 AGENT_BACKEND="zai",
-                ZAI_API_KEY="zk-live-x",
+                ZAI_API_KEY="<test-placeholder>",
                 GLOBAL_MAX_AI_CALLS_PER_DAY="0",
                 GLOBAL_MAX_AI_TOKENS_PER_DAY="0",
             )
@@ -959,7 +959,7 @@ class TestSpendCeiling:
             _write_env(
                 tmp_path,
                 AGENT_BACKEND="zai",
-                ZAI_API_KEY="zk-live-x",
+                ZAI_API_KEY="<test-placeholder>",
                 GLOBAL_MAX_AI_CALLS_PER_DAY="0",
                 GLOBAL_MAX_AI_TOKENS_PER_DAY="2000000",
             )
