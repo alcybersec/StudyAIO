@@ -13,6 +13,15 @@ vi.mock('../hooks/useApi', () => ({
   useInvites: vi.fn(() => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })),
   useCreateInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useRevokeInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  // User provisioning is exercised in its own tests; here it just needs to render.
+  useCreateAdminUser: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useDeleteAdminUser: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useSendPasswordReset: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useResendVerification: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+}))
+
+vi.mock('../hooks/useAuth', () => ({
+  useAuth: () => ({ user: { id: 'admin-001', email: 'admin@example.com' } }),
 }))
 
 const mockUsers = vi.mocked(useAdminUsers)

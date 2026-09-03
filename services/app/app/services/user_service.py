@@ -32,6 +32,13 @@ MIN_PASSWORD_LENGTH = 8
 # flag, so a slower journey through the inbox costs nothing.
 EMAIL_VERIFICATION_TOKEN_HOURS = 24
 
+#: A self-service reset is acted on immediately, so it expires fast.
+PASSWORD_RESET_TOKEN_HOURS = 1
+
+#: An admin-created account's first link has to survive being relayed to a
+#: person who is not sitting at the keyboard.
+ACCOUNT_SETUP_TOKEN_HOURS = 24
+
 
 class MintedMagicLink(NamedTuple):
     """A freshly minted magic link plus its raw token.
@@ -246,6 +253,7 @@ async def change_password(
 async def request_password_reset(
     session: AsyncSession,
     email: str,
+    expires_in_hours: int = PASSWORD_RESET_TOKEN_HOURS,
 ) -> MintedMagicLink | None:
     """Create a password reset magic link for a user.
 
@@ -257,6 +265,8 @@ async def request_password_reset(
     Args:
         session: Database session.
         email: User email.
+        expires_in_hours: Token lifetime. Defaults to one hour; admin-created
+            accounts pass a longer window since the link has to be relayed.
 
     Returns:
         MintedMagicLink if user exists, None otherwise (no email leak).
@@ -284,7 +294,7 @@ async def request_password_reset(
         user_id=user.id,
         token_hash=hash_magic_link_token(raw_token),
         link_type="password_reset",
-        expires_at=now + timedelta(hours=1),
+        expires_at=now + timedelta(hours=expires_in_hours),
     )
     session.add(link)
     await session.flush()

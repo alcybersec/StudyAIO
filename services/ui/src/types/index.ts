@@ -1168,3 +1168,29 @@ export interface InviteCreateRequest {
   note?: string
 }
 
+// ── Admin: user provisioning ──────────────────────────────────────
+
+export interface AdminUserCreateRequest {
+  email: string
+  username: string
+  role?: string
+  tier?: string
+}
+
+export interface AdminUserCreated {
+  user: AdminUser
+  /** Single-use set-password link; always returned so it can be relayed. */
+  setup_url: string
+  email_sent: boolean
+}
+
+export interface AdminUserLink {
+  detail: string
+  url: string
+  email_sent: boolean
+}
+
+export interface AdminUserDeleted {
+  detail: string
+  rows_deleted: number
+}

@@ -600,6 +600,34 @@ export function useUpdateAdminUser() {
   })
 }
 
+function invalidateAdminUsers(queryClient: ReturnType<typeof useQueryClient>) {
+  return queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+}
+
+export function useCreateAdminUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminApi.createUser,
+    onSuccess: () => invalidateAdminUsers(queryClient),
+  })
+}
+
+export function useDeleteAdminUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminApi.deleteUser,
+    onSuccess: () => invalidateAdminUsers(queryClient),
+  })
+}
+
+export function useSendPasswordReset() {
+  return useMutation({ mutationFn: adminApi.sendPasswordReset })
+}
+
+export function useResendVerification() {
+  return useMutation({ mutationFn: adminApi.resendVerification })
+}
+
 export function useInvites() {
   return useQuery({
     queryKey: ['admin', 'invites'],

@@ -405,6 +405,12 @@ Codes are single-use by default and revocable (`DELETE /api/admin/invites/{id}`)
 `users.invite_code_id` records which code each account used, so a code that leaks
 can be traced to the accounts it created.
 
+Alternatively, create the account yourself in **Admin → Users → Add user**. That
+returns a single-use set-password link which is emailed when SMTP is configured
+and always shown on screen so you can relay it directly — useful before SMTP is
+working. The same panel can reset a tester's password, resend their verification
+email, change their tier, or delete them outright.
+
 **4. Raise the free-tier limits.** `app/services/quota_service.py` caps the free
 tier at 1 course, 5 uploads/month and 20 AI calls/day. A real student hits that in
 one sitting — give beta testers `tier=pro` (Admin → Users) or raise the constants.
