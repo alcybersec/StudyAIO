@@ -225,7 +225,12 @@ async def _fetch_github_primary_email(client: AsyncOAuth2Client) -> str:
 async def store_oauth_state(state: str, provider: str) -> None:
     """Store an OAuth state token in Redis with a 10-minute TTL."""
     try:
-        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=settings.redis_socket_timeout,
+            socket_timeout=settings.redis_socket_timeout,
+        )
         try:
             await redis.setex(
                 f"{STATE_KEY_PREFIX}{state}",
@@ -246,7 +251,12 @@ async def validate_oauth_state(state: str, provider: str) -> bool:
     The state is deleted after validation (one-time use).
     """
     try:
-        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=settings.redis_socket_timeout,
+            socket_timeout=settings.redis_socket_timeout,
+        )
         try:
             stored = await redis.get(f"{STATE_KEY_PREFIX}{state}")
             if stored == provider:

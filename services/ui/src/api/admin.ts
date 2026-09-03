@@ -1,5 +1,14 @@
 import { api } from './client'
-import type { AdminUser, AdminUserDetail, AdminUserList, AdminUserUpdate, SystemMetrics } from '../types'
+import type {
+  AdminUser,
+  AdminUserDetail,
+  AdminUserList,
+  AdminUserUpdate,
+  InviteCode,
+  InviteCodeList,
+  InviteCreateRequest,
+  SystemMetrics,
+} from '../types'
 
 export const adminApi = {
   listUsers(params?: {
@@ -29,5 +38,17 @@ export const adminApi = {
 
   getUserDetails(userId: string): Promise<AdminUserDetail> {
     return api.get<AdminUserDetail>(`/admin/users/${userId}/details`)
+  },
+
+  listInvites(): Promise<InviteCodeList> {
+    return api.get<InviteCodeList>('/admin/invites')
+  },
+
+  createInvite(data: InviteCreateRequest): Promise<InviteCode> {
+    return api.post<InviteCode>('/admin/invites', data)
+  },
+
+  revokeInvite(inviteId: string): Promise<InviteCode> {
+    return api.request<InviteCode>(`/admin/invites/${inviteId}`, { method: 'DELETE' })
   },
 }

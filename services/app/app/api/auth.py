@@ -6,11 +6,12 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_schemas import (
+    AccountDeletedResponse,
+    AccountDeleteRequest,
     AuthConfigResponse,
     ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
-    MagicLinkRequest,
     MFADisableRequest,
     MFASetupResponse,
     MFAVerifyRequest,
@@ -30,9 +31,15 @@ from app.core.auth import (
     create_refresh_token,
     decode_token,
     is_token_invalidated,
+    verify_password,
 )
 from app.core.database import get_session
-from app.core.exceptions import AuthenticationError, AuthorizationError, SessionRevokedError
+from app.core.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    RegistrationClosedError,
+    SessionRevokedError,
+)
 from app.core.oauth import (
     VALID_PROVIDERS,
     build_authorize_url,
@@ -45,7 +52,7 @@ from app.core.oauth import (
 from app.core.rate_limit import limiter
 from app.core.security import generate_qr_code_base64, setup_totp, verify_totp
 from app.models.user import User
-from app.services import user_service
+from app.services import account_service, invite_service, user_service
 
 logger = structlog.get_logger()
 
@@ -96,11 +103,14 @@ async def get_auth_config() -> AuthConfigResponse:
     if settings.github_client_id:
         providers.append("github")
 
+    mode = settings.registration_mode
     return AuthConfigResponse(
         self_hosted=settings.self_hosted,
-        registration_enabled=not settings.self_hosted,
+        registration_enabled=not settings.self_hosted and mode != "closed",
         oauth_providers=providers,
         demo_enabled=settings.demo_enabled,
+        registration_mode=mode,
+        invite_required=mode == "invite",
     )
 
 
@@ -112,8 +122,28 @@ async def register(
     response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> UserProfileResponse:
-    """Register a new user account."""
+    """Register a new user account.
+
+    Gated by `REGISTRATION_MODE`: "open" accepts anyone, "invite" requires a
+    valid invite code, "closed" rejects everything. Enforced here rather than in
+    the UI — `/config` only tells the frontend what to render.
+    """
+    mode = settings.registration_mode
+
+    if mode == "closed":
+        raise RegistrationClosedError()
+
+    invite = None
+    if mode == "invite":
+        # Redeem before creating the user so an invalid code costs nothing, and
+        # so a failed registration below rolls the use back with the same
+        # transaction.
+        invite = await invite_service.redeem_invite(session, body.invite_code or "")
+
     user = await user_service.register_user(session, body.email, body.username, body.password)
+
+    if invite is not None:
+        user.invite_code_id = invite.id
     minted = await user_service.create_email_verification_link(session, user)
     await session.commit()
     _set_auth_cookies(response, user)
@@ -441,20 +471,6 @@ async def oauth_callback(
         return RedirectResponse(url="/login?error=oauth_failed", status_code=302)
 
 
-@router.post("/magic-link", status_code=202)
-@limiter.limit(lambda: "5/minute")
-async def request_magic_link(
-    request: Request,
-    body: MagicLinkRequest,
-    session: AsyncSession = Depends(get_session),
-) -> dict[str, str]:
-    """Request a magic link for passwordless login. Always returns 202."""
-    # Reuse password reset flow for now — magic link sending deferred to M21
-    await user_service.request_password_reset(session, body.email)
-    await session.commit()
-    return {"detail": "If an account exists with that email, a magic link has been sent"}
-
-
 DEMO_USER_ID = "00000000-0000-0000-0000-000000000002"
 
 
@@ -481,11 +497,63 @@ async def demo_login(
     return redirect
 
 
-@router.get("/magic/{token}")
-async def magic_link_login(
-    token: str,
+@router.get(
+    "/account/export",
+    summary="Export my data",
+    description="Download everything this account owns as JSON.",
+)
+async def export_account_data(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> Response:
+    """Export the caller's data as a JSON attachment.
+
+    Covers the same tables account deletion removes, so "download my data" and
+    "delete my data" can never disagree about what is owned. Credential columns
+    (password hash, MFA secret, tokens) are excluded.
+    """
+    data = await account_service.export_user_data(session, user.id)
+    filename = f"studyaio-export-{user.id}.json"
+    logger.info("account_data_exported", user_id=user.id)
+    return JSONResponse(
+        content=data,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.delete(
+    "/account",
+    response_model=AccountDeletedResponse,
+    summary="Delete my account",
+    description="Permanently delete this account and all of its data.",
+)
+@limiter.limit(lambda: "3/minute")
+async def delete_account(
+    request: Request,
+    body: AccountDeleteRequest,
     response: Response,
     session: AsyncSession = Depends(get_session),
-) -> dict[str, str]:
-    """Login via magic link token (placeholder — full implementation in M21)."""
-    return {"detail": "Magic link login not yet fully implemented"}
+    user: User = Depends(get_current_user),
+) -> AccountDeletedResponse:
+    """Permanently delete the caller's account and every row they own.
+
+    Irreversible and immediate — there is no grace period, so the request is
+    re-authenticated first: with the account password, or, for OAuth-only
+    accounts that have none, by typing the username back.
+    """
+    if user.hashed_password:
+        if not body.password or not verify_password(body.password, user.hashed_password):
+            raise AuthenticationError("Password is incorrect")
+    elif (body.confirm_username or "").strip() != user.username:
+        raise AuthenticationError("Type your username to confirm deletion")
+
+    user_id = user.id
+    counts = await account_service.delete_user_account(session, user_id)
+    await session.commit()
+
+    _clear_auth_cookies(response)
+    logger.info("account_deleted", user_id=user_id, tables_touched=len(counts))
+    return AccountDeletedResponse(
+        detail="Your account and all of its data have been permanently deleted",
+        rows_deleted=sum(counts.values()),
+    )

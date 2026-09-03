@@ -8,7 +8,7 @@ import { classifyAuthError } from '../components/auth/authErrorMap'
 import { useAuth } from '../hooks/useAuth'
 import { registerSchema, type RegisterFormData } from '../lib/schemas'
 
-const REGISTER_FIELDS = ['email', 'username', 'password', 'confirm'] as const
+const REGISTER_FIELDS = ['email', 'username', 'password', 'confirm', 'invite_code'] as const
 type RegisterField = (typeof REGISTER_FIELDS)[number]
 
 function isRegisterField(key: string): key is RegisterField {
@@ -17,7 +17,8 @@ function isRegisterField(key: string): key is RegisterField {
 
 export function RegisterPage() {
   const navigate = useNavigate()
-  const { register: registerUser } = useAuth()
+  const { register: registerUser, authConfig } = useAuth()
+  const inviteRequired = authConfig?.invite_required ?? false
   const [cooldown, setCooldown] = useState<{ key: number; seconds: number } | null>(null)
   const [networkFailed, setNetworkFailed] = useState(false)
 
@@ -30,8 +31,17 @@ export function RegisterPage() {
 
   const onSubmit = handleSubmit(async (data) => {
     setNetworkFailed(false)
+    if (inviteRequired && !data.invite_code?.trim()) {
+      setError('invite_code', { message: 'An invite code is required' })
+      return
+    }
     try {
-      await registerUser({ email: data.email, username: data.username, password: data.password })
+      await registerUser({
+        email: data.email,
+        username: data.username,
+        password: data.password,
+        ...(inviteRequired ? { invite_code: data.invite_code?.trim() } : {}),
+      })
       navigate('/')
     } catch (err) {
       const outcome = classifyAuthError(err)
@@ -100,6 +110,19 @@ export function RegisterPage() {
           error={errors.confirm?.message}
           {...register('confirm')}
         />
+        {inviteRequired && (
+          <Input
+            id="invite_code"
+            type="text"
+            label="Invite code"
+            placeholder="BETA-XXXXXXXX"
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            error={errors.invite_code?.message}
+            {...register('invite_code')}
+          />
+        )}
         {errors.root?.message && (
           <p role="alert" className="text-xs text-red-fg">
             {errors.root.message}

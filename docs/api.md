@@ -59,9 +59,16 @@ Public endpoint (no auth required). Returns auth configuration for the frontend.
   "self_hosted": true,
   "registration_enabled": false,
   "oauth_providers": [],
-  "demo_enabled": false
+  "demo_enabled": false,
+  "registration_mode": "open",
+  "invite_required": false
 }
 ```
+
+`registration_mode` is one of `open`, `invite`, `closed` (env: `REGISTRATION_MODE`).
+`invite_required` is a convenience flag for the sign-up form — it is `true` exactly
+when the mode is `invite`. The gate itself is enforced server-side on
+`POST /api/auth/register`; this endpoint only tells the frontend what to render.
 
 ### `GET /api/auth/demo-login`
 
@@ -76,8 +83,21 @@ Register a new user. Rate limited: 3/minute. Mints a 24-hour email verification
 token and delivers the link best-effort after the commit — delivery failures
 never fail registration (see `POST /api/auth/resend-verification`).
 
-**Body** `RegisterRequest`
+Gated by `REGISTRATION_MODE`:
+
+| Mode | Behaviour |
+|---|---|
+| `open` (default) | Anyone may register; `invite_code` is ignored. |
+| `invite` | `invite_code` is required and must be redeemable, else `400`. |
+| `closed` | Always `403`, invite code or not. |
+
+In `invite` mode the code is redeemed *before* the user is created, so an invalid
+code costs nothing; the redeemed invite's ID is recorded on `users.invite_code_id`.
+
+**Body** `RegisterRequest` — `{ email, username, password, invite_code? }`
 **Response** `201` `UserProfileResponse` + Set-Cookie (access_token, refresh_token)
+**Response** `400` invite code missing, unknown, expired, revoked, or used up
+**Response** `403` registration is closed
 
 ### `POST /api/auth/login`
 
@@ -205,20 +225,59 @@ Provider callback. Validates the state token, exchanges the code for an access t
 
 **Response** `302` to `/` with Set-Cookie | `302` to `/login?error=oauth_failed` on a provider error or missing code/state | `400` unknown provider, or no email returned by the provider | `403` invalid or expired state
 
-### `POST /api/auth/magic-link`
+### `GET /api/auth/account/export`
 
-Request a magic link. Rate limited: 5/minute. Always returns 202.
+Download everything the authenticated account owns as a single JSON document.
+Covers the same tables account deletion removes, so export and delete cannot
+disagree about what is owned. Credential columns (password hash, MFA secret,
+magic-link hashes, Stripe IDs) are excluded.
 
-**Body** `MagicLinkRequest`
-**Response** `202`
+**Response** `200` `{ exported_at, user_id, tables: { <table>: [ …rows ] } }`
+with `Content-Disposition: attachment`
 
-> **Not implemented.** This currently sends a *password reset* email, and
-> `GET /api/auth/magic/{token}` below does not log anyone in. Passwordless login
-> is not wired up; nothing in the UI links to it.
+### `DELETE /api/auth/account`
 
-### `GET /api/auth/magic/{token}`
+Permanently delete the authenticated account and every row it owns, then purge
+its uploaded and generated files from storage. Immediate and irreversible —
+there is no grace period. Rate limited: 3/minute.
 
-Placeholder. Returns `200 {"detail": "Magic link login not yet fully implemented"}` without authenticating.
+Re-authenticates first: accounts with a password must supply it; OAuth-only
+accounts (`has_password: false` on the profile) confirm by sending their own
+username in `confirm_username`.
+
+**Body** `AccountDeleteRequest` — `{ password? }` or `{ confirm_username? }`
+**Response** `200` `{ detail, rows_deleted }` + cleared auth cookies
+**Response** `401` wrong password, or username confirmation did not match
+
+---
+
+## Admin — invite codes
+
+All three require `role=admin`.
+
+### `POST /api/admin/invites`
+
+Mint a registration invite code.
+
+**Body** `{ max_uses?: int = 1, expires_in_days?: int | null = 30, note?: string }`
+**Response** `201` `InviteResponse` — `{ id, code, note, max_uses, used_count, uses_remaining, is_redeemable, expires_at, revoked_at, created_at }`
+
+Codes look like `BETA-7F3KQ2MN` and use an alphabet with no `0/O` or `1/I/L`, so
+they survive being read off a screen and typed by hand.
+
+### `GET /api/admin/invites`
+
+List every invite code with its redemption state.
+
+**Response** `200` `{ invites: InviteResponse[], total }`
+
+### `DELETE /api/admin/invites/{invite_id}`
+
+Revoke a code so it can no longer be redeemed. Idempotent. The row is kept, not
+deleted — the record of who registered with which code is the point.
+
+**Response** `200` `InviteResponse`
+**Response** `404` unknown invite
 
 ---
 

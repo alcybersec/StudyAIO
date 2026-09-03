@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -34,6 +34,11 @@ class User(Base):
     tokens_valid_from: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Which invite this account registered with, when REGISTRATION_MODE=invite.
+    # SET NULL on delete so purging an invite does not delete its users.
+    invite_code_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("invite_codes.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -42,6 +47,15 @@ class User(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
+    @property
+    def has_password(self) -> bool:
+        """Whether this account can sign in with a password.
+
+        False for OAuth-only accounts, which have no password to re-enter when
+        confirming a destructive action.
+        """
+        return bool(self.hashed_password)
 
     # Relationships — auth
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(

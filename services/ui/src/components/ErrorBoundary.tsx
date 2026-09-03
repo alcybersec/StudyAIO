@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { captureError } from '../lib/monitoring'
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -22,6 +23,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo)
+    captureError(error, { componentStack: errorInfo.componentStack })
   }
 
   handleReset = () => {

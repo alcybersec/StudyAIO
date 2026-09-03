@@ -441,6 +441,8 @@ export interface AuthConfig {
   registration_enabled: boolean
   oauth_providers: string[]
   demo_enabled: boolean
+  registration_mode: 'open' | 'invite' | 'closed'
+  invite_required: boolean
 }
 
 export interface AuthUser {
@@ -455,6 +457,8 @@ export interface AuthUser {
   avatar_url: string | null
   last_login_at: string | null
   created_at: string
+  /** False for OAuth-only accounts, which have no password to re-enter. */
+  has_password: boolean
 }
 
 export interface LoginRequest {
@@ -467,6 +471,24 @@ export interface RegisterRequest {
   email: string
   username: string
   password: string
+  /** Required only when the server reports invite_required. */
+  invite_code?: string
+}
+
+export interface AccountDeleteRequest {
+  password?: string
+  confirm_username?: string
+}
+
+export interface AccountDeletedResponse {
+  detail: string
+  rows_deleted: number
+}
+
+export interface UserDataExport {
+  exported_at: string
+  user_id: string
+  tables: Record<string, Record<string, unknown>[]>
 }
 
 export interface ChangePasswordRequest {
@@ -1115,4 +1137,30 @@ export interface CaptureRequest {
   text?: string
   url?: string
   title?: string
+}
+
+// ── Admin: invite codes ───────────────────────────────────────────
+
+export interface InviteCode {
+  id: string
+  code: string
+  note: string | null
+  max_uses: number
+  used_count: number
+  uses_remaining: number
+  is_redeemable: boolean
+  expires_at: string | null
+  revoked_at: string | null
+  created_at: string
+}
+
+export interface InviteCodeList {
+  invites: InviteCode[]
+  total: number
+}
+
+export interface InviteCreateRequest {
+  max_uses?: number
+  expires_in_days?: number | null
+  note?: string
 }

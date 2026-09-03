@@ -18,6 +18,7 @@ import {
   TRow,
 } from '../components/ui'
 import type { AdminUser } from '../types'
+import { InvitePanel } from '../components/admin/InvitePanel'
 
 const PAGE_SIZE = 25
 
@@ -158,6 +159,8 @@ export function AdminPage() {
       <PageHeader title="Admin" subtitle="System metrics and user management" />
 
       <MetricsGrid />
+
+      <InvitePanel />
 
       <div className="bg-surface-1 rounded-xl border border-border">
         <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">

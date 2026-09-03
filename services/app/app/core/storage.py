@@ -47,6 +47,18 @@ class StorageBackend(ABC):
         """Return True if *key* exists in storage."""
 
     @abstractmethod
+    async def delete_prefix(self, prefix: str) -> int:
+        """Delete every object under a key prefix.
+
+        Args:
+            prefix: Key prefix, e.g. "extractions/<artifact_id>".
+
+        Returns:
+            Number of objects deleted.
+        """
+        ...
+
+    @abstractmethod
     async def delete(self, key: str) -> None:
         """Delete *key*. No error if it doesn't exist."""
 
@@ -171,6 +183,26 @@ class LocalStorageBackend(StorageBackend):
         if path.is_file():
             path.unlink()
 
+    async def delete_prefix(self, prefix: str) -> int:
+        target = self._resolve(prefix)
+        # Refuse to walk outside the storage root, whatever the caller passed.
+        try:
+            target.resolve().relative_to(self._base.resolve())
+        except ValueError:
+            logger.warning("storage_delete_prefix_escaped_root", prefix=prefix)
+            return 0
+
+        if not target.exists():
+            return 0
+
+        if target.is_file():
+            target.unlink()
+            return 1
+
+        count = sum(1 for p in target.rglob("*") if p.is_file())
+        shutil.rmtree(target, ignore_errors=True)
+        return count
+
     def get_url(self, key: str) -> str:
         # Serve via the /api/files/ endpoint
         return f"/api/files/{key}"
@@ -264,6 +296,26 @@ class S3StorageBackend(StorageBackend):
                 Bucket=settings.s3_bucket,
                 Key=self._full_key(key),
             )
+
+    async def delete_prefix(self, prefix: str) -> int:
+        deleted = 0
+        with contextlib.suppress(Exception):
+            client = self._get_client()
+            paginator = client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(
+                Bucket=settings.s3_bucket, Prefix=self._full_key(prefix)
+            ):
+                keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+                if not keys:
+                    continue
+                # delete_objects caps at 1000 keys per call.
+                for i in range(0, len(keys), 1000):
+                    client.delete_objects(
+                        Bucket=settings.s3_bucket,
+                        Delete={"Objects": keys[i : i + 1000]},
+                    )
+                deleted += len(keys)
+        return deleted
 
     def get_url(self, key: str) -> str:
         if settings.cdn_base_url:

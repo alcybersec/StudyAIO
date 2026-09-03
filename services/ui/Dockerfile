@@ -7,6 +7,18 @@ COPY package.json package-lock.json* ./
 RUN npm ci
 
 COPY . .
+
+# Vite inlines VITE_* at build time, so Sentry has to be configured here
+# rather than in the runtime environment. Empty (the default) disables it.
+ARG VITE_SENTRY_DSN=""
+ARG VITE_SENTRY_ENVIRONMENT="production"
+ARG VITE_SENTRY_RELEASE=""
+ARG VITE_SENTRY_TRACES_SAMPLE_RATE="0"
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN \
+    VITE_SENTRY_ENVIRONMENT=$VITE_SENTRY_ENVIRONMENT \
+    VITE_SENTRY_RELEASE=$VITE_SENTRY_RELEASE \
+    VITE_SENTRY_TRACES_SAMPLE_RATE=$VITE_SENTRY_TRACES_SAMPLE_RATE
+
 RUN npm run build
 
 # Stage 2: Serve with nginx
