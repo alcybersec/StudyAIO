@@ -179,6 +179,9 @@ export interface Settings {
   claude_cli_credentials: string
   openai_api_key: string
   openai_model: string
+  zai_api_key: string
+  zai_model: string
+  zai_base_url: string
   ollama_base_url: string
   ollama_model: string
   embedding_backend: string
@@ -1164,3 +1167,4 @@ export interface InviteCreateRequest {
   expires_in_days?: number | null
   note?: string
 }
+

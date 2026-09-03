@@ -51,7 +51,7 @@ export type AssessmentCreateFormData = z.infer<typeof assessmentCreateSchema>
 
 // ── Settings (D9) ──────────────────────────────────────────────
 
-export const AGENT_BACKENDS = ['claude_code', 'anthropic_api', 'openai', 'ollama'] as const
+export const AGENT_BACKENDS = ['claude_code', 'anthropic_api', 'openai', 'zai', 'ollama'] as const
 export const EMBEDDING_BACKENDS = ['sentence_transformers', 'openai', 'ollama'] as const
 
 export const aiProviderSettingsSchema = z.object({
@@ -66,6 +66,11 @@ export const aiProviderSettingsSchema = z.object({
     .string()
     .refine((v) => v === '' || v.startsWith('sk-'), { message: 'Key must start with sk-' }),
   openai_model: z.string(),
+  zai_api_key: z.string(),
+  zai_model: z.string(),
+  zai_base_url: z
+    .string()
+    .refine((v) => v === '' || /^https?:\/\/\S+$/.test(v), { message: 'Must be an http(s) URL' }),
   ollama_base_url: z
     .string()
     .refine((v) => v === '' || /^https?:\/\/\S+$/.test(v), { message: 'Must be an http(s) URL' }),
