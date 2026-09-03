@@ -102,6 +102,11 @@ class Settings(BaseSettings):
     # "open" | "invite" | "closed" — gates POST /api/auth/register
     registration_mode: str = "open"
 
+    # Redis socket timeouts (seconds). Cache/event/OAuth-state writes are all
+    # best-effort, so a slow or unreachable Redis must fail fast and degrade
+    # rather than block the request. Without these the client waits forever.
+    redis_socket_timeout: float = 2.0
+
     # Error monitoring (Sentry). Inert when sentry_dsn is empty.
     sentry_dsn: str = ""
     sentry_environment: str = "development"
