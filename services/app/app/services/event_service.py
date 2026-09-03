@@ -34,7 +34,12 @@ async def publish_pipeline_event(
     }
 
     try:
-        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=settings.redis_socket_timeout,
+            socket_timeout=settings.redis_socket_timeout,
+        )
         await redis.publish(PIPELINE_EVENTS_CHANNEL, json.dumps(event))
         await redis.aclose()
     except Exception as e:

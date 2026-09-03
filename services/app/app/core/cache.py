@@ -23,7 +23,12 @@ async def check_redis_connectivity() -> bool:
     Returns True if Redis is reachable, False otherwise.
     """
     try:
-        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=settings.redis_socket_timeout,
+            socket_timeout=settings.redis_socket_timeout,
+        )
         try:
             return await redis.ping()
         finally:
@@ -35,7 +40,12 @@ async def check_redis_connectivity() -> bool:
 async def cache_get(key: str) -> dict | None:
     """Fetch a JSON value from Redis cache. Returns None on miss or error."""
     try:
-        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=settings.redis_socket_timeout,
+            socket_timeout=settings.redis_socket_timeout,
+        )
         try:
             raw = await redis.get(key)
             if raw is not None:
@@ -50,7 +60,12 @@ async def cache_get(key: str) -> dict | None:
 async def cache_set(key: str, value: dict, ttl: int = DASHBOARD_TTL_SECONDS) -> None:
     """Store a JSON value in Redis with a TTL. Best-effort, never raises."""
     try:
-        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=settings.redis_socket_timeout,
+            socket_timeout=settings.redis_socket_timeout,
+        )
         try:
             await redis.setex(key, ttl, json.dumps(value))
         finally:
@@ -62,7 +77,12 @@ async def cache_set(key: str, value: dict, ttl: int = DASHBOARD_TTL_SECONDS) -> 
 async def cache_delete_pattern(pattern: str) -> None:
     """Delete all keys matching a pattern. Best-effort, never raises."""
     try:
-        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=settings.redis_socket_timeout,
+            socket_timeout=settings.redis_socket_timeout,
+        )
         try:
             cursor = 0
             while True:
@@ -80,7 +100,12 @@ async def cache_delete_pattern(pattern: str) -> None:
 async def cache_delete(key: str) -> None:
     """Delete a single cache key. Best-effort, never raises."""
     try:
-        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=settings.redis_socket_timeout,
+            socket_timeout=settings.redis_socket_timeout,
+        )
         try:
             await redis.delete(key)
         finally:
