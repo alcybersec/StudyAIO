@@ -92,6 +92,13 @@ async def _process_document(document_id: str) -> dict:
                 document_type=doc.document_type,
             )
 
+            # Meter the AI spend. Usage accumulates on the adapter, so one call
+            # here records every request this stage made.
+            if owner_user_id:
+                from app.services.billing_service import record_agent_usage
+
+                await record_agent_usage(session, owner_user_id, agent)
+
             # Persist results
             result = await courseops_service.process_course_document(
                 session=session,

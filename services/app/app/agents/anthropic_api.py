@@ -84,6 +84,11 @@ class AnthropicAPIAdapter(AgentAdapter):
                 text_parts.append(block.text)
 
         result = "\n".join(text_parts).strip()
+        # Metered by the caller (pipeline stages, API endpoints) after the call.
+        self.usage.add(
+            input_tokens=message.usage.input_tokens,
+            output_tokens=message.usage.output_tokens,
+        )
         logger.info(
             "anthropic_api_response",
             response_length=len(result),
