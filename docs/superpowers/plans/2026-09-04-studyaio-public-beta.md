@@ -607,7 +607,9 @@ git commit -m "feat(cli): add ensure-admin operator command"
 
 ## Task 3: Allow an admin to change a user's email
 
-`UserUpdateRequest` (`app/api/admin.py:49-54`) carries `role`, `tier` and `is_active` only, so `admin@studyaio.local` cannot be repointed through the API. Task 1 fixes it once from the CLI; this closes it permanently in the UI.
+`UserUpdateRequest` (`app/api/admin.py:49-54`) carries `role`, `tier` and `is_active` only, so `admin@studyaio.local` cannot be repointed through the API. Task 1 fixes it once from the CLI; this closes it permanently **in the API**.
+
+Note the limit, which this task does not remove: the admin UI still cannot send the field, because `services/ui/src/types/index.ts`'s `AdminUserUpdate` has no `email` and the form sends single-field patches. So after this task an operator corrects an address via the CLI, `curl`, or `/docs` — not by clicking. Wiring the UI is separate work (TS types, the form, vitest coverage), deliberately out of Phase 1; the beta is unblocked by the CLI and the API alone.
 
 **Files:**
 - Modify: `services/app/app/services/admin_service.py:87-127`
