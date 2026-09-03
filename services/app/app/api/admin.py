@@ -63,6 +63,11 @@ class SystemMetricsResponse(BaseModel):
     pipeline_runs_24h: int
     total_storage_bytes: int
     total_storage_mb: float
+    ai_calls_today: int = 0
+    ai_tokens_today: int = 0
+    #: 0 means no ceiling configured.
+    ai_calls_ceiling: int = 0
+    ai_tokens_ceiling: int = 0
 
 
 # ── User Detail Schemas ──────────────────────────────────────────

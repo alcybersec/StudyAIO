@@ -345,6 +345,12 @@ curl https://your-domain.com/health
 | `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Performance trace sampling; `0` disables |
 | `SENTRY_RELEASE` | | Release tag, e.g. the git SHA |
 | `VITE_SENTRY_DSN` | | Frontend DSN — a **build arg**, not runtime |
+| `FREE_MAX_COURSES` | `1` | Courses per free account; 0 = unlimited |
+| `FREE_MAX_UPLOADS_PER_MONTH` | `5` | Uploads per free account per month |
+| `FREE_MAX_AI_CALLS_PER_DAY` | `100` | AI calls per free account per day (~4 per upload) |
+| `PRO_MAX_COURSES` / `PRO_MAX_UPLOADS_PER_MONTH` / `PRO_MAX_AI_CALLS_PER_DAY` | `0` | Pro equivalents; 0 = unlimited |
+| `GLOBAL_MAX_AI_CALLS_PER_DAY` | `0` | Instance-wide daily AI call ceiling; 0 disables |
+| `GLOBAL_MAX_AI_TOKENS_PER_DAY` | `0` | Instance-wide daily token ceiling; 0 disables |
 
 ---
 
@@ -414,6 +420,23 @@ email, change their tier, or delete them outright.
 **4. Raise the free-tier limits.** `app/services/quota_service.py` caps the free
 tier at 1 course, 5 uploads/month and 20 AI calls/day. A real student hits that in
 one sitting — give beta testers `tier=pro` (Admin → Users) or raise the constants.
+
+**4b. Bound the bill.** Per-user limits do not cap what the *instance* spends:
+five testers on 100 calls/day is 500 calls/day. Set a ceiling:
+
+```env
+GLOBAL_MAX_AI_CALLS_PER_DAY=300
+```
+
+Once reached, new uploads and chat return `429` with `Retry-After`; pipelines
+already running finish, so no artifact is left half-processed. The counter resets
+at 00:00 UTC. Unlike the per-tier limits this applies to pro accounts and in
+self-hosted mode too — it is a cost guard, not a plan feature. Today's spend and
+the ceiling are shown on **Admin → metrics**.
+
+Pipeline AI calls are metered from this release on. Token counts are recorded for
+OpenAI, Z.ai and Anthropic; the Claude Code CLI reports no usage, so its calls are
+counted with zero tokens.
 
 **5. Decide who pays for AI.** `AGENT_BACKEND=claude_code` shells out to the CLI
 using the credentials mounted into the worker — every tester's usage bills to that

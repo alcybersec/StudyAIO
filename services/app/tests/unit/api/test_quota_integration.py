@@ -88,6 +88,10 @@ class TestUploadQuota:
     ):
         """Free user can upload when under quota."""
         mock_quota.check_upload_quota = AsyncMock(return_value=None)
+        # Uploads now also reserve the AI budget for the pipeline run they
+        # trigger, so this must be awaitable too.
+        mock_quota.check_ai_quota = AsyncMock(return_value=None)
+        mock_quota.PIPELINE_AI_CALLS_PER_UPLOAD = 4
         mock_billing.record_usage = AsyncMock()
 
         mock_result = MagicMock()

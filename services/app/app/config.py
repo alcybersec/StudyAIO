@@ -118,6 +118,22 @@ class Settings(BaseSettings):
     sentry_traces_sample_rate: float = 0.0
     sentry_release: str = ""
 
+    # Tier limits. 0 means unlimited. Pipeline AI calls count toward
+    # *_max_ai_calls_per_day, and one upload costs about
+    # PIPELINE_AI_CALLS_PER_UPLOAD calls (classify + summarize + flashcards + quiz).
+    free_max_courses: int = 1
+    free_max_uploads_per_month: int = 5
+    free_max_ai_calls_per_day: int = 100
+    pro_max_courses: int = 0
+    pro_max_uploads_per_month: int = 0
+    pro_max_ai_calls_per_day: int = 0
+
+    # Instance-wide daily ceiling. 0 disables it. This is an operator cost
+    # guard, so unlike the per-tier limits it applies to every tier and in
+    # self-hosted mode too.
+    global_max_ai_calls_per_day: int = 0
+    global_max_ai_tokens_per_day: int = 0
+
     # Stripe billing
     stripe_api_key: SecretStr = SecretStr("")
     stripe_webhook_secret: SecretStr = SecretStr("")

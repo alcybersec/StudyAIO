@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.core.exceptions import UserExistsError
+from app.core.exceptions import LastAdminError, UserExistsError
 from app.models.user import User
 from app.services import admin_service
 
@@ -119,7 +119,7 @@ class TestDeleteUser:
         mock_session.get = AsyncMock(return_value=make_user(id="admin-2", role="admin"))
 
         with patch("app.services.admin_service.count_active_admins", AsyncMock(return_value=0)):
-            with pytest.raises(ValueError, match="last active admin"):
+            with pytest.raises(LastAdminError, match="last active admin"):
                 await admin_service.delete_user(mock_session, "admin-2", acting_admin_id="admin-1")
 
     @pytest.mark.asyncio
@@ -197,3 +197,112 @@ class TestIssueEmailVerification:
         mock_session.get = AsyncMock(return_value=None)
         with pytest.raises(ValueError, match="User not found"):
             await admin_service.issue_email_verification(mock_session, "nope")
+
+
+class TestLastAdminGuardOnUpdate:
+    """Demotion and deactivation strip an admin just as deletion does.
+
+    PR #21 guarded only `delete_user`, which left two unguarded routes to an
+    instance with no admin and no recovery short of direct SQL.
+    """
+
+    def _only_admin(self):
+        return AsyncMock(return_value=0)
+
+    def _another_admin_exists(self):
+        return AsyncMock(return_value=1)
+
+    @pytest.mark.asyncio
+    async def test_refuses_to_demote_the_last_admin(self, mock_session):
+        mock_session.get = AsyncMock(return_value=make_user(id="a-1", role="admin"))
+
+        with patch("app.services.admin_service.count_active_admins", self._only_admin()):
+            with pytest.raises(LastAdminError, match="demote"):
+                await admin_service.update_user(mock_session, "a-1", role="user")
+
+    @pytest.mark.asyncio
+    async def test_refuses_to_demote_the_last_admin_to_demo(self, mock_session):
+        """`demo` is not `admin` either — the same lockout by another name."""
+        mock_session.get = AsyncMock(return_value=make_user(id="a-1", role="admin"))
+
+        with patch("app.services.admin_service.count_active_admins", self._only_admin()):
+            with pytest.raises(LastAdminError):
+                await admin_service.update_user(mock_session, "a-1", role="demo")
+
+    @pytest.mark.asyncio
+    async def test_refuses_to_deactivate_the_last_admin(self, mock_session):
+        mock_session.get = AsyncMock(return_value=make_user(id="a-1", role="admin"))
+
+        with patch("app.services.admin_service.count_active_admins", self._only_admin()):
+            with pytest.raises(LastAdminError, match="deactivate"):
+                await admin_service.update_user(mock_session, "a-1", is_active=False)
+
+    @pytest.mark.asyncio
+    async def test_the_change_is_not_applied_when_refused(self, mock_session):
+        """The guard must run before mutation, not after."""
+        user = make_user(id="a-1", role="admin")
+        mock_session.get = AsyncMock(return_value=user)
+
+        with patch("app.services.admin_service.count_active_admins", self._only_admin()):
+            with pytest.raises(LastAdminError):
+                await admin_service.update_user(mock_session, "a-1", role="user")
+
+        assert user.role == "admin"
+
+    @pytest.mark.asyncio
+    async def test_allows_demotion_when_another_admin_exists(self, mock_session):
+        user = make_user(id="a-1", role="admin")
+        mock_session.get = AsyncMock(return_value=user)
+
+        with patch("app.services.admin_service.count_active_admins", self._another_admin_exists()):
+            result = await admin_service.update_user(mock_session, "a-1", role="user")
+
+        assert result["role"] == "user"
+
+    @pytest.mark.asyncio
+    async def test_allows_deactivation_when_another_admin_exists(self, mock_session):
+        user = make_user(id="a-1", role="admin")
+        mock_session.get = AsyncMock(return_value=user)
+
+        with patch("app.services.admin_service.count_active_admins", self._another_admin_exists()):
+            result = await admin_service.update_user(mock_session, "a-1", is_active=False)
+
+        assert result["is_active"] is False
+
+    @pytest.mark.asyncio
+    async def test_tier_change_on_the_last_admin_is_fine(self, mock_session):
+        """Changing tier does not remove anyone's admin access."""
+        user = make_user(id="a-1", role="admin")
+        mock_session.get = AsyncMock(return_value=user)
+
+        with patch("app.services.admin_service.count_active_admins", self._only_admin()):
+            result = await admin_service.update_user(mock_session, "a-1", tier="pro")
+
+        assert result["tier"] == "pro"
+
+    @pytest.mark.asyncio
+    async def test_promoting_a_regular_user_is_fine(self, mock_session):
+        user = make_user(id="u-1", role="user")
+        mock_session.get = AsyncMock(return_value=user)
+
+        with patch("app.services.admin_service.count_active_admins", self._only_admin()):
+            result = await admin_service.update_user(mock_session, "u-1", role="admin")
+
+        assert result["role"] == "admin"
+
+    @pytest.mark.asyncio
+    async def test_an_inactive_admin_is_not_protected(self, mock_session):
+        """They are already not administering anything."""
+        user = make_user(id="a-1", role="admin", is_active=False)
+        mock_session.get = AsyncMock(return_value=user)
+
+        with patch("app.services.admin_service.count_active_admins", self._only_admin()):
+            result = await admin_service.update_user(mock_session, "a-1", role="user")
+
+        assert result["role"] == "user"
+
+    @pytest.mark.asyncio
+    async def test_invalid_role_still_rejected(self, mock_session):
+        mock_session.get = AsyncMock(return_value=make_user())
+        with pytest.raises(ValueError, match="Invalid role"):
+            await admin_service.update_user(mock_session, "u-1", role="superuser")

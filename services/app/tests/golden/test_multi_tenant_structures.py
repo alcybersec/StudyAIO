@@ -50,6 +50,11 @@ class TestAdminMetricsResponseStructure:
             "pipeline_runs_24h",
             "total_storage_bytes",
             "total_storage_mb",
+            # Today's instance-wide AI spend against the configured ceiling.
+            "ai_calls_today",
+            "ai_tokens_today",
+            "ai_calls_ceiling",
+            "ai_tokens_ceiling",
         }
         assert expected == fields
 
