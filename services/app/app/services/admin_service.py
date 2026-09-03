@@ -90,8 +90,9 @@ async def update_user(
     role: str | None = None,
     tier: str | None = None,
     is_active: bool | None = None,
+    email: str | None = None,
 ) -> dict | None:
-    """Update user role, tier, or active status.
+    """Update user role, tier, active status, or email.
 
     Args:
         session: Database session.
@@ -99,9 +100,13 @@ async def update_user(
         role: New role (admin, user, demo).
         tier: New tier (free, pro).
         is_active: New active status.
+        email: New email address.
 
     Returns:
         Updated user dict or None if not found.
+
+    Raises:
+        UserExistsError: If email is already used by another user.
     """
     user = await session.get(User, user_id)
     if not user:
@@ -116,6 +121,14 @@ async def update_user(
     # Guarding only `delete_user` would leave two open paths to a locked-out
     # instance, recoverable only with direct SQL access.
     await _guard_last_admin(session, user, role=role, is_active=is_active)
+
+    if email is not None and email != user.email:
+        clash = await session.execute(select(User).where(User.email == email, User.id != user.id))
+        if clash.scalar_one_or_none():
+            raise UserExistsError("email")
+        user.email = email
+        # A new address is unproven until its owner follows a link.
+        user.email_verified = False
 
     if role is not None:
         user.role = role

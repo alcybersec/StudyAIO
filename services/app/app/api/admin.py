@@ -47,11 +47,12 @@ class UserListResponse(BaseModel):
 
 
 class UserUpdateRequest(BaseModel):
-    """Request to update a user's role, tier, or active status."""
+    """Request to update a user's role, tier, active status, or email."""
 
     role: str | None = None
     tier: str | None = None
     is_active: bool | None = None
+    email: EmailStr | None = None
 
 
 class SystemMetricsResponse(BaseModel):
@@ -247,13 +248,18 @@ async def update_user(
     _admin: User = Depends(require_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> UserResponse:
-    """Update user role, tier, or active status (admin only)."""
-    if body.role is None and body.tier is None and body.is_active is None:
+    """Update user role, tier, active status, or email (admin only)."""
+    if body.role is None and body.tier is None and body.is_active is None and body.email is None:
         raise HTTPException(status_code=400, detail="No fields provided to update")
 
     try:
         result = await admin_service.update_user(
-            session, user_id, role=body.role, tier=body.tier, is_active=body.is_active
+            session,
+            user_id,
+            role=body.role,
+            tier=body.tier,
+            is_active=body.is_active,
+            email=body.email,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e

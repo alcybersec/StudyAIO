@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.exceptions import UserExistsError
 from app.services import admin_service
 
 
@@ -337,3 +338,44 @@ class TestGetUserDetails:
         result = await admin_service.get_user_details(mock_session, "user-001")
         assert result is not None
         assert result["profile"]["avatar_url"] == "https://example.com/avatar.png"
+
+
+@pytest.mark.asyncio
+class TestUpdateUserEmail:
+    """Tests for update_user(email=...)."""
+
+    async def test_changes_the_email(self, mock_session):
+        """An operator must be able to fix an unroutable address."""
+        # `_make_user_model` defaults email_verified to False, so it must be set
+        # explicitly here or the assertion below passes without the code running.
+        user = _make_user_model(email="admin@studyaio.local", email_verified=True)
+        mock_session.get = AsyncMock(return_value=user)
+        empty = MagicMock()
+        empty.scalar_one_or_none = MagicMock(return_value=None)
+        mock_session.execute = AsyncMock(return_value=empty)
+
+        result = await admin_service.update_user(mock_session, "user-001", email="real@example.com")
+
+        assert result["email"] == "real@example.com"
+        assert user.email_verified is False
+
+    async def test_rejects_an_email_already_in_use(self, mock_session):
+        """Two accounts sharing an address would make login ambiguous."""
+        user = _make_user_model()
+        mock_session.get = AsyncMock(return_value=user)
+        taken = MagicMock()
+        taken.scalar_one_or_none = MagicMock(return_value=_make_user_model(id="u-2"))
+        mock_session.execute = AsyncMock(return_value=taken)
+
+        with pytest.raises(UserExistsError):
+            await admin_service.update_user(mock_session, "user-001", email="taken@example.com")
+
+    async def test_leaves_the_email_alone_when_not_passed(self, mock_session):
+        """The existing role/tier/is_active calls must not change behaviour."""
+        user = _make_user_model(email="keep@example.com", email_verified=True)
+        mock_session.get = AsyncMock(return_value=user)
+
+        await admin_service.update_user(mock_session, "user-001", tier="pro")
+
+        assert user.email == "keep@example.com"
+        assert user.email_verified is True
