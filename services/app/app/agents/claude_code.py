@@ -149,6 +149,9 @@ class ClaudeCodeAdapter(AgentAdapter):
             raise AgentError(f"Claude Code failed (exit {process.returncode}): {error_text}")
 
         result = stdout.decode().strip()
+        # The CLI runs with --output-format text and reports no token usage, so
+        # the call is counted but tokens stay at 0 rather than being guessed.
+        self.usage.add()
         logger.info("claude_code_response", response_length=len(result))
         return result
 
