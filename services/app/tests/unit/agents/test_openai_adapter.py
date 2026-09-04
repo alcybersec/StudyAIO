@@ -150,6 +150,25 @@ class TestCallApi:
         call_kwargs = mock_client.chat.completions.create.call_args.kwargs
         assert call_kwargs["model"] == "gpt-4o"
 
+    async def test_sends_no_extra_body(self, adapter):
+        """OpenAIAdapter's request is byte-identical to before the hook existed.
+
+        Regression guard for the `_extra_request_params` extension point added
+        for Z.ai's thinking-mode override: on the plain OpenAI path it must
+        return {} and `extra_body` must not appear in the request at all.
+        """
+        mock_response = _mock_openai_response("result")
+        mock_client = MagicMock()
+        mock_client.chat = MagicMock()
+        mock_client.chat.completions = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with patch("app.agents.openai_adapter.AsyncOpenAI", return_value=mock_client):
+            await adapter._call_api("test prompt")
+
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert "extra_body" not in call_kwargs
+
     async def test_handles_none_usage(self, adapter):
         """None usage doesn't crash logging."""
         mock_response = _mock_openai_response("result")

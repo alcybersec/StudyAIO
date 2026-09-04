@@ -166,6 +166,35 @@ class TestOpenAIStreamAnswer:
         assert "".join(tokens) == "Hello World"
 
     @pytest.mark.asyncio
+    async def test_openai_stream_answer_sends_no_extra_body(self) -> None:
+        """OpenAI streaming request carries no `extra_body` (regression guard,
+        matches the non-streaming path's equivalent test)."""
+        with patch(
+            "app.agents.openai_adapter.get_effective_setting",
+            side_effect=lambda key: {
+                "openai_api_key": "test-key",
+                "openai_model": "gpt-4",
+            }.get(key, ""),
+        ):
+            from app.agents.openai_adapter import OpenAIAdapter
+
+            adapter = OpenAIAdapter(api_key="test-key", model="gpt-4")
+
+        async def mock_stream():
+            return
+            yield  # pragma: no cover - makes this an async generator
+
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
+
+        with patch("app.agents.openai_adapter.AsyncOpenAI", return_value=mock_client):
+            async for _ in adapter.stream_answer("Test question", []):
+                pass
+
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert "extra_body" not in call_kwargs
+
+    @pytest.mark.asyncio
     async def test_openai_stream_answer_raises_on_error(self) -> None:
         """OpenAI stream_answer wraps errors in AgentError."""
         from app.core.exceptions import AgentError

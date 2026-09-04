@@ -57,6 +57,14 @@ class OpenAIAdapter(AgentAdapter):
                 f"{self.provider_name} API key not configured. Set it in Settings > AI Providers."
             )
 
+    def _extra_request_params(self) -> dict:
+        """Provider-specific request parameters, merged into every completion call.
+
+        Empty for OpenAI proper; subclasses override for vendor extensions that
+        the OpenAI SDK passes through via `extra_body`.
+        """
+        return {}
+
     async def _call_api(self, prompt: str, max_tokens: int = _DEFAULT_MAX_TOKENS) -> str:
         """Send a prompt to the OpenAI API and return the text response.
 
@@ -80,12 +88,17 @@ class OpenAIAdapter(AgentAdapter):
             max_tokens=max_tokens,
         )
 
+        extra_params = self._extra_request_params()
+        request_kwargs = {
+            "model": self._model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if extra_params:
+            request_kwargs["extra_body"] = extra_params
+
         try:
-            response = await client.chat.completions.create(
-                model=self._model,
-                max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}],
-            )
+            response = await client.chat.completions.create(**request_kwargs)
         except Exception as e:
             raise AgentError(f"{self.provider_name} API call failed: {e}") from e
 
@@ -403,13 +416,18 @@ Respond with ONLY a JSON object:
             model=self._model,
         )
 
+        extra_params = self._extra_request_params()
+        request_kwargs = {
+            "model": self._model,
+            "max_tokens": _DEFAULT_MAX_TOKENS,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+        }
+        if extra_params:
+            request_kwargs["extra_body"] = extra_params
+
         try:
-            stream = await client.chat.completions.create(
-                model=self._model,
-                max_tokens=_DEFAULT_MAX_TOKENS,
-                messages=[{"role": "user", "content": prompt}],
-                stream=True,
-            )
+            stream = await client.chat.completions.create(**request_kwargs)
             async for chunk in stream:
                 delta = chunk.choices[0].delta if chunk.choices else None
                 if delta and delta.content:

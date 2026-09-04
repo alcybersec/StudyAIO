@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     zai_api_key: SecretStr = SecretStr("")
     zai_model: str = "glm-5.3"
     zai_base_url: str = "https://api.z.ai/api/paas/v4/"
+    # "disabled" by default: GLM's thinking mode roughly doubles output verbosity,
+    # which blows the summarize stage's token cap before the response structure
+    # completes (measured: 2/8 required sections, truncated mid-sentence, no
+    # footer). Disabling it produces a complete, on-length response within the
+    # existing cap. Set to "enabled" to restore GLM's default reasoning behavior.
+    zai_thinking: str = "disabled"
 
     # Ollama
     ollama_base_url: str = "http://ollama:11434"
