@@ -61,6 +61,7 @@ class TestConfiguration:
             "zai_api_key": "env-key",
             "zai_model": "glm-4.6",
             "zai_base_url": "https://regional.z.ai/api/paas/v4/",
+            "zai_thinking": "disabled",
         }
         with patch("app.agents.zai_adapter.get_effective_setting", side_effect=lambda k: values[k]):
             adapter = ZaiAdapter()
@@ -154,6 +155,79 @@ class TestInheritedBehaviour:
             # call sends the operator looking at the wrong provider.
             with pytest.raises(AgentError, match="Z.ai API call failed"):
                 await adapter._call_api("prompt")
+
+
+class TestThinkingMode:
+    """GLM's thinking mode roughly doubles response verbosity, which blows the
+    summarize stage's 8192 token cap before the response structure completes
+    (measured: 2/8 sections, truncated, no footer). Disabling it produced a
+    complete response (8/8 sections, footer present) within the same cap, so
+    it is disabled by default."""
+
+    @pytest.mark.asyncio
+    async def test_disables_thinking_by_default(self, no_env_settings):
+        adapter = ZaiAdapter(api_key="k")
+        client = MagicMock()
+        client.chat.completions.create = AsyncMock(return_value=_mock_response("hi"))
+
+        with patch.object(ZaiAdapter, "_client", return_value=client):
+            await adapter._call_api("prompt")
+
+        call_kwargs = client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
+
+    @pytest.mark.asyncio
+    async def test_zai_thinking_setting_enabled_sends_enabled(self):
+        values = {
+            "zai_api_key": "env-key",
+            "zai_model": "glm-5.3",
+            "zai_base_url": "",
+            "zai_thinking": "enabled",
+        }
+        with patch("app.agents.zai_adapter.get_effective_setting", side_effect=lambda k: values[k]):
+            adapter = ZaiAdapter()
+
+        client = MagicMock()
+        client.chat.completions.create = AsyncMock(return_value=_mock_response("hi"))
+
+        with patch.object(ZaiAdapter, "_client", return_value=client):
+            await adapter._call_api("prompt")
+
+        call_kwargs = client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["extra_body"] == {"thinking": {"type": "enabled"}}
+
+    @pytest.mark.asyncio
+    async def test_explicit_thinking_argument_wins(self, no_env_settings):
+        adapter = ZaiAdapter(api_key="k", thinking="enabled")
+        client = MagicMock()
+        client.chat.completions.create = AsyncMock(return_value=_mock_response("hi"))
+
+        with patch.object(ZaiAdapter, "_client", return_value=client):
+            await adapter._call_api("prompt")
+
+        call_kwargs = client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["extra_body"] == {"thinking": {"type": "enabled"}}
+
+    @pytest.mark.asyncio
+    async def test_streaming_path_also_disables_thinking(self, no_env_settings):
+        """The streaming path (chat, not summarize) must carry the same
+        thinking override — a fix limited to the non-streaming path would
+        leave GLM chat streaming still verbose and prone to truncation."""
+        adapter = ZaiAdapter(api_key="k")
+
+        async def mock_stream():
+            return
+            yield  # pragma: no cover - makes this an async generator
+
+        client = MagicMock()
+        client.chat.completions.create = AsyncMock(return_value=mock_stream())
+
+        with patch.object(ZaiAdapter, "_client", return_value=client):
+            async for _ in adapter.stream_answer("question", []):
+                pass
+
+        call_kwargs = client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
 
 
 class TestFactoryRouting:
