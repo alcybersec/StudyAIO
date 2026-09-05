@@ -15,20 +15,32 @@ from app.worker import celery_app
 logger = structlog.get_logger()
 
 
-async def _ingest(file_path: str, user_id: str | None = None) -> dict:
-    """Async ingest implementation."""
+async def _ingest(
+    file_path: str, user_id: str | None = None, artifact_id: str | None = None
+) -> dict:
+    """Async ingest implementation.
+
+    Args:
+        file_path: Storage key of the file to ingest.
+        user_id: Owner user UUID.
+        artifact_id: Artifact already created by the upload endpoint. When set,
+            hashing/dedup/creation are skipped and this row is adopted.
+    """
     async with async_session_factory() as session:
-        # Create pipeline run record
+        # Create pipeline run record. Without a pre-created artifact the id is
+        # only known once ingest_file returns, hence the placeholder.
         run = PipelineRun(
             id=generate_id(),
-            artifact_id="pending",  # will be updated after artifact creation
+            artifact_id=artifact_id or "pending",
             stage="ingest",
             status="running",
             started_at=datetime.now(UTC),
         )
 
         try:
-            artifact = await artifact_service.ingest_file(session, file_path, user_id=user_id or "")
+            artifact = await artifact_service.ingest_file(
+                session, file_path, user_id=user_id or "", artifact_id=artifact_id
+            )
 
             # Update pipeline run with real artifact_id
             run.artifact_id = artifact.id
@@ -88,20 +100,26 @@ def ingest_file(self, input_value: str | dict) -> dict:
     if isinstance(input_value, dict):
         file_path = input_value.get("file_path", "")
         user_id = input_value.get("user_id")
+        known_artifact_id = input_value.get("artifact_id")
     else:
         file_path = input_value
         user_id = None
+        known_artifact_id = None
 
-    logger.info("ingest_task_started", file_path=file_path, user_id=user_id)
-    publish_pipeline_event_sync("pending", "ingest", "started")
+    logger.info(
+        "ingest_task_started", file_path=file_path, user_id=user_id, artifact_id=known_artifact_id
+    )
+    # Uploads always pass the real id here. Only a caller that has not created
+    # the artifact yet falls back to the placeholder, which no client filters on.
+    publish_pipeline_event_sync(known_artifact_id or "pending", "ingest", "started")
     try:
-        result = run_async(_ingest(file_path, user_id=user_id))
-        artifact_id = result.get("artifact_id", "unknown")
+        result = run_async(_ingest(file_path, user_id=user_id, artifact_id=known_artifact_id))
+        artifact_id = result.get("artifact_id") or known_artifact_id or "unknown"
         publish_pipeline_event_sync(artifact_id, "ingest", result.get("status", "completed"))
         return result
     except (DuplicateFileError, FileNotFoundError, ValueError):
         raise  # Don't retry on expected errors
     except Exception as exc:
         logger.error("ingest_task_error", error=str(exc))
-        publish_pipeline_event_sync("unknown", "ingest", "failed", str(exc))
+        publish_pipeline_event_sync(known_artifact_id or "unknown", "ingest", "failed", str(exc))
         raise self.retry(exc=exc) from exc

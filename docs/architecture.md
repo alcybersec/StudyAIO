@@ -115,7 +115,7 @@ graph LR
 
 | Stage | Task | Input | Output | Idempotent? |
 |-------|------|-------|--------|-------------|
-| 0: Ingest | `ingest_file` | File path | LectureArtifact | Yes (SHA-256 dedup) |
+| 0: Ingest | `ingest_file` | File path + artifact_id | LectureArtifact | Yes (adopts the artifact the upload endpoint created; SHA-256 dedup when called without one) |
 | 1: Classify | `classify_artifact` | artifact_id | Updated artifact | Yes (re-classify overwrites) |
 | 2: Extract | `extract_artifact` | artifact_id | Extraction record | Yes (skip if exists) |
 | 3: Summarize | `summarize_artifact` | artifact_id | Summary record | Yes (version increment) |

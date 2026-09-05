@@ -8,6 +8,7 @@ import httpx
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from redis.asyncio import Redis
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
@@ -25,8 +26,7 @@ from app.core.cache import cache_delete, dashboard_cache_key
 from app.core.database import get_session
 from app.core.exceptions import DuplicateFileError
 from app.core.rate_limit import limiter
-from app.core.storage import get_storage
-from app.core.utils import read_upload_with_limit, sanitize_filename
+from app.core.utils import compute_sha256_from_bytes, read_upload_with_limit
 from app.models.user import User
 from app.pipeline.orchestrator import resume_pipeline, run_pipeline
 from app.services import (
@@ -53,7 +53,14 @@ MAX_CAPTURE_BYTES = 1024 * 1024
     response_model=UploadResponse,
     status_code=201,
     summary="Upload a lecture file",
-    description="Accepts PDF, DOCX, or PPTX files. Saves to storage, starts the processing pipeline, and returns immediately. Duplicate files (by SHA-256) return 409.",
+    description=(
+        "Accepts PDF, DOCX, or PPTX files. Hashes and dedups the bytes in the request, "
+        "creates the artifact, then starts the processing pipeline and returns immediately. "
+        "The returned artifact_id is always the real artifact — use it to follow the "
+        "pipeline-events stream or to retry a stage. A file already in the library returns "
+        '201 with status="duplicate" and the existing artifact id; nothing is stored and no '
+        "quota or XP is consumed."
+    ),
 )
 @limiter.limit(lambda: settings.rate_limit_uploads)
 async def upload_file(
@@ -64,7 +71,9 @@ async def upload_file(
 ) -> UploadResponse:
     """Upload a lecture file and start the processing pipeline.
 
-    Saves the file to a temp location and dispatches the pipeline.
+    Hashes and dedups the bytes in the request so the response can carry the
+    real artifact id, then stores the file, creates the artifact and dispatches
+    the pipeline against it.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
@@ -85,45 +94,65 @@ async def upload_file(
         session, user.id, user.tier, calls=quota_service.PIPELINE_AI_CALLS_PER_UPLOAD
     )
 
-    # Save to storage backend
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    content = await read_upload_with_limit(file, max_bytes)
+
+    # Dedup before touching storage. Doing it here rather than in the worker is
+    # what lets the response carry a real artifact id, and it stops a duplicate
+    # from orphaning a stored copy or burning quota and XP.
+    sha256 = compute_sha256_from_bytes(content)
+    existing = await artifact_service.check_duplicate(session, sha256, user.id)
+    if existing:
+        logger.info(
+            "upload_duplicate_detected",
+            filename=file.filename,
+            existing_artifact_id=existing.id,
+        )
+        return UploadResponse(
+            artifact_id=existing.id,
+            filename=file.filename,
+            status="duplicate",
+            pipeline_task_id=None,
+        )
+
+    # Store the bytes and create the artifact row
     try:
-        storage = get_storage()
-        await storage.ensure_dir("uploads")
-
-        safe_name = sanitize_filename(file.filename)
-        if not safe_name:
-            safe_name = f"upload{Path(file.filename).suffix}"
-        storage_key = f"uploads/{safe_name}"
-
-        # Handle key collision with counter
-        if await storage.exists(storage_key):
-            stem = Path(safe_name).stem
-            suffix = Path(safe_name).suffix
-            counter = 1
-            while await storage.exists(storage_key):
-                storage_key = f"uploads/{stem}_{counter}{suffix}"
-                counter += 1
-
-        max_bytes = settings.max_upload_size_mb * 1024 * 1024
-        content = await read_upload_with_limit(file, max_bytes)
-        await storage.put(storage_key, content)
-        file_path = storage_key
+        artifact = await artifact_service.create_upload_artifact(
+            session,
+            content=content,
+            original_filename=file.filename,
+            sha256=sha256,
+            user_id=user.id,
+        )
+    except IntegrityError:
+        # Two identical uploads raced past the dedup check above; the
+        # (sha256, user_id) unique constraint settled it. Report the winner.
+        await session.rollback()
+        existing = await artifact_service.check_duplicate(session, sha256, user.id)
+        if existing is None:
+            logger.error("upload_conflict_unresolved", filename=file.filename)
+            raise HTTPException(status_code=500, detail="Failed to save uploaded file") from None
+        return UploadResponse(
+            artifact_id=existing.id,
+            filename=file.filename,
+            status="duplicate",
+            pipeline_task_id=None,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error("upload_save_failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to save uploaded file") from e
 
-    logger.info("upload_received", filename=file.filename, saved_path=file_path)
+    logger.info(
+        "upload_received",
+        filename=file.filename,
+        artifact_id=artifact.id,
+        saved_path=artifact.file_path,
+    )
 
-    # Dispatch pipeline
-    try:
-        result = run_pipeline(file_path, user_id=user.id)
-    except DuplicateFileError as e:
-        raise HTTPException(
-            status_code=409,
-            detail=f"File already exists as artifact {e.existing_artifact_id}",
-        ) from e
+    # Dispatch pipeline against the artifact we just created
+    result = run_pipeline(artifact.file_path, user_id=user.id, artifact_id=artifact.id)
 
     # Record upload usage for quota tracking (best-effort)
     try:
@@ -145,7 +174,7 @@ async def upload_file(
     await cache_delete(dashboard_cache_key(str(user.id)))
 
     return UploadResponse(
-        artifact_id="pending",
+        artifact_id=artifact.id,
         filename=file.filename,
         status="processing",
         pipeline_task_id=result.id if result else None,
@@ -157,7 +186,13 @@ async def upload_file(
     response_model=BatchUploadResponse,
     status_code=201,
     summary="Batch upload lecture files",
-    description="Upload multiple lecture files in a single request. Returns per-file results with succeeded/failed/duplicate counts.",
+    description=(
+        "Upload multiple lecture files in a single request. Each file is hashed and "
+        "deduped before it is stored, so every result carries a real artifact id: "
+        'status="processing" for a new artifact, status="duplicate" with the existing '
+        "artifact id for a file already in the library. Returns per-file results with "
+        "succeeded/failed/duplicate counts."
+    ),
 )
 @limiter.limit("5/minute")
 async def batch_upload(
@@ -175,9 +210,6 @@ async def batch_upload(
     duplicates = 0
     failed = 0
 
-    storage = get_storage()
-    await storage.ensure_dir("uploads")
-
     for file in files:
         filename = file.filename or "unknown"
 
@@ -194,25 +226,10 @@ async def batch_upload(
             failed += 1
             continue
 
-        # Save file
+        # Read and hash the bytes
         try:
-            safe_name = sanitize_filename(filename)
-            if not safe_name:
-                safe_name = f"upload{ext}"
-            storage_key = f"uploads/{safe_name}"
-
-            if await storage.exists(storage_key):
-                stem = Path(safe_name).stem
-                suffix = Path(safe_name).suffix
-                counter = 1
-                while await storage.exists(storage_key):
-                    storage_key = f"uploads/{stem}_{counter}{suffix}"
-                    counter += 1
-
             max_bytes = settings.max_upload_size_mb * 1024 * 1024
             content = await read_upload_with_limit(file, max_bytes)
-            await storage.put(storage_key, content)
-            file_path = storage_key
         except HTTPException as e:
             results.append(
                 BatchUploadFileResult(
@@ -222,6 +239,69 @@ async def batch_upload(
                 )
             )
             failed += 1
+            continue
+        except Exception as e:
+            logger.error("batch_upload_read_failed", filename=filename, error=str(e))
+            results.append(
+                BatchUploadFileResult(
+                    filename=filename,
+                    status="error",
+                    error="Failed to read file",
+                )
+            )
+            failed += 1
+            continue
+
+        # Dedup before storing anything, same as the single-file endpoint
+        sha256 = compute_sha256_from_bytes(content)
+        existing = await artifact_service.check_duplicate(session, sha256, user.id)
+        if existing:
+            logger.info(
+                "batch_upload_duplicate_detected",
+                filename=filename,
+                existing_artifact_id=existing.id,
+            )
+            results.append(
+                BatchUploadFileResult(
+                    filename=filename,
+                    status="duplicate",
+                    artifact_id=existing.id,
+                )
+            )
+            duplicates += 1
+            continue
+
+        # Store the file and create the artifact row
+        try:
+            artifact = await artifact_service.create_upload_artifact(
+                session,
+                content=content,
+                original_filename=filename,
+                sha256=sha256,
+                user_id=user.id,
+            )
+        except IntegrityError:
+            await session.rollback()
+            existing = await artifact_service.check_duplicate(session, sha256, user.id)
+            if existing is None:
+                logger.error("batch_upload_conflict_unresolved", filename=filename)
+                results.append(
+                    BatchUploadFileResult(
+                        filename=filename,
+                        status="error",
+                        error="Failed to save file",
+                    )
+                )
+                failed += 1
+                continue
+            results.append(
+                BatchUploadFileResult(
+                    filename=filename,
+                    status="duplicate",
+                    artifact_id=existing.id,
+                )
+            )
+            duplicates += 1
             continue
         except Exception as e:
             logger.error("batch_upload_save_failed", filename=filename, error=str(e))
@@ -235,26 +315,17 @@ async def batch_upload(
             failed += 1
             continue
 
-        # Dispatch pipeline
+        # Dispatch pipeline against the artifact we just created
         try:
-            run_pipeline(file_path, user_id=user.id)
+            run_pipeline(artifact.file_path, user_id=user.id, artifact_id=artifact.id)
             results.append(
                 BatchUploadFileResult(
                     filename=filename,
                     status="processing",
-                    artifact_id="pending",
+                    artifact_id=artifact.id,
                 )
             )
             succeeded += 1
-        except DuplicateFileError as e:
-            results.append(
-                BatchUploadFileResult(
-                    filename=filename,
-                    status="duplicate",
-                    artifact_id=e.existing_artifact_id,
-                )
-            )
-            duplicates += 1
         except Exception as e:
             logger.error("batch_upload_pipeline_failed", filename=filename, error=str(e))
             results.append(
