@@ -98,6 +98,106 @@ class TestEmailService:
             assert "5" in call_args[0][2]  # html_body contains the count
 
     @pytest.mark.asyncio
+    async def test_send_email_port_587_uses_starttls(self) -> None:
+        """Port 587 + smtp_use_tls=True must use STARTTLS, not implicit TLS.
+
+        aiosmtplib's use_tls=True means implicit TLS from the first byte
+        (SMTPS, port 465). Port 587 is a STARTTLS submission port: connect
+        plaintext, then upgrade. Passing use_tls=True on 587 fails with
+        SSL: WRONG_VERSION_NUMBER.
+        """
+        with (
+            patch("app.services.email_service.settings") as mock_settings,
+            patch("app.services.email_service._smtp_configured", return_value=True),
+            patch("aiosmtplib.send", new_callable=AsyncMock) as mock_send,
+        ):
+            mock_settings.smtp_host = "smtp.test.com"
+            mock_settings.smtp_port = 587
+            mock_settings.smtp_username = "user"
+            mock_settings.smtp_password.get_secret_value.return_value = "<test-placeholder>"
+            mock_settings.smtp_from_email = "from@test.com"
+            mock_settings.smtp_from_name = "Test"
+            mock_settings.smtp_use_tls = True
+
+            result = await send_email("to@test.com", "Subject", "<p>Body</p>")
+
+            assert result is True
+            _, kwargs = mock_send.call_args
+            assert kwargs.get("start_tls") is True
+            assert not kwargs.get("use_tls")
+
+    @pytest.mark.asyncio
+    async def test_send_email_port_465_uses_implicit_tls(self) -> None:
+        """Port 465 + smtp_use_tls=True must use implicit TLS (use_tls=True)."""
+        with (
+            patch("app.services.email_service.settings") as mock_settings,
+            patch("app.services.email_service._smtp_configured", return_value=True),
+            patch("aiosmtplib.send", new_callable=AsyncMock) as mock_send,
+        ):
+            mock_settings.smtp_host = "smtp.test.com"
+            mock_settings.smtp_port = 465
+            mock_settings.smtp_username = "user"
+            mock_settings.smtp_password.get_secret_value.return_value = "<test-placeholder>"
+            mock_settings.smtp_from_email = "from@test.com"
+            mock_settings.smtp_from_name = "Test"
+            mock_settings.smtp_use_tls = True
+
+            result = await send_email("to@test.com", "Subject", "<p>Body</p>")
+
+            assert result is True
+            _, kwargs = mock_send.call_args
+            assert kwargs.get("use_tls") is True
+            assert not kwargs.get("start_tls")
+
+    @pytest.mark.asyncio
+    async def test_send_email_no_tls_uses_neither_flag(self) -> None:
+        """smtp_use_tls=False must set neither use_tls nor start_tls truthy."""
+        with (
+            patch("app.services.email_service.settings") as mock_settings,
+            patch("app.services.email_service._smtp_configured", return_value=True),
+            patch("aiosmtplib.send", new_callable=AsyncMock) as mock_send,
+        ):
+            mock_settings.smtp_host = "smtp.test.com"
+            mock_settings.smtp_port = 25
+            mock_settings.smtp_username = ""
+            mock_settings.smtp_password.get_secret_value.return_value = ""
+            mock_settings.smtp_from_email = "from@test.com"
+            mock_settings.smtp_from_name = "Test"
+            mock_settings.smtp_use_tls = False
+
+            result = await send_email("to@test.com", "Subject", "<p>Body</p>")
+
+            assert result is True
+            _, kwargs = mock_send.call_args
+            assert not kwargs.get("use_tls")
+            assert not kwargs.get("start_tls")
+
+    @pytest.mark.asyncio
+    async def test_send_email_ssl_failure_still_returns_false(self) -> None:
+        """A TLS/SSL handshake failure is still swallowed (best-effort contract)."""
+        import ssl
+
+        with (
+            patch("app.services.email_service.settings") as mock_settings,
+            patch("app.services.email_service._smtp_configured", return_value=True),
+            patch(
+                "aiosmtplib.send",
+                new_callable=AsyncMock,
+                side_effect=ssl.SSLError("WRONG_VERSION_NUMBER"),
+            ),
+        ):
+            mock_settings.smtp_host = "smtp.test.com"
+            mock_settings.smtp_port = 587
+            mock_settings.smtp_username = "user"
+            mock_settings.smtp_password.get_secret_value.return_value = "<test-placeholder>"
+            mock_settings.smtp_from_email = "from@test.com"
+            mock_settings.smtp_from_name = "Test"
+            mock_settings.smtp_use_tls = True
+
+            result = await send_email("to@test.com", "Subject", "<p>Body</p>")
+            assert result is False
+
+    @pytest.mark.asyncio
     async def test_typed_senders(self) -> None:
         """Typed sender functions call send_templated_email correctly."""
         with patch(
