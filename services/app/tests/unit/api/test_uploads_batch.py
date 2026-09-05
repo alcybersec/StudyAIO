@@ -1,16 +1,29 @@
 """Tests for batch upload endpoint."""
 
 import io
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from app.core.exceptions import DuplicateFileError
 
 
 def _make_upload_file(name: str, content: bytes = b"test pdf content"):
     """Create a tuple suitable for httpx multipart file upload."""
     return ("files", (name, io.BytesIO(content), "application/octet-stream"))
+
+
+def _patch_existing_artifact(artifact_id: str):
+    """Make every dedup lookup report an already-stored artifact.
+
+    Batch upload now hashes and dedups in the request, so a duplicate is an
+    artifact_service lookup hit rather than an exception out of run_pipeline.
+    """
+    existing = MagicMock()
+    existing.id = artifact_id
+    return patch(
+        "app.api.uploads.artifact_service.check_duplicate",
+        new_callable=AsyncMock,
+        return_value=existing,
+    )
 
 
 @pytest.mark.asyncio
@@ -90,12 +103,11 @@ class TestBatchUpload:
         assert txt_result["status"] == "error"
 
     async def test_batch_upload_duplicate(self, async_client):
-        """Batch upload handles duplicate files gracefully."""
-        with patch("app.api.uploads.run_pipeline") as mock_pipeline:
-            mock_pipeline.side_effect = DuplicateFileError(
-                sha256="abc123" * 10 + "abcd",
-                existing_artifact_id="existing-art-001",
-            )
+        """A file already in the library is reported with its existing id."""
+        with (
+            patch("app.api.uploads.run_pipeline") as mock_pipeline,
+            _patch_existing_artifact("existing-art-001"),
+        ):
             response = await async_client.post(
                 "/api/uploads/batch",
                 files=[_make_upload_file("duplicate.pdf")],
@@ -109,6 +121,8 @@ class TestBatchUpload:
         assert data["failed"] == 0
         assert data["results"][0]["status"] == "duplicate"
         assert data["results"][0]["artifact_id"] == "existing-art-001"
+        # Dedup happens before dispatch, so no pipeline runs for a duplicate.
+        mock_pipeline.assert_not_called()
 
     async def test_batch_upload_response_structure(self, async_client):
         """Batch upload response contains all expected fields."""
@@ -136,29 +150,38 @@ class TestBatchUpload:
 
     async def test_batch_upload_counts_correct(self, async_client):
         """Verify total = succeeded + failed + duplicates."""
-        with patch("app.api.uploads.run_pipeline") as mock_pipeline:
-            call_count = 0
+        existing = MagicMock()
+        existing.id = "dup-art"
+        dedup_calls = 0
 
-            def side_effect(file_path, user_id=None):
-                nonlocal call_count
-                call_count += 1
-                if call_count == 1:
-                    return MagicMock(id="task-1")
-                elif call_count == 2:
-                    raise DuplicateFileError(
-                        sha256="d" * 64,
-                        existing_artifact_id="dup-art",
-                    )
-                else:
-                    raise RuntimeError("Pipeline error")
+        async def fake_check_duplicate(session, sha256, user_id):
+            # Second file of the batch is the one already in the library.
+            nonlocal dedup_calls
+            dedup_calls += 1
+            return existing if dedup_calls == 2 else None
 
-            mock_pipeline.side_effect = side_effect
+        pipeline_calls = 0
+
+        def dispatch(file_path, user_id=None, artifact_id=None):
+            nonlocal pipeline_calls
+            pipeline_calls += 1
+            if pipeline_calls == 1:
+                return MagicMock(id="task-1")
+            raise RuntimeError("Pipeline error")
+
+        with (
+            patch("app.api.uploads.run_pipeline", side_effect=dispatch),
+            patch(
+                "app.api.uploads.artifact_service.check_duplicate",
+                fake_check_duplicate,
+            ),
+        ):
             response = await async_client.post(
                 "/api/uploads/batch",
                 files=[
-                    _make_upload_file("file1.pdf"),
-                    _make_upload_file("file2.pdf"),
-                    _make_upload_file("file3.pdf"),
+                    _make_upload_file("file1.pdf", b"one"),
+                    _make_upload_file("file2.pdf", b"two"),
+                    _make_upload_file("file3.pdf", b"three"),
                     _make_upload_file("bad.txt"),  # unsupported ext
                 ],
             )
@@ -186,4 +209,8 @@ class TestBatchUpload:
         assert data["succeeded"] == 1
         assert data["results"][0]["filename"] == "single.pptx"
         assert data["results"][0]["status"] == "processing"
-        assert data["results"][0]["artifact_id"] == "pending"
+        # The real artifact id, not the old "pending" placeholder (issue #25).
+        artifact_id = data["results"][0]["artifact_id"]
+        assert artifact_id
+        assert artifact_id != "pending"
+        assert mock_pipeline.call_args.kwargs["artifact_id"] == artifact_id

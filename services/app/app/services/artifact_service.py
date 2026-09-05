@@ -1,6 +1,7 @@
 """Business logic for lecture artifact management."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import structlog
 from sqlalchemy import select
@@ -39,25 +40,115 @@ async def check_duplicate(
     return result.scalar_one_or_none()
 
 
-async def ingest_file(session: AsyncSession, source_path: str, user_id: str) -> LectureArtifact:
+async def create_upload_artifact(
+    session: AsyncSession,
+    *,
+    content: bytes,
+    original_filename: str,
+    sha256: str,
+    user_id: str,
+) -> LectureArtifact:
+    """Store already-read upload bytes and create their artifact row.
+
+    This is the request-time half of ingest: the caller has the bytes in hand
+    and has already checked for a duplicate, so the artifact id exists before
+    the pipeline is dispatched and can be returned to the client.
+
+    Args:
+        session: Database session.
+        content: The uploaded file's bytes.
+        original_filename: Filename as supplied by the client.
+        sha256: Hex digest of *content*, computed by the caller.
+        user_id: Owner user UUID.
+
+    Returns:
+        The created LectureArtifact, already committed.
+
+    Raises:
+        ValueError: If the file type is not supported.
+    """
+    ext = Path(original_filename).suffix.lower()
+    file_type = SUPPORTED_EXTENSIONS.get(ext)
+    if file_type is None:
+        raise ValueError(
+            f"Unsupported file type: {ext}. Supported: {list(SUPPORTED_EXTENSIONS.keys())}"
+        )
+
+    artifact_id = generate_id()
+    safe_name = sanitize_filename(original_filename) or f"upload{ext}"
+    # The artifact id prefixes the key, so two uploads of different files with
+    # the same name cannot collide and no counter probe is needed.
+    storage_key = f"uploads/{artifact_id}_{safe_name}"
+
+    storage = get_storage()
+    await storage.ensure_dir("uploads")
+    await storage.put(storage_key, content)
+
+    artifact = LectureArtifact(
+        id=artifact_id,
+        user_id=user_id,
+        original_filename=original_filename,
+        file_path=storage_key,
+        file_type=file_type,
+        sha256=sha256,
+        file_size_bytes=len(content),
+        status="ingested",
+        pipeline_started_at=datetime.now(UTC),
+    )
+    session.add(artifact)
+    await session.commit()
+    await session.refresh(artifact)
+
+    logger.info(
+        "upload_artifact_created",
+        artifact_id=artifact.id,
+        storage_key=storage_key,
+        size=len(content),
+    )
+    return artifact
+
+
+async def ingest_file(
+    session: AsyncSession,
+    source_path: str,
+    user_id: str,
+    artifact_id: str | None = None,
+) -> LectureArtifact:
     """Ingest a file into the system.
 
     Computes SHA-256 for dedup, copies to uploads via storage backend,
     creates LectureArtifact record.
 
+    If *artifact_id* is given the row already exists (the upload endpoint
+    created it so it could return a real id), so hashing, dedup and creation
+    are skipped and the existing artifact is loaded and returned.
+
     Args:
         session: Database session.
         source_path: Path to the source file (local filesystem).
         user_id: Owner user UUID.
+        artifact_id: Pre-created artifact to adopt instead of creating one.
 
     Returns:
         Created (or existing) LectureArtifact.
 
     Raises:
         DuplicateFileError: If file already exists (same SHA-256 for this user).
-        ValueError: If file type is not supported.
+        ValueError: If file type is not supported, or the pre-created artifact
+            id does not resolve.
         FileNotFoundError: If source file doesn't exist.
     """
+    if artifact_id:
+        artifact = await get_artifact(session, artifact_id, user_id=user_id or None)
+        if artifact is None:
+            raise ValueError(f"Pre-created artifact not found: {artifact_id}")
+        logger.info(
+            "ingest_artifact_adopted",
+            artifact_id=artifact.id,
+            filename=artifact.original_filename,
+        )
+        return artifact
+
     storage = get_storage()
     path = storage.resolve_path(source_path)
     if not path.exists():
