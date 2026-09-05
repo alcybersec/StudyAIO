@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -154,6 +155,46 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
 
 _DEFAULT_JWT_SECRET = "changeme-in-production-use-a-real-secret"
 
+#: Uvicorn's own default for --forwarded-allow-ips. Behind a reverse proxy on a
+#: different host, this means every forwarding header is discarded.
+_DEFAULT_FORWARDED_ALLOW_IPS = "127.0.0.1"
+
+
+def warn_if_proxy_headers_untrusted() -> None:
+    """Warn when the app is behind a proxy it has not been told to trust.
+
+    Uvicorn only honours `X-Forwarded-For` when the immediate peer appears in
+    `--forwarded-allow-ips` / `FORWARDED_ALLOW_IPS`, which defaults to
+    `127.0.0.1`. A reverse proxy on any other host therefore has its forwarding
+    headers discarded, and `request.client.host` stays the proxy's address —
+    for every request, from every client.
+
+    That is not a cosmetic problem. The rate limiter keys on that address, so
+    the whole internet lands in a single bucket: a handful of requests a minute
+    from anywhere exhausts the login, registration and password-reset limits
+    for every user at once. It also makes the access log useless for
+    attribution. See StudyAIO issue #39.
+
+    This only warns. The correct value depends on deployment topology, so
+    guessing one would be worse than saying clearly that it is unset.
+    """
+    if settings.self_hosted:
+        return
+
+    configured = os.environ.get("FORWARDED_ALLOW_IPS", "").strip()
+    if configured and configured != _DEFAULT_FORWARDED_ALLOW_IPS:
+        return
+
+    logger.warning(
+        "proxy_headers_untrusted",
+        forwarded_allow_ips=configured or _DEFAULT_FORWARDED_ALLOW_IPS,
+        detail=(
+            "X-Forwarded-For will be ignored, so every client shares one "
+            "rate-limit bucket and the access log records the proxy address. "
+            "Set FORWARDED_ALLOW_IPS to the reverse proxy's address."
+        ),
+    )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -170,6 +211,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "You MUST set a unique, random JWT_SECRET_KEY in production (SaaS mode). "
             'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))"'
         )
+
+    warn_if_proxy_headers_untrusted()
 
     logger.info("studyaio_starting", data_dir=settings.data_dir)
     yield

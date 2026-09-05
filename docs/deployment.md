@@ -532,6 +532,101 @@ data as JSON, minus credentials — worth suggesting before anyone deletes.
 
 ---
 
+## Running Behind a Reverse Proxy
+
+If anything sits in front of the app — Caddy, nginx, Cloudflare, a load balancer
+— you must tell the app which proxy it may believe. Skipping this does not fail
+loudly; it fails silently and expensively.
+
+### Why it matters
+
+Uvicorn honours `X-Forwarded-For` only when the **immediate peer** appears in
+`--forwarded-allow-ips` (env: `FORWARDED_ALLOW_IPS`), which defaults to
+`127.0.0.1`. A proxy on any other host therefore has its forwarding headers
+discarded, and `request.client.host` stays **the proxy's address for every
+request**.
+
+The rate limiter keys on that address. So instead of 5 login attempts per minute
+per client, you get 5 per minute *in total, for the entire internet*. Roughly ten
+requests a minute — indistinguishable from ordinary traffic — locks every user
+out of login, registration and password reset at once. Password reset is the
+worst of the three: a locked-out user cannot self-recover.
+
+The access log is equally affected: every entry records the proxy, so no failed
+login can be attributed to anyone.
+
+The app logs a `proxy_headers_untrusted` warning at startup when it is in SaaS
+mode with this unset. It cannot do more than warn — the correct value depends on
+your topology.
+
+### Setting it up
+
+```bash
+FORWARDED_ALLOW_IPS=10.0.0.5   # the address of the proxy that talks to the app
+```
+
+Two rules, both load-bearing:
+
+**1. Only trust a proxy that is itself unreachable except through your edge.**
+Trusting a proxy anyone can connect to lets callers forge their own address —
+evading rate limits and poisoning your audit log. That is strictly worse than
+leaving the header untrusted.
+
+**2. Exactly one hop may set the header; the rest must pass it through.**
+Proxies *append* to `X-Forwarded-For` by default. With a chain, the app resolves
+the address to an inner proxy rather than the client. Have the outermost proxy
+overwrite the header and every inner hop pass it through unchanged.
+
+Caddy, for a two-hop chain behind Cloudflare:
+
+```
+# edge proxy — overwrite from Cloudflare's own view of the client
+header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+
+# inner proxy — pass through, do not append this hop
+header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+```
+
+`CF-Connecting-IP` is trustworthy **only** if your origin refuses non-Cloudflare
+traffic. A Cloudflare-proxied site whose origin accepts connections from anywhere
+has no protection at all: the origin address is published by certificate
+transparency logs, historical DNS, and any other service on the same host.
+Restrict it first:
+
+```
+@not_cloudflare not remote_ip <cloudflare ips-v4 + ips-v6>
+abort @not_cloudflare
+```
+
+Cloudflare's ranges change, so refresh them on a timer, and make the refresher
+refuse an implausibly short list — a truncated download would narrow the
+allow-list and take the site down.
+
+### Verifying it
+
+Config review is not enough here; check the behaviour.
+
+**Is the real client address reaching the app?** Send a request with a
+distinctive path and read the log entry back:
+
+```bash
+curl https://your-domain/api/whatever-probe-12345
+docker compose logs api | grep whatever-probe-12345
+```
+
+`client_ip` must be the address you sent from, not a proxy.
+
+**Is the rate limit actually per-client?** Exhaust it from **one** source, then
+immediately try from a second that has sent nothing. The second source must
+still succeed.
+
+Send more than `limit x worker_count` requests when exhausting. The default
+in-memory limiter storage is **per worker**, so with `--workers 2` a short probe
+can land on the other worker and produce a convincing false pass — two sources
+looking independent when they are not.
+
+---
+
 ## Troubleshooting
 
 ### Services won't start
