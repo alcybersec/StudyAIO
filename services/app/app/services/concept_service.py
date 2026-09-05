@@ -13,6 +13,53 @@ from app.models.concept_relation import ConceptRelation
 logger = structlog.get_logger()
 
 
+def _embed_concepts(concepts: list[Concept]) -> None:
+    """Attach embeddings to concepts in place, tolerating provider failures.
+
+    Embedding is best-effort: a provider that is down or misconfigured must not
+    lose the extracted concepts and relations, which are the expensive part.
+
+    But "best-effort" was previously a bare `except Exception`, and it hid two
+    stacked programming errors for the entire life of the feature — an import of
+    a module that does not exist, and a call to a method the interface does not
+    declare. Every concept had a NULL embedding and
+    `GET /api/concepts/{id}/similar` returned `[]` for everyone, always, without
+    ever erroring. See issue #33.
+
+    So infrastructure failures are swallowed and programming errors are not.
+    If this function is wrong, the tests and the pipeline say so.
+
+    Args:
+        concepts: Concepts whose `embedding` is unset. Mutated in place.
+    """
+    from app.agents.embeddings import get_embedding_provider
+
+    texts = [f"{c.name}: {c.description}" for c in concepts]
+
+    try:
+        vectors = get_embedding_provider().embed_texts(texts)
+    except (ImportError, AttributeError, TypeError):
+        # A missing module, a method that is not there, a bad signature — these
+        # are defects in this code, not a provider having a bad day.
+        raise
+    except Exception:
+        logger.warning("concept_embedding_failed", concept_count=len(concepts), exc_info=True)
+        return
+
+    if len(vectors) != len(concepts):
+        logger.warning(
+            "concept_embedding_count_mismatch",
+            expected=len(concepts),
+            received=len(vectors),
+        )
+        return
+
+    for concept, vector in zip(concepts, vectors, strict=True):
+        concept.embedding = vector
+
+    logger.debug("concepts_embedded", concept_count=len(concepts))
+
+
 async def extract_and_save_concepts(
     session: AsyncSession,
     artifact_id: str,
@@ -104,18 +151,13 @@ async def extract_and_save_concepts(
 
     await session.flush()
 
-    # Generate embeddings for new concepts (best-effort)
-    try:
-        from app.services.embedding_service import get_embedding_provider
-
-        provider = get_embedding_provider()
-        for concept in concept_map.values():
-            if concept.embedding is None:
-                embed_text = f"{concept.name}: {concept.description}"
-                embedding = await provider.embed(embed_text)
-                concept.embedding = embedding
-    except Exception:
-        logger.warning("concept_embedding_failed", exc_info=True)
+    # Generate embeddings for new concepts (best-effort).
+    #
+    # Batched deliberately: one provider call for the whole set, not one per
+    # concept. The local model pays its cost per call, not per text.
+    pending = [c for c in concept_map.values() if c.embedding is None]
+    if pending:
+        _embed_concepts(pending)
 
     # Save relations (dedup by unique constraint)
     relation_count = 0

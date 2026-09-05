@@ -34,7 +34,10 @@ class TestExtractAndSaveConcepts:
         mock_get_agent.return_value = mock_agent
 
         mock_provider = MagicMock()
-        mock_provider.embed = AsyncMock(return_value=[0.1] * 384)
+        # `embed_texts` is the method the ABC declares. These mocks used to name
+        # `embed`, which does not exist — so they passed while the real call path
+        # was broken and nothing embedded anything (issue #33).
+        mock_provider.embed_texts = MagicMock(side_effect=lambda texts: [[0.1] * 384] * len(texts))
         mock_embed.return_value = mock_provider
 
         # Mock empty existing concepts
@@ -81,7 +84,10 @@ class TestExtractAndSaveConcepts:
         mock_get_agent.return_value = mock_agent
 
         mock_provider = MagicMock()
-        mock_provider.embed = AsyncMock(return_value=[0.1] * 384)
+        # `embed_texts` is the method the ABC declares. These mocks used to name
+        # `embed`, which does not exist — so they passed while the real call path
+        # was broken and nothing embedded anything (issue #33).
+        mock_provider.embed_texts = MagicMock(side_effect=lambda texts: [[0.1] * 384] * len(texts))
         mock_embed.return_value = mock_provider
 
         # Return some existing names
