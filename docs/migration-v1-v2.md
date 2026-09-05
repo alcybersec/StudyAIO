@@ -81,7 +81,9 @@ STUDYAIO_ANTHROPIC_API_KEY=sk-ant-...
 STUDYAIO_OPENAI_API_KEY=sk-...
 STUDYAIO_OLLAMA_BASE_URL=http://ollama:11434
 
-# Embedding Provider (default: sentence_transformers)
+# Embedding Provider (instance-wide; default: sentence_transformers)
+# Anything but the default needs the vector columns migrated to that backend's
+# width and every artifact re-indexed — see docs/architecture.md.
 STUDYAIO_EMBEDDING_BACKEND=sentence_transformers  # or: openai, ollama
 
 # Stripe Billing (SaaS mode only)

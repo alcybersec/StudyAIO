@@ -130,6 +130,17 @@ class ProviderCredentialError(StudyAIOError):
         )
 
 
+class ConfigurationError(StudyAIOError):
+    """Raised when the instance's own configuration is internally inconsistent.
+
+    Not user input — an operator set two env values that contradict each other,
+    so the message names both of them and the values it saw. Surfaces as a 500,
+    which is correct: nothing the caller sends can fix it.
+    """
+
+    pass
+
+
 class GlobalCeilingError(StudyAIOError):
     """Raised when the instance-wide daily AI ceiling is reached.
 

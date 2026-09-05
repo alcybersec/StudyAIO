@@ -187,34 +187,103 @@ _provider: EmbeddingProvider | None = None
 def get_embedding_provider() -> EmbeddingProvider:
     """Get the configured embedding provider singleton.
 
-    Reads embedding_backend from settings:
-    - "sentence_transformers": local SentenceTransformerProvider (default)
-    - "openai": OpenAI text-embedding-3-small
-    - "ollama": Ollama nomic-embed-text
+    The backend is instance-wide, read straight from `EMBEDDING_BACKEND`. It is
+    deliberately **not** a per-user setting, and this is not a gap waiting to be
+    filled — see the note below.
+
+    Backends:
+    - "sentence_transformers": local SentenceTransformerProvider (default, 384)
+    - "openai": OpenAI text-embedding-3-small (1536)
+    - "ollama": Ollama nomic-embed-text (768)
+
+    The constructed provider's dimensionality must match
+    `EMBEDDING_DIMENSIONS`, which in turn must match the `vector(N)` column the
+    rows land in. A mismatch is refused here, before the provider is ever
+    called.
 
     Returns:
         An EmbeddingProvider implementation.
+
+    Raises:
+        ConfigurationError: If the backend's output dimensionality does not
+            match `EMBEDDING_DIMENSIONS`.
     """
+    # Why the embedding backend is operator-only, and must stay that way
+    # (issue #32):
+    #
+    # A per-user embedding provider is incoherent, not merely unimplemented.
+    # Vectors from different models are not comparable and do not share a
+    # column: `chunks.embedding` is a single `vector(384)`, and a query vector
+    # is compared against every row in it. A user switching provider would need
+    # their entire corpus re-indexed, and every query embedded by the same model
+    # that embedded their documents — which in turn needs a provenance column
+    # recording the producing model, a model-scoped filter on every similarity
+    # query, and a re-index pipeline. That is a feature with a schema change
+    # behind it, not a settings toggle.
+    #
+    # So: no dropdown. Offering one promises a per-user choice that cannot be
+    # honoured, and before this guard existed, selecting `openai` meant OpenAI
+    # was called and billed, the INSERT was rejected by pgvector, and Celery
+    # retried it twice — three paid runs, zero rows stored.
     global _provider
     if _provider is None:
         from app.config import settings
-        from app.services.settings_service import get_effective_setting
 
-        backend = get_effective_setting("embedding_backend")
+        backend = settings.embedding_backend
 
         if backend == "openai":
             api_key = settings.openai_api_key.get_secret_value()
-            _provider = OpenAIEmbeddingProvider(api_key=api_key)
+            provider: EmbeddingProvider = OpenAIEmbeddingProvider(api_key=api_key)
         elif backend == "ollama":
-            _provider = OllamaEmbeddingProvider(
+            provider = OllamaEmbeddingProvider(
                 base_url=settings.ollama_base_url,
             )
         else:
-            _provider = SentenceTransformerProvider(
+            provider = SentenceTransformerProvider(
                 model_name=settings.embedding_model,
             )
 
+        _check_dimensions(backend, provider, settings.embedding_dimensions)
+        _provider = provider
+
     return _provider
+
+
+def _check_dimensions(backend: str, provider: EmbeddingProvider, expected: int) -> None:
+    """Refuse a provider whose vectors cannot fit the configured column.
+
+    Checked at construction rather than at insert time because the insert is
+    downstream of a paid API call: OpenAI bills for the embeddings, pgvector
+    then rejects the row for its dimensionality, and the index task retries.
+    Failing here costs nothing and names what to change.
+
+    Note this checks the provider's *declared* dimensionality.
+    `SentenceTransformerProvider` re-reads its true value once the model
+    loads, so pointing `EMBEDDING_MODEL` at a non-384 local model is still
+    caught only at insert time — no money is at stake on that path.
+
+    Args:
+        backend: The configured `EMBEDDING_BACKEND` value, for the message.
+        provider: The freshly constructed provider.
+        expected: `EMBEDDING_DIMENSIONS`, which must match the pgvector column.
+
+    Raises:
+        ConfigurationError: If the two disagree.
+    """
+    from app.core.exceptions import ConfigurationError
+
+    if provider.dimensions == expected:
+        return
+
+    raise ConfigurationError(
+        f"EMBEDDING_BACKEND={backend!r} produces {provider.dimensions}-dimensional "
+        f"vectors, but EMBEDDING_DIMENSIONS is {expected}. They must agree, and "
+        f"both must match the vector(N) column embeddings are stored in. Either "
+        f"set EMBEDDING_BACKEND back to a {expected}-dimensional backend, or "
+        f"migrate the chunks.embedding and concepts.embedding columns to "
+        f"{provider.dimensions} dimensions, set EMBEDDING_DIMENSIONS to match, "
+        f"and re-index every artifact."
+    )
 
 
 def reset_embedding_provider() -> None:

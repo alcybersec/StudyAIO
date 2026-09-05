@@ -188,7 +188,6 @@ export interface Settings {
   zai_base_url: string
   ollama_base_url: string
   ollama_model: string
-  embedding_backend: string
   classification_confidence_threshold: number
   flashcard_count_per_week: number
   quiz_question_count_per_week: number

@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.agents.embeddings import (
     OllamaEmbeddingProvider,
     OpenAIEmbeddingProvider,
@@ -125,44 +127,122 @@ class TestGetEmbeddingProvider:
 
     def test_default_returns_sentence_transformers(self):
         """Default backend returns SentenceTransformerProvider."""
-        with (
-            patch(
-                "app.services.settings_service.get_effective_setting",
-                return_value="sentence_transformers",
-            ),
-            patch("app.config.settings") as mock_settings,
-        ):
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.embedding_backend = "sentence_transformers"
             mock_settings.embedding_model = "all-MiniLM-L6-v2"
+            mock_settings.embedding_dimensions = 384
             provider = get_embedding_provider()
 
         assert isinstance(provider, SentenceTransformerProvider)
 
     def test_openai_returns_openai_provider(self):
-        """openai backend returns OpenAIEmbeddingProvider."""
+        """openai backend returns OpenAIEmbeddingProvider when dimensions agree."""
         from pydantic import SecretStr
 
-        with (
-            patch(
-                "app.services.settings_service.get_effective_setting",
-                return_value="openai",
-            ),
-            patch("app.config.settings") as mock_settings,
-        ):
-            mock_settings.openai_api_key = SecretStr("test-key")
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.embedding_backend = "openai"
+            mock_settings.openai_api_key = SecretStr("<test-placeholder>")
+            mock_settings.embedding_dimensions = 1536
             provider = get_embedding_provider()
 
         assert isinstance(provider, OpenAIEmbeddingProvider)
 
     def test_ollama_returns_ollama_provider(self):
-        """ollama backend returns OllamaEmbeddingProvider."""
-        with (
-            patch(
-                "app.services.settings_service.get_effective_setting",
-                return_value="ollama",
-            ),
-            patch("app.config.settings") as mock_settings,
-        ):
+        """ollama backend returns OllamaEmbeddingProvider when dimensions agree."""
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.embedding_backend = "ollama"
             mock_settings.ollama_base_url = "http://test:11434"
+            mock_settings.embedding_dimensions = 768
             provider = get_embedding_provider()
 
         assert isinstance(provider, OllamaEmbeddingProvider)
+
+    def test_backend_is_read_from_config_not_user_settings(self):
+        """The backend is instance-wide — a per-user override cannot reach it.
+
+        Issue #32: `embedding_backend` used to be resolved through
+        `get_effective_setting`, which named a per-user layer that never
+        applied to it. Nothing in this path may consult user settings.
+        """
+        with (
+            patch("app.config.settings") as mock_settings,
+            patch("app.services.settings_service.get_effective_setting") as mock_effective,
+        ):
+            mock_settings.embedding_backend = "sentence_transformers"
+            mock_settings.embedding_model = "all-MiniLM-L6-v2"
+            mock_settings.embedding_dimensions = 384
+            get_embedding_provider()
+
+        mock_effective.assert_not_called()
+
+
+class TestDimensionGuard:
+    """A provider whose vectors cannot fit the column is refused up front.
+
+    Before this guard, `EMBEDDING_BACKEND=openai` on the shipped `vector(384)`
+    schema meant OpenAI was called and billed, pgvector rejected the INSERT,
+    and Celery retried twice — three paid runs, zero rows stored (issue #32).
+    """
+
+    def setup_method(self):
+        reset_embedding_provider()
+
+    def teardown_method(self):
+        reset_embedding_provider()
+
+    def test_openai_against_384_column_raises_before_any_call(self):
+        """The documented failure: 1536-dim backend, 384-dim column."""
+        from pydantic import SecretStr
+
+        from app.core.exceptions import ConfigurationError
+
+        with (
+            patch("app.config.settings") as mock_settings,
+            patch("openai.OpenAI") as mock_openai,
+        ):
+            mock_settings.embedding_backend = "openai"
+            mock_settings.openai_api_key = SecretStr("<test-placeholder>")
+            mock_settings.embedding_dimensions = 384
+
+            with pytest.raises(ConfigurationError) as exc_info:
+                get_embedding_provider()
+
+        # No client was constructed, so nothing was sent and nothing was billed.
+        mock_openai.assert_not_called()
+
+        message = str(exc_info.value)
+        assert "1536" in message
+        assert "384" in message
+        assert "EMBEDDING_BACKEND" in message
+        assert "EMBEDDING_DIMENSIONS" in message
+
+    def test_ollama_against_384_column_raises(self):
+        """768-dim backend against the shipped 384-dim column."""
+        from app.core.exceptions import ConfigurationError
+
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.embedding_backend = "ollama"
+            mock_settings.ollama_base_url = "http://test:11434"
+            mock_settings.embedding_dimensions = 384
+
+            with pytest.raises(ConfigurationError, match="768"):
+                get_embedding_provider()
+
+    def test_failed_construction_does_not_poison_the_singleton(self):
+        """A refused provider is not cached, so a fixed config recovers."""
+        from app.core.exceptions import ConfigurationError
+
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.embedding_backend = "ollama"
+            mock_settings.ollama_base_url = "http://test:11434"
+            mock_settings.embedding_dimensions = 384
+            with pytest.raises(ConfigurationError):
+                get_embedding_provider()
+
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.embedding_backend = "sentence_transformers"
+            mock_settings.embedding_model = "all-MiniLM-L6-v2"
+            mock_settings.embedding_dimensions = 384
+            provider = get_embedding_provider()
+
+        assert isinstance(provider, SentenceTransformerProvider)
