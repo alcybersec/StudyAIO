@@ -15,6 +15,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
+from app.agents.embeddings import get_embedding_provider
 from app.api import (
     admin_router,
     analytics_router,
@@ -196,6 +197,61 @@ def warn_if_proxy_headers_untrusted() -> None:
     )
 
 
+def warn_if_embedding_provider_unavailable() -> None:
+    """Say loudly at startup when this process cannot embed text.
+
+    Every retrieval path in the API needs an embedding provider, and until
+    issue #44 not one of them had one. The api container runs as `studyaio`,
+    whose home is the root-owned `/app`, so sentence-transformers could not
+    create its model cache: `POST /api/qa` raised and returned 500, and chat
+    caught the identical error and answered with no lecture context at all.
+    That ran for six months. The process said nothing at boot either time.
+
+    Note this **loads** the model rather than only constructing the provider.
+    Construction is lazy — `SentenceTransformerProvider.__init__` records a
+    model name and returns without touching the filesystem — so a check that
+    stopped at `get_embedding_provider()` would have passed happily throughout
+    the outage. `preload()` is the step that actually resolves the cache. For
+    the OpenAI and Ollama backends `preload()` is a documented no-op, so this
+    costs them nothing and never makes a billable call at startup.
+
+    This only logs. A self-hosted instance that has deliberately stripped the
+    model should still start and serve everything that does not need
+    retrieval — the same reasoning as `warn_if_proxy_headers_untrusted`, at
+    error level because unlike an untrusted proxy header this one means a
+    feature is already dead.
+
+    Nothing equivalent runs in the Celery worker: it does not execute this
+    lifespan, and the worker's embedding paths were never the broken ones.
+    """
+    try:
+        provider = get_embedding_provider()
+        provider.preload()
+    except Exception as exc:
+        logger.error(
+            "embedding_provider_unavailable",
+            backend=settings.embedding_backend,
+            model=settings.embedding_model,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            detail=(
+                "Retrieval is dead in this process: /api/qa will return 500 and "
+                "chat will answer without any lecture context, silently. A "
+                "permission error here means the model cache is not readable by "
+                "the user this container runs as — the image bakes a "
+                "world-readable one at HF_HOME, so check that it survived the "
+                "build and that EMBEDDING_MODEL still names the baked model."
+            ),
+        )
+        return
+
+    logger.info(
+        "embedding_provider_ready",
+        backend=settings.embedding_backend,
+        dimensions=provider.dimensions,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application startup and shutdown events."""
@@ -213,6 +269,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     warn_if_proxy_headers_untrusted()
+    warn_if_embedding_provider_unavailable()
 
     logger.info("studyaio_starting", data_dir=settings.data_dir)
     yield

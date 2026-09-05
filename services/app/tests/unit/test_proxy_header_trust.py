@@ -86,7 +86,12 @@ async def test_startup_actually_runs_the_check():
     """
     from app.main import app, lifespan
 
-    with patch("app.main.warn_if_proxy_headers_untrusted") as check:
+    with (
+        patch("app.main.warn_if_proxy_headers_untrusted") as check,
+        # Stubbed because it loads the embedding model for real; its own wiring
+        # test lives in test_embedding_startup_check.py.
+        patch("app.main.warn_if_embedding_provider_unavailable"),
+    ):
         async with lifespan(app):
             pass
 
