@@ -301,10 +301,19 @@ Separate interface (`EmbeddingProvider`) from the agent adapter since embeddings
 | Backend | Module | Notes |
 |---------|--------|-------|
 | `sentence_transformers` | `agents/embeddings.py` | all-MiniLM-L6-v2, 384 dims, in-process |
-| `openai` | `agents/openai_embedding.py` | text-embedding-3-small |
-| `ollama` | `agents/ollama_embedding.py` | Local Ollama embedding model |
+| `openai` | `agents/embeddings.py` | text-embedding-3-small, 1536 dims |
+| `ollama` | `agents/embeddings.py` | nomic-embed-text, 768 dims |
 
-Selected via `embedding_backend` setting.
+Instance-wide, via the `EMBEDDING_BACKEND` env variable only — never per-user.
+All of an instance's vectors share one `vector(N)` column and are comparable
+only when one model produced them, so the choice belongs to the deployment, not
+to an account (issue #32).
+
+`EMBEDDING_DIMENSIONS` must match both the chosen backend and the
+`chunks.embedding` / `concepts.embedding` columns, which ship as `vector(384)`.
+`get_embedding_provider()` refuses to construct a provider whose dimensionality
+disagrees, so changing the backend means migrating those columns and re-indexing
+every artifact — not flipping one variable.
 
 ## Storage Backend
 

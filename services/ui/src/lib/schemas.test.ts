@@ -21,7 +21,6 @@ const validAiSettings = {
   zai_base_url: '',
   ollama_base_url: 'http://ollama:11434',
   ollama_model: 'llama3.2',
-  embedding_backend: 'sentence_transformers',
   classification_confidence_threshold: 0.75,
 }
 

@@ -39,6 +39,17 @@ class TestValidateSetting:
         with pytest.raises(ValueError, match="must be one of"):
             settings_service.validate_setting("claude_model", "gpt4")
 
+    def test_embedding_backend_is_not_a_user_setting(self):
+        """embedding_backend is operator-only — the API must not accept it.
+
+        Not merely unimplemented per-user: an instance's vectors share one
+        column and are comparable only when one model produced them, so the
+        choice cannot be an account's to make (issue #32).
+        """
+        assert "embedding_backend" not in settings_service.ALLOWED_KEYS
+        with pytest.raises(ValueError, match="Unknown setting"):
+            settings_service.validate_setting("embedding_backend", "openai")
+
     def test_claude_code_path_empty_string_raises(self):
         """Empty path string is rejected."""
         with pytest.raises(ValueError, match="non-empty string"):
@@ -134,3 +145,26 @@ class TestGetEffectiveSetting:
         """Returns None for unknown keys."""
         result = settings_service.get_effective_setting("nonexistent_key_xyz")
         assert result is None
+
+
+class TestEmbeddingBackendIsOperatorOnly:
+    """embedding_backend has no per-user surface left anywhere (issue #32)."""
+
+    def test_absent_from_defaults_and_public_view(self):
+        """It is neither a default nor a readable setting."""
+        assert "embedding_backend" not in settings_service.get_all_settings()
+        assert "embedding_backend" not in settings_service._public_view({})
+
+    def test_a_stale_stored_override_is_not_echoed_back(self):
+        """A value left by the old API stays inert rather than resurfacing."""
+        view = settings_service._public_view({"embedding_backend": "openai"})
+        assert "embedding_backend" not in view
+
+    def test_still_resolvable_as_an_instance_setting(self):
+        """Removing the user surface must not remove the operator's knob."""
+        from app.config import settings
+
+        assert settings.embedding_backend
+        assert settings_service.get_effective_setting("embedding_backend") == (
+            settings.embedding_backend
+        )

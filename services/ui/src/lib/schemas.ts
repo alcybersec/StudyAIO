@@ -64,7 +64,6 @@ export const AGENT_BACKENDS = [
   'zai',
   'ollama',
 ] as const
-export const EMBEDDING_BACKENDS = ['sentence_transformers', 'openai', 'ollama'] as const
 
 export const aiProviderSettingsSchema = z.object({
   agent_backend: z.enum(AGENT_BACKENDS),
@@ -87,7 +86,6 @@ export const aiProviderSettingsSchema = z.object({
     .string()
     .refine((v) => v === '' || /^https?:\/\/\S+$/.test(v), { message: 'Must be an http(s) URL' }),
   ollama_model: z.string(),
-  embedding_backend: z.enum(EMBEDDING_BACKENDS),
   classification_confidence_threshold: z
     .number({ message: 'Enter a number between 0 and 1' })
     .min(0, 'Must be at least 0')

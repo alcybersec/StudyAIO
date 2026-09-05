@@ -33,7 +33,6 @@ function settings(overrides: Partial<Settings> = {}): Settings {
     zai_base_url: '',
     ollama_base_url: '',
     ollama_model: '',
-    embedding_backend: 'sentence_transformers',
     classification_confidence_threshold: 0.7,
     flashcard_count_per_week: 15,
     quiz_question_count_per_week: 8,

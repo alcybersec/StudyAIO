@@ -87,12 +87,6 @@ const CLAUDE_MODEL_OPTIONS = [
   { value: 'haiku', label: 'Haiku' },
 ]
 
-const EMBEDDING_OPTIONS = [
-  { value: 'sentence_transformers', label: 'Sentence Transformers (Local)' },
-  { value: 'openai', label: 'OpenAI Embeddings' },
-  { value: 'ollama', label: 'Ollama Embeddings' },
-]
-
 const PROVIDER_TITLES: Record<AgentBackend, string> = {
   studyaio: 'StudyAIO provided',
   claude_code: 'Claude Code CLI configuration',
@@ -113,9 +107,6 @@ function toFormValues(s: Settings): AiProviderSettingsFormData {
   const backend = (AGENT_BACKENDS as readonly string[]).includes(s.agent_backend)
     ? (s.agent_backend as AgentBackend)
     : 'studyaio'
-  const embedding = ['sentence_transformers', 'openai', 'ollama'].includes(s.embedding_backend)
-    ? (s.embedding_backend as AiProviderSettingsFormData['embedding_backend'])
-    : 'sentence_transformers'
   return {
     agent_backend: backend,
     claude_code_path: s.claude_code_path ?? '',
@@ -129,7 +120,6 @@ function toFormValues(s: Settings): AiProviderSettingsFormData {
     zai_base_url: s.zai_base_url ?? '',
     ollama_base_url: s.ollama_base_url ?? '',
     ollama_model: s.ollama_model ?? '',
-    embedding_backend: embedding,
     classification_confidence_threshold: s.classification_confidence_threshold ?? 0.7,
   }
 }
@@ -272,7 +262,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
     saveValue('agent_backend', id)
   }
 
-  const selectField = (field: 'claude_model' | 'embedding_backend') => (value: string) => {
+  const selectField = (field: 'claude_model') => (value: string) => {
     if (getValues(field) === value) return
     setValue(field, value as never)
     saveValue(field, value)
@@ -615,22 +605,6 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
             />
             <p className="mt-1.5 text-xs text-text-faint">
               Below this threshold, classifications go to review (0.0 – 1.0)
-            </p>
-          </div>
-          <div>
-            <LabelRow
-              htmlFor="embedding_backend"
-              label="Embedding backend"
-              saved={!!saved.embedding_backend}
-            />
-            <Select
-              id="embedding_backend"
-              options={EMBEDDING_OPTIONS}
-              value={watch('embedding_backend')}
-              onValueChange={selectField('embedding_backend')}
-            />
-            <p className="mt-1.5 text-xs text-text-faint">
-              Backend used for generating text embeddings for similarity search
             </p>
           </div>
         </div>
