@@ -44,7 +44,9 @@ class TestTestAIEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
-        assert data["backend"] == "claude_code"
+        # No per-user config means "StudyAIO provided". Which provider the
+        # operator pays for is not named back to the caller.
+        assert data["backend"] == "studyaio"
         assert "successful" in data["message"]
 
     async def test_test_ai_failure_returns_502(self, async_client):

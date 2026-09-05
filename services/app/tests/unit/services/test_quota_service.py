@@ -19,6 +19,7 @@ from app.services.quota_service import (
     check_global_ai_ceiling,
     check_upload_quota,
     get_course_count,
+    get_global_usage_today,
     get_monthly_upload_count,
     get_usage_today,
 )
@@ -53,6 +54,21 @@ def quota_settings():
     cfg = _settings()
     with patch("app.services.quota_service.settings", cfg):
         yield cfg
+
+
+@pytest.fixture(autouse=True)
+def on_instance_provider():
+    """Default every quota test to a user on the instance ("StudyAIO provided").
+
+    That is what these limits meant before per-user providers existed, so the
+    existing expectations carry over unchanged. `TestByoKeyExemption` flips it.
+    """
+    with patch(
+        "app.services.settings_service.uses_instance_provider",
+        new_callable=AsyncMock,
+        return_value=True,
+    ) as mock:
+        yield mock
 
 
 class TestLimitFor:
@@ -335,3 +351,90 @@ class TestGlobalCeiling:
         mock_session.execute.return_value = result
 
         await check_course_quota(mock_session, "user-1", "free")
+
+
+class TestByoKeyExemption:
+    """A user on their own key costs the operator nothing.
+
+    The global ceiling bounds the *operator's* bill, so it must not apply to
+    spend the operator does not pay for. Per-tier limits still do — they are
+    abuse control, not cost control.
+    """
+
+    def _usage(self, mock_session, calls: int, tokens: int = 0) -> None:
+        result = MagicMock()
+        result.one.return_value = (calls, tokens)
+        result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = result
+
+    @pytest.mark.asyncio
+    async def test_byo_user_ignores_the_global_ceiling(
+        self, quota_settings, mock_session, on_instance_provider
+    ):
+        on_instance_provider.return_value = False
+        quota_settings.global_max_ai_calls_per_day = 1
+        self._usage(mock_session, calls=5000)
+
+        await check_ai_quota(mock_session, "user-1", "pro")
+
+    @pytest.mark.asyncio
+    async def test_instance_user_still_hits_the_global_ceiling(self, quota_settings, mock_session):
+        quota_settings.global_max_ai_calls_per_day = 1
+        self._usage(mock_session, calls=5000)
+
+        with pytest.raises(GlobalCeilingError):
+            await check_ai_quota(mock_session, "user-1", "pro")
+
+    @pytest.mark.asyncio
+    async def test_byo_user_uploads_ignore_the_global_ceiling(
+        self, quota_settings, mock_session, on_instance_provider
+    ):
+        on_instance_provider.return_value = False
+        quota_settings.global_max_ai_calls_per_day = 1
+        self._usage(mock_session, calls=5000)
+
+        await check_upload_quota(mock_session, "user-1", "pro")
+
+    @pytest.mark.asyncio
+    async def test_byo_user_still_bound_by_their_tier_limit(
+        self, quota_settings, mock_session, on_instance_provider
+    ):
+        """Abuse control applies to everyone, key or no key."""
+        on_instance_provider.return_value = False
+        quota_settings.free_max_ai_calls_per_day = 10
+        usage = MagicMock()
+        usage.ai_calls_count = 10
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = usage
+        mock_session.execute.return_value = result
+
+        with pytest.raises(QuotaExceededError):
+            await check_ai_quota(mock_session, "user-1", "free")
+
+    @pytest.mark.asyncio
+    async def test_global_aggregate_excludes_byo_users(self, quota_settings, mock_session):
+        """Recording is universal; only the ceiling aggregate filters.
+
+        BYO usage stays in `usage_records` so admin analytics and per-tier
+        limits still see it — the ceiling query is what leaves it out.
+        """
+        from sqlalchemy.dialects import postgresql
+
+        captured = {}
+
+        async def capture(stmt):
+            captured["stmt"] = stmt
+            result = MagicMock()
+            result.one.return_value = (0, 0)
+            return result
+
+        mock_session.execute = capture
+        await get_global_usage_today(mock_session)
+
+        sql = str(
+            captured["stmt"].compile(
+                dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+            )
+        )
+        assert "user_settings" in sql
+        assert "studyaio" in sql

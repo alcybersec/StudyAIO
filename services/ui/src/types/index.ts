@@ -171,15 +171,19 @@ export interface QAResponse {
   chunks_searched: number
 }
 
+/**
+ * Settings as the API returns them. Credentials are write-only: the server
+ * sends `*_configured` booleans and never a value, for any account.
+ */
 export interface Settings {
   claude_code_path: string
   claude_model: string
   agent_backend: string
-  anthropic_api_key: string
-  claude_cli_credentials: string
-  openai_api_key: string
+  anthropic_api_key_configured: boolean
+  claude_cli_credentials_configured: boolean
+  openai_api_key_configured: boolean
+  zai_api_key_configured: boolean
   openai_model: string
-  zai_api_key: string
   zai_model: string
   zai_base_url: string
   ollama_base_url: string
@@ -193,13 +197,23 @@ export interface Settings {
   dashboard_layout: Record<string, unknown> | null
 }
 
+/** Credentials travel one way only — up. Empty means "leave unchanged". */
+export interface SettingsSecretsUpdate {
+  anthropic_api_key?: string
+  claude_cli_credentials?: string
+  openai_api_key?: string
+  zai_api_key?: string
+  /** Names of credentials to delete; the only way to remove a stored one. */
+  clear_secrets?: string[]
+}
+
 export interface TestAIResponse {
   status: string
   backend: string
   message: string
 }
 
-export type SettingsUpdate = Partial<Settings>
+export type SettingsUpdate = Partial<Settings> & SettingsSecretsUpdate
 
 export interface Flashcard {
   id: string

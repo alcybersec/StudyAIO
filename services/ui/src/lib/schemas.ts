@@ -51,7 +51,19 @@ export type AssessmentCreateFormData = z.infer<typeof assessmentCreateSchema>
 
 // ── Settings (D9) ──────────────────────────────────────────────
 
-export const AGENT_BACKENDS = ['claude_code', 'anthropic_api', 'openai', 'zai', 'ollama'] as const
+/**
+ * `studyaio` — "StudyAIO provided" — means the instance's own provider and
+ * credentials. Every other value is the user's own provider, backed by a
+ * credential they supply themselves.
+ */
+export const AGENT_BACKENDS = [
+  'studyaio',
+  'claude_code',
+  'anthropic_api',
+  'openai',
+  'zai',
+  'ollama',
+] as const
 export const EMBEDDING_BACKENDS = ['sentence_transformers', 'openai', 'ollama'] as const
 
 export const aiProviderSettingsSchema = z.object({

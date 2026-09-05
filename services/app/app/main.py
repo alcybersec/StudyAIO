@@ -51,6 +51,7 @@ from app.core.exceptions import (
     GlobalCeilingError,
     InviteError,
     LastAdminError,
+    ProviderCredentialError,
     QuotaExceededError,
     RegistrationClosedError,
     StudyAIOError,
@@ -332,6 +333,21 @@ async def registration_closed_handler(
 ) -> JSONResponse:
     """Handle registration being disabled with 403."""
     return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+
+@app.exception_handler(ProviderCredentialError)
+async def provider_credential_handler(
+    request: Request, exc: ProviderCredentialError
+) -> JSONResponse:
+    """Handle a provider selected without a credential with 400."""
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": str(exc),
+            "backend": exc.backend,
+            "credential_key": exc.credential_key,
+        },
+    )
 
 
 @app.exception_handler(QuotaExceededError)
