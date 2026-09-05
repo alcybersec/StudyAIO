@@ -118,3 +118,81 @@ class TestEnsureAdminCommand:
         """Bare `python -m app.cli` should explain itself, not traceback."""
         assert cli.main([]) == 2
         assert "ensure-admin" in capsys.readouterr().err
+
+
+def _concept(name: str):
+    concept = MagicMock()
+    concept.name = name
+    concept.description = f"description of {name}"
+    concept.embedding = None
+    return concept
+
+
+class TestBackfillConceptEmbeddingsCommand:
+    """Concepts created before issue #33 was fixed have NULL embeddings."""
+
+    def _run(self, session, factory, batches, embed_side_effect=None):
+        """Drive the command with a scripted sequence of unembedded batches."""
+        session.scalar = AsyncMock(return_value=sum(len(b) for b in batches))
+        results = []
+        for batch in [*batches, []]:
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = batch
+            results.append(result)
+        session.execute = AsyncMock(side_effect=results)
+        session.rollback = AsyncMock()
+
+        def _embed(concepts):
+            for c in concepts:
+                c.embedding = [0.1] * 384
+
+        with patch.object(cli, "async_session_factory", factory):
+            with patch(
+                "app.services.concept_service._embed_concepts",
+                side_effect=embed_side_effect or _embed,
+            ) as embed:
+                code = cli.main(["backfill-concept-embeddings", "--batch-size", "2"])
+        return code, embed
+
+    def test_embeds_every_batch_and_commits(self, fake_session_factory, capsys):
+        factory, session = fake_session_factory
+        code, embed = self._run(session, factory, [[_concept("a"), _concept("b")], [_concept("c")]])
+
+        assert code == 0
+        assert embed.call_count == 2
+        assert session.commit.await_count == 2
+        assert "3 concept(s) embedded" in capsys.readouterr().out
+
+    def test_nothing_to_do_is_not_an_error(self, fake_session_factory, capsys):
+        factory, session = fake_session_factory
+        session.scalar = AsyncMock(return_value=0)
+
+        with patch.object(cli, "async_session_factory", factory):
+            code = cli.main(["backfill-concept-embeddings"])
+
+        assert code == 0
+        assert "nothing to do" in capsys.readouterr().out
+
+    def test_a_provider_returning_nothing_stops_instead_of_looping(
+        self, fake_session_factory, capsys
+    ):
+        """The query selects `embedding IS NULL`, so unembedded rows come back forever.
+
+        Without this guard the command spins on the same batch indefinitely
+        while reporting progress.
+        """
+        factory, session = fake_session_factory
+        code, _ = self._run(
+            session,
+            factory,
+            [[_concept("a")]],
+            embed_side_effect=lambda concepts: None,
+        )
+
+        assert code == 1
+        assert session.rollback.await_count == 1
+        assert "returned nothing" in capsys.readouterr().err
+
+    def test_it_is_listed_when_no_subcommand_is_given(self, capsys):
+        assert cli.main([]) == 2
+        assert "backfill-concept-embeddings" in capsys.readouterr().err
