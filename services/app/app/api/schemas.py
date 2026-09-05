@@ -318,16 +318,27 @@ class QuizQuestionResponse(BaseModel):
 
 
 class SettingsResponse(BaseModel):
-    """Current application settings."""
+    """Current application settings.
+
+    Credentials are write-only. Each is represented by a
+    `<key>_configured` boolean saying whether *this user* stored one; the
+    value never leaves the server, for any caller including admins. The
+    instance's own credentials are configured through the environment and are
+    not represented here at all. See issue #30.
+    """
+
+    # Anything not declared here is dropped rather than echoed, so a value
+    # added to the settings dict cannot leak through this response by default.
+    model_config = ConfigDict(extra="ignore")
 
     claude_code_path: str
     claude_model: str
     agent_backend: str
-    anthropic_api_key: str
-    claude_cli_credentials: str = ""
-    openai_api_key: str = ""
+    anthropic_api_key_configured: bool = False
+    claude_cli_credentials_configured: bool = False
+    openai_api_key_configured: bool = False
+    zai_api_key_configured: bool = False
     openai_model: str = ""
-    zai_api_key: str = ""
     zai_model: str = ""
     zai_base_url: str = ""
     ollama_base_url: str = ""
@@ -367,6 +378,10 @@ class SettingsUpdateRequest(BaseModel):
     max_upload_size_mb: int | None = None
     theme: str | None = None
     dashboard_layout: dict | None = None
+    #: Credentials to remove. An empty or omitted secret above means "leave
+    #: unchanged" — the UI cannot echo back a value it is never sent — so
+    #: deleting one has to be said explicitly.
+    clear_secrets: list[str] | None = None
 
 
 class TestAIResponse(BaseModel):

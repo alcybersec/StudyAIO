@@ -6,6 +6,19 @@ default from `app.config.settings` is used.
 
 For pipeline tasks (synchronous context without a DB session),
 `get_effective_setting()` falls back to env defaults only.
+
+Provider selection has two shapes, and the difference is a security boundary:
+
+* ``studyaio`` — "StudyAIO provided". The instance's own backend and
+  credentials, configured through the environment/secret store and never
+  readable through this API. This is the default for every account.
+* any other backend — the user's own provider. Their credential is the only
+  one used; the instance credential is never inherited. That inheritance was
+  the root of issue #30, where every authenticated account could read (and
+  spend) the operator's key.
+
+Credentials are therefore write-only: `get_user_settings` returns
+``<key>_configured`` booleans, never values.
 """
 
 import json
@@ -46,8 +59,38 @@ ALLOWED_KEYS = {
 }
 
 VALID_MODELS = {"opus", "sonnet", "haiku"}
-VALID_BACKENDS = {"claude_code", "anthropic_api", "openai", "zai", "ollama"}
+
+#: "StudyAIO provided" — use the instance's configured backend and credentials.
+STUDYAIO_BACKEND = "studyaio"
+
+VALID_BACKENDS = {STUDYAIO_BACKEND, "claude_code", "anthropic_api", "openai", "zai", "ollama"}
 VALID_EMBEDDING_BACKENDS = {"sentence_transformers", "openai", "ollama"}
+
+#: Never returned by the API. Written only, and only by the owning user.
+SECRET_KEYS = frozenset(
+    {
+        "anthropic_api_key",
+        "openai_api_key",
+        "zai_api_key",
+        "claude_cli_credentials",
+    }
+)
+
+#: What a user must supply for each provider they select explicitly. Absent it,
+#: the agent factory refuses rather than reaching for the instance credential.
+#: Ollama has no API key, so its endpoint plays the part: pointing at the
+#: instance's own Ollama would be spending the operator's hardware under a
+#: selection that claims to be the user's own.
+BACKEND_REQUIRED_KEY = {
+    "claude_code": "claude_cli_credentials",
+    "anthropic_api": "anthropic_api_key",
+    "openai": "openai_api_key",
+    "zai": "zai_api_key",
+    "ollama": "ollama_base_url",
+}
+
+#: Resolved from the user's own settings only — never from instance defaults.
+USER_ONLY_KEYS = frozenset(SECRET_KEYS | {"ollama_base_url"})
 
 # Validation rules: (type, min, max)
 _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
@@ -239,22 +282,53 @@ async def _get_or_create_user_settings(session: AsyncSession, user_id: str) -> U
     return user_settings
 
 
+def _public_view(overrides: dict[str, Any]) -> dict[str, Any]:
+    """Build the credential-free settings view for a set of user overrides.
+
+    Secrets collapse to `<key>_configured` booleans reflecting whether *this
+    user* stored one. The instance credential is never represented at all, so
+    there is nothing for a response to leak.
+
+    Args:
+        overrides: The user's stored `settings_json`.
+
+    Returns:
+        Dict of readable settings plus the `*_configured` flags.
+    """
+    merged = {k: v for k, v in _defaults().items() if k not in SECRET_KEYS}
+
+    for key in ALLOWED_KEYS - SECRET_KEYS - USER_ONLY_KEYS:
+        if key in overrides:
+            merged[key] = overrides[key]
+
+    # An explicitly chosen provider is entirely the user's own, so these
+    # show what they stored rather than what the instance is configured with.
+    for key in USER_ONLY_KEYS - SECRET_KEYS:
+        merged[key] = overrides.get(key, "")
+
+    # Everyone defaults to "StudyAIO provided", whatever the instance backend is.
+    merged["agent_backend"] = overrides.get("agent_backend", STUDYAIO_BACKEND)
+    if merged["agent_backend"] not in VALID_BACKENDS:
+        merged["agent_backend"] = STUDYAIO_BACKEND
+
+    for key in SECRET_KEYS:
+        merged[f"{key}_configured"] = bool(str(overrides.get(key) or "").strip())
+
+    return merged
+
+
 async def get_user_settings(session: AsyncSession, user_id: str) -> dict[str, Any]:
-    """Get merged settings for a user (env defaults + per-user overrides).
+    """Get the readable settings for a user — no credential values.
 
     Args:
         session: Database session.
         user_id: User UUID.
 
     Returns:
-        Dict of all settings with effective values.
+        Dict of all readable settings plus `*_configured` booleans.
     """
-    merged = _defaults()
     user_settings = await _get_or_create_user_settings(session, user_id)
-    overrides = user_settings.settings_json or {}
-    for key in ALLOWED_KEYS:
-        if key in overrides:
-            merged[key] = overrides[key]
+    merged = _public_view(user_settings.settings_json or {})
     # Include theme and dashboard_layout
     merged["theme"] = user_settings.theme
     merged["dashboard_layout"] = user_settings.dashboard_layout
@@ -277,9 +351,24 @@ async def update_user_settings(
     Raises:
         ValueError: If any key or value is invalid.
     """
+    updates = dict(updates)
+
     # Handle special non-settings-json keys
     theme = updates.pop("theme", None)
     dashboard_layout = updates.pop("dashboard_layout", None)
+    clear_secrets = updates.pop("clear_secrets", None) or []
+
+    # A credential is write-only, so the UI cannot echo the stored value back
+    # on the next save. An empty submission therefore has to mean "leave it
+    # alone" — otherwise every unrelated edit would wipe the stored key.
+    # Removing one is an explicit act: `clear_secrets`.
+    for key in SECRET_KEYS:
+        if key in updates and not str(updates[key] or "").strip():
+            del updates[key]
+
+    for key in clear_secrets:
+        if key not in SECRET_KEYS:
+            raise ValueError(f"clear_secrets may only name a credential, got '{key}'")
 
     # Validate remaining settings
     validated: dict[str, Any] = {}
@@ -289,9 +378,11 @@ async def update_user_settings(
     user_settings = await _get_or_create_user_settings(session, user_id)
 
     # Update settings_json
-    if validated:
+    if validated or clear_secrets:
         current = dict(user_settings.settings_json or {})
         current.update(validated)
+        for key in clear_secrets:
+            current.pop(key, None)
         user_settings.settings_json = current
 
     # Update theme
@@ -306,13 +397,21 @@ async def update_user_settings(
 
     user_settings.updated_at = datetime.now(UTC)
     await session.commit()
-    logger.info("user_settings_updated", user_id=user_id, keys=list(updates.keys()))
+    logger.info(
+        "user_settings_updated",
+        user_id=user_id,
+        keys=sorted(validated.keys()),
+        cleared=sorted(clear_secrets),
+    )
 
     return await get_user_settings(session, user_id)
 
 
 async def get_effective_setting_async(session: AsyncSession, user_id: str, key: str) -> Any:
-    """Get the effective value of a single setting for a user.
+    """Get the effective value of a single readable setting for a user.
+
+    Credentials are not readable here: this reads the public view, so a secret
+    key returns None rather than a value.
 
     Args:
         session: Database session.
@@ -346,35 +445,89 @@ _AGENT_CONFIG_KEYS = {
 }
 
 
-async def get_user_agent_config(session: AsyncSession, user_id: str) -> dict[str, Any] | None:
-    """Get AI-related settings for a user, returning None if no overrides.
-
-    Used by pipeline stages and API endpoints to pass per-user credentials
-    to the agent factory.
+async def _get_overrides(session: AsyncSession, user_id: str) -> dict[str, Any]:
+    """Read a user's stored settings without creating a row.
 
     Args:
         session: Database session.
         user_id: User UUID.
 
     Returns:
-        Dict of AI-related settings if user has overrides, None otherwise.
+        The stored `settings_json`, or an empty dict.
     """
     result = await session.execute(select(UserSettings).where(UserSettings.user_id == user_id))
     user_settings = result.scalar_one_or_none()
     if not user_settings:
+        return {}
+    return user_settings.settings_json or {}
+
+
+def resolve_backend(overrides: dict[str, Any]) -> str:
+    """Resolve which provider a set of overrides selects.
+
+    Args:
+        overrides: The user's stored `settings_json`.
+
+    Returns:
+        A backend name; `STUDYAIO_BACKEND` when nothing valid is selected.
+    """
+    backend = overrides.get("agent_backend") or STUDYAIO_BACKEND
+    if backend not in VALID_BACKENDS:
+        return STUDYAIO_BACKEND
+    return backend
+
+
+async def uses_instance_provider(session: AsyncSession, user_id: str) -> bool:
+    """Whether this user's AI spend lands on the operator's credentials.
+
+    The global daily ceiling exists to bound the operator's bill, so it is
+    scoped to exactly the users this returns True for. A user on their own key
+    costs the operator nothing and is therefore exempt — their per-tier limits
+    still apply, as abuse control.
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
+
+    Returns:
+        True when the user is on "StudyAIO provided".
+    """
+    overrides = await _get_overrides(session, user_id)
+    return resolve_backend(overrides) == STUDYAIO_BACKEND
+
+
+async def get_user_agent_config(session: AsyncSession, user_id: str) -> dict[str, Any] | None:
+    """Get the AI config for a user, or None to mean "use the instance".
+
+    Used by pipeline stages and API endpoints to pass per-user credentials to
+    the agent factory.
+
+    A returned config never contains an instance credential. `USER_ONLY_KEYS`
+    come from the user's own settings or not at all — the factory then refuses
+    a selection with nothing behind it rather than quietly spending the
+    operator's key, which is what issue #30 was.
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
+
+    Returns:
+        Dict of AI settings when the user runs their own provider; None when
+        they are on "StudyAIO provided".
+    """
+    overrides = await _get_overrides(session, user_id)
+    backend = resolve_backend(overrides)
+    if backend == STUDYAIO_BACKEND:
         return None
 
-    overrides = user_settings.settings_json or {}
-    # Check if user has any AI-related overrides
-    has_ai_overrides = any(k in overrides for k in _AGENT_CONFIG_KEYS)
-    if not has_ai_overrides:
-        return None
-
-    # Build config with defaults + user overrides for agent keys only
     defaults = _defaults()
     config: dict[str, Any] = {}
     for key in _AGENT_CONFIG_KEYS:
-        config[key] = overrides.get(key, defaults.get(key, ""))
+        if key in USER_ONLY_KEYS:
+            config[key] = overrides.get(key, "")
+        else:
+            config[key] = overrides.get(key, defaults.get(key, ""))
+    config["agent_backend"] = backend
     return config
 
 

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Cpu, Globe, Server, Sparkles, Terminal, type LucideIcon } from 'lucide-react'
+import { Cpu, Globe, Server, Sparkles, Terminal, Zap, type LucideIcon } from 'lucide-react'
 import { Badge, Button, Card, ErrorState, Input, Select, SkeletonCard, Textarea } from '../../ui'
 import { FieldSavedNote } from '../FieldSavedNote'
 import { useSavedFields } from '../useSavedFields'
@@ -13,7 +13,7 @@ import {
   aiProviderSettingsSchema,
   type AiProviderSettingsFormData,
 } from '../../../lib/schemas'
-import type { Settings } from '../../../types'
+import type { Settings, SettingsUpdate } from '../../../types'
 
 type AgentBackend = (typeof AGENT_BACKENDS)[number]
 
@@ -25,53 +25,59 @@ interface ProviderMeta {
   status: (s: Settings) => { text: string; ok: boolean }
 }
 
+const NOT_SET = { text: 'your key is not set', ok: false }
+
 const PROVIDERS: ProviderMeta[] = [
+  {
+    id: 'studyaio',
+    name: 'StudyAIO provided',
+    icon: Zap,
+    desc: 'Included with your account. Nothing to configure, no key of your own.',
+    status: () => ({ text: 'included — no key needed', ok: true }),
+  },
   {
     id: 'claude_code',
     name: 'Claude Code CLI',
     icon: Terminal,
-    desc: 'Uses your Max plan via the local CLI — no API key needed.',
+    desc: 'Your own Max plan, via CLI credentials you paste in.',
     status: (s) =>
-      s.claude_cli_credentials?.trim()
-        ? { text: 'own CLI credentials configured', ok: true }
-        : { text: 'using system default credentials', ok: true },
+      s.claude_cli_credentials_configured
+        ? { text: 'your CLI credentials are set', ok: true }
+        : { text: 'your credentials are not set', ok: false },
   },
   {
     id: 'anthropic_api',
     name: 'Anthropic API',
     icon: Sparkles,
-    desc: 'Direct API access with your own key. Pay per token.',
-    status: (s) =>
-      s.anthropic_api_key
-        ? { text: 'key configured', ok: true }
-        : { text: 'no key configured', ok: false },
+    desc: 'Direct API access with your own key. You pay per token.',
+    status: (s) => (s.anthropic_api_key_configured ? { text: 'your key is set', ok: true } : NOT_SET),
   },
   {
     id: 'openai',
     name: 'OpenAI',
     icon: Globe,
-    desc: 'GPT models for summaries, flashcards and Q&A.',
-    status: (s) =>
-      s.openai_api_key
-        ? { text: 'key configured', ok: true }
-        : { text: 'no key configured', ok: false },
+    desc: 'GPT models with your own key. You pay per token.',
+    status: (s) => (s.openai_api_key_configured ? { text: 'your key is set', ok: true } : NOT_SET),
   },
   {
     id: 'zai',
     name: 'Z.ai',
     icon: Cpu,
-    desc: 'GLM models via Z.ai — OpenAI-compatible, pay per token.',
+    desc: 'GLM models via Z.ai with your own key — OpenAI-compatible.',
     status: (s) =>
-      s.zai_api_key
-        ? { text: `key configured (${s.zai_model || 'glm-5.3'})`, ok: true }
-        : { text: 'no key configured', ok: false },
+      s.zai_api_key_configured
+        ? { text: `your key is set (${s.zai_model || 'glm-5.3'})`, ok: true }
+        : NOT_SET,
   },
   {
     id: 'ollama',
     name: 'Ollama',
     icon: Server,
-    desc: 'Local models — private, free, slower on big lectures.',
-    status: (s) => ({ text: `at ${s.ollama_base_url || 'http://ollama:11434'}`, ok: true }),
+    desc: 'Your own Ollama server — private, free, slower on big lectures.',
+    status: (s) =>
+      s.ollama_base_url
+        ? { text: `at ${s.ollama_base_url}`, ok: true }
+        : { text: 'your endpoint is not set', ok: false },
   },
 ]
 
@@ -88,6 +94,7 @@ const EMBEDDING_OPTIONS = [
 ]
 
 const PROVIDER_TITLES: Record<AgentBackend, string> = {
+  studyaio: 'StudyAIO provided',
   claude_code: 'Claude Code CLI configuration',
   anthropic_api: 'Anthropic API configuration',
   openai: 'OpenAI configuration',
@@ -95,10 +102,17 @@ const PROVIDER_TITLES: Record<AgentBackend, string> = {
   ollama: 'Ollama configuration',
 }
 
+/**
+ * Map the server's settings onto form values.
+ *
+ * Credential fields are always blank: the server never sends a value, and a
+ * blank submission means "leave the stored one unchanged". A credential
+ * therefore never round-trips through here.
+ */
 function toFormValues(s: Settings): AiProviderSettingsFormData {
   const backend = (AGENT_BACKENDS as readonly string[]).includes(s.agent_backend)
     ? (s.agent_backend as AgentBackend)
-    : 'claude_code'
+    : 'studyaio'
   const embedding = ['sentence_transformers', 'openai', 'ollama'].includes(s.embedding_backend)
     ? (s.embedding_backend as AiProviderSettingsFormData['embedding_backend'])
     : 'sentence_transformers'
@@ -106,11 +120,11 @@ function toFormValues(s: Settings): AiProviderSettingsFormData {
     agent_backend: backend,
     claude_code_path: s.claude_code_path ?? '',
     claude_model: s.claude_model ?? 'sonnet',
-    claude_cli_credentials: s.claude_cli_credentials ?? '',
-    anthropic_api_key: s.anthropic_api_key ?? '',
-    openai_api_key: s.openai_api_key ?? '',
+    claude_cli_credentials: '',
+    anthropic_api_key: '',
+    openai_api_key: '',
     openai_model: s.openai_model ?? '',
-    zai_api_key: s.zai_api_key ?? '',
+    zai_api_key: '',
     zai_model: s.zai_model ?? '',
     zai_base_url: s.zai_base_url ?? '',
     ollama_base_url: s.ollama_base_url ?? '',
@@ -133,6 +147,47 @@ function LabelRow({ htmlFor, label, saved }: LabelRowProps) {
         {label}
       </label>
       <FieldSavedNote show={saved} />
+    </div>
+  )
+}
+
+/** Write-only fields: the server reports whether one is stored, never its value. */
+type SecretField =
+  | 'anthropic_api_key'
+  | 'openai_api_key'
+  | 'zai_api_key'
+  | 'claude_cli_credentials'
+
+interface SecretLabelRowProps {
+  htmlFor: string
+  label: string
+  saved: boolean
+  configured: boolean
+  onClear: () => void
+}
+
+/** Label for a write-only credential: says whether one is stored, never what. */
+function SecretLabelRow({ htmlFor, label, saved, configured, onClear }: SecretLabelRowProps) {
+  return (
+    <div className="flex items-center justify-between gap-2 mb-1.5">
+      <label htmlFor={htmlFor} className="text-xs font-medium text-text-muted">
+        {label} —{' '}
+        <span className={configured ? 'text-sage-fg' : 'text-text-faint'}>
+          {configured ? 'configured' : 'not set'}
+        </span>
+      </label>
+      <span className="flex items-center gap-2">
+        <FieldSavedNote show={saved} />
+        {configured && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-[11px] text-text-faint hover:text-red-fg underline cursor-pointer"
+          >
+            Remove
+          </button>
+        )}
+      </span>
     </div>
   )
 }
@@ -179,13 +234,26 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
   const backend = watch('agent_backend')
 
   const saveValue = (field: keyof AiProviderSettingsFormData, value: unknown) => {
-    updateMutation.mutate(
-      { [field]: value } as Partial<Settings>,
-      {
-        onSuccess: () => markSaved(field),
-        onError: (err) => toastMutationError(err),
+    updateMutation.mutate({ [field]: value } as SettingsUpdate, {
+      onSuccess: () => markSaved(field),
+      onError: (err) => toastMutationError(err),
+    })
+  }
+
+  /**
+   * Delete a stored credential.
+   *
+   * Submitting an empty field means "unchanged", so removal has to be said
+   * out loud — otherwise there would be no way back to having no key at all.
+   */
+  const clearSecret = (field: SecretField) => {
+    updateMutation.mutate({ clear_secrets: [field] }, {
+      onSuccess: () => {
+        setValue(field, '')
+        markSaved(field)
       },
-    )
+      onError: (err) => toastMutationError(err),
+    })
   }
 
   /** Validate a field on blur and persist it if it changed. */
@@ -216,7 +284,10 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
     try {
       const result = await settingsApi.testAi()
       const secs = ((Date.now() - started) / 1000).toFixed(1)
-      setTest({ state: 'ok', message: `✓ ${result.backend} responded in ${secs}s` })
+      // The instance reports itself as `studyaio` — it does not name which
+      // provider the operator pays for, and neither do we.
+      const label = result.backend === 'studyaio' ? 'StudyAIO' : result.backend
+      setTest({ state: 'ok', message: `✓ ${label} responded in ${secs}s` })
     } catch (err) {
       setTest({
         state: 'error',
@@ -275,6 +346,14 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
         <div className="text-[13px] font-semibold text-text mb-4">{PROVIDER_TITLES[backend]}</div>
 
         <div className="space-y-4 max-w-md">
+          {backend === 'studyaio' && (
+            <p className="text-xs text-text-muted">
+              StudyAIO runs the AI for you on its own provider account. There is nothing to set
+              up and no key to paste. Pick another provider above only if you want your work to
+              run on your own account and your own bill.
+            </p>
+          )}
+
           {backend === 'claude_code' && (
             <>
               <div>
@@ -296,20 +375,22 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                 />
               </div>
               <div>
-                <LabelRow
+                <SecretLabelRow
                   htmlFor="claude_cli_credentials"
-                  label={
-                    settings.claude_cli_credentials?.trim()
-                      ? 'CLI credentials — configured'
-                      : 'CLI credentials — using system default'
-                  }
+                  label="CLI credentials"
                   saved={!!saved.claude_cli_credentials}
+                  configured={settings.claude_cli_credentials_configured}
+                  onClear={() => clearSecret('claude_cli_credentials')}
                 />
                 <Textarea
                   id="claude_cli_credentials"
                   rows={4}
                   className="font-mono text-xs"
-                  placeholder="Paste contents of ~/.claude/.credentials.json"
+                  placeholder={
+                    settings.claude_cli_credentials_configured
+                      ? 'Leave blank to keep the stored credentials'
+                      : 'Paste contents of ~/.claude/.credentials.json'
+                  }
                   error={errors.claude_cli_credentials?.message}
                   {...registerWithSave('claude_cli_credentials')}
                 />
@@ -320,7 +401,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   <code className="px-1 py-0.5 bg-surface-2 rounded text-[11px]">
                     ~/.claude/.credentials.json
                   </code>
-                  . Leave empty to use the system default.
+                  . Leaving this blank keeps whatever is already stored.
                 </p>
               </div>
             </>
@@ -329,11 +410,21 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
           {backend === 'anthropic_api' && (
             <>
               <div>
-                <LabelRow htmlFor="anthropic_api_key" label="API key" saved={!!saved.anthropic_api_key} />
+                <SecretLabelRow
+                  htmlFor="anthropic_api_key"
+                  label="API key"
+                  saved={!!saved.anthropic_api_key}
+                  configured={settings.anthropic_api_key_configured}
+                  onClear={() => clearSecret('anthropic_api_key')}
+                />
                 <Input
                   id="anthropic_api_key"
                   type="password"
-                  placeholder="sk-ant-…"
+                  placeholder={
+                    settings.anthropic_api_key_configured
+                      ? 'Leave blank to keep the stored key'
+                      : 'sk-ant-…'
+                  }
                   className="font-mono"
                   autoComplete="off"
                   error={errors.anthropic_api_key?.message}
@@ -355,11 +446,21 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
           {backend === 'openai' && (
             <>
               <div>
-                <LabelRow htmlFor="openai_api_key" label="API key" saved={!!saved.openai_api_key} />
+                <SecretLabelRow
+                  htmlFor="openai_api_key"
+                  label="API key"
+                  saved={!!saved.openai_api_key}
+                  configured={settings.openai_api_key_configured}
+                  onClear={() => clearSecret('openai_api_key')}
+                />
                 <Input
                   id="openai_api_key"
                   type="password"
-                  placeholder="sk-…"
+                  placeholder={
+                    settings.openai_api_key_configured
+                      ? 'Leave blank to keep the stored key'
+                      : 'sk-…'
+                  }
                   className="font-mono"
                   autoComplete="off"
                   error={errors.openai_api_key?.message}
@@ -383,11 +484,21 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
           {backend === 'zai' && (
             <>
               <div>
-                <LabelRow htmlFor="zai_api_key" label="API key" saved={!!saved.zai_api_key} />
+                <SecretLabelRow
+                  htmlFor="zai_api_key"
+                  label="API key"
+                  saved={!!saved.zai_api_key}
+                  configured={settings.zai_api_key_configured}
+                  onClear={() => clearSecret('zai_api_key')}
+                />
                 <Input
                   id="zai_api_key"
                   type="password"
-                  placeholder="your Z.ai API key"
+                  placeholder={
+                    settings.zai_api_key_configured
+                      ? 'Leave blank to keep the stored key'
+                      : 'your Z.ai API key'
+                  }
                   className="font-mono"
                   autoComplete="off"
                   error={errors.zai_api_key?.message}
@@ -441,6 +552,10 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   error={errors.ollama_base_url?.message}
                   {...registerWithSave('ollama_base_url')}
                 />
+                <p className="mt-1.5 text-xs text-text-faint">
+                  Your own Ollama server. Required — this provider runs on your hardware, not
+                  StudyAIO's.
+                </p>
               </div>
               <div>
                 <LabelRow htmlFor="ollama_model" label="Model" saved={!!saved.ollama_model} />

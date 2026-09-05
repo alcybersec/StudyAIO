@@ -1,4 +1,10 @@
-"""Settings API endpoints."""
+"""Settings API endpoints.
+
+Credentials are write-only here. `SettingsResponse` carries
+`<key>_configured` booleans and no values, for every caller including admins:
+the instance credential is configured through the environment, so there is
+nothing legitimate to read back, and returning one is what issue #30 was.
+"""
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,7 +25,11 @@ router = APIRouter()
     "/settings",
     response_model=SettingsResponse,
     summary="Get current settings",
-    description="Returns all configurable settings with their effective values (defaults merged with per-user overrides).",
+    description=(
+        "Returns all readable settings (defaults merged with per-user overrides). "
+        "Credentials are never returned — each is reported as a "
+        "`<key>_configured` boolean."
+    ),
 )
 async def get_settings(
     user: User = Depends(get_current_user_or_default),
@@ -34,7 +44,11 @@ async def get_settings(
     "/settings",
     response_model=SettingsResponse,
     summary="Update settings",
-    description="Partially update application settings. Only provided fields are changed.",
+    description=(
+        "Partially update application settings. Only provided fields are changed. "
+        "An empty or omitted credential leaves the stored one unchanged; name it "
+        "in `clear_secrets` to remove it."
+    ),
 )
 async def update_settings(
     body: SettingsUpdateRequest,
@@ -70,16 +84,14 @@ async def test_ai_connection(
     from app.services.settings_service import get_user_agent_config
 
     user_agent_config = await get_user_agent_config(session, user.id)
+    # None means "StudyAIO provided" — the instance backend, which is not named
+    # in the response: which provider the operator pays for is their business.
+    backend = (
+        user_agent_config.get("agent_backend")
+        if user_agent_config
+        else settings_service.STUDYAIO_BACKEND
+    )
     agent = get_agent(user_settings=user_agent_config)
-
-    # Determine the backend name for the response
-    if user_agent_config:
-        backend = user_agent_config.get(
-            "agent_backend",
-            settings_service.get_effective_setting("agent_backend"),
-        )
-    else:
-        backend = settings_service.get_effective_setting("agent_backend")
 
     try:
         result = await agent.classify_lecture(

@@ -334,7 +334,7 @@ curl https://your-domain.com/health
 | `JWT_SECRET_KEY` | (insecure default) | **Change in production** |
 | `CORS_ORIGINS` | `http://localhost:3001` | Comma-separated origins |
 | `MAX_UPLOAD_SIZE_MB` | `100` | Max upload file size |
-| `AGENT_BACKEND` | `claude_code` | AI backend: `claude_code`, `anthropic_api`, `openai`, `zai`, `ollama` |
+| `AGENT_BACKEND` | `claude_code` | The instance's own AI backend, used by everyone on "StudyAIO provided": `claude_code`, `anthropic_api`, `openai`, `zai`, `ollama`. Never exposed through the API; a user who picks their own provider never inherits it. |
 | `ZAI_API_KEY` | | Z.ai (GLM) API key, when `AGENT_BACKEND=zai` |
 | `ZAI_MODEL` | `glm-5.3` | GLM model id, e.g. `glm-5.3`, `glm-5.3-flash`, `glm-4.6` |
 | `ZAI_BASE_URL` | `https://api.z.ai/api/paas/v4/` | Override only for a regional or self-hosted endpoint |
