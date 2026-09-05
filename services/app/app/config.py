@@ -127,6 +127,16 @@ class Settings(BaseSettings):
     # Tier limits. 0 means unlimited. Pipeline AI calls count toward
     # *_max_ai_calls_per_day, and one upload costs about
     # PIPELINE_AI_CALLS_PER_UPLOAD calls (classify + summarize + flashcards + quiz).
+    # Per-account login throttling (issue #37). Rate limiting keys on the source
+    # address, which a distributed attacker simply spreads across; these count
+    # failures against the account being attacked. A delay rather than a lock,
+    # because locking is itself a denial-of-service primitive against a user
+    # whose email someone knows.
+    login_throttle_free_attempts: int = 5
+    login_throttle_base_delay: float = 0.5
+    login_throttle_max_delay: float = 5.0
+    login_throttle_window_seconds: int = 900
+
     free_max_courses: int = 1
     free_max_uploads_per_month: int = 5
     free_max_ai_calls_per_day: int = 100
