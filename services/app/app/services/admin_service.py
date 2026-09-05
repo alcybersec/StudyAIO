@@ -224,8 +224,10 @@ async def get_system_metrics(session: AsyncSession) -> dict:
         "pipeline_runs_24h": pipeline_runs_24h,
         "total_storage_bytes": total_storage_bytes,
         "total_storage_mb": round(total_storage_bytes / (1024 * 1024), 2),
-        # Today's instance-wide AI spend, so the ceiling is visible before it
-        # fires rather than only when a user is turned away.
+        # Today's AI spend on the *instance's* credentials — the same scope
+        # the ceiling enforces, so the ceiling is visible before it fires
+        # rather than only when a user is turned away. Users on their own
+        # provider key are excluded here for the same reason they are exempt.
         "ai_calls_today": ai_calls_today,
         "ai_tokens_today": ai_tokens_today,
         "ai_calls_ceiling": int(settings.global_max_ai_calls_per_day or 0),

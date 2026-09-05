@@ -8,7 +8,14 @@ Two independent layers:
 * **The global ceiling** bounds what the *instance* spends in a day. It is an
   operator cost guard rather than a plan feature, so it deliberately applies to
   every tier and in self-hosted mode too — N users times their individual limits
-  is otherwise unbounded in aggregate.
+  is otherwise unbounded in aggregate. It is scoped to users on "StudyAIO
+  provided": a user running their own provider key costs the operator nothing,
+  so neither their spend nor their requests belong in a bill guard. Their
+  per-tier limits still apply — those are abuse control, not cost control.
+
+Usage is recorded for everyone regardless. Metering answers "what happened",
+enforcement answers "who pays"; conflating them would make a BYO user's work
+invisible to admin analytics and to their own tier limits.
 
 Both are enforced at the API edge. The pipeline records usage as it goes but is
 never blocked mid-run, so an accepted upload always finishes rather than leaving
@@ -18,13 +25,15 @@ an artifact with a summary and no flashcards.
 from datetime import UTC, date, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.exceptions import GlobalCeilingError, QuotaExceededError
 from app.models.course import Course
 from app.models.usage_record import UsageRecord
+from app.models.user_settings import UserSettings
+from app.services import settings_service
 
 logger = structlog.get_logger()
 
@@ -114,22 +123,40 @@ async def get_course_count(session: AsyncSession, user_id: str) -> int:
 
 
 async def get_global_usage_today(session: AsyncSession) -> tuple[int, int]:
-    """Sum AI calls and tokens across every user for today.
+    """Sum today's AI calls and tokens spent on the *instance's* credentials.
 
     `usage_records` is indexed on `record_date`, so this is a cheap aggregate
     and needs no separate counter table.
+
+    Users running their own provider are excluded: their spend is not the
+    operator's, and counting it would let one BYO user exhaust the bill guard
+    for everybody. A row with no `user_settings`, or none naming a provider,
+    is on "StudyAIO provided" — which is the default — so it counts.
+
+    The user's *current* selection decides, which is a deliberate
+    simplification: a same-day switch reattributes that day's earlier calls.
+    Recording each row's provider would be exact, but a daily counter that
+    flips mid-day cannot be made exact without splitting the row, and the
+    ceiling is a coarse guard.
 
     Args:
         session: Database session.
 
     Returns:
-        (ai_calls, total_tokens) for today.
+        (ai_calls, total_tokens) for today, instance-funded only.
     """
+    selected = UserSettings.settings_json["agent_backend"].astext
     result = await session.execute(
         select(
             func.coalesce(func.sum(UsageRecord.ai_calls_count), 0),
             func.coalesce(func.sum(UsageRecord.ai_tokens_input + UsageRecord.ai_tokens_output), 0),
-        ).where(UsageRecord.record_date == date.today())
+        )
+        .select_from(UsageRecord)
+        .outerjoin(UserSettings, UserSettings.user_id == UsageRecord.user_id)
+        .where(
+            UsageRecord.record_date == date.today(),
+            or_(selected.is_(None), selected == settings_service.STUDYAIO_BACKEND),
+        )
     )
     calls, tokens = result.one()
     return int(calls), int(tokens)
@@ -142,7 +169,8 @@ async def check_global_ai_ceiling(session: AsyncSession) -> None:
     """Check the instance-wide daily AI ceiling.
 
     Applies to every tier and in self-hosted mode: it protects the operator's
-    bill, which a per-user limit cannot do.
+    bill, which a per-user limit cannot do. Callers scope it to users on
+    "StudyAIO provided" — see the module docstring.
 
     Args:
         session: Database session.
@@ -181,7 +209,8 @@ async def check_upload_quota(session: AsyncSession, user_id: str, user_tier: str
         GlobalCeilingError: If the instance-wide ceiling is reached.
         QuotaExceededError: If the user's upload quota is exceeded.
     """
-    await check_global_ai_ceiling(session)
+    if await settings_service.uses_instance_provider(session, user_id):
+        await check_global_ai_ceiling(session)
 
     limit = _limit_for(user_tier, "uploads_per_month")
     if settings.self_hosted or limit <= 0:
@@ -209,7 +238,8 @@ async def check_ai_quota(
         GlobalCeilingError: If the instance-wide ceiling is reached.
         QuotaExceededError: If the user's daily AI quota is exceeded.
     """
-    await check_global_ai_ceiling(session)
+    if await settings_service.uses_instance_provider(session, user_id):
+        await check_global_ai_ceiling(session)
 
     limit = _limit_for(user_tier, "ai_calls_per_day")
     if settings.self_hosted or limit <= 0:

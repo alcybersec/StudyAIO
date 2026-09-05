@@ -112,6 +112,24 @@ class LastAdminError(StudyAIOError):
         )
 
 
+class ProviderCredentialError(StudyAIOError):
+    """Raised when a user's chosen AI provider has no credential of their own.
+
+    Selecting a provider explicitly means "bill my account". Falling back to
+    the instance credential would hand the operator's key to whoever asked,
+    which is exactly the leak this refuses to reintroduce.
+    """
+
+    def __init__(self, backend: str, credential_key: str):
+        self.backend = backend
+        self.credential_key = credential_key
+        super().__init__(
+            f"No credential stored for provider '{backend}'. Add your "
+            f"{credential_key} under Settings > AI Providers, or switch back to "
+            f"StudyAIO provided."
+        )
+
+
 class GlobalCeilingError(StudyAIOError):
     """Raised when the instance-wide daily AI ceiling is reached.
 
