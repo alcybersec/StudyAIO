@@ -18,6 +18,9 @@ on:
       - 'infra/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
+      - 'scripts/preflight-check.sh'
+      - 'scripts/backup.sh'
+      - 'scripts/restore.sh'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -127,14 +130,19 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Copy compose files to server
+      # Only files the server needs at runtime. Application code ships inside the
+      # images — but anything the *operator* runs on the box does not, and until
+      # this list included it, scripts/ was whatever had last been copied there
+      # by hand. The preflight check is the tool that gates opening the beta, so
+      # a stale copy silently validates the wrong things.
+      - name: Copy compose files and operator scripts to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ vars.DEPLOY_SSH_PORT || '22' }}
-          source: "docker-compose.yml,docker-compose.prod.yml"
+          source: "docker-compose.yml,docker-compose.prod.yml,scripts/preflight-check.sh,scripts/backup.sh,scripts/restore.sh"
           target: ${{ vars.DEPLOY_DIR || '~/studyaio' }}
 
       - name: Deploy via SSH
