@@ -1,9 +1,58 @@
 """Tests for the uploads API endpoints."""
 
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from app.config import settings
+from app.services import artifact_service
+
+
+@pytest.fixture
+def artifact_store():
+    """Dict-backed stand-in for the ``lecture_artifacts`` table.
+
+    ``tests/unit`` runs the endpoints against an AsyncMock session, so a real
+    SHA-256 lookup can never find anything and every upload would look new.
+    This patches the two artifact_service calls the upload path makes so dedup
+    behaves like the (sha256, user_id) unique constraint does in production.
+    ``create_upload_artifact`` still runs for real, so the storage backend is
+    genuinely written to and can be asserted on.
+
+    Yields the {(sha256, user_id): artifact} mapping.
+    """
+    store: dict[tuple[str, str], object] = {}
+    real_create = artifact_service.create_upload_artifact
+
+    async def fake_check_duplicate(session, sha256, user_id):
+        return store.get((sha256, user_id))
+
+    async def recording_create(session, *, content, original_filename, sha256, user_id):
+        artifact = await real_create(
+            session,
+            content=content,
+            original_filename=original_filename,
+            sha256=sha256,
+            user_id=user_id,
+        )
+        store[(sha256, user_id)] = artifact
+        return artifact
+
+    with (
+        patch.object(artifact_service, "check_duplicate", fake_check_duplicate),
+        patch.object(artifact_service, "create_upload_artifact", recording_create),
+    ):
+        yield store
+
+
+def _stored_uploads() -> list[Path]:
+    """Every file the local storage backend currently holds under uploads/."""
+    uploads = Path(settings.data_dir) / "uploads"
+    if not uploads.exists():
+        return []
+    return sorted(p for p in uploads.iterdir() if p.is_file())
 
 
 @pytest.mark.asyncio
@@ -38,6 +87,135 @@ class TestUploadFile:
         assert data["filename"] == "lecture.pdf"
         assert data["status"] == "processing"
         assert data["pipeline_task_id"] == "celery-task-123"
+
+
+@pytest.mark.asyncio
+class TestUploadArtifactId:
+    """Regression tests for issue #25 — the upload response carried a fake id.
+
+    ``POST /api/uploads`` used to return the literal string ``"pending"``. The
+    UI stored that as the card key and filtered the SSE stream by it, so no
+    real pipeline event ever matched and the card never left ``processing``.
+    """
+
+    async def test_upload_returns_real_artifact_id(self, async_client, artifact_store):
+        """The response carries the id of an artifact that actually exists."""
+        with patch("app.api.uploads.run_pipeline", return_value=MagicMock(id="task-1")):
+            response = await async_client.post(
+                "/api/uploads",
+                files={"file": ("lecture.pdf", b"%PDF-1.4 real id", "application/pdf")},
+            )
+
+        assert response.status_code == 201
+        artifact_id = response.json()["artifact_id"]
+        assert artifact_id != "pending"
+        created = {a.id for a in artifact_store.values()}
+        assert artifact_id in created
+
+    async def test_duplicate_upload_returns_the_existing_artifact_id(
+        self, async_client, artifact_store
+    ):
+        """The same bytes twice resolve to the same, already-existing artifact."""
+        content = b"%PDF-1.4 uploaded twice"
+
+        with patch("app.api.uploads.run_pipeline", return_value=MagicMock(id="task-1")):
+            first = await async_client.post(
+                "/api/uploads",
+                files={"file": ("lecture.pdf", content, "application/pdf")},
+            )
+            second = await async_client.post(
+                "/api/uploads",
+                files={"file": ("lecture.pdf", content, "application/pdf")},
+            )
+
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert first.json()["status"] == "processing"
+        assert second.json()["status"] == "duplicate"
+        assert second.json()["artifact_id"] == first.json()["artifact_id"]
+
+    async def test_duplicate_upload_stores_nothing_and_costs_nothing(
+        self, async_client, artifact_store
+    ):
+        """A duplicate leaves no orphan file and burns no upload quota."""
+        content = b"%PDF-1.4 uploaded twice"
+
+        with (
+            patch("app.api.uploads.run_pipeline", return_value=MagicMock(id="task-1")),
+            patch(
+                "app.api.uploads.billing_service.record_usage", new_callable=AsyncMock
+            ) as mock_usage,
+        ):
+            await async_client.post(
+                "/api/uploads",
+                files={"file": ("lecture.pdf", content, "application/pdf")},
+            )
+            after_first = _stored_uploads()
+
+            await async_client.post(
+                "/api/uploads",
+                files={"file": ("lecture.pdf", content, "application/pdf")},
+            )
+            after_second = _stored_uploads()
+
+        assert len(after_first) == 1
+        assert after_second == after_first, "duplicate upload wrote a second copy to storage"
+        assert mock_usage.await_count == 1, "duplicate upload counted against upload quota"
+
+    async def test_pipeline_is_dispatched_with_the_real_artifact_id(
+        self, async_client, artifact_store
+    ):
+        """The worker is handed the real id, so its events can carry it.
+
+        Every ``publish_pipeline_event_sync`` call in the ingest stage keys off
+        this value; the companion assertion that it is never ``"pending"``
+        lives in ``tests/unit/pipeline/test_ingest.py``.
+        """
+        with patch("app.api.uploads.run_pipeline", return_value=MagicMock(id="task-1")) as mock_run:
+            response = await async_client.post(
+                "/api/uploads",
+                files={"file": ("lecture.pdf", b"%PDF-1.4 dispatch", "application/pdf")},
+            )
+
+        artifact_id = response.json()["artifact_id"]
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["artifact_id"] == artifact_id
+        assert mock_run.call_args.kwargs["artifact_id"] != "pending"
+
+    async def test_retry_resolves_the_returned_artifact_id(self, async_client, artifact_store):
+        """POST /uploads/{returned id}/retry finds the artifact instead of 404ing."""
+        with patch("app.api.uploads.run_pipeline", return_value=MagicMock(id="task-1")):
+            response = await async_client.post(
+                "/api/uploads",
+                files={"file": ("lecture.pdf", b"%PDF-1.4 retry me", "application/pdf")},
+            )
+        artifact_id = response.json()["artifact_id"]
+
+        by_id = {a.id: a for a in artifact_store.values()}
+        by_id[artifact_id].status = "failed"
+
+        async def fake_get_artifact(session, requested_id, user_id=None):
+            return by_id.get(requested_id)
+
+        failed_run = MagicMock()
+        failed_run.status = "failed"
+        failed_run.stage = "summarize"
+
+        with (
+            patch("app.api.uploads.artifact_service.get_artifact", fake_get_artifact),
+            patch(
+                "app.api.uploads.pipeline_service.get_artifact_pipeline_runs",
+                new_callable=AsyncMock,
+                return_value=[failed_run],
+            ),
+            patch("app.api.uploads.resume_pipeline"),
+        ):
+            retry = await async_client.post(f"/api/uploads/{artifact_id}/retry")
+
+        assert retry.status_code == 200, (
+            "the id the upload returned does not resolve to an artifact"
+        )
+        assert retry.json()["artifact_id"] == artifact_id
 
 
 @pytest.mark.asyncio

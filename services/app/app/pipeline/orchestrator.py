@@ -63,19 +63,26 @@ def resolve_pipeline_input(input_value: str | dict, stage: str) -> tuple[str | N
     return input_value or None, None
 
 
-def run_pipeline(file_path: str, user_id: str | None = None) -> AsyncResult:
+def run_pipeline(
+    file_path: str, user_id: str | None = None, artifact_id: str | None = None
+) -> AsyncResult:
     """Build and dispatch the full ingest-to-assets pipeline.
 
     Args:
-        file_path: Absolute path to the file to ingest.
+        file_path: Storage key of the file to ingest.
         user_id: Owner user UUID (threaded through all stages).
+        artifact_id: Artifact already created by the caller. Passing it lets
+            ingest adopt that row and every event carry the real id; omitting
+            it keeps the legacy behaviour where ingest creates the artifact.
 
     Returns:
         Celery AsyncResult for the chain.
     """
-    logger.info("pipeline_dispatched", file_path=file_path, user_id=user_id)
+    logger.info(
+        "pipeline_dispatched", file_path=file_path, user_id=user_id, artifact_id=artifact_id
+    )
     # Pack file_path and user_id into a dict for the first stage
-    initial_input = {"file_path": file_path, "user_id": user_id}
+    initial_input = {"file_path": file_path, "user_id": user_id, "artifact_id": artifact_id}
     return chain(
         ingest_file.s(initial_input),
         classify_artifact.s(),

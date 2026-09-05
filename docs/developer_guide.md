@@ -326,10 +326,17 @@ Upload → ingest_file → classify_artifact → extract_artifact
   → summarize_artifact → index_artifact → generate_assets
 ```
 
-Each stage is a Celery task chained via `orchestrator.run_pipeline(file_path, user_id)`.
-Stages pass a dict along the chain — `{"file_path", "user_id"}` into `ingest_file`,
-then `{"artifact_id", "user_id"}` onward — so ownership is threaded through for
-multi-tenant isolation. `resolve_pipeline_input()` accepts either that dict or a
+Each stage is a Celery task chained via
+`orchestrator.run_pipeline(file_path, user_id, artifact_id)`.
+Stages pass a dict along the chain — `{"file_path", "user_id", "artifact_id"}` into
+`ingest_file`, then `{"artifact_id", "user_id"}` onward — so ownership is threaded
+through for multi-tenant isolation.
+
+`POST /api/uploads` hashes the bytes, checks for a duplicate and creates the
+artifact row **inside the request**, then passes that `artifact_id` in. That is
+what lets the response return a real id the client can filter the SSE stream by
+and retry against; ingest adopts the row instead of creating one. Called without
+an `artifact_id`, `ingest_file` still hashes, dedups and creates as before. `resolve_pipeline_input()` accepts either that dict or a
 bare `artifact_id` string, and each task opens its own database session.
 
 `orchestrator.resume_pipeline(artifact_id, from_stage=...)` restarts the chain from
