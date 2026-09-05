@@ -94,8 +94,42 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def client_ip(request: Request) -> str:
+    """The address a request is attributed to, for logging.
+
+    Deliberately `request.client.host` — the exact value the rate limiter keys
+    on (`slowapi.util.get_remote_address`). The two must agree, or a 429 in the
+    log cannot be traced to the address that earned it, which is most of the
+    point of recording it.
+
+    That also rules out reading `X-Forwarded-For` here. A client can put
+    anything in that header; the value only becomes trustworthy after the ASGI
+    proxy-header layer has resolved it against the trusted hops, and the result
+    of that resolution is `request.client` — which is what this returns.
+
+    Args:
+        request: The incoming request.
+
+    Returns:
+        The client address, or "unknown" when the transport reports none
+        (in-process test clients and some ASGI servers leave it unset).
+    """
+    if request.client is None or not request.client.host:
+        return "unknown"
+    return request.client.host
+
+
 class AccessLogMiddleware(BaseHTTPMiddleware):
-    """Log every HTTP request with method, path, status, and duration."""
+    """Log every HTTP request with method, path, status, duration, and client.
+
+    The client address is recorded so authentication failures can be attributed
+    and a brute-force attempt can be seen at all. Without it a burst of 401s is
+    indistinguishable from one user mistyping a password, and an attack that has
+    already happened cannot be investigated.
+
+    Note this makes the application log personal data. It is the minimum needed
+    for abuse investigation, and log retention governs how long it lives.
+    """
 
     _SKIP_PATHS = {"/health", "/health/live", "/health/ready", "/metrics"}
 
@@ -113,6 +147,7 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
             path=request.url.path,
             status_code=response.status_code,
             duration_ms=duration_ms,
+            client_ip=client_ip(request),
         )
         return response
 
