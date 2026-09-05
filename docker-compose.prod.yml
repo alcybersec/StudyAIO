@@ -23,7 +23,13 @@ services:
     pull_policy: always
     restart: unless-stopped
     stop_grace_period: 35s
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --timeout-graceful-shutdown 30
+    # --forwarded-allow-ips names the reverse proxy whose X-Forwarded-For may be
+    # believed. Uvicorn's default is 127.0.0.1, so a proxy on any other host has
+    # its headers discarded and every client arrives as that proxy's address —
+    # one rate-limit bucket for the whole internet, and an access log that
+    # attributes nothing (issue #39). Set FORWARDED_ALLOW_IPS to the proxy's
+    # address; the default here keeps uvicorn's safe behaviour when it is unset.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --timeout-graceful-shutdown 30 --forwarded-allow-ips ${FORWARDED_ALLOW_IPS:-127.0.0.1}
     volumes: !override
       - ./data:/app/data
 
