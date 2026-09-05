@@ -1,6 +1,7 @@
 """Email notification service using aiosmtplib."""
 
 import os
+import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -59,20 +60,52 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
         msg["Subject"] = subject
         msg.attach(MIMEText(html_body, "html"))
 
+        # aiosmtplib's `use_tls=True` means *implicit* TLS from the first byte
+        # (SMTPS, conventionally port 465). Any other TLS-capable port — 587,
+        # 25, ... — is a STARTTLS submission port: connect in plaintext, then
+        # upgrade via `start_tls=True`. Passing use_tls=True on 587 fails with
+        # "SSL: WRONG_VERSION_NUMBER" because the server isn't speaking TLS
+        # from byte one. Infer the mechanism from the port so no new config
+        # is needed and existing 465 deployments keep working unchanged.
+        use_tls = settings.smtp_use_tls and settings.smtp_port == 465
+        start_tls = settings.smtp_use_tls and settings.smtp_port != 465
+        logger.debug(
+            "email_smtp_tls_mode",
+            port=settings.smtp_port,
+            use_tls=use_tls,
+            start_tls=start_tls,
+        )
+
         await aiosmtplib.send(
             msg,
             hostname=settings.smtp_host,
             port=settings.smtp_port,
             username=settings.smtp_username or None,
             password=settings.smtp_password.get_secret_value() or None,
-            use_tls=settings.smtp_use_tls,
+            use_tls=use_tls,
+            start_tls=start_tls,
         )
 
         logger.info("email_sent", to=to_email, subject=subject)
         return True
 
-    except Exception:
-        logger.warning("email_send_failed", to=to_email, subject=subject, exc_info=True)
+    except Exception as exc:
+        hint = None
+        # aiosmtplib wraps a handshake-time ssl.SSLError in SMTPConnectError,
+        # so check __cause__ too — isinstance on exc alone misses it.
+        if isinstance(exc, ssl.SSLError) or isinstance(exc.__cause__, ssl.SSLError):
+            hint = (
+                "TLS handshake failed — this usually means implicit TLS "
+                "(use_tls) was attempted against a server expecting STARTTLS, "
+                "or vice versa. Check smtp_port against smtp_use_tls."
+            )
+        logger.warning(
+            "email_send_failed",
+            to=to_email,
+            subject=subject,
+            hint=hint,
+            exc_info=True,
+        )
         return False
 
 
