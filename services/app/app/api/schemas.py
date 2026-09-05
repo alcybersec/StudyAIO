@@ -343,7 +343,8 @@ class SettingsResponse(BaseModel):
     zai_base_url: str = ""
     ollama_base_url: str = ""
     ollama_model: str = ""
-    embedding_backend: str = "sentence_transformers"
+    #: `embedding_backend` is deliberately absent — it is instance-wide, not a
+    #: per-user choice. See settings_service.ALLOWED_KEYS and issue #32.
     classification_confidence_threshold: float
     flashcard_count_per_week: int
     quiz_question_count_per_week: int
@@ -369,7 +370,6 @@ class SettingsUpdateRequest(BaseModel):
     zai_base_url: str | None = None
     ollama_base_url: str | None = None
     ollama_model: str | None = None
-    embedding_backend: str | None = None
     classification_confidence_threshold: float | None = None
     flashcard_count_per_week: int | None = None
     quiz_question_count_per_week: int | None = None

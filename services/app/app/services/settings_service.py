@@ -48,7 +48,6 @@ ALLOWED_KEYS = {
     "zai_base_url",
     "ollama_base_url",
     "ollama_model",
-    "embedding_backend",
     "claude_cli_credentials",
     "classification_confidence_threshold",
     "flashcard_count_per_week",
@@ -64,7 +63,16 @@ VALID_MODELS = {"opus", "sonnet", "haiku"}
 STUDYAIO_BACKEND = "studyaio"
 
 VALID_BACKENDS = {STUDYAIO_BACKEND, "claude_code", "anthropic_api", "openai", "zai", "ollama"}
-VALID_EMBEDDING_BACKENDS = {"sentence_transformers", "openai", "ollama"}
+
+#: Deliberately absent from ALLOWED_KEYS: `embedding_backend`. It is instance-wide
+#: (`EMBEDDING_BACKEND`), read by `agents.embeddings.get_embedding_provider`, and
+#: must not come back here as a per-user choice — issue #32. All of a deployment's
+#: vectors share one `vector(384)` column and are only comparable when one model
+#: produced them, so a per-user encoder needs a provenance column, a model-scoped
+#: filter on every similarity query, and a re-index pipeline before the selection
+#: means anything. Until that exists, offering the choice promises what it cannot
+#: honour: the old dropdown let a user pick OpenAI, which was then called and
+#: billed for vectors pgvector refused to store.
 
 #: Never returned by the API. Written only, and only by the owning user.
 SECRET_KEYS = frozenset(
@@ -106,7 +114,6 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
     "zai_base_url": (str, None, None),
     "ollama_base_url": (str, None, None),
     "ollama_model": (str, None, None),
-    "embedding_backend": (str, None, None),
     "classification_confidence_threshold": (float, 0.0, 1.0),
     "flashcard_count_per_week": (int, 1, 100),
     "quiz_question_count_per_week": (int, 1, 100),
@@ -130,7 +137,6 @@ def _defaults() -> dict[str, Any]:
         "zai_base_url": settings.zai_base_url,
         "ollama_base_url": settings.ollama_base_url,
         "ollama_model": settings.ollama_model,
-        "embedding_backend": settings.embedding_backend,
         "classification_confidence_threshold": settings.classification_confidence_threshold,
         "flashcard_count_per_week": settings.flashcard_count_per_week,
         "quiz_question_count_per_week": settings.quiz_question_count_per_week,
@@ -214,13 +220,6 @@ def validate_setting(key: str, value: Any) -> Any:
         if not isinstance(value, str) or not value.strip():
             raise ValueError("ollama_model must be a non-empty string")
         return value.strip()
-
-    if key == "embedding_backend":
-        if value not in VALID_EMBEDDING_BACKENDS:
-            raise ValueError(
-                f"embedding_backend must be one of {sorted(VALID_EMBEDDING_BACKENDS)}, got '{value}'"
-            )
-        return value
 
     if key == "claude_code_path":
         if not isinstance(value, str) or not value.strip():
