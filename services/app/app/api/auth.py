@@ -24,6 +24,7 @@ from app.api.auth_schemas import (
 )
 from app.api.deps import get_current_user
 from app.config import settings
+from app.core import login_throttle
 from app.core.auth import (
     ACCESS_TOKEN_COOKIE,
     REFRESH_TOKEN_COOKIE,
@@ -167,15 +168,27 @@ async def login(
     session: AsyncSession = Depends(get_session),
 ) -> UserProfileResponse:
     """Authenticate with email and password."""
-    user = await user_service.authenticate_user(session, body.email, body.password)
+    # Slow down guessing against *this account*, whatever address it comes from
+    # (issue #37). Deliberately before the password is checked, so an address
+    # with no account is indistinguishable from one with an account.
+    await login_throttle.apply_delay(body.email)
 
-    # Check MFA if enabled
-    if user.mfa_enabled:
-        if not body.totp_code:
-            raise AuthorizationError("MFA code required")
-        if not user.mfa_secret or not verify_totp(user.mfa_secret, body.totp_code):
-            raise AuthorizationError("Invalid MFA code")
+    try:
+        user = await user_service.authenticate_user(session, body.email, body.password)
 
+        # Check MFA if enabled
+        if user.mfa_enabled:
+            if not body.totp_code:
+                raise AuthorizationError("MFA code required")
+            if not user.mfa_secret or not verify_totp(user.mfa_secret, body.totp_code):
+                raise AuthorizationError("Invalid MFA code")
+    except (AuthenticationError, AuthorizationError):
+        # A correct password with a wrong TOTP is still a failed attempt: an
+        # attacker holding the password must not get unlimited codes to guess.
+        await login_throttle.record_failure(body.email)
+        raise
+
+    await login_throttle.clear(body.email)
     await session.commit()
     _set_auth_cookies(response, user)
     return UserProfileResponse.model_validate(user)
