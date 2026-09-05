@@ -5,6 +5,7 @@ guarding. It is bash, so these run it as a subprocess against generated .env
 fixtures and assert on exit code and output.
 """
 
+import os
 import re
 import shutil
 import subprocess
@@ -97,11 +98,16 @@ def _quoted_env_text(**overrides) -> str:
     return "".join(f"{k}='{v}'\n" for k, v in values.items() if v is not None)
 
 
-def _run(env_file: Path) -> subprocess.CompletedProcess:
+def _run(env_file: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """Run the script against an env file, optionally overriding the process env."""
+    process_env = None
+    if env:
+        process_env = {**os.environ, **env}
     return subprocess.run(
         ["bash", str(SCRIPT), str(env_file)],
         capture_output=True,
         text=True,
+        env=process_env,
     )
 
 
@@ -366,3 +372,109 @@ class TestQuotedValues:
         result = _run(_write_raw_env(tmp_path, text))
         assert any("[FAIL]" in ln and "SMTP" in ln for ln in result.stdout.splitlines())
         assert result.returncode == 1
+
+
+class TestPerUserLimitVersusCeiling:
+    """A per-user limit close to the instance ceiling does nothing (issue #35)."""
+
+    def test_warns_when_one_user_can_exhaust_the_ceiling(self, tmp_path):
+        """200 per user against a 300 ceiling: one user spends everyone's budget."""
+        result = _run(
+            _write_env(
+                tmp_path,
+                AGENT_BACKEND="zai",
+                ZAI_API_KEY="<test-placeholder>",
+                GLOBAL_MAX_AI_CALLS_PER_DAY="300",
+                FREE_MAX_AI_CALLS_PER_DAY="200",
+            )
+        )
+        assert result.returncode == 0, result.stdout
+        assert any(
+            "[WARN]" in ln and "FREE_MAX_AI_CALLS_PER_DAY" in ln
+            for ln in result.stdout.splitlines()
+        ), result.stdout
+
+    def test_quiet_when_the_ceiling_leaves_room(self, tmp_path):
+        result = _run(
+            _write_env(
+                tmp_path,
+                AGENT_BACKEND="zai",
+                ZAI_API_KEY="<test-placeholder>",
+                GLOBAL_MAX_AI_CALLS_PER_DAY="300",
+                FREE_MAX_AI_CALLS_PER_DAY="30",
+            )
+        )
+        assert result.returncode == 0, result.stdout
+        assert not any(
+            "[WARN]" in ln and "FREE_MAX_AI_CALLS_PER_DAY" in ln
+            for ln in result.stdout.splitlines()
+        ), result.stdout
+
+    def test_unlimited_per_user_is_not_compared(self, tmp_path):
+        """0 means unlimited; dividing by it would be a crash, not a warning."""
+        result = _run(
+            _write_env(
+                tmp_path,
+                AGENT_BACKEND="zai",
+                ZAI_API_KEY="<test-placeholder>",
+                GLOBAL_MAX_AI_CALLS_PER_DAY="300",
+                FREE_MAX_AI_CALLS_PER_DAY="0",
+            )
+        )
+        assert result.returncode == 0, result.stdout
+        assert "FREE_MAX_AI_CALLS_PER_DAY" not in result.stdout
+
+    def test_unlimited_ceiling_is_not_compared(self, tmp_path):
+        result = _run(
+            _write_env(
+                tmp_path,
+                AGENT_BACKEND="zai",
+                ZAI_API_KEY="<test-placeholder>",
+                GLOBAL_MAX_AI_CALLS_PER_DAY="0",
+                FREE_MAX_AI_CALLS_PER_DAY="200",
+            )
+        )
+        assert result.returncode == 0, result.stdout
+        assert not any(
+            "[WARN]" in ln and "FREE_MAX_AI_CALLS_PER_DAY" in ln
+            for ln in result.stdout.splitlines()
+        ), result.stdout
+
+    def test_self_hosted_is_not_compared(self, tmp_path):
+        """Self-hosted skips per-user quotas, so the ratio is meaningless."""
+        result = _run(
+            _write_env(
+                tmp_path,
+                SELF_HOSTED="true",
+                AGENT_BACKEND="zai",
+                ZAI_API_KEY="<test-placeholder>",
+                GLOBAL_MAX_AI_CALLS_PER_DAY="300",
+                FREE_MAX_AI_CALLS_PER_DAY="200",
+            )
+        )
+        assert result.returncode == 0, result.stdout
+        assert not any(
+            "[WARN]" in ln and "FREE_MAX_AI_CALLS_PER_DAY" in ln
+            for ln in result.stdout.splitlines()
+        ), result.stdout
+
+
+class TestPerUserProviderOverrides:
+    """AGENT_BACKEND is only the default; users may run their own (issue #26)."""
+
+    def test_reports_the_check_as_unperformed_without_a_database(self, tmp_path):
+        """The script must say it could not look, rather than implying none exist.
+
+        Silence here is what made #26 hard to see: preflight reported the env
+        backend as correct while a user's pipeline ran on something else.
+        """
+        result = _run(
+            _write_env(
+                tmp_path,
+                AGENT_BACKEND="zai",
+                ZAI_API_KEY="<test-placeholder>",
+            ),
+            env={"PREFLIGHT_DB_CONTAINER": "studyaio-db-does-not-exist"},
+        )
+        assert result.returncode == 0, result.stdout
+        assert "Per-user provider overrides not checked" in result.stdout
