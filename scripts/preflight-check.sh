@@ -208,6 +208,57 @@ else
     ok "Spend ceiling not enforced (self-hosted — you are paying your own bill)"
 fi
 
+# ── Per-user limit vs the instance ceiling ────────────────────────
+
+# A per-user daily limit only does useful work when it is small enough that one
+# user cannot exhaust the instance ceiling on their own. Set them close together
+# and the per-user number is decorative: the global ceiling always binds first,
+# and it binds first-come-first-served — whoever uploads earliest that day
+# spends everybody else's budget. See issue #35.
+
+FREE_CALLS=$(get_val "FREE_MAX_AI_CALLS_PER_DAY")
+FREE_CALLS=${FREE_CALLS:-0}
+
+# Only meaningful when both are enforced: 0 means unlimited on either side, and
+# self-hosted skips per-user quotas entirely.
+if [[ "$SELF_HOSTED" == "false" && "$GLOBAL_CALLS" != "0" && "$FREE_CALLS" != "0" ]]; then
+    if [[ "$FREE_CALLS" =~ ^[0-9]+$ && "$GLOBAL_CALLS" =~ ^[0-9]+$ ]]; then
+        CONCURRENT=$((GLOBAL_CALLS / FREE_CALLS))
+        if [[ "$CONCURRENT" -lt 3 ]]; then
+            warn "FREE_MAX_AI_CALLS_PER_DAY=$FREE_CALLS against GLOBAL_MAX_AI_CALLS_PER_DAY=$GLOBAL_CALLS — only $CONCURRENT user(s) can reach their own limit before the instance ceiling is exhausted, so one user can lock out the rest. Aim for roughly ceiling / expected concurrent users."
+        else
+            ok "Per-user limit leaves room for ~$CONCURRENT users within the instance ceiling"
+        fi
+    fi
+fi
+
+# ── Per-user provider overrides ───────────────────────────────────
+
+# AGENT_BACKEND above is only the *default*. A user who picked their own
+# provider in Settings runs on that instead, and this script reads .env — it
+# cannot see the database. Reporting the env backend as correct while a user
+# runs something else is exactly the blindness issue #26 describes, so look if
+# we can and say so plainly if we cannot.
+
+DB_CONTAINER="${PREFLIGHT_DB_CONTAINER:-studyaio-db-1}"
+
+if ! command -v docker >/dev/null 2>&1; then
+    ok "Per-user provider overrides not checked (docker not available here)"
+elif ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER"; then
+    ok "Per-user provider overrides not checked ($DB_CONTAINER is not running)"
+else
+    OVERRIDES=$(docker exec "$DB_CONTAINER" psql -U "${POSTGRES_USER:-studyaio}" -d "${POSTGRES_DB:-studyaio}" -tAc \
+        "select count(*) from user_settings where settings_json ? 'agent_backend' and settings_json->>'agent_backend' <> 'studyaio'" 2>/dev/null || echo "")
+
+    if [[ -z "$OVERRIDES" ]]; then
+        ok "Per-user provider overrides not checked (could not query $DB_CONTAINER)"
+    elif [[ "$OVERRIDES" == "0" ]]; then
+        ok "No per-user provider overrides — every account uses AGENT_BACKEND=$AGENT_BACKEND"
+    else
+        warn "$OVERRIDES account(s) run their own AI provider, not AGENT_BACKEND=$AGENT_BACKEND. That is a supported feature, but it means this check does not describe what those pipelines actually use. Inspect with: SELECT user_id, settings_json->>'agent_backend' FROM user_settings WHERE settings_json->>'agent_backend' <> 'studyaio';"
+    fi
+fi
+
 # ── Cookie Secure ─────────────────────────────────────────────────
 
 COOKIE_SECURE=$(get_val "COOKIE_SECURE")
