@@ -90,6 +90,50 @@ class TestUploadFile:
 
 
 @pytest.mark.asyncio
+class TestUploadContentValidation:
+    """Uploads are validated by magic bytes, not just the extension (issue #48).
+
+    Before this, a shell script or HTML named ``evil.pdf`` was accepted (201)
+    and only failed deep in the pipeline. Now a mismatch is rejected at the
+    edge with the same 400 the extension check raises.
+    """
+
+    @pytest.mark.parametrize(
+        "filename, content",
+        [
+            ("lecture.pdf", b"%PDF-1.4 body"),
+            ("slides.docx", b"PK\x03\x04 docx zip"),
+            ("deck.pptx", b"PK\x03\x04 pptx zip"),
+            ("empty.docx", b"PK\x05\x06"),  # empty-archive ZIP signature is valid
+        ],
+    )
+    async def test_matching_magic_bytes_are_accepted(self, async_client, filename, content):
+        """A file whose leading bytes match its extension is accepted."""
+        with patch("app.api.uploads.run_pipeline", return_value=MagicMock(id="task-1")):
+            response = await async_client.post(
+                "/api/uploads",
+                files={"file": (filename, content, "application/octet-stream")},
+            )
+
+        assert response.status_code == 201
+        assert response.json()["status"] == "processing"
+
+    @pytest.mark.parametrize(
+        "filename",
+        ["evil.pdf", "macro.docx", "trojan.pptx"],
+    )
+    async def test_mismatched_content_is_rejected(self, async_client, filename):
+        """A valid extension carrying non-matching bytes is rejected with 400."""
+        response = await async_client.post(
+            "/api/uploads",
+            files={"file": (filename, b"#!/bin/sh\necho pwned", "application/octet-stream")},
+        )
+
+        assert response.status_code == 400
+        assert "Unsupported file type" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
 class TestUploadArtifactId:
     """Regression tests for issue #25 — the upload response carried a fake id.
 
