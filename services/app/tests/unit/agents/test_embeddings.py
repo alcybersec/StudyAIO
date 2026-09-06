@@ -26,6 +26,37 @@ class TestSentenceTransformerProvider:
         provider = SentenceTransformerProvider()
         assert provider.embed_texts([]) == []
 
+    def test_construction_touches_nothing(self):
+        """Constructing the provider must not load the model.
+
+        This is why the startup check calls `preload()` rather than stopping at
+        `get_embedding_provider()`: for six months the API constructed this
+        provider without error while every call it made failed (issue #44).
+        """
+        with patch("sentence_transformers.SentenceTransformer") as loader:
+            SentenceTransformerProvider()
+
+        loader.assert_not_called()
+
+    def test_preload_loads_the_model(self):
+        """`preload()` is the step that resolves the model cache."""
+        provider = SentenceTransformerProvider()
+
+        with patch("sentence_transformers.SentenceTransformer") as loader:
+            loader.return_value.get_sentence_embedding_dimension.return_value = 384
+            provider.preload()
+
+        loader.assert_called_once_with("all-MiniLM-L6-v2")
+
+    def test_preload_propagates_a_broken_cache(self):
+        """The caller decides what a load failure means, so it must be raised."""
+        provider = SentenceTransformerProvider()
+
+        with patch("sentence_transformers.SentenceTransformer") as loader:
+            loader.side_effect = PermissionError(13, "Permission denied", "/app/.cache")
+            with pytest.raises(PermissionError):
+                provider.preload()
+
 
 class TestOpenAIEmbeddingProvider:
     """Tests for OpenAIEmbeddingProvider."""
@@ -39,6 +70,20 @@ class TestOpenAIEmbeddingProvider:
         """Empty input returns empty output."""
         provider = OpenAIEmbeddingProvider(api_key="test-key")
         assert provider.embed_texts([]) == []
+
+    def test_preload_makes_no_api_call(self):
+        """A startup probe must never spend money or need the network.
+
+        OpenAI bills per embedding call, so the only probe available here would
+        be a billable one at every boot. `preload()` is deliberately a no-op;
+        this backend fails at first use instead, where the caller sees it.
+        """
+        provider = OpenAIEmbeddingProvider(api_key="<test-placeholder>")
+
+        with patch("openai.OpenAI") as client:
+            provider.preload()
+
+        client.assert_not_called()
 
     def test_calls_openai_api(self):
         """embed_texts calls OpenAI embeddings API."""
@@ -94,6 +139,15 @@ class TestOllamaEmbeddingProvider:
         """Empty input returns empty output."""
         provider = OllamaEmbeddingProvider()
         assert provider.embed_texts([]) == []
+
+    def test_preload_makes_no_api_call(self):
+        """Same reasoning as OpenAI: no network dependency on the start path."""
+        provider = OllamaEmbeddingProvider()
+
+        with patch("ollama.Client") as client:
+            provider.preload()
+
+        client.assert_not_called()
 
     def test_calls_ollama_api(self):
         """embed_texts calls Ollama embed API."""

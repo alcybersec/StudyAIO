@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     chunk_overlap_tokens: int = 50
 
     # Embeddings
+    # This default is read by services/app/Dockerfile at build time and baked
+    # into the image's model cache, so the two cannot drift. Pointing
+    # EMBEDDING_MODEL at anything else means the replacement is downloaded at
+    # run time — which works in the worker (uid 0) and fails in the api, whose
+    # user cannot write a cache. See the note in .env.example.
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dimensions: int = 384
     search_top_k: int = 10
