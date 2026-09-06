@@ -43,8 +43,6 @@ must also be removed from it.
 import ast
 import pathlib
 
-import pytest
-
 # Parameters that are never an object identifier, so a call receiving one of
 # these is not an id-addressed lookup.
 NON_OBJECT_PARAMS = frozenset(
@@ -93,23 +91,11 @@ GUARDED_ELSEWHERE: dict[str, str] = {
     ),
 }
 
-# Real, currently-unfixed findings. Deliberately NOT fixed in the #53 PR to
-# keep it reviewable -- the whole courseops router is unscoped, including five
-# write paths, which is its own issue rather than a footnote in someone
-# else's. Every line here is a live IDOR; delete entries as they are fixed.
-KNOWN_UNSCOPED_PENDING_FIX: dict[str, str] = {
-    "courseops:update_assessment:courseops_service.update_assessment": "WRITE",
-    "courseops:list_assessment_documents:courseops_service.list_assessment_documents": "read",
-    "courseops:delete_document:courseops_service.delete_course_document": "WRITE",
-    "courseops:create_assessment:courseops_service.create_assessment": "WRITE",
-    "courseops:list_assessments:courseops_service.list_assessments": "read",
-    "courseops:create_deadline:courseops_service.create_deadline": "WRITE",
-    "courseops:list_deadlines:courseops_service.list_deadlines": "read",
-    "courseops:update_deadline:courseops_service.update_deadline": "WRITE",
-    "courseops:delete_deadline:courseops_service.delete_deadline": "WRITE",
-    "courseops:export_calendar:generate_ics": "read",
-    "courseops:export_task_plan:generate_task_plan_md": "read",
-}
+# Real, currently-unfixed findings: a live IDOR that a PR is deliberately not
+# fixing, deferred to its own issue rather than buried in someone else's diff.
+# The eleven courseops entries #53 parked here were fixed in #55, so the list
+# is empty and should stay that way -- an entry is a debt, not a resting place.
+KNOWN_UNSCOPED_PENDING_FIX: dict[str, str] = {}
 
 ALLOWED = frozenset(GUARDED_ELSEWHERE) | frozenset(KNOWN_UNSCOPED_PENDING_FIX)
 
@@ -224,16 +210,22 @@ def test_scoping_allowlist_has_no_stale_entries():
     )
 
 
-@pytest.mark.parametrize("key", sorted(KNOWN_UNSCOPED_PENDING_FIX))
-def test_known_unscoped_endpoints_are_still_present(key):
-    """Pin the known-vulnerable courseops calls so they cannot be quietly lost.
+def test_known_unscoped_endpoints_are_still_present():
+    """Pin any known-vulnerable call so it cannot be quietly lost.
 
     These are live IDORs awaiting their own issue. If one stops being
     reported, it was either fixed (remove it from the dict) or the detection
     rule regressed (fix the rule) -- both need a human to look.
+
+    Written as a loop rather than a parametrize because the dict is empty
+    now that #55 landed, and parametrizing over an empty set turns this into
+    a skip -- a guard that reports "skipped" is a guard nobody reads.
     """
-    assert key in _find_unscoped_lookups(), (
-        f"{key} is no longer detected as unscoped. If it was fixed, remove it from "
-        "KNOWN_UNSCOPED_PENDING_FIX. If the detection rule changed, that is a "
-        "regression in this guard."
+    found = _find_unscoped_lookups()
+    lost = sorted(k for k in KNOWN_UNSCOPED_PENDING_FIX if k not in found)
+    assert not lost, (
+        "No longer detected as unscoped:\n"
+        + "\n".join(f"  {k}" for k in lost)
+        + "\nIf they were fixed, remove them from KNOWN_UNSCOPED_PENDING_FIX. "
+        "If the detection rule changed, that is a regression in this guard."
     )
