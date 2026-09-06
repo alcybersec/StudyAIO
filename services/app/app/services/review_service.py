@@ -83,27 +83,31 @@ async def create_review_item(
 async def list_pending_reviews(
     session: AsyncSession, user_id: str | None = None
 ) -> list[ReviewItem]:
-    """Get all pending review items.
+    """Get all pending review items, optionally scoped by owner.
+
+    Ownership is resolved with _owned_by, the same predicate the
+    id-addressed paths use. This used to be an inner join onto
+    LectureArtifact, which structurally excluded every ``summary``-backed
+    item -- a merge-conflict review was created and then unreachable by the
+    user who owned it (#58). A single predicate is also the only way the two
+    paths can stay in agreement: an item listed here must be openable, and
+    an item openable must be listed.
 
     Args:
         session: Database session.
+        user_id: If provided, only items whose referenced entity belongs to
+            this user. Endpoints MUST pass it.
 
     Returns:
-        List of pending ReviewItem records.
+        List of pending ReviewItem records, newest first.
     """
     query = (
         select(ReviewItem)
         .where(ReviewItem.status == "pending")
         .order_by(ReviewItem.created_at.desc())
     )
-    if user_id:
-        # Scope via artifact's user_id
-        from app.models.artifact import LectureArtifact
-
-        query = query.join(
-            LectureArtifact,
-            ReviewItem.entity_id == LectureArtifact.id,
-        ).where(LectureArtifact.user_id == user_id)
+    if user_id is not None:
+        query = query.where(_owned_by(user_id))
     result = await session.execute(query)
     return list(result.scalars().all())
 
@@ -275,21 +279,22 @@ async def dismiss_review_item(
 
 
 async def count_pending_reviews(session: AsyncSession, user_id: str | None = None) -> int:
-    """Count pending review items.
+    """Count pending review items, optionally scoped by owner.
+
+    Uses the same _owned_by predicate as list_pending_reviews. The two must
+    agree: this count is what the inbox badge shows, and a badge that
+    disagrees with the list it links to is its own bug report.
 
     Args:
         session: Database session.
+        user_id: If provided, only count items whose referenced entity
+            belongs to this user.
 
     Returns:
         Number of pending reviews.
     """
     query = select(func.count(ReviewItem.id)).where(ReviewItem.status == "pending")
-    if user_id:
-        from app.models.artifact import LectureArtifact
-
-        query = query.join(
-            LectureArtifact,
-            ReviewItem.entity_id == LectureArtifact.id,
-        ).where(LectureArtifact.user_id == user_id)
+    if user_id is not None:
+        query = query.where(_owned_by(user_id))
     result = await session.execute(query)
     return result.scalar_one()
