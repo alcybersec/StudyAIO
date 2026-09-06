@@ -1343,7 +1343,7 @@ studyaio/
 - Idempotent re-upload behavior
 - API endpoints with database
 
-**Tools:** pytest, testcontainers (Postgres + Redis in Docker for tests), httpx (async API testing)
+**Tools:** pytest, a real Postgres + Redis for integration tests (`make test-integration`), httpx (async API testing)
 
 ### Golden Tests
 

@@ -70,8 +70,13 @@ test:
 test-unit:
 	cd services/app && pytest tests/unit -x -v
 
+# Integration tests need a real Postgres + Redis, addressed by DATABASE_URL /
+# DATABASE_URL_SYNC / REDIS_URL. Those must be exported before pytest starts —
+# the app builds its engine and Redis client at import time (issue #56) — so the
+# script starts throwaway containers, exports them, runs pytest and cleans up.
+# Pass extra pytest args with: make test-integration ARGS="-k test_health"
 test-integration:
-	cd services/app && pytest tests/integration -x -v
+	bash scripts/test-integration.sh $(ARGS)
 
 test-golden:
 	cd services/app && pytest tests/golden -x -v

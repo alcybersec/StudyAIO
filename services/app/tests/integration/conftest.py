@@ -1,96 +1,164 @@
-"""Integration test fixtures using testcontainers.
+"""Integration test fixtures.
 
-Provides real Postgres (pgvector) + Redis for integration testing.
-Environment variables are set before any app code is imported.
+These tests run against a **real** Postgres (with pgvector) and a **real** Redis.
+Both are addressed through environment variables that must already be exported
+when the pytest process starts:
+
+    DATABASE_URL        postgresql+asyncpg://<user>:<pass>@<host>:<port>/<db>
+    DATABASE_URL_SYNC   postgresql://<user>:<pass>@<host>:<port>/<db>
+    REDIS_URL           redis://<host>:<port>/0
+
+`make test-integration` starts both services and exports all three for you.
+CI does the same thing with service containers and a job-level `env:` block, so
+local runs and CI take exactly the same code path.
+
+Why the environment must be set *before* pytest starts
+------------------------------------------------------
+`app.config.settings` is a module-level singleton that reads the environment
+once, at first import. `app.core.database.engine` and `app.core.redis.redis_client`
+are built at *their* import time from that singleton. By the time any fixture
+runs, both objects exist and are frozen against whatever the environment said
+back then.
+
+This conftest used to start testcontainers inside a session fixture and then
+`importlib.reload()` `app.config` and `app.core.database` to make the app notice.
+That never worked: reloading a module rebinds names *in that module*, not in the
+dozen modules that already did `from app.core.database import async_session_factory`,
+and the already-constructed engine keeps the URL it was created with. The app
+stayed pointed at the compose default `db:5432`, a hostname that does not resolve
+outside compose, so every test hung until it timed out (issue #56).
+
+Rather than fight that, the fixtures now *verify* it: if the app's resolved
+database URL does not match what the environment configured, the suite fails
+immediately with an explanation instead of 35 opaque `TimeoutError`s.
 """
 
 import os
 
 import pytest
 import pytest_asyncio
-from testcontainers.postgres import PostgresContainer
-from testcontainers.redis import RedisContainer
 
-# ── Session-scoped containers ────────────────────────────────────────
+# ── Environment contract ─────────────────────────────────────────────
+
+REQUIRED_ENV = ("DATABASE_URL", "DATABASE_URL_SYNC", "REDIS_URL")
+
+_HOW_TO_RUN = """\
+How to run the integration suite:
+
+    make test-integration                 # starts Postgres + Redis, exports the
+                                          # variables, runs pytest, cleans up
+
+    # or point it at services you already have:
+    DATABASE_URL=postgresql+asyncpg://user:pass@127.0.0.1:5432/testdb \\
+    DATABASE_URL_SYNC=postgresql://user:pass@127.0.0.1:5432/testdb \\
+    REDIS_URL=redis://127.0.0.1:6379/0 \\
+    pytest tests/integration
+
+The variables must be exported *before* pytest starts. Setting them from inside
+a fixture is too late: app.config.settings, app.core.database.engine and
+app.core.redis.redis_client are all built at import time (see this file's
+module docstring, and issue #56)."""
+
+
+def _redact(url: str) -> str:
+    """Hide the password in a database URL before putting it in a message."""
+    from sqlalchemy.engine import make_url
+
+    try:
+        return make_url(url).render_as_string(hide_password=True)
+    except Exception:
+        return url
 
 
 @pytest.fixture(scope="session")
-def postgres_container():
-    """Start a Postgres container with pgvector for the test session."""
-    # Skip container startup if DATABASE_URL is already set (e.g., CI with services)
-    if os.environ.get("DATABASE_URL"):
-        yield None
-        return
-
-    with PostgresContainer(
-        image="pgvector/pgvector:pg16",
-        username="testuser",
-        password="testpass",
-        dbname="testdb",
-    ) as pg:
-        yield pg
-
-
-@pytest.fixture(scope="session")
-def redis_container():
-    """Start a Redis container for the test session."""
-    if os.environ.get("REDIS_URL"):
-        yield None
-        return
-
-    with RedisContainer(image="redis:7-alpine") as redis:
-        yield redis
-
-
-@pytest.fixture(scope="session")
-def _set_env(postgres_container, redis_container):
-    """Set environment variables from containers before importing app code.
-
-    This must run before any app imports to ensure config.Settings picks up
-    the test database URL instead of the default Docker Compose one.
-    """
-    if postgres_container is not None:
-        host = postgres_container.get_container_host_ip()
-        port = postgres_container.get_exposed_port(5432)
-        async_url = f"postgresql+asyncpg://testuser:testpass@{host}:{port}/testdb"
-        sync_url = f"postgresql://testuser:testpass@{host}:{port}/testdb"
-        os.environ["DATABASE_URL"] = async_url
-        os.environ["DATABASE_URL_SYNC"] = sync_url
-
-    if redis_container is not None:
-        host = redis_container.get_container_host_ip()
-        port = redis_container.get_exposed_port(6379)
-        os.environ["REDIS_URL"] = f"redis://{host}:{port}/0"
+def _require_env() -> dict[str, str]:
+    """Fail loudly, and early, when the suite has not been given its services."""
+    missing = [name for name in REQUIRED_ENV if not os.environ.get(name)]
+    if missing:
+        raise RuntimeError(
+            "Integration tests need a real Postgres and Redis, addressed by "
+            "environment variables.\n\n"
+            f"Missing: {', '.join(missing)}\n\n" + _HOW_TO_RUN
+        )
+    return {name: os.environ[name] for name in REQUIRED_ENV}
 
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000099"
 
 
+def _url_identity(url) -> tuple:
+    """The parts of a URL that decide *which server and database* it reaches."""
+    return (url.drivername, url.host, url.port, url.database, url.username)
+
+
 @pytest.fixture(scope="session")
-def _run_migrations(_set_env):
-    """Create pgvector extension, run Alembic migrations, seed test user."""
+def _verify_app_wiring(_require_env):
+    """Assert the app is actually wired to the database the fixtures prepared.
+
+    This runs *before* migrations on purpose. `alembic/env.py` resolves the URL
+    from `app.config.settings` itself, so a mis-wired app fails inside
+    `command.upgrade()` — as a bare `TimeoutError` after a 60s hang against
+    `db:5432`, with nothing to say the environment was the problem.
+    """
+    from sqlalchemy.engine import make_url
+
+    from app.config import settings
+    from app.core.database import engine
+
+    expected = make_url(_require_env["DATABASE_URL"])
+    actual = engine.url
+
+    if _url_identity(expected) != _url_identity(actual):
+        raise RuntimeError(
+            "The application is not connected to the integration test database.\n\n"
+            f"  DATABASE_URL says          : {expected.render_as_string(hide_password=True)}\n"
+            f"  app.core.database.engine is: {actual.render_as_string(hide_password=True)}\n\n"
+            "app.core.database builds its engine at import time from "
+            "app.config.settings, which reads the environment once. If the engine "
+            "above shows the compose default (host `db`), the environment was not "
+            "set before pytest started — and `db` only resolves inside docker "
+            "compose, so every test would hang until it timed out.\n\n" + _HOW_TO_RUN
+        )
+
+    # The Redis client is built at import time from the same settings object, so
+    # it can drift the same way — and `redis:6379` hangs exactly like `db:5432`.
+    if settings.redis_url != _require_env["REDIS_URL"]:
+        raise RuntimeError(
+            "The application is not connected to the integration test Redis.\n\n"
+            f"  REDIS_URL says            : {_require_env['REDIS_URL']}\n"
+            f"  app.config.settings says  : {settings.redis_url}\n\n" + _HOW_TO_RUN
+        )
+
+
+@pytest.fixture(scope="session")
+def _run_migrations(_verify_app_wiring, _require_env):
+    """Create the pgvector extension, run Alembic migrations, seed a test user."""
     import sqlalchemy
 
-    sync_url = os.environ.get("DATABASE_URL_SYNC") or os.environ["DATABASE_URL"].replace(
-        "+asyncpg", ""
-    )
-    engine = sqlalchemy.create_engine(sync_url)
+    sync_url = _require_env["DATABASE_URL_SYNC"]
 
-    with engine.connect() as conn:
-        conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS vector"))
-        conn.commit()
+    try:
+        engine = sqlalchemy.create_engine(sync_url, connect_args={"connect_timeout": 10})
+        with engine.connect() as conn:
+            conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+        engine.dispose()
+    except Exception as exc:
+        raise RuntimeError(
+            "Could not connect to the integration test database.\n\n"
+            f"  DATABASE_URL_SYNC = {_redact(sync_url)}\n"
+            f"  error             = {type(exc).__name__}: {exc}\n\n"
+            "Is Postgres running and reachable at that address?\n\n" + _HOW_TO_RUN
+        ) from exc
 
-    engine.dispose()
-
-    # Run Alembic migrations
     from alembic import command
     from alembic.config import Config
 
+    # No set_main_option here: alembic/env.py overwrites `sqlalchemy.url` with
+    # `settings.database_url` when it is imported, and connects with its own
+    # async engine. The migration target is therefore whatever the environment
+    # said at import time — which _verify_app_wiring has already checked.
     alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "..", "..", "alembic.ini"))
-    alembic_cfg.set_main_option(
-        "sqlalchemy.url",
-        os.environ.get("DATABASE_URL_SYNC") or os.environ["DATABASE_URL"].replace("+asyncpg", ""),
-    )
     command.upgrade(alembic_cfg, "head")
 
     # Seed a test user for integration tests (multi-tenant FK requirement)
@@ -118,25 +186,11 @@ def test_user_id():
     return TEST_USER_ID
 
 
-@pytest.fixture(scope="session")
-def _app_setup(_run_migrations):
-    """Import app code after environment is configured and migrations are run."""
-    # Force re-import of config with new env vars by reloading
-    import importlib
-
-    import app.config
-
-    importlib.reload(app.config)
-    import app.core.database
-
-    importlib.reload(app.core.database)
-
-
 # ── Function-scoped fixtures ──────────────────────────────────────────
 
 
 @pytest_asyncio.fixture(loop_scope="session")
-async def db_session(_app_setup):
+async def db_session(_run_migrations):
     """Provide an async session with SAVEPOINT isolation.
 
     Each test runs in a nested transaction that is rolled back after the test,
