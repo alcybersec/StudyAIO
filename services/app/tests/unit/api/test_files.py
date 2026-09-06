@@ -172,6 +172,35 @@ class TestDownloadCourseDocument:
             response = await async_client.get("/api/files/courseops/documents/nope")
         assert response.status_code == 404
 
+    async def test_download_scoped_to_owner_returns_404_for_other_user(
+        self, async_client, default_test_user
+    ):
+        """IDOR regression (#47): user B gets 404 for user A's document id.
+
+        The download endpoint must thread the authenticated user's id into the
+        owner-scoped lookup. Here the document belongs to owner-A while the
+        authenticated caller is default_test_user (user B), so the scoped
+        service returns None → 404, matching the artifact path (no 403 oracle).
+        """
+        owner_a_doc = AsyncMock()
+        owner_a_doc.file_path = "uploads/secret.pdf"
+        owner_a_doc.file_type = "pdf"
+        owner_a_doc.original_filename = "owner_a_secret.pdf"
+
+        async def scoped_get(session, document_id, user_id=None):
+            # Emulate the real owner filter: only owner-A may retrieve it.
+            return owner_a_doc if user_id == "owner-A" else None
+
+        mock_get = AsyncMock(side_effect=scoped_get)
+        with patch("app.services.courseops_service.get_course_document", new=mock_get):
+            response = await async_client.get("/api/files/courseops/documents/doc-owned-by-a")
+
+        assert response.status_code == 404
+        # Wiring assertion: the endpoint must pass the caller's own id, not
+        # nothing — otherwise the scope is silently bypassed.
+        assert mock_get.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != "owner-A"
+
 
 @pytest.mark.asyncio
 class TestPreviewArtifact:

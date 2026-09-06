@@ -199,6 +199,52 @@ class TestListDocuments:
 
 
 @pytest.mark.asyncio
+class TestGetDocumentDetail:
+    """Tests for GET /api/courseops/documents/{document_id}."""
+
+    async def test_returns_detail_for_owned_document(self, async_client):
+        """Owner sees the document's extracted assessments and deadlines."""
+        doc = _mock_document()
+        doc.assessments = [_mock_assessment()]
+        doc.deadlines = [_mock_deadline()]
+        with patch(
+            "app.api.courseops.courseops_service.get_course_document",
+            new_callable=AsyncMock,
+            return_value=doc,
+        ):
+            response = await async_client.get("/api/courseops/documents/doc-001")
+
+        assert response.status_code == 200
+        assert response.json()["id"] == "doc-001"
+
+    async def test_scoped_to_owner_returns_404_for_other_user(
+        self, async_client, default_test_user
+    ):
+        """IDOR regression (#47): user B gets 404 for user A's document id.
+
+        The detail endpoint must thread the authenticated user's id into the
+        owner-scoped lookup. The document belongs to owner-A while the caller
+        is default_test_user (user B), so the scoped service returns None →
+        404 (not 403, so it is not an existence oracle).
+        """
+
+        async def scoped_get(session, document_id, user_id=None):
+            return _mock_document() if user_id == "owner-A" else None
+
+        mock_get = AsyncMock(side_effect=scoped_get)
+        with patch(
+            "app.api.courseops.courseops_service.get_course_document",
+            new=mock_get,
+        ):
+            response = await async_client.get("/api/courseops/documents/doc-owned-by-a")
+
+        assert response.status_code == 404
+        # Wiring assertion: the endpoint must forward the caller's own id.
+        assert mock_get.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != "owner-A"
+
+
+@pytest.mark.asyncio
 class TestCreateAssessment:
     """Tests for POST /api/courseops/assessments."""
 
