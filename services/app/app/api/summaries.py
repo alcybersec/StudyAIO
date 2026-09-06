@@ -24,7 +24,7 @@ async def get_summary(
     session: AsyncSession = Depends(get_session),
 ) -> SummaryResponse:
     """Get a summary by ID."""
-    summary = await summary_service.get_summary_by_id(session, summary_id)
+    summary = await summary_service.get_summary_by_id(session, summary_id, user_id=user.id)
     if not summary:
         raise HTTPException(status_code=404, detail="Summary not found")
     return SummaryResponse.model_validate(summary)

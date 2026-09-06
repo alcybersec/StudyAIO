@@ -68,7 +68,7 @@ async def build_week_plan(session: AsyncSession, user_id: str) -> list[dict]:
     for exam in exams:
         course_code = code_by_course.get(exam.course_id, "")
         schedule = await schedule_service.generate_study_schedule(
-            session, exam.id, days_ahead=PLAN_DAYS
+            session, exam.id, days_ahead=PLAN_DAYS, user_id=user_id
         )
         if not schedule:
             continue

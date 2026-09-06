@@ -93,7 +93,7 @@ async def get_exam(
     session: AsyncSession = Depends(get_session),
 ) -> ExamProgressResponse:
     """Get exam detail with progress."""
-    progress = await exam_service.get_exam_progress(session, exam_id)
+    progress = await exam_service.get_exam_progress(session, exam_id, user_id=user.id)
     if not progress:
         raise HTTPException(status_code=404, detail="Exam not found")
     await session.commit()  # persist auto-completions
@@ -114,7 +114,7 @@ async def update_exam(
 ) -> ExamResponse:
     """Update an exam."""
     update_data = body.model_dump(exclude_unset=True)
-    exam = await exam_service.update_exam(session, exam_id, **update_data)
+    exam = await exam_service.update_exam(session, exam_id, user_id=user.id, **update_data)
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
     await session.commit()
@@ -133,7 +133,7 @@ async def delete_exam(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Archive an exam."""
-    archived = await exam_service.delete_exam(session, exam_id)
+    archived = await exam_service.delete_exam(session, exam_id, user_id=user.id)
     if not archived:
         raise HTTPException(status_code=404, detail="Exam not found")
     await session.commit()
@@ -152,7 +152,9 @@ async def get_schedule(
     session: AsyncSession = Depends(get_session),
 ) -> list[DailyPlanResponse]:
     """Get study schedule."""
-    schedule = await schedule_service.generate_study_schedule(session, exam_id, days)
+    schedule = await schedule_service.generate_study_schedule(
+        session, exam_id, days, user_id=user.id
+    )
     if schedule is None:
         raise HTTPException(status_code=404, detail="Exam not found")
     return [DailyPlanResponse(**day) for day in schedule]
@@ -170,7 +172,7 @@ async def get_today(
     session: AsyncSession = Depends(get_session),
 ) -> DailyPlanResponse:
     """Get today's study plan."""
-    plan = await schedule_service.get_daily_study_plan(session, exam_id)
+    plan = await schedule_service.get_daily_study_plan(session, exam_id, user_id=user.id)
     if plan is None:
         raise HTTPException(status_code=404, detail="Exam not found")
     return DailyPlanResponse(**plan)
@@ -188,7 +190,7 @@ async def get_weak_topics(
     session: AsyncSession = Depends(get_session),
 ) -> list[WeakTopicResponse]:
     """Get weak topics for an exam."""
-    exam = await exam_service.get_exam(session, exam_id)
+    exam = await exam_service.get_exam(session, exam_id, user_id=user.id)
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
     topics = await exam_service.get_weak_topics(session, exam.course_id, exam.weeks_scope)
