@@ -161,6 +161,7 @@ async def update_assessment(
         weight_pct=body.weight_pct,
         description=body.description,
         weeks_relevant=body.weeks_relevant,
+        user_id=user.id,
     )
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
@@ -178,7 +179,9 @@ async def list_assessment_documents(
     session: AsyncSession = Depends(get_session),
 ) -> list[CourseDocumentResponse]:
     """List reference documents (brief, rubric, guideline, …) for an assessment."""
-    docs = await courseops_service.list_assessment_documents(session, assessment_id)
+    docs = await courseops_service.list_assessment_documents(
+        session, assessment_id, user_id=user.id
+    )
     return [CourseDocumentResponse.model_validate(d) for d in docs]
 
 
@@ -258,7 +261,7 @@ async def delete_document(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Delete a course or assessment document."""
-    deleted = await courseops_service.delete_course_document(session, document_id)
+    deleted = await courseops_service.delete_course_document(session, document_id, user_id=user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -284,6 +287,7 @@ async def create_assessment(
         weight_pct=body.weight_pct,
         description=body.description,
         weeks_relevant=body.weeks_relevant,
+        user_id=user.id,
     )
     if not assessment:
         raise HTTPException(status_code=404, detail="Course not found")
@@ -301,7 +305,7 @@ async def list_assessments(
     session: AsyncSession = Depends(get_session),
 ) -> list[AssessmentResponse]:
     """List all assessments for a course."""
-    assessments = await courseops_service.list_assessments(session, course_code)
+    assessments = await courseops_service.list_assessments(session, course_code, user_id=user.id)
     return [AssessmentResponse.model_validate(a) for a in assessments]
 
 
@@ -325,6 +329,7 @@ async def create_deadline(
         due_date=body.due_date,
         deadline_type=body.deadline_type,
         description=body.description,
+        user_id=user.id,
     )
     if not deadline:
         raise HTTPException(status_code=404, detail="Course not found")
@@ -343,7 +348,9 @@ async def list_deadlines(
     session: AsyncSession = Depends(get_session),
 ) -> list[DeadlineResponse]:
     """List deadlines for a course."""
-    deadlines = await courseops_service.list_deadlines(session, course_code, upcoming_only=upcoming)
+    deadlines = await courseops_service.list_deadlines(
+        session, course_code, upcoming_only=upcoming, user_id=user.id
+    )
     return [DeadlineResponse.model_validate(d) for d in deadlines]
 
 
@@ -367,6 +374,7 @@ async def update_deadline(
         deadline_type=body.deadline_type,
         description=body.description,
         is_confirmed=body.is_confirmed,
+        user_id=user.id,
     )
     if not deadline:
         raise HTTPException(status_code=404, detail="Deadline not found")
@@ -384,7 +392,7 @@ async def delete_deadline(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Delete an AI-extracted deadline."""
-    deleted = await courseops_service.delete_deadline(session, deadline_id)
+    deleted = await courseops_service.delete_deadline(session, deadline_id, user_id=user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Deadline not found")
 
@@ -429,7 +437,7 @@ async def export_calendar(
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """Download an .ics calendar file with all deadlines for a course."""
-    result = await generate_ics(session, course_code)
+    result = await generate_ics(session, course_code, user_id=user.id)
     if not result:
         raise HTTPException(status_code=404, detail="Course not found or no deadlines")
 
@@ -451,7 +459,7 @@ async def export_task_plan(
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """Download a markdown task plan with deadlines and study recommendations."""
-    result = await generate_task_plan_md(session, course_code)
+    result = await generate_task_plan_md(session, course_code, user_id=user.id)
     if not result:
         raise HTTPException(status_code=404, detail="Course not found")
 
