@@ -68,7 +68,7 @@ async def download_course_document(
     """Download a CourseDocument's file by ID."""
     from app.services import courseops_service
 
-    doc = await courseops_service.get_course_document(session, document_id)
+    doc = await courseops_service.get_course_document(session, document_id, user_id=user.id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
