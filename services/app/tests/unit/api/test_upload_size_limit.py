@@ -72,7 +72,7 @@ class TestUploadEndpointSizeLimit:
 
     async def test_upload_small_file_succeeds(self, async_client):
         """POST /api/uploads with small file succeeds."""
-        small_content = b"x" * 100  # 100 bytes
+        small_content = b"%PDF-1.4" + b"x" * 100  # valid PDF magic bytes + payload
 
         mock_result = MagicMock()
         mock_result.id = "task-123"

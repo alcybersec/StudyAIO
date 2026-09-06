@@ -26,7 +26,11 @@ from app.core.cache import cache_delete, dashboard_cache_key
 from app.core.database import get_session
 from app.core.exceptions import DuplicateFileError
 from app.core.rate_limit import limiter
-from app.core.utils import compute_sha256_from_bytes, read_upload_with_limit
+from app.core.utils import (
+    compute_sha256_from_bytes,
+    read_upload_with_limit,
+    validate_upload_content,
+)
 from app.models.user import User
 from app.pipeline.orchestrator import resume_pipeline, run_pipeline
 from app.services import (
@@ -96,6 +100,11 @@ async def upload_file(
 
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
     content = await read_upload_with_limit(file, max_bytes)
+
+    # Reject a file whose bytes do not match its extension (issue #48). Done
+    # against the bytes just read, before hashing, so garbage is turned away at
+    # the edge instead of burning a pipeline run and AI quota.
+    validate_upload_content(ext, content)
 
     # Dedup before touching storage. Doing it here rather than in the worker is
     # what lets the response carry a real artifact id, and it stops a duplicate
@@ -230,6 +239,9 @@ async def batch_upload(
         try:
             max_bytes = settings.max_upload_size_mb * 1024 * 1024
             content = await read_upload_with_limit(file, max_bytes)
+            # Reject bytes that do not match the extension (issue #48). The 400
+            # it raises is caught below and recorded as this file's error.
+            validate_upload_content(ext, content)
         except HTTPException as e:
             results.append(
                 BatchUploadFileResult(

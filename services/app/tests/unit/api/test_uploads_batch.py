@@ -5,9 +5,27 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+# Leading bytes that satisfy the upload content check (issue #48) for each
+# supported extension: "%PDF" for PDF, the ZIP local-file-header signature for
+# the OOXML formats (DOCX/PPTX are ZIP archives).
+_MAGIC_BY_EXT = {
+    ".pdf": b"%PDF-1.4 ",
+    ".docx": b"PK\x03\x04",
+    ".pptx": b"PK\x03\x04",
+}
 
-def _make_upload_file(name: str, content: bytes = b"test pdf content"):
-    """Create a tuple suitable for httpx multipart file upload."""
+
+def _make_upload_file(name: str, content: bytes | None = None):
+    """Create a tuple suitable for httpx multipart file upload.
+
+    When ``content`` is omitted, the bytes default to a valid magic-byte
+    signature for the file's extension so the upload passes content validation;
+    unsupported extensions get placeholder bytes (their extension is rejected
+    before content is ever inspected).
+    """
+    if content is None:
+        ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        content = _MAGIC_BY_EXT.get(ext, b"not a real document")
     return ("files", (name, io.BytesIO(content), "application/octet-stream"))
 
 
@@ -102,6 +120,29 @@ class TestBatchUpload:
         txt_result = next(r for r in data["results"] if r["filename"] == "notes.txt")
         assert txt_result["status"] == "error"
 
+    async def test_batch_upload_rejects_mismatched_content(self, async_client):
+        """A valid extension carrying wrong magic bytes is a per-file error (issue #48)."""
+        with patch("app.api.uploads.run_pipeline") as mock_pipeline:
+            mock_pipeline.return_value = MagicMock(id="task-123")
+            response = await async_client.post(
+                "/api/uploads/batch",
+                files=[
+                    _make_upload_file("good.pdf"),
+                    _make_upload_file("evil.pdf", b"#!/bin/sh\necho pwned"),
+                ],
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["total"] == 2
+        assert data["succeeded"] == 1
+        assert data["failed"] == 1
+        good = next(r for r in data["results"] if r["filename"] == "good.pdf")
+        assert good["status"] == "processing"
+        evil = next(r for r in data["results"] if r["filename"] == "evil.pdf")
+        assert evil["status"] == "error"
+        assert "Unsupported file type" in evil["error"]
+
     async def test_batch_upload_duplicate(self, async_client):
         """A file already in the library is reported with its existing id."""
         with (
@@ -179,9 +220,9 @@ class TestBatchUpload:
             response = await async_client.post(
                 "/api/uploads/batch",
                 files=[
-                    _make_upload_file("file1.pdf", b"one"),
-                    _make_upload_file("file2.pdf", b"two"),
-                    _make_upload_file("file3.pdf", b"three"),
+                    _make_upload_file("file1.pdf", b"%PDF-1.4 one"),
+                    _make_upload_file("file2.pdf", b"%PDF-1.4 two"),
+                    _make_upload_file("file3.pdf", b"%PDF-1.4 three"),
                     _make_upload_file("bad.txt"),  # unsupported ext
                 ],
             )

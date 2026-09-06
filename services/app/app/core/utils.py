@@ -32,6 +32,37 @@ def sanitize_filename(filename: str) -> str:
     return "".join(c for c in filename if c.isalnum() or c in keepchars).strip()
 
 
+# Leading-byte signatures accepted for each supported extension. A PDF starts
+# with "%PDF"; DOCX/PPTX are ZIP archives, so they start with one of the three
+# valid ZIP signatures: a local file header (the usual case), an empty archive,
+# or a spanned/split marker.
+_ZIP_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+_CONTENT_SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    ".pdf": (b"%PDF",),
+    ".docx": _ZIP_MAGIC,
+    ".pptx": _ZIP_MAGIC,
+}
+
+
+def validate_upload_content(ext: str, content: bytes) -> None:
+    """Reject a file whose leading bytes do not match its extension.
+
+    The extension check alone lets a shell script or HTML named ``evil.pdf``
+    through; this checks the magic bytes so a mislabelled file is rejected at
+    the edge instead of failing deep in the pipeline. ``ext`` must already be
+    lowercased. Raises the same 400 the extension check uses; an extension with
+    no known signature is left untouched.
+    """
+    signatures = _CONTENT_SIGNATURES.get(ext)
+    if signatures is None:
+        return
+    if not content.startswith(signatures):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {ext}. File content does not match its extension.",
+        )
+
+
 async def read_upload_with_limit(file: UploadFile, max_bytes: int) -> bytes:
     """Read an uploaded file in chunks, raising 413 if it exceeds max_bytes.
 
