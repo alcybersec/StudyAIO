@@ -33,15 +33,7 @@ async def list_review_items(
     if status == "pending":
         items = await review_service.list_pending_reviews(session, user_id=user.id)
     else:
-        # For other statuses, do a simple query
-        from app.models.review_item import ReviewItem
-
-        result = await session.execute(
-            select(ReviewItem)
-            .where(ReviewItem.status == status)
-            .order_by(ReviewItem.created_at.desc())
-        )
-        items = list(result.scalars().all())
+        items = await review_service.list_reviews_by_status(session, status, user_id=user.id)
     return [ReviewItemResponse.model_validate(item) for item in items]
 
 
@@ -57,7 +49,7 @@ async def get_review_item(
     session: AsyncSession = Depends(get_session),
 ) -> ReviewItemResponse:
     """Get a single review item."""
-    item = await review_service.get_review_item(session, review_id)
+    item = await review_service.get_review_item(session, review_id, user_id=user.id)
     if not item:
         raise HTTPException(status_code=404, detail="Review item not found")
     return ReviewItemResponse.model_validate(item)
@@ -80,7 +72,7 @@ async def resolve_review_item(
     Applies the resolution to the referenced entity, marks the review
     as resolved, and restarts the pipeline from the appropriate stage.
     """
-    item = await review_service.get_review_item(session, review_id)
+    item = await review_service.get_review_item(session, review_id, user_id=user.id)
     if not item:
         raise HTTPException(status_code=404, detail="Review item not found")
     if item.status != "pending":
@@ -94,7 +86,10 @@ async def resolve_review_item(
     # Apply resolution to the entity
     if item.entity_type == "lecture_artifact":
         result = await session.execute(
-            select(LectureArtifact).where(LectureArtifact.id == item.entity_id)
+            select(LectureArtifact).where(
+                LectureArtifact.id == item.entity_id,
+                LectureArtifact.user_id == user.id,
+            )
         )
         artifact = result.scalar_one_or_none()
         if not artifact:
@@ -113,7 +108,9 @@ async def resolve_review_item(
 
     # Mark review as resolved
     try:
-        item = await review_service.resolve_review_item(session, review_id, resolution)
+        item = await review_service.resolve_review_item(
+            session, review_id, resolution, user_id=user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -145,8 +142,10 @@ async def dismiss_review_item(
     session: AsyncSession = Depends(get_session),
 ) -> ReviewItemResponse:
     """Dismiss a review item without resolving it."""
+    # A foreign item is reported exactly like a missing one, so this stays a
+    # 400 "not found" rather than becoming an existence oracle.
     try:
-        item = await review_service.dismiss_review_item(session, review_id)
+        item = await review_service.dismiss_review_item(session, review_id, user_id=user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

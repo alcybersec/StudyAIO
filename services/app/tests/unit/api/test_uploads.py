@@ -278,10 +278,17 @@ class TestGetUploadStatus:
         mock_run.completed_at = datetime(2024, 1, 1, 0, 0, 5)
         mock_run.duration_ms = 5000
 
-        with patch(
-            "app.api.uploads.pipeline_service.get_artifact_pipeline_runs",
-            new_callable=AsyncMock,
-            return_value=[mock_run],
+        with (
+            patch(
+                "app.api.uploads.pipeline_service.get_artifact_pipeline_runs",
+                new_callable=AsyncMock,
+                return_value=[mock_run],
+            ),
+            patch(
+                "app.api.uploads.artifact_service.get_artifact",
+                new_callable=AsyncMock,
+                return_value=AsyncMock(id="art-001"),
+            ),
         ):
             response = await async_client.get("/api/uploads/art-001/status")
 
