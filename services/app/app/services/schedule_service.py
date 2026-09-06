@@ -36,6 +36,7 @@ async def generate_study_schedule(
     session: AsyncSession,
     exam_id: str,
     days_ahead: int = 7,
+    user_id: str | None = None,
 ) -> list[dict] | None:
     """Generate an adaptive daily study plan for the next N days.
 
@@ -49,11 +50,18 @@ async def generate_study_schedule(
         session: Database session.
         exam_id: Exam UUID.
         days_ahead: Number of days to plan (default 7).
+        user_id: If provided, only build a schedule for an exam owned by this
+            user. Endpoints reaching an exam by a caller-supplied id MUST
+            pass this; omitting it plans against the exam regardless of owner
+            and is only appropriate for trusted internal callers.
 
     Returns:
-        List of daily plan dicts, or None if exam not found.
+        List of daily plan dicts, or None if exam not found (or not owned).
     """
-    result = await session.execute(select(Exam).where(Exam.id == exam_id))
+    query = select(Exam).where(Exam.id == exam_id)
+    if user_id is not None:
+        query = query.where(Exam.user_id == user_id)
+    result = await session.execute(query)
     exam = result.scalar_one_or_none()
     if not exam:
         return None
@@ -126,17 +134,20 @@ async def generate_study_schedule(
 async def get_daily_study_plan(
     session: AsyncSession,
     exam_id: str,
+    user_id: str | None = None,
 ) -> dict | None:
     """Get today's study plan for an exam.
 
     Args:
         session: Database session.
         exam_id: Exam UUID.
+        user_id: If provided, only build a plan for an exam owned by this
+            user. Endpoints exposing this by id MUST pass it.
 
     Returns:
-        Today's plan dict, or None if exam not found.
+        Today's plan dict, or None if exam not found (or not owned).
     """
-    schedule = await generate_study_schedule(session, exam_id, days_ahead=1)
+    schedule = await generate_study_schedule(session, exam_id, days_ahead=1, user_id=user_id)
     if not schedule:
         return None
     return schedule[0]

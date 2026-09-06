@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.base import ExtractionData
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
+from app.models.course import Course
 from app.models.extraction import Extraction
 from app.models.summary import Summary
 
@@ -156,17 +157,29 @@ async def create_or_update_summary(
     return summary
 
 
-async def get_summary_by_id(session: AsyncSession, summary_id: str) -> Summary | None:
-    """Get a summary by its ID.
+async def get_summary_by_id(
+    session: AsyncSession, summary_id: str, user_id: str | None = None
+) -> Summary | None:
+    """Get a summary by its ID, optionally scoped by owner.
+
+    Summary has no user_id column of its own; ownership runs through the
+    course it belongs to.
 
     Args:
         session: Database session.
         summary_id: Summary UUID.
+        user_id: If provided, only return the summary when its course belongs
+            to this user. Endpoints exposing summaries by id MUST pass this;
+            omitting it returns the summary regardless of owner and is only
+            appropriate for trusted internal callers.
 
     Returns:
         Summary if found, None otherwise.
     """
-    result = await session.execute(select(Summary).where(Summary.id == summary_id))
+    query = select(Summary).where(Summary.id == summary_id)
+    if user_id is not None:
+        query = query.join(Course, Summary.course_id == Course.id).where(Course.user_id == user_id)
+    result = await session.execute(query)
     return result.scalar_one_or_none()
 
 

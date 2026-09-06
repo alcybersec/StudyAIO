@@ -80,7 +80,10 @@ async def get_exam(session: AsyncSession, exam_id: str, user_id: str | None = No
     Args:
         session: Database session.
         exam_id: Exam UUID.
-        user_id: If provided, only return exam owned by this user.
+        user_id: If provided, only return exam owned by this user. Any
+            endpoint that reaches an exam by a caller-supplied id MUST pass
+            this; omitting it returns the exam regardless of owner and is
+            only appropriate for trusted internal callers.
 
     Returns:
         Exam if found, None otherwise.
@@ -139,6 +142,8 @@ async def list_exams(
 async def update_exam(
     session: AsyncSession,
     exam_id: str,
+    *,
+    user_id: str | None = None,
     **kwargs,
 ) -> Exam | None:
     """Update exam fields.
@@ -146,12 +151,15 @@ async def update_exam(
     Args:
         session: Database session.
         exam_id: Exam UUID.
+        user_id: If provided, only update an exam owned by this user; a
+            foreign exam is reported as not-found. Endpoints exposing this
+            by id MUST pass it -- otherwise any caller can mutate any exam.
         **kwargs: Fields to update (title, exam_date, weeks_scope, target_mastery_pct).
 
     Returns:
-        Updated Exam or None if not found.
+        Updated Exam or None if not found (or not owned by user_id).
     """
-    exam = await get_exam(session, exam_id)
+    exam = await get_exam(session, exam_id, user_id=user_id)
     if not exam:
         return None
 
@@ -164,17 +172,20 @@ async def update_exam(
     return exam
 
 
-async def delete_exam(session: AsyncSession, exam_id: str) -> bool:
+async def delete_exam(session: AsyncSession, exam_id: str, user_id: str | None = None) -> bool:
     """Archive an exam (soft delete).
 
     Args:
         session: Database session.
         exam_id: Exam UUID.
+        user_id: If provided, only archive an exam owned by this user; a
+            foreign exam is reported as not-found. Endpoints exposing this
+            by id MUST pass it -- otherwise any caller can archive any exam.
 
     Returns:
-        True if archived, False if not found.
+        True if archived, False if not found (or not owned by user_id).
     """
-    exam = await get_exam(session, exam_id)
+    exam = await get_exam(session, exam_id, user_id=user_id)
     if not exam:
         return False
     exam.status = "archived"
@@ -268,17 +279,20 @@ async def get_weak_topics(
 async def get_exam_progress(
     session: AsyncSession,
     exam_id: str,
+    user_id: str | None = None,
 ) -> dict | None:
     """Get comprehensive exam progress data.
 
     Args:
         session: Database session.
         exam_id: Exam UUID.
+        user_id: If provided, only return progress for an exam owned by this
+            user. Endpoints exposing this by id MUST pass it.
 
     Returns:
-        Dict with progress data or None if exam not found.
+        Dict with progress data or None if exam not found (or not owned).
     """
-    exam = await get_exam(session, exam_id)
+    exam = await get_exam(session, exam_id, user_id=user_id)
     if not exam:
         return None
 
