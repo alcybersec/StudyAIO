@@ -232,17 +232,23 @@ async def list_course_documents(
 async def get_course_document(
     session: AsyncSession,
     document_id: str,
+    user_id: str | None = None,
 ) -> CourseDocument | None:
-    """Get a single course document by ID.
+    """Get a single course document by ID, optionally scoped by owner.
 
     Args:
         session: Database session.
         document_id: UUID of the document.
+        user_id: If provided, only return the document when it is owned by
+            this user. Endpoints exposing documents by id MUST pass this to
+            enforce object-level authorization; omitting it returns the
+            document regardless of owner and is only appropriate for trusted
+            internal callers.
 
     Returns:
         CourseDocument or None.
     """
-    result = await session.execute(
+    query = (
         select(CourseDocument)
         .options(
             joinedload(CourseDocument.assessments),
@@ -250,6 +256,9 @@ async def get_course_document(
         )
         .where(CourseDocument.id == document_id)
     )
+    if user_id is not None:
+        query = query.where(CourseDocument.user_id == user_id)
+    result = await session.execute(query)
     return result.unique().scalar_one_or_none()
 
 

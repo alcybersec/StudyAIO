@@ -135,7 +135,7 @@ async def get_document(
     session: AsyncSession = Depends(get_session),
 ) -> CourseDocumentDetailResponse:
     """Get a course document with its extracted assessments and deadlines."""
-    doc = await courseops_service.get_course_document(session, document_id)
+    doc = await courseops_service.get_course_document(session, document_id, user_id=user.id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return CourseDocumentDetailResponse.model_validate(doc)
