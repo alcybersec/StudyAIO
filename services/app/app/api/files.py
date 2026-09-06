@@ -10,11 +10,21 @@ from app.api.deps import get_current_user_or_default
 from app.core.database import get_session
 from app.core.storage import LocalStorageBackend, get_storage, normalize_storage_key
 from app.models.user import User
-from app.services import artifact_service
+from app.services import artifact_service, course_service
 
 router = APIRouter()
 
-_VALID_PREFIXES = {"uploads", "extractions", "summaries", "courseops"}
+# Prefixes the generic path-addressed route at the bottom of this module will
+# serve.
+#
+# ``uploads`` and ``courseops`` are deliberately absent. Both already have
+# id-addressed, owner-scoped routes above (``/files/uploads/artifacts/{id}``,
+# ``/files/courseops/documents/{id}``) and those are what the UI uses
+# (``ArtifactList.tsx``, ``FileViewer.tsx``). Serving them by raw path as well
+# only widened #66: an uploaded file's storage key is
+# ``uploads/<uuid>_<original name>`` and carries no owner, so there is nothing
+# in the path to scope it by.
+_VALID_PREFIXES = {"extractions", "summaries"}
 
 # Map file extension to MIME type for inline viewing
 _MIME_TYPES = {
@@ -151,18 +161,78 @@ async def preview_artifact(
     return await _serve_storage_key(key, media_type="application/pdf")
 
 
+async def _authorize_path(
+    file_type: str,
+    path: str,
+    user: User,
+    session: AsyncSession,
+) -> None:
+    """Raise 404 unless *user* owns the object the path addresses.
+
+    The generic route's path carries no owner of its own, so authentication
+    alone would leave any signed-in user able to read anyone else's files --
+    the #47/#53/#55 IDOR class. Ownership is instead resolved from the shape
+    of each prefix, whose first segment is always an owned object's id:
+
+    * ``extractions/<artifact_id>/...`` -- everything the extraction pipeline
+      writes lives under the artifact's own id (``pipeline/extract.py``), so
+      the owner-scoped artifact getter settles the whole subtree.
+    * ``summaries/<COURSE_CODE>/...`` -- summary keys are
+      ``summaries/<CODE>/<CODE>_Week<N>.md`` (``summary_service`` builds
+      them), so the owner-scoped course getter settles the whole subtree.
+      This is the half of #66 that was enumerable: course codes are standard
+      university codes and weeks run 1-15.
+
+    A path too short to carry an owner segment is unresolvable, so it is
+    refused rather than served.
+
+    Raises:
+        HTTPException: 404 if the caller does not own the addressed object.
+    """
+    parts = Path(path).parts
+    # ``<owner segment>/<filename>`` is the shortest addressable form.
+    if len(parts) < 2:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    owner_segment = parts[0]
+    if file_type == "extractions":
+        owned = await artifact_service.get_artifact(session, owner_segment, user_id=user.id)
+    elif file_type == "summaries":
+        owned = await course_service.get_course_by_code(session, owner_segment, user_id=user.id)
+    else:
+        # A prefix added to _VALID_PREFIXES without an ownership rule here
+        # fails closed, rather than inheriting whichever branch is last.
+        owned = None
+
+    if not owned:
+        # 404, not 403: a 403 here would confirm the file exists to someone
+        # who may not have it, and every id-addressed route above 404s too.
+        raise HTTPException(status_code=404, detail="File not found")
+
+
 @router.get(
     "/files/{file_type}/{path:path}",
     response_model=None,
     summary="Serve a file",
-    description="Serves a file from the data directory. file_type must be one of: uploads, extractions, summaries, courseops. Path traversal is blocked.",
+    description=(
+        "Serves a file the caller owns from the data directory. file_type must be one of: "
+        "extractions, summaries. Path traversal is blocked. Files the caller does not own "
+        "return 404."
+    ),
 )
-async def serve_file(file_type: str, path: str) -> Response:
-    """Serve a file from the data directory.
+async def serve_file(
+    file_type: str,
+    path: str,
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Serve a file from the data directory, scoped to its owner.
 
     Args:
-        file_type: One of uploads, extractions, summaries, courseops.
+        file_type: One of extractions, summaries.
         path: Relative path within the type directory.
+        user: Authenticated caller.
+        session: Database session.
     """
     if file_type not in _VALID_PREFIXES:
         raise HTTPException(
@@ -174,6 +244,8 @@ async def serve_file(file_type: str, path: str) -> Response:
     normalized = Path(path)
     if ".." in normalized.parts:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    await _authorize_path(file_type, path, user, session)
 
     key = f"{file_type}/{path}"
     return await _serve_storage_key(key)

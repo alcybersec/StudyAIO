@@ -105,19 +105,15 @@ PUBLIC_BY_DESIGN: dict[str, str] = {
     "GET /api/notifications/push/vapid-key": "returns the VAPID *public* key, which is published",
 }
 
-# Real, currently-unprotected routes that this PR is deliberately not fixing —
+# Real, currently-unprotected routes that a PR is deliberately not fixing —
 # pinned so they cannot be lost, and so the guard stays green while the fix is
-# tracked as its own issue rather than buried in a test-coverage diff. An entry
-# here is a debt, not a resting place.
-KNOWN_UNAUTHENTICATED_PENDING_FIX: dict[str, str] = {
-    "GET /api/files/{file_type}/{path:path}": (
-        "Serves any file under data_dir's uploads/extractions/summaries/courseops "
-        "prefixes to an anonymous caller. Path traversal is blocked and stored "
-        "names are UUID-prefixed, so it is obscurity rather than an open listing "
-        "— but every sibling route in files.py resolves its object through "
-        "get_current_user_or_default and this one does not. Needs its own issue."
-    ),
-}
+# tracked as its own issue rather than buried in a test-coverage diff.
+#
+# The one entry #65 parked here, `GET /api/files/{file_type}/{path:path}`, was
+# fixed in #66: the route now takes `get_current_user_or_default` and resolves
+# the owner from the path prefix. So the dict is empty, and should stay that
+# way — an entry is a debt, not a resting place.
+KNOWN_UNAUTHENTICATED_PENDING_FIX: dict[str, str] = {}
 
 PUBLIC = frozenset(PUBLIC_BY_DESIGN) | frozenset(KNOWN_UNAUTHENTICATED_PENDING_FIX)
 
