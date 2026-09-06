@@ -367,8 +367,8 @@ class TestListDeadlines:
         assert len(data) == 1
         assert data[0]["title"] == "Assignment 1 Due"
 
-    async def test_list_deadlines_upcoming(self, async_client):
-        """Passes upcoming flag to service."""
+    async def test_list_deadlines_upcoming(self, async_client, default_test_user):
+        """Passes the upcoming flag, and the caller's id, to the service."""
         with patch(
             "app.api.courseops.courseops_service.list_deadlines",
             new_callable=AsyncMock,
@@ -383,6 +383,7 @@ class TestListDeadlines:
             pytest.approx(mock_list.call_args[0][0], abs=1),
             "CSIT302",
             upcoming_only=True,
+            user_id=default_test_user.id,
         )
 
 

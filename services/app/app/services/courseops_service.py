@@ -15,8 +15,46 @@ from app.models.course import Course
 from app.models.course_document import CourseDocument
 from app.models.deadline import Deadline
 from app.models.exam import Exam
+from app.services import course_service
 
 logger = structlog.get_logger()
+
+
+async def _get_course_owned(
+    session: AsyncSession,
+    model: type[Assessment] | type[Deadline],
+    object_id: str,
+    user_id: str | None,
+) -> Assessment | Deadline | None:
+    """Resolve an Assessment or Deadline by id, pinned to its course's owner.
+
+    Neither model carries a ``user_id`` column of its own -- the owner of one
+    is the owner of the Course it hangs off -- so scoping means joining Course
+    rather than adding a column filter. Stated once here so the eleven call
+    sites in the courseops router do not each grow their own join.
+
+    Args:
+        session: Database session.
+        model: Assessment or Deadline.
+        object_id: UUID of the row, as supplied by the caller.
+        user_id: If provided, only return the row when the course it belongs
+            to is owned by this user. Endpoints reaching one of these by id
+            MUST pass this to enforce object-level authorization; omitting it
+            returns the row regardless of owner and is only appropriate for
+            trusted internal callers such as the extraction pipeline.
+
+    Returns:
+        The row, or None when it does not exist or is owned by someone else.
+    """
+    if user_id is None:
+        return await session.get(model, object_id)
+
+    result = await session.execute(
+        select(model)
+        .join(Course, model.course_id == Course.id)
+        .where(model.id == object_id, Course.user_id == user_id)
+    )
+    return result.scalar_one_or_none()
 
 
 async def upload_course_document(
@@ -49,11 +87,7 @@ async def upload_course_document(
         CourseOpsError: If course not found or document is a duplicate.
     """
     # Look up course
-    query = select(Course).where(Course.code == course_code)
-    if user_id:
-        query = query.where(Course.user_id == user_id)
-    result = await session.execute(query)
-    course = result.scalar_one_or_none()
+    course = await course_service.get_course_by_code(session, course_code, user_id=user_id)
     if not course:
         raise CourseOpsError(f"Course {course_code} not found")
 
@@ -209,15 +243,12 @@ async def list_course_documents(
     Args:
         session: Database session.
         course_code: Course code.
+        user_id: If provided, only match the course owned by this user.
 
     Returns:
         List of CourseDocument objects.
     """
-    query = select(Course).where(Course.code == course_code)
-    if user_id:
-        query = query.where(Course.user_id == user_id)
-    result = await session.execute(query)
-    course = result.scalar_one_or_none()
+    course = await course_service.get_course_by_code(session, course_code, user_id=user_id)
     if not course:
         return []
 
@@ -271,6 +302,7 @@ async def create_assessment(
     weight_pct: float | None = None,
     description: str | None = None,
     weeks_relevant: list[int] | None = None,
+    user_id: str | None = None,
 ) -> Assessment | None:
     """Manually create an assessment for a course.
 
@@ -282,12 +314,18 @@ async def create_assessment(
         weight_pct: Grade weight percentage, if known.
         description: Optional free-text description.
         weeks_relevant: Optional list of relevant week numbers.
+        user_id: If provided, only match the course owned by this user.
+            Course codes are unique *per user* (uq_courses_code_user), so a
+            code like "CSIT302" resolves to a different course for every
+            user. Endpoints reaching a course by a caller-supplied code MUST
+            pass this; omitting it matches whichever user's course the code
+            happens to hit first.
 
     Returns:
-        The created Assessment, or None if the course code is unknown.
+        The created Assessment, or None if the course code is unknown or the
+        course is owned by someone else.
     """
-    result = await session.execute(select(Course).where(Course.code == course_code))
-    course = result.scalar_one_or_none()
+    course = await course_service.get_course_by_code(session, course_code, user_id=user_id)
     if not course:
         return None
 
@@ -317,13 +355,19 @@ async def update_assessment(
     weight_pct: float | None = None,
     description: str | None = None,
     weeks_relevant: list[int] | None = None,
+    user_id: str | None = None,
 ) -> Assessment | None:
     """Edit an assessment's info. Only provided fields are changed.
 
+    Args:
+        user_id: If provided, only edit the assessment when it belongs to a
+            course owned by this user. Endpoints MUST pass this; see
+            ``_get_course_owned``.
+
     Returns:
-        The updated Assessment, or None if not found.
+        The updated Assessment, or None if not found or owned by someone else.
     """
-    assessment = await session.get(Assessment, assessment_id)
+    assessment = await _get_course_owned(session, Assessment, assessment_id, user_id)
     if not assessment:
         return None
 
@@ -348,13 +392,26 @@ async def update_assessment(
 async def list_assessment_documents(
     session: AsyncSession,
     assessment_id: str,
+    user_id: str | None = None,
 ) -> list[CourseDocument]:
-    """List documents attached to a specific assessment."""
-    result = await session.execute(
-        select(CourseDocument)
-        .where(CourseDocument.assessment_id == assessment_id)
-        .order_by(CourseDocument.created_at)
-    )
+    """List documents attached to a specific assessment.
+
+    Args:
+        session: Database session.
+        assessment_id: UUID of the assessment.
+        user_id: If provided, only return documents owned by this user -- the
+            same column ``get_course_document`` filters on. Endpoints MUST
+            pass this; omitting it lists another user's attachments for any
+            guessed assessment id.
+
+    Returns:
+        List of CourseDocument objects, empty when the assessment is unknown
+        or belongs to someone else.
+    """
+    query = select(CourseDocument).where(CourseDocument.assessment_id == assessment_id)
+    if user_id is not None:
+        query = query.where(CourseDocument.user_id == user_id)
+    result = await session.execute(query.order_by(CourseDocument.created_at))
     return list(result.scalars().all())
 
 
@@ -413,9 +470,24 @@ async def attach_assessment_document(
 async def delete_course_document(
     session: AsyncSession,
     document_id: str,
+    user_id: str | None = None,
 ) -> bool:
-    """Delete a course document. Returns True if it existed."""
-    doc = await session.get(CourseDocument, document_id)
+    """Delete a course document.
+
+    Resolves the document through the same owner-scoped getter #50 added for
+    the read path, so the delete beside it can no longer destroy another
+    user's document.
+
+    Args:
+        session: Database session.
+        document_id: UUID of the document.
+        user_id: If provided, only delete the document when it is owned by
+            this user. Endpoints MUST pass this.
+
+    Returns:
+        True if it existed and, when ``user_id`` is given, is owned by them.
+    """
+    doc = await get_course_document(session, document_id, user_id=user_id)
     if not doc:
         return False
     await session.delete(doc)
@@ -432,6 +504,7 @@ async def create_deadline(
     due_date: date,
     deadline_type: str = "other",
     description: str | None = None,
+    user_id: str | None = None,
 ) -> Deadline | None:
     """Manually create a deadline for a course.
 
@@ -445,12 +518,18 @@ async def create_deadline(
         due_date: Date the deadline is due.
         deadline_type: Type (assignment, exam, quiz, project, other).
         description: Optional free-text description.
+        user_id: If provided, only match the course owned by this user.
+            Course codes are unique *per user* (uq_courses_code_user), so a
+            code like "CSIT302" resolves to a different course for every
+            user. Endpoints reaching a course by a caller-supplied code MUST
+            pass this; omitting it matches whichever user's course the code
+            happens to hit first.
 
     Returns:
-        The created Deadline, or None if the course code is unknown.
+        The created Deadline, or None if the course code is unknown or the
+        course is owned by someone else.
     """
-    result = await session.execute(select(Course).where(Course.code == course_code))
-    course = result.scalar_one_or_none()
+    course = await course_service.get_course_by_code(session, course_code, user_id=user_id)
     if not course:
         return None
 
@@ -475,18 +554,25 @@ async def create_deadline(
 async def list_assessments(
     session: AsyncSession,
     course_code: str,
+    user_id: str | None = None,
 ) -> list[Assessment]:
     """List all assessments for a course.
 
     Args:
         session: Database session.
         course_code: Course code.
+        user_id: If provided, only match the course owned by this user.
+            Course codes are unique *per user* (uq_courses_code_user), so a
+            code like "CSIT302" resolves to a different course for every
+            user. Endpoints reaching a course by a caller-supplied code MUST
+            pass this; omitting it matches whichever user's course the code
+            happens to hit first.
 
     Returns:
-        List of Assessment objects.
+        List of Assessment objects, empty when the code resolves to no course
+        owned by ``user_id``.
     """
-    result = await session.execute(select(Course).where(Course.code == course_code))
-    course = result.scalar_one_or_none()
+    course = await course_service.get_course_by_code(session, course_code, user_id=user_id)
     if not course:
         return []
 
@@ -502,6 +588,7 @@ async def list_deadlines(
     session: AsyncSession,
     course_code: str,
     upcoming_only: bool = False,
+    user_id: str | None = None,
 ) -> list[Deadline]:
     """List deadlines for a course.
 
@@ -509,12 +596,18 @@ async def list_deadlines(
         session: Database session.
         course_code: Course code.
         upcoming_only: If True, only return future deadlines.
+        user_id: If provided, only match the course owned by this user.
+            Course codes are unique *per user* (uq_courses_code_user), so a
+            code like "CSIT302" resolves to a different course for every
+            user. Endpoints reaching a course by a caller-supplied code MUST
+            pass this; omitting it matches whichever user's course the code
+            happens to hit first.
 
     Returns:
-        List of Deadline objects.
+        List of Deadline objects, empty when the code resolves to no course
+        owned by ``user_id``.
     """
-    result = await session.execute(select(Course).where(Course.code == course_code))
-    course = result.scalar_one_or_none()
+    course = await course_service.get_course_by_code(session, course_code, user_id=user_id)
     if not course:
         return []
 
@@ -535,6 +628,7 @@ async def update_deadline(
     deadline_type: str | None = None,
     description: str | None = None,
     is_confirmed: bool | None = None,
+    user_id: str | None = None,
 ) -> Deadline | None:
     """Update a deadline.
 
@@ -546,11 +640,14 @@ async def update_deadline(
         deadline_type: New type (optional).
         description: New description (optional).
         is_confirmed: New confirmed status (optional).
+        user_id: If provided, only update the deadline when it belongs to a
+            course owned by this user. Endpoints MUST pass this; see
+            ``_get_course_owned``.
 
     Returns:
-        Updated Deadline or None if not found.
+        Updated Deadline, or None if not found or owned by someone else.
     """
-    deadline = await session.get(Deadline, deadline_id)
+    deadline = await _get_course_owned(session, Deadline, deadline_id, user_id)
     if not deadline:
         return None
 
@@ -574,17 +671,21 @@ async def update_deadline(
 async def delete_deadline(
     session: AsyncSession,
     deadline_id: str,
+    user_id: str | None = None,
 ) -> bool:
     """Delete a deadline.
 
     Args:
         session: Database session.
         deadline_id: UUID of the deadline.
+        user_id: If provided, only delete the deadline when it belongs to a
+            course owned by this user. Endpoints MUST pass this; see
+            ``_get_course_owned``.
 
     Returns:
-        True if deleted, False if not found.
+        True if deleted, False if not found or owned by someone else.
     """
-    deadline = await session.get(Deadline, deadline_id)
+    deadline = await _get_course_owned(session, Deadline, deadline_id, user_id)
     if not deadline:
         return False
 
@@ -603,14 +704,22 @@ async def create_exam_from_deadline(
     Args:
         session: Database session.
         deadline_id: UUID of the deadline.
+        user_id: If provided, only resolve a deadline whose course is owned by
+            this user, and use it as the new exam's owner. Before #55 it was
+            only the latter -- the deadline itself was fetched unscoped, so a
+            caller could build an exam out of another user's deadline and flip
+            that deadline's is_confirmed. The scoping guard could not see it,
+            because the call site already passed user_id=user.id for the other
+            purpose.
 
     Returns:
-        Created Exam or None if deadline not found.
+        Created Exam, or None if the deadline is not found or is owned by
+        someone else.
 
     Raises:
         CourseOpsError: If deadline type is not exam-compatible.
     """
-    deadline = await session.get(Deadline, deadline_id)
+    deadline = await _get_course_owned(session, Deadline, deadline_id, user_id)
     if not deadline:
         return None
 

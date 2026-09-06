@@ -12,6 +12,7 @@ that exercised the service alone would have missed the bug entirely. This
 has now bitten three times in this repo; do not drop the wiring assertion.
 """
 
+import io
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -306,3 +307,206 @@ class TestUploadStatusIdorScoping:
         assert mock_artifact.await_args.kwargs.get("user_id") == default_test_user.id
         # And the unscoped query must not even have run.
         mock_runs.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+class TestCourseOpsIdorScoping:
+    """#55: every id- or code-addressed lookup in the courseops router ran
+    without an owner. Eleven endpoints, six of them writes.
+
+    The ``course_code`` ones are the #53 cluster-5 shape: codes are unique
+    *per user* (uq_courses_code_user), so two users who both have CSIT302
+    reached each other's assessments, deadlines and exports.
+    """
+
+    # ------------------------------------------------------------------ writes
+
+    async def test_delete_document_404_for_other_user(self, async_client, default_test_user):
+        """WRITE, and the one that matters most.
+
+        #50 scoped ``get_course_document`` so *reading* another user's
+        document 404s, but left the delete beside it unscoped -- so until #55
+        one user could still destroy another's document by id.
+        """
+
+        async def scoped(session, document_id, user_id=None):
+            return user_id == OWNER_A
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.courseops_service.delete_course_document", new=mock):
+            response = await async_client.delete("/api/courseops/documents/doc-owned-by-a")
+
+        assert response.status_code == 404
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+    async def test_update_assessment_404_for_other_user(self, async_client, default_test_user):
+        """WRITE: PATCH /assessments/{id} must not edit user A's assessment."""
+
+        async def scoped(session, assessment_id, user_id=None, **kwargs):
+            return MagicMock() if user_id == OWNER_A else None
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.courseops_service.update_assessment", new=mock):
+            response = await async_client.patch(
+                "/api/courseops/assessments/assess-owned-by-a",
+                json={"title": "hijacked"},
+            )
+
+        assert response.status_code == 404
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+    async def test_update_deadline_404_for_other_user(self, async_client, default_test_user):
+        """WRITE: PUT /deadlines/{id} must not move or confirm user A's deadline."""
+
+        async def scoped(session, deadline_id, user_id=None, **kwargs):
+            return MagicMock() if user_id == OWNER_A else None
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.courseops_service.update_deadline", new=mock):
+            response = await async_client.put(
+                "/api/courseops/deadlines/dl-owned-by-a",
+                json={"title": "hijacked", "is_confirmed": True},
+            )
+
+        assert response.status_code == 404
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+    async def test_delete_deadline_404_for_other_user(self, async_client, default_test_user):
+        """WRITE: DELETE /deadlines/{id} must not delete user A's deadline."""
+
+        async def scoped(session, deadline_id, user_id=None):
+            return user_id == OWNER_A
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.courseops_service.delete_deadline", new=mock):
+            response = await async_client.delete("/api/courseops/deadlines/dl-owned-by-a")
+
+        assert response.status_code == 404
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+    async def test_create_assessment_404_for_other_users_course(
+        self, async_client, default_test_user
+    ):
+        """WRITE: POST /assessments?course_code= must not add to user A's course."""
+
+        async def scoped(session, *, course_code, user_id=None, **kwargs):
+            return MagicMock() if user_id == OWNER_A else None
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.courseops_service.create_assessment", new=mock):
+            response = await async_client.post(
+                "/api/courseops/assessments?course_code=CSIT302",
+                json={"title": "planted", "assessment_type": "exam"},
+            )
+
+        assert response.status_code == 404
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+    async def test_create_deadline_404_for_other_users_course(
+        self, async_client, default_test_user
+    ):
+        """WRITE: POST /deadlines?course_code= must not add to user A's course."""
+
+        async def scoped(session, *, course_code, user_id=None, **kwargs):
+            return MagicMock() if user_id == OWNER_A else None
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.courseops_service.create_deadline", new=mock):
+            response = await async_client.post(
+                "/api/courseops/deadlines?course_code=CSIT302",
+                json={"title": "planted", "due_date": "2026-05-01"},
+            )
+
+        assert response.status_code == 404
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+    # ------------------------------------------------------------------- reads
+
+    async def test_list_assessment_documents_scoped_to_user(self, async_client, default_test_user):
+        """A guessed assessment id must not list user A's attachments.
+
+        A list endpoint's non-oracle answer is an empty 200, not a 404 -- the
+        same shape #53 cluster 5 settled on for the asset lists.
+        """
+
+        async def scoped(session, assessment_id, user_id=None):
+            return [MagicMock()] if user_id == OWNER_A else []
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.courseops_service.list_assessment_documents", new=mock):
+            response = await async_client.get(
+                "/api/courseops/assessments/assess-owned-by-a/documents"
+            )
+
+        assert response.status_code == 200
+        assert response.json() == []
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+    async def test_list_assessments_scoped_to_user(self, async_client, default_test_user):
+        """Sharing a course code with user A must not list their assessments."""
+
+        async def scoped(session, course_code, user_id=None):
+            return [MagicMock()] if user_id == OWNER_A else []
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.courseops_service.list_assessments", new=mock):
+            response = await async_client.get("/api/courseops/assessments?course_code=CSIT302")
+
+        assert response.status_code == 200
+        assert response.json() == []
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+    async def test_list_deadlines_scoped_to_user(self, async_client, default_test_user):
+        """Sharing a course code with user A must not list their deadlines."""
+
+        async def scoped(session, course_code, upcoming_only=False, user_id=None):
+            return [MagicMock()] if user_id == OWNER_A else []
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.courseops_service.list_deadlines", new=mock):
+            response = await async_client.get("/api/courseops/deadlines?course_code=CSIT302")
+
+        assert response.status_code == 200
+        assert response.json() == []
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+    async def test_export_calendar_404_for_other_users_course(
+        self, async_client, default_test_user
+    ):
+        """The .ics export carries every deadline of the course it resolves."""
+
+        async def scoped(session, course_code, user_id=None):
+            return (io.BytesIO(b"BEGIN:VCALENDAR"), "x.ics") if user_id == OWNER_A else None
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.generate_ics", new=mock):
+            response = await async_client.get("/api/courseops/export/calendar/CSIT302")
+
+        assert response.status_code == 404
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+    async def test_export_task_plan_404_for_other_users_course(
+        self, async_client, default_test_user
+    ):
+        """Same for the markdown plan: assessments, weights and deadlines."""
+
+        async def scoped(session, course_code, user_id=None):
+            return (io.BytesIO(b"# plan"), "x.md") if user_id == OWNER_A else None
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.courseops.generate_task_plan_md", new=mock):
+            response = await async_client.get("/api/courseops/export/task-plan/CSIT302")
+
+        assert response.status_code == 404
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A

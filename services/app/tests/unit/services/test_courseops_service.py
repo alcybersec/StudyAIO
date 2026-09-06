@@ -9,11 +9,13 @@ from app.agents.base import CourseOpsAssessment, CourseOpsDeadline, CourseOpsRes
 from app.core.exceptions import CourseOpsError
 from app.services.courseops_service import (
     create_exam_from_deadline,
+    delete_course_document,
     delete_deadline,
     list_assessments,
     list_course_documents,
     list_deadlines,
     process_course_document,
+    update_assessment,
     update_deadline,
     upload_course_document,
 )
@@ -327,3 +329,104 @@ class TestListFunctions:
 
         result = await list_deadlines(session, "FAKE")
         assert result == []
+
+
+def _misses(session):
+    """Wire a session whose scoped query finds nothing, and whose get() fails.
+
+    ``session.get`` resolves a row by primary key alone -- the unscoped shape
+    these functions used before #55 -- so making it explode proves the owner
+    filter is in the query rather than bolted on afterwards.
+    """
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    result.unique.return_value = result
+    session.execute = AsyncMock(return_value=result)
+    session.get = AsyncMock(side_effect=AssertionError("resolved by id alone, unscoped"))
+    return session
+
+
+def _sql(session) -> str:
+    return str(session.execute.await_args.args[0])
+
+
+class TestOwnerScopedLookups:
+    """#55: Assessment and Deadline carry no user_id column of their own.
+
+    Their owner is the owner of the Course they hang off, so a scoped lookup
+    has to join Course -- something an endpoint-level wiring test cannot see.
+    """
+
+    @pytest.mark.asyncio
+    async def test_update_assessment_joins_course_owner(self):
+        """A scoped edit resolves through Course, and misses for a non-owner."""
+        session = _misses(AsyncMock())
+
+        result = await update_assessment(session, "assess-001", title="X", user_id="user-b")
+
+        assert result is None
+        session.get.assert_not_called()
+        assert "JOIN courses" in _sql(session)
+        assert "courses.user_id" in _sql(session)
+
+    @pytest.mark.asyncio
+    async def test_update_deadline_joins_course_owner(self):
+        session = _misses(AsyncMock())
+
+        result = await update_deadline(session, "dl-001", title="X", user_id="user-b")
+
+        assert result is None
+        session.get.assert_not_called()
+        assert "JOIN courses" in _sql(session)
+        assert "courses.user_id" in _sql(session)
+
+    @pytest.mark.asyncio
+    async def test_delete_deadline_joins_course_owner(self):
+        session = _misses(AsyncMock())
+
+        assert await delete_deadline(session, "dl-001", user_id="user-b") is False
+        session.get.assert_not_called()
+        assert "courses.user_id" in _sql(session)
+
+    @pytest.mark.asyncio
+    async def test_delete_course_document_filters_on_owner(self):
+        """CourseDocument does carry user_id, so this one is a column filter.
+
+        #50 scoped the read and left this delete alone; the same getter now
+        backs both.
+        """
+        session = _misses(AsyncMock())
+
+        assert await delete_course_document(session, "doc-001", user_id="user-b") is False
+        session.get.assert_not_called()
+        assert "course_documents.user_id" in _sql(session)
+
+    @pytest.mark.asyncio
+    async def test_create_exam_from_deadline_scopes_the_deadline_lookup(self):
+        """The guard could not see this one, so only a service test can.
+
+        ``create_exam_from_deadline`` already took user_id -- as the owner of
+        the *exam it creates* -- while fetching the deadline by id alone. The
+        call site therefore passed user_id=user.id and read as scoped, yet a
+        caller could build an exam from someone else's deadline and flip that
+        deadline's is_confirmed on the way.
+        """
+        session = _misses(AsyncMock())
+
+        assert await create_exam_from_deadline(session, "dl-001", user_id="user-b") is None
+        session.get.assert_not_called()
+        assert "JOIN courses" in _sql(session)
+        assert "courses.user_id" in _sql(session)
+
+    @pytest.mark.asyncio
+    async def test_unscoped_callers_still_resolve_by_id(self):
+        """user_id=None is the documented trusted-internal-caller path.
+
+        The extraction pipeline has no request user; it must keep working.
+        """
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=None)
+        session.execute = AsyncMock(side_effect=AssertionError("should not build a scoped query"))
+
+        assert await update_deadline(session, "dl-001", title="X") is None
+        session.get.assert_awaited_once()
