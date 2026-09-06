@@ -9,8 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import Assessment
-from app.models.course import Course
 from app.models.deadline import Deadline
+from app.services import course_service
 
 logger = structlog.get_logger()
 
@@ -18,18 +18,24 @@ logger = structlog.get_logger()
 async def generate_ics(
     session: AsyncSession,
     course_code: str,
+    user_id: str | None = None,
 ) -> tuple[io.BytesIO, str] | None:
     """Generate an .ics calendar file with all deadlines for a course.
 
     Args:
         session: Database session.
         course_code: Course code.
+        user_id: If provided, only match the course owned by this user.
+            Course codes are unique *per user* (uq_courses_code_user), so a
+            code like "CSIT302" resolves to a different course for every
+            user. Endpoints exporting by a caller-supplied code MUST pass
+            this; omitting it exports whichever user's course the code hits.
 
     Returns:
-        Tuple of (ics_bytes_io, filename) or None if course not found.
+        Tuple of (ics_bytes_io, filename), or None if no course with that code
+        is owned by ``user_id``.
     """
-    result = await session.execute(select(Course).where(Course.code == course_code))
-    course = result.scalar_one_or_none()
+    course = await course_service.get_course_by_code(session, course_code, user_id=user_id)
     if not course:
         return None
 
@@ -79,18 +85,24 @@ async def generate_ics(
 async def generate_task_plan_md(
     session: AsyncSession,
     course_code: str,
+    user_id: str | None = None,
 ) -> tuple[io.BytesIO, str] | None:
     """Generate a markdown task plan from deadlines and assessments.
 
     Args:
         session: Database session.
         course_code: Course code.
+        user_id: If provided, only match the course owned by this user.
+            Course codes are unique *per user* (uq_courses_code_user), so a
+            code like "CSIT302" resolves to a different course for every
+            user. Endpoints exporting by a caller-supplied code MUST pass
+            this; omitting it exports whichever user's course the code hits.
 
     Returns:
-        Tuple of (md_bytes_io, filename) or None if course not found.
+        Tuple of (md_bytes_io, filename), or None if no course with that code
+        is owned by ``user_id``.
     """
-    result = await session.execute(select(Course).where(Course.code == course_code))
-    course = result.scalar_one_or_none()
+    course = await course_service.get_course_by_code(session, course_code, user_id=user_id)
     if not course:
         return None
 
