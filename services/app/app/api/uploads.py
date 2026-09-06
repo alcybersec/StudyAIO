@@ -457,12 +457,13 @@ async def get_upload_status(
     session: AsyncSession = Depends(get_session),
 ) -> list[PipelineRunResponse]:
     """Get pipeline run status for an uploaded artifact."""
+    # Ownership first: get_artifact_pipeline_runs is not owner-scoped, so the
+    # check has to gate the query rather than sit in an `if not runs:` branch
+    # -- there it only fired when there was nothing to protect.
+    artifact = await artifact_service.get_artifact(session, artifact_id, user_id=user.id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
     runs = await pipeline_service.get_artifact_pipeline_runs(session, artifact_id)
-    if not runs:
-        # Check if artifact exists at all
-        artifact = await artifact_service.get_artifact(session, artifact_id, user_id=user.id)
-        if not artifact:
-            raise HTTPException(status_code=404, detail="Artifact not found")
     return [PipelineRunResponse.model_validate(r) for r in runs]
 
 

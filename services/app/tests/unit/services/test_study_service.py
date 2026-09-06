@@ -92,7 +92,7 @@ class TestBuildWeekPlan:
         near_exam = _make_exam("exam-near", "course-near")
         far_exam = _make_exam("exam-far", "course-far")
 
-        async def fake_schedule(session, exam_id, days_ahead=7):
+        async def fake_schedule(session, exam_id, days_ahead=7, user_id=None):
             if exam_id == "exam-near":
                 return _schedule(7, card_target=20, quiz_target=8, priority="critical")
             return _schedule(7, card_target=6, quiz_target=5, priority="low")

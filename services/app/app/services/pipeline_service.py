@@ -58,9 +58,14 @@ async def get_recent_activity(
 async def get_artifact_pipeline_runs(session: AsyncSession, artifact_id: str) -> list[PipelineRun]:
     """Get all pipeline runs for a given artifact.
 
+    NOT owner-scoped: PipelineRun hangs off the artifact and carries no user
+    of its own. Every caller that takes artifact_id from a request MUST first
+    resolve the artifact with artifact_service.get_artifact(..., user_id=...)
+    and 404 on a miss, *before* calling this.
+
     Args:
         session: Database session.
-        artifact_id: Artifact UUID.
+        artifact_id: Artifact UUID, assumed already checked for ownership.
 
     Returns:
         List of PipelineRun records ordered by start time.
