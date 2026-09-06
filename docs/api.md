@@ -751,13 +751,23 @@ Download a course or assessment document by ID, with its original filename.
 
 ### `GET /api/files/{file_type}/{path}`
 
-Serve a file from the data directories by relative path. Used for rendering images embedded in summaries.
+Serve a file the caller owns from the data directories by relative path. Used for
+rendering images embedded in summaries.
+
+Requires authentication, and the first path segment must name an object the caller
+owns — the artifact id for `extractions/<artifact_id>/...`, the course code for
+`summaries/<COURSE_CODE>/...`. Anything else is `404`, not `403`, so the route is
+not an existence oracle.
+
+`uploads` and `courseops` are **not** served here. Use the owner-scoped
+id-addressed routes above (`/api/files/uploads/artifacts/{id}`,
+`/api/files/courseops/documents/{id}`) instead.
 
 **Path Parameters**
 | Param | Type | Description |
 |-------|------|-------------|
-| `file_type` | string | One of: `uploads`, `extractions`, `summaries`, `courseops` |
-| `path` | string | Relative path within the type directory |
+| `file_type` | string | One of: `extractions`, `summaries` |
+| `path` | string | Relative path within the type directory; its first segment identifies the owning object |
 
 **Response** `200` — File download (FileResponse)
 
@@ -765,8 +775,9 @@ Serve a file from the data directories by relative path. Used for rendering imag
 | Status | Detail |
 |--------|--------|
 | 400 | Invalid file type |
+| 401 | Not authenticated |
 | 403 | Path traversal detected |
-| 404 | File not found |
+| 404 | File not found, or not owned by the caller |
 
 ---
 
