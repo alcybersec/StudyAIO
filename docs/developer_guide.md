@@ -212,8 +212,8 @@ services/app/tests/
 │   ├── extractors/       # PDF/DOCX/PPTX extractor tests
 │   ├── pipeline/         # Celery task tests
 │   └── services/         # Business logic tests
-├── integration/          # Real DB + Redis (testcontainers)
-│   └── conftest.py       # Testcontainers + SAVEPOINT fixtures
+├── integration/          # Real Postgres + Redis (see below)
+│   └── conftest.py       # Env-var contract + SAVEPOINT fixtures
 └── golden/               # Structural validation tests
     ├── conftest.py       # Sample manifests, summaries, asset fixtures
     ├── test_extraction_structure.py
@@ -226,10 +226,37 @@ services/app/tests/
 ```bash
 make test               # All unit tests
 make test-unit          # Unit tests only
-make test-integration   # Integration tests (needs Docker services)
+make test-integration   # Integration tests (starts Postgres + Redis for you)
 make test-golden        # Golden structural tests
 make coverage           # Unit tests with coverage report
 ```
+
+### Integration Tests
+
+`tests/integration/` runs against a real Postgres (with pgvector) and a real
+Redis. Both are addressed by three environment variables that **must be exported
+before pytest starts**:
+
+```
+DATABASE_URL        postgresql+asyncpg://<user>:<pass>@<host>:<port>/<db>
+DATABASE_URL_SYNC   postgresql://<user>:<pass>@<host>:<port>/<db>
+REDIS_URL           redis://<host>:<port>/0
+```
+
+`make test-integration` (`scripts/test-integration.sh`) starts throwaway
+containers, exports all three, runs the suite and removes the containers again.
+If `DATABASE_URL` is already set it uses your services instead and starts
+nothing — which is exactly what CI does with its service containers, so local
+runs and CI take the same code path.
+
+Setting those variables from inside a fixture is too late. `app.config.settings`
+reads the environment once at import; `app.core.database.engine` and
+`app.core.redis.redis_client` are constructed at import from that singleton and
+never re-read it. An `importlib.reload()` does not help, because every module
+that already did `from app.core.database import async_session_factory` still
+holds the old object. The conftest therefore checks the app's *resolved* engine
+URL against `DATABASE_URL` and fails with an explanation on a mismatch, instead
+of hanging against the compose hostname `db:5432` (issue #56).
 
 Or inside the container:
 
