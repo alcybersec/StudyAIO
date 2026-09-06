@@ -39,6 +39,29 @@ class EmbeddingProvider(ABC):
         """
         ...
 
+    @abstractmethod
+    def preload(self) -> None:
+        """Do the expensive one-time setup now instead of on first use.
+
+        Called from the API's startup check (`app.main`) so that a provider
+        which cannot work *at all* says so in the log at boot, rather than
+        failing inside a request. Constructing a provider proves nothing on its
+        own — see `SentenceTransformerProvider.preload` — so there has to be a
+        second, explicit step, and this is it.
+
+        Abstract with no default on purpose. A no-op is the right answer for the
+        API-backed providers, but it is a *decision* — the only honest probe of
+        a remote service is a real call to it, which is billable for OpenAI and
+        a network dependency on the start path for both — and a new provider
+        should have to make that decision rather than inherit it silently.
+
+        Raises:
+            Exception: Whatever the underlying model loader raises. Callers are
+                expected to catch and report; this must never be the reason a
+                process refuses to start.
+        """
+        ...
+
 
 class SentenceTransformerProvider(EmbeddingProvider):
     """Local embedding provider using sentence-transformers.
@@ -87,6 +110,16 @@ class SentenceTransformerProvider(EmbeddingProvider):
         embeddings = self._model.encode(texts, show_progress_bar=False)
         return [emb.tolist() for emb in embeddings]
 
+    def preload(self) -> None:
+        """Load the model now, so a broken cache is a startup error.
+
+        This is the whole point of the startup check. `__init__` only records a
+        model name; nothing touches the filesystem until here, which is why the
+        API could construct this provider happily for six months while every
+        embedding call in the process failed (issue #44).
+        """
+        self._load_model()
+
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):
     """Embedding provider using OpenAI's text-embedding API.
@@ -103,6 +136,15 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def dimensions(self) -> int:
         """Return embedding dimensionality (1536 for text-embedding-3-small)."""
         return self._dimensions
+
+    def preload(self) -> None:
+        """Nothing to load — deliberately.
+
+        Probing this backend means embedding something through OpenAI, which is
+        a billed request. A startup check that costs money on every boot is
+        worse than the failure it would find, so a broken key or an unreachable
+        API surfaces at first use instead, in front of the caller.
+        """
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings using OpenAI API.
@@ -150,6 +192,15 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
     def dimensions(self) -> int:
         """Return embedding dimensionality (768 for nomic-embed-text)."""
         return self._dimensions
+
+    def preload(self) -> None:
+        """Nothing to load — deliberately.
+
+        Ollama runs in its own container, on its own schedule. Reaching for it
+        during API startup would couple this process's boot to another
+        service's, and a check that has to wait on the network is a check that
+        delays every restart.
+        """
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings using Ollama embed API.
