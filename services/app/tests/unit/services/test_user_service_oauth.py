@@ -1,13 +1,32 @@
-"""Tests for user_service.create_or_link_oauth."""
+"""Tests for user_service.create_or_link_oauth.
+
+Issue #70 changed what this function is allowed to do with the provider's
+email. It used to attach the OAuth identity to whatever account already held
+that address, and to trust the address without asking whether the provider had
+verified it. Both are now gated -- see the tests marked "#70" below, and the
+function's own docstring for the reasoning.
+
+No value here is shaped like a real credential: provider tokens are the literal
+string "<test-placeholder>".
+"""
 
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import (
+    AuthenticationError,
+    OAuthAccountLinkRequiredError,
+    OAuthEmailUnverifiedError,
+)
 from app.models.oauth_account import OAuthAccount
 from app.models.user import User
 from app.services import user_service
+
+# Not a credential. Provider tokens are opaque strings these tests only pass
+# through, so a placeholder keeps secret scanners off a file full of
+# OAuth-shaped fixtures.
+PLACEHOLDER_TOKEN = "<test-placeholder>"
 
 
 def _make_user(**overrides) -> User:
@@ -81,6 +100,7 @@ class TestCreateOrLinkOAuth:
             "google",
             "goog-123",
             "test@example.com",
+            email_verified=True,
             access_token="new-access",
             refresh_token="new-refresh",
         )
@@ -106,6 +126,7 @@ class TestCreateOrLinkOAuth:
             "google",
             "goog-123",
             "test@example.com",
+            email_verified=True,
             avatar_url="https://example.com/pic.jpg",
         )
 
@@ -128,6 +149,7 @@ class TestCreateOrLinkOAuth:
             "google",
             "goog-123",
             "test@example.com",
+            email_verified=True,
             avatar_url="https://example.com/new.jpg",
         )
 
@@ -135,9 +157,25 @@ class TestCreateOrLinkOAuth:
 
     @pytest.mark.asyncio
     async def test_existing_user_by_email_links_oauth(self):
+        """#70: this used to hold for *any* account sharing the email.
+
+        The old contract was "find the row with this email and attach the
+        identity to it", and this test pinned it without caring what was in the
+        row. That is the pre-account-takeover: an attacker who registered
+        ``victim@example.com`` with a password of their own collected the
+        victim's later Google sign-in inside the attacker's account.
+
+        What survives is the narrow half -- an account with **no password**.
+        There is no credential to bypass on one: it is OAuth-only, or waiting
+        on an emailed setup link, so its only route in already reduces to
+        control of the mailbox, which is what a provider-verified address
+        proves. The assertions are therefore unchanged, but the precondition is
+        now spelled out rather than left to the fixture's default. The password
+        case is the test below.
+        """
         session = AsyncMock()
         session.add = MagicMock()
-        user = _make_user(avatar_url=None)
+        user = _make_user(avatar_url=None, hashed_password=None)
 
         # First execute: no existing OAuth account
         result_no_oauth = MagicMock()
@@ -154,7 +192,8 @@ class TestCreateOrLinkOAuth:
             "github",
             "gh-456",
             "test@example.com",
-            access_token="tok",
+            email_verified=True,
+            access_token=PLACEHOLDER_TOKEN,
             avatar_url="https://github.com/pic.jpg",
         )
 
@@ -162,6 +201,139 @@ class TestCreateOrLinkOAuth:
         assert user.avatar_url == "https://github.com/pic.jpg"
         # OAuthAccount was added
         assert session.add.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_existing_password_user_by_email_is_refused(self):
+        """#70: the case the test above used to cover, now refused.
+
+        Nothing in an OAuth callback proves the caller knows this account's
+        password, so nothing in it may hand over this account's session.
+        """
+        session = AsyncMock()
+        session.add = MagicMock()
+        user = _make_user(hashed_password="$argon2id$v=19$m=65536,t=3,p=4$hash")
+
+        result_no_oauth = MagicMock()
+        result_no_oauth.scalar_one_or_none.return_value = None
+        result_user = MagicMock()
+        result_user.scalar_one_or_none.return_value = user
+        session.execute = AsyncMock(side_effect=[result_no_oauth, result_user])
+
+        with pytest.raises(OAuthAccountLinkRequiredError, match="already exists"):
+            await user_service.create_or_link_oauth(
+                session,
+                "github",
+                "gh-456",
+                "test@example.com",
+                email_verified=True,
+                access_token=PLACEHOLDER_TOKEN,
+            )
+
+        # Nothing was written: no OAuthAccount row, and the account untouched.
+        # A refusal that linked anyway would be worse than no refusal.
+        assert session.add.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_refusal_message_points_at_the_password(self):
+        """The user has to be told what to do instead, or they retry forever."""
+        session = AsyncMock()
+        user = _make_user(hashed_password="$argon2id$v=19$m=65536,t=3,p=4$hash")
+
+        result_no_oauth = MagicMock()
+        result_no_oauth.scalar_one_or_none.return_value = None
+        result_user = MagicMock()
+        result_user.scalar_one_or_none.return_value = user
+        session.execute = AsyncMock(side_effect=[result_no_oauth, result_user])
+
+        with pytest.raises(OAuthAccountLinkRequiredError) as exc:
+            await user_service.create_or_link_oauth(
+                session, "google", "goog-123", "test@example.com", email_verified=True
+            )
+
+        assert "password" in str(exc.value).lower()
+
+
+class TestProviderEmailMustBeVerified:
+    """#70: an address the provider will not vouch for decides nothing."""
+
+    @pytest.mark.asyncio
+    async def test_unverified_email_refuses_to_create_an_account(self):
+        session = AsyncMock()
+        session.add = MagicMock()
+
+        result_none = MagicMock()
+        result_none.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=result_none)
+
+        with pytest.raises(OAuthEmailUnverifiedError, match="not verified"):
+            await user_service.create_or_link_oauth(
+                session, "google", "goog-123", "newuser@example.com", email_verified=False
+            )
+
+        assert session.add.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_unverified_email_refuses_to_link(self):
+        session = AsyncMock()
+        session.add = MagicMock()
+        user = _make_user(hashed_password=None)
+
+        result_no_oauth = MagicMock()
+        result_no_oauth.scalar_one_or_none.return_value = None
+        result_user = MagicMock()
+        result_user.scalar_one_or_none.return_value = user
+        session.execute = AsyncMock(side_effect=[result_no_oauth, result_user])
+
+        with pytest.raises(OAuthEmailUnverifiedError):
+            await user_service.create_or_link_oauth(
+                session, "github", "gh-456", "test@example.com", email_verified=False
+            )
+
+        assert session.add.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_default_is_unverified(self):
+        """A caller that forgets the flag must fail closed, not link."""
+        session = AsyncMock()
+        session.add = MagicMock()
+
+        result_none = MagicMock()
+        result_none.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=result_none)
+
+        with pytest.raises(OAuthEmailUnverifiedError):
+            await user_service.create_or_link_oauth(
+                session, "google", "goog-123", "newuser@example.com"
+            )
+
+    @pytest.mark.asyncio
+    async def test_known_identity_signs_in_despite_unverified_email(self):
+        """The gate is on email-based decisions, not on re-authentication.
+
+        A returning user is identified by provider + provider_user_id; the
+        email decides nothing on that path, so a provider that stops vouching
+        for it must not lock them out of an account they already own.
+        """
+        session = AsyncMock()
+        existing_oauth = _make_oauth_account()
+        user = _make_user()
+
+        result_oauth = MagicMock()
+        result_oauth.scalar_one_or_none.return_value = existing_oauth
+        result_user = MagicMock()
+        result_user.scalar_one_or_none.return_value = user
+        session.execute = AsyncMock(side_effect=[result_oauth, result_user])
+
+        returned = await user_service.create_or_link_oauth(
+            session,
+            "google",
+            "goog-123",
+            "test@example.com",
+            email_verified=False,
+            access_token=PLACEHOLDER_TOKEN,
+        )
+
+        assert returned is user
 
     @pytest.mark.asyncio
     async def test_new_user_created_from_oauth(self):
@@ -189,7 +361,8 @@ class TestCreateOrLinkOAuth:
             "google",
             "goog-789",
             "newuser@example.com",
-            access_token="tok",
+            email_verified=True,
+            access_token=PLACEHOLDER_TOKEN,
             avatar_url="https://example.com/avatar.png",
         )
 
@@ -227,6 +400,7 @@ class TestCreateOrLinkOAuth:
             "google",
             "goog-dup",
             "newuser@example.com",
+            email_verified=True,
         )
 
         added_user = session.add.call_args_list[0][0][0]

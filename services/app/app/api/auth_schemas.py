@@ -76,6 +76,18 @@ class MFADisableRequest(BaseModel):
     totp_code: str = Field(min_length=6, max_length=6)
 
 
+class OAuthMFARequest(BaseModel):
+    """Second factor for an OAuth sign-in the callback left half-finished.
+
+    Same two-of-one shape as `LoginRequest`: an authenticator code or a backup
+    code, never a password. The first factor was the provider, and it is proved
+    by the pending-MFA cookie rather than by anything in this body.
+    """
+
+    totp_code: str | None = None
+    backup_code: str | None = Field(default=None, max_length=64)
+
+
 class UpdateProfileRequest(BaseModel):
     """Profile update request."""
 
