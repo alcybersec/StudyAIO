@@ -467,6 +467,14 @@ class UserDeletedResponse(BaseModel):
     rows_deleted: int
 
 
+class MFAClearedResponse(BaseModel):
+    """Result of clearing a user's MFA enrollment."""
+
+    detail: str
+    #: False means the account already had MFA off and nothing changed.
+    mfa_was_enabled: bool
+
+
 def _absolute(path: str) -> str:
     """Build a user-facing URL from a path."""
     return f"{settings.app_base_url.rstrip('/')}{path}"
@@ -617,3 +625,42 @@ async def resend_verification(
 
     logger.info("admin_verification_issued", user_id=user_id, by=admin.id)
     return UserLinkResponse(detail="Verification link created", url=url, email_sent=email_sent)
+
+
+@router.post(
+    "/admin/users/{user_id}/mfa-reset",
+    response_model=MFAClearedResponse,
+    summary="Clear a user's MFA enrollment",
+    description=(
+        "Turn MFA off for a user who has lost both their authenticator and their "
+        "backup codes, ending their sessions. Admin only."
+    ),
+)
+async def clear_user_mfa(
+    user_id: str,
+    admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> MFAClearedResponse:
+    """Unlock a user locked out of their own second factor (admin only).
+
+    The account holder cannot reach this, and password reset deliberately does
+    not do it: an MFA reset that anyone with mailbox access can trigger is not a
+    second factor. Verifying that the requester really is the account holder is
+    the administrator's job, out of band.
+    """
+    try:
+        was_enabled = await user_service.clear_mfa(session, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    await session.commit()
+
+    logger.warning("admin_cleared_mfa", user_id=user_id, by=admin.id, was_enabled=was_enabled)
+    return MFAClearedResponse(
+        detail=(
+            "MFA cleared; the user can sign in with their password and re-enroll"
+            if was_enabled
+            else "MFA was already disabled for this user"
+        ),
+        mfa_was_enabled=was_enabled,
+    )

@@ -17,7 +17,12 @@ from app.core.auth import (
     verify_password,
 )
 from app.core.exceptions import AuthenticationError, AuthorizationError, UserExistsError
-from app.core.security import generate_backup_codes, verify_totp
+from app.core.security import (
+    find_backup_code_hash,
+    generate_backup_codes,
+    hash_backup_codes,
+    verify_totp,
+)
 from app.core.utils import generate_id
 from app.models.magic_link import MagicLink
 from app.models.oauth_account import OAuthAccount
@@ -508,15 +513,23 @@ async def enable_mfa(
         secret: The TOTP secret being enrolled.
 
     Returns:
-        List of backup codes.
+        The raw backup codes, to be shown to the user once. They are not
+        recoverable afterwards -- only their hashes are stored.
 
     Raises:
-        ValueError: If user not found.
+        ValueError: If user not found, or MFA is already enabled.
         AuthorizationError: If TOTP code is invalid.
     """
     user = await get_user_by_id(session, user_id)
     if not user:
         raise ValueError("User not found")
+
+    if user.mfa_enabled:
+        # Enrolling over live MFA is how a hijacked session makes itself
+        # durable: it swaps in a secret of its own and the account holder's
+        # authenticator quietly stops working. Turning MFA off first needs a
+        # current TOTP code, which a session hijacker does not have.
+        raise ValueError("MFA is already enabled")
 
     if not verify_totp(secret, totp_code):
         raise AuthorizationError("Invalid TOTP code")
@@ -524,10 +537,64 @@ async def enable_mfa(
     backup_codes = generate_backup_codes()
     user.mfa_secret = secret
     user.mfa_enabled = True
-    user.backup_codes = json.dumps(backup_codes)
+    # Digests only. The column used to hold the codes themselves, which made
+    # anything that could read the database an MFA bypass -- the same reasoning
+    # that hashes magic link tokens (`core.auth.hash_magic_link_token`).
+    user.backup_codes = json.dumps(hash_backup_codes(backup_codes))
     await session.flush()
-    logger.info("mfa_enabled", user_id=user_id)
+    logger.info("mfa_enabled", user_id=user_id, backup_codes_issued=len(backup_codes))
     return backup_codes
+
+
+async def consume_backup_code(
+    session: AsyncSession,
+    user: User,
+    code: str,
+) -> int | None:
+    """Spend one of a user's MFA backup codes.
+
+    Single-use, like a magic link: a matching code is removed from the account
+    before this returns, so replaying it fails. Nothing is written on a
+    mismatch, so a wrong guess cannot be used to burn a stranger's codes.
+
+    Args:
+        session: Database session.
+        user: The already password-authenticated user. Callers must not reach
+            this before verifying the password -- a backup code stands in for
+            the second factor, not for the first.
+        code: The code as submitted, in any form the user typed it.
+
+    Returns:
+        The number of codes left on the account, which may be 0, or None if the
+        code matched nothing. A caller must not distinguish None from 0 in what
+        it tells the user: "no codes left" and "wrong code" are the same answer.
+    """
+    if not user.backup_codes:
+        return None
+
+    try:
+        stored = json.loads(user.backup_codes)
+    except (TypeError, ValueError):
+        # A value we cannot parse is a value we cannot authenticate against.
+        # Fail closed and say so in the logs -- silently treating it as "no
+        # codes" would hide a corrupted column indefinitely.
+        logger.warning("backup_codes_unparseable", user_id=user.id)
+        return None
+
+    if not isinstance(stored, list):
+        logger.warning("backup_codes_wrong_shape", user_id=user.id)
+        return None
+
+    hashes = [item for item in stored if isinstance(item, str)]
+    matched = find_backup_code_hash(code, hashes)
+    if matched is None:
+        return None
+
+    remaining = [item for item in hashes if item != matched]
+    user.backup_codes = json.dumps(remaining)
+    await session.flush()
+    logger.info("backup_code_consumed", user_id=user.id, remaining=len(remaining))
+    return len(remaining)
 
 
 async def disable_mfa(
@@ -564,6 +631,56 @@ async def disable_mfa(
     user.tokens_valid_from = datetime.now(UTC)
     await session.flush()
     logger.info("mfa_disabled", user_id=user_id)
+
+
+async def clear_mfa(session: AsyncSession, user_id: str) -> bool:
+    """Turn MFA off for a user *without* a second factor. Admin-only.
+
+    This is the escape hatch for the one failure `disable_mfa` cannot handle: a
+    user who has lost their authenticator and their backup codes, and therefore
+    cannot produce the TOTP code that turning MFA off requires. Before this
+    existed the only recovery was direct SQL.
+
+    **Why this is not attached to password reset.** Making a reset clear
+    `mfa_enabled` is the convenient version, and it reduces the account to a
+    single factor -- possession of the mailbox. Anyone who can read the user's
+    email then walks through MFA, which is precisely the attacker MFA was added
+    to stop. Recovery instead needs a human decision by someone who is not the
+    requester, so it lives behind `require_role("admin")` where the identity
+    check happens out of band.
+
+    Sessions are revoked on the way out, matching `disable_mfa`: the account's
+    security level just dropped, so a token minted before the drop must not
+    survive it. That also signs out whoever had the account if the request was
+    the result of a support-desk social-engineering attempt.
+
+    Args:
+        session: Database session.
+        user_id: The account to unlock.
+
+    Returns:
+        True if MFA had been enabled, False if this was a no-op.
+
+    Raises:
+        ValueError: If user not found.
+    """
+    user = await get_user_by_id(session, user_id)
+    if not user:
+        raise ValueError("User not found")
+
+    was_enabled = bool(user.mfa_enabled)
+    user.mfa_secret = None
+    user.mfa_enabled = False
+    user.backup_codes = None
+    if was_enabled:
+        # Only when something actually changed: stamping this on an account
+        # that already had MFA off would sign the user out for nothing.
+        user.tokens_valid_from = datetime.now(UTC)
+    await session.flush()
+    # Warning, not info: an administrator removing someone's second factor is
+    # exactly the event an audit trail is read for.
+    logger.warning("mfa_cleared_administratively", user_id=user_id, was_enabled=was_enabled)
+    return was_enabled
 
 
 async def create_or_link_oauth(
