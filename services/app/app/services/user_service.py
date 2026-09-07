@@ -16,7 +16,13 @@ from app.core.auth import (
     hash_password,
     verify_password,
 )
-from app.core.exceptions import AuthenticationError, AuthorizationError, UserExistsError
+from app.core.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    OAuthAccountLinkRequiredError,
+    OAuthEmailUnverifiedError,
+    UserExistsError,
+)
 from app.core.security import (
     find_backup_code_hash,
     generate_backup_codes,
@@ -688,17 +694,55 @@ async def create_or_link_oauth(
     provider: str,
     provider_user_id: str,
     email: str,
+    email_verified: bool = False,
     access_token: str | None = None,
     refresh_token: str | None = None,
     avatar_url: str | None = None,
 ) -> User:
     """Find or create a user via OAuth, linking the OAuth account.
 
+    **Signing in with a known identity** (this provider + provider_user_id has
+    been seen before) only refreshes tokens: the provider's user id is the
+    identity, the email plays no part, and nothing about the account changes.
+
+    **Everything else is an email-based decision** — creating an account for
+    the address, or attaching this identity to an account that already holds
+    it — and those are gated twice:
+
+    1. ``email_verified`` must be true. An address the provider will not vouch
+       for is a string the caller typed, and both decisions treat it as proof
+       of identity (issue #70).
+    2. An existing account **with a password** is never auto-linked. Before
+       this, the identity was silently attached to whatever row held that
+       email and full session cookies were minted (issue #70): an attacker who
+       registered ``victim@example.com`` with their own password first would
+       collect the victim's Google sign-in inside the attacker's account, keep
+       their own password working, and read everything the victim then wrote.
+       No round-trip proved the OAuth caller controlled the local account.
+
+       The refusal is deliberate over the friendlier "email a confirmation
+       link and link on redemption": that alternative makes linking equivalent
+       to possession of the mailbox, which is exactly the thing being fixed
+       here. Signing in with the password proves knowledge of a credential the
+       mailbox does not hand over. Linking a provider to a password account
+       therefore belongs behind an authenticated settings action; until one
+       exists the user is told to sign in with their password.
+
+    **An existing account with no password is different, and is still linked.**
+    It is either OAuth-only or admin-created awaiting a setup link, and in both
+    cases there is no password to bypass — the account's only route in already
+    reduces to control of that mailbox (the pending setup link, or the
+    provider that created it). A provider-verified address is that same proof,
+    so linking is not an escalation. Where such an account has MFA enabled, the
+    callback still challenges it before any cookie is set.
+
     Args:
         session: Database session.
         provider: OAuth provider name (e.g. "google", "github").
         provider_user_id: User ID from the provider.
         email: Email from the provider.
+        email_verified: Whether the provider states it verified that address.
+            Defaults to False so a caller that does not pass it fails closed.
         access_token: Provider access token.
         refresh_token: Provider refresh token.
         avatar_url: Profile picture URL from the provider.
@@ -708,6 +752,9 @@ async def create_or_link_oauth(
 
     Raises:
         AuthenticationError: If provider returns no email.
+        OAuthEmailUnverifiedError: If the provider has not verified the email.
+        OAuthAccountLinkRequiredError: If a password-backed account already
+            holds that email.
     """
     if not email:
         raise AuthenticationError(f"OAuth provider '{provider}' did not return an email")
@@ -733,8 +780,33 @@ async def create_or_link_oauth(
         await session.flush()
         return user
 
+    # From here on the email decides what happens, so the provider has to
+    # stand behind it. Checked *after* the known-identity branch on purpose:
+    # a returning user whose provider email verification lapsed is still the
+    # same identity, and locking them out would buy nothing.
+    if not email_verified:
+        logger.warning("oauth_email_unverified", provider=provider)
+        raise OAuthEmailUnverifiedError(
+            f"{provider} has not verified this email address. "
+            "Verify it with the provider and try again."
+        )
+
     # Check if user with this email exists
     user = await get_user_by_email(session, email)
+
+    if user is not None and user.hashed_password:
+        # See the docstring: proof of the provider email is not proof of this
+        # account. Warning, not info -- in the takeover this is the moment the
+        # attempt shows up.
+        logger.warning(
+            "oauth_link_refused_password_account",
+            provider=provider,
+            user_id=user.id,
+        )
+        raise OAuthAccountLinkRequiredError(
+            "An account with this email address already exists and is protected by a "
+            "password. Sign in with your password instead."
+        )
 
     if not user:
         # Create new user
@@ -755,7 +827,9 @@ async def create_or_link_oauth(
             username=username,
             role="user",
             tier="free",
-            email_verified=True,  # OAuth emails are pre-verified
+            # Safe only because the `email_verified` gate above already
+            # refused anything the provider would not vouch for.
+            email_verified=True,
             avatar_url=avatar_url,
         )
         session.add(user)

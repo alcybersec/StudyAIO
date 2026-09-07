@@ -17,6 +17,14 @@ logger = structlog.get_logger()
 # Cookie names
 ACCESS_TOKEN_COOKIE = "access_token"
 REFRESH_TOKEN_COOKIE = "refresh_token"
+# Carries a half-finished OAuth sign-in that still owes a second factor. It is
+# not a session: it names a user and nothing else, and only /auth/oauth/mfa
+# accepts it.
+MFA_PENDING_COOKIE = "mfa_pending"
+
+# Long enough to open an authenticator app, short enough that a token left in a
+# browser on a shared machine is worthless by the time anyone finds it.
+MFA_PENDING_TOKEN_EXPIRE_MINUTES = 5
 
 # Argon2id hasher (sensible defaults from argon2-cffi)
 _hasher = PasswordHasher()
@@ -92,6 +100,36 @@ def create_refresh_token(user_id: str) -> str:
         "type": "refresh",
         "iat": now,
         "exp": now + timedelta(days=settings.jwt_refresh_token_expire_days),
+    }
+    return jwt.encode(
+        payload,
+        settings.jwt_secret_key.get_secret_value(),
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def create_mfa_pending_token(user_id: str) -> str:
+    """Create a short-lived token standing for "first factor done, second owed".
+
+    The OAuth callback has authenticated the user against the provider but must
+    not mint a session while the account carries MFA. It cannot ask for a TOTP
+    code inside a redirect either, so it hands the browser this instead: a
+    token of its own `type`, with no role or tier in it, that buys nothing
+    anywhere except `POST /auth/oauth/mfa`. Every other entry point checks
+    `type` and will reject it.
+
+    Args:
+        user_id: The user who must now prove a second factor.
+
+    Returns:
+        Encoded JWT string.
+    """
+    now = datetime.now(UTC)
+    payload = {
+        "sub": user_id,
+        "type": "mfa_pending",
+        "iat": now,
+        "exp": now + timedelta(minutes=MFA_PENDING_TOKEN_EXPIRE_MINUTES),
     }
     return jwt.encode(
         payload,

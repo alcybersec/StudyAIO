@@ -89,6 +89,32 @@ class AuthorizationError(StudyAIOError):
     pass
 
 
+class OAuthEmailUnverifiedError(AuthenticationError):
+    """Raised when an OAuth provider will not vouch for the identity's email.
+
+    Every email-based decision downstream — creating an account, or attaching
+    the identity to an existing one — treats the address as proof of who the
+    caller is. That only holds if the *provider* verified it. Google says so in
+    the ``email_verified`` claim; GitHub says so only in ``/user/emails``, never
+    on the profile itself. Without that flag the address is a self-asserted
+    string, and honouring it would let anyone claim anyone's mailbox.
+    """
+
+    pass
+
+
+class OAuthAccountLinkRequiredError(AuthenticationError):
+    """Raised when OAuth resolves to an existing password-protected account.
+
+    Attaching the identity would hand out that account's session on the
+    strength of a provider email alone, with no proof the caller knows the
+    password. See ``user_service.create_or_link_oauth`` for why that is refused
+    rather than confirmed by mail.
+    """
+
+    pass
+
+
 class UserExistsError(StudyAIOError):
     """Raised when registration fails because email or username already exists."""
 
