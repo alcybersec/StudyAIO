@@ -25,14 +25,20 @@ export const AuthContext = createContext<AuthContextValue | null>(null)
  * service worker's per-user API caches, the offline write queue's ownership
  * marker, and react-query's in-memory data.
  *
- * Auth queries are deliberately left alone. Removing `['auth', 'config']`
+ * Auth queries are deliberately left alone. Clearing `['auth', 'config']`
  * would make `isSelfHosted` fall back to `true` for a frame, which reads as
  * "authenticated" and would keep a signed-out user inside the app.
+ *
+ * `resetQueries`, not `removeQueries`: removing a query that still has mounted
+ * observers drops it from the cache underneath them. `resetQueries` clears the
+ * data — which is the whole point here — and lets the observers refetch
+ * cleanly. `reconcileSession` also guarantees this never runs on a first page
+ * load, where there is no previous identity and nothing to purge.
  */
 function purgeSessionState(identity: QueueOwner, queryClient: QueryClient) {
   return reconcileSession(identity, {
     onIdentityChange: () => {
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
+      void queryClient.resetQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
     },
   })
 }

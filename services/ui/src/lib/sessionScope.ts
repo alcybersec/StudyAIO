@@ -10,11 +10,7 @@
  * one code path.
  */
 
-import {
-  getQueueOwner,
-  setQueueOwner,
-  type QueueOwner,
-} from './queueOwner'
+import { readQueueOwner, setQueueOwner, type QueueOwner } from './queueOwner'
 
 /**
  * Workbox caches that hold responses scoped to one user, and so must not
@@ -53,10 +49,16 @@ export async function clearApiCaches(
 }
 
 export interface ReconcileDeps {
-  getOwner?: () => Promise<QueueOwner>
+  /** `undefined` = no owner has ever been recorded in this browser profile. */
+  getOwner?: () => Promise<QueueOwner | undefined>
   setOwner?: (owner: QueueOwner) => Promise<void>
   clearCaches?: () => Promise<unknown>
-  /** Drop in-memory (react-query) state belonging to the previous identity. */
+  /**
+   * Drop in-memory (react-query) state belonging to the previous identity.
+   *
+   * Called only when a *recorded* previous identity is being replaced — never
+   * on a first load. See `reconcileSession`.
+   */
   onIdentityChange?: (previous: QueueOwner, next: QueueOwner) => void
 }
 
@@ -79,7 +81,7 @@ export function reconcileSession(
   deps: ReconcileDeps = {},
 ): Promise<boolean> {
   const {
-    getOwner = getQueueOwner,
+    getOwner = readQueueOwner,
     setOwner = setQueueOwner,
     clearCaches = clearApiCaches,
     onIdentityChange,
@@ -87,9 +89,21 @@ export function reconcileSession(
 
   const run = chain.then(async () => {
     const previous = await getOwner()
-    if (previous === identity) return false
+    if ((previous ?? null) === identity) return false
+
+    // Persisted caches outlive the page, so they are purged even on a first
+    // load: a profile that used the app before this fix shipped holds the
+    // previous user's cached responses and carries no owner marker.
     await clearCaches()
-    onIdentityChange?.(previous, identity)
+
+    // In-memory state does NOT outlive the page. On a first load react-query
+    // holds nothing but this page session's own data, so there is nothing to
+    // purge — and purging lands mid-load, discarding the state of queries the
+    // page has already settled and leaving widgets stuck. Only a recorded
+    // previous identity means a real in-session switch: logout then sign-in,
+    // or an expiry followed by somebody else.
+    if (previous !== undefined) onIdentityChange?.(previous, identity)
+
     await setOwner(identity)
     return true
   })
