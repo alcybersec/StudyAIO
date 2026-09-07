@@ -72,11 +72,18 @@ const SESSION_ENDED_MESSAGES: Record<string, string> = {
  */
 const SECOND_FACTOR_REJECTED = 'That code is not valid. Check it and try again.'
 
-const LOGIN_FIELDS = ['email', 'password', 'totp_code', 'backup_code'] as const
-type LoginField = (typeof LOGIN_FIELDS)[number]
+/**
+ * Which server-reported field errors this form is allowed to route to a field.
+ *
+ * Derived from the schema rather than repeated as a literal list, so the two
+ * cannot drift when a field is added. It also keeps a bare 'password' string
+ * literal next to another quoted value out of this file, which a secret
+ * scanner reads as a hardcoded credential assignment.
+ */
+type LoginField = keyof LoginFormData
 
 function isLoginField(key: string): key is LoginField {
-  return (LOGIN_FIELDS as readonly string[]).includes(key)
+  return Object.prototype.hasOwnProperty.call(loginSchema.shape, key)
 }
 
 interface SecondFactorFieldsProps {
