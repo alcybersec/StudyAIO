@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import time
 from pathlib import Path
 
 import httpx
@@ -23,7 +24,7 @@ from app.api.schemas import (
 )
 from app.config import settings
 from app.core.cache import cache_delete, dashboard_cache_key
-from app.core.database import get_session
+from app.core.database import async_session_factory, get_session
 from app.core.exceptions import DuplicateFileError
 from app.core.rate_limit import limiter
 from app.core.utils import (
@@ -40,7 +41,7 @@ from app.services import (
     quota_service,
     xp_service,
 )
-from app.services.event_service import PIPELINE_EVENTS_CHANNEL
+from app.services.event_service import pipeline_events_channel
 
 logger = structlog.get_logger()
 
@@ -533,53 +534,127 @@ async def retry_pipeline(
     )
 
 
+# How often an open pipeline-events stream re-checks that the credential which
+# opened it is still good. A stream can outlive its own access token by hours,
+# so without this a password change or deactivation leaves the revoked session
+# reading events until the browser happens to disconnect (#69).
+STREAM_REVALIDATE_SECONDS = 30
+
+
+async def _stream_owner_still_valid(request: Request, user_id: str) -> bool:
+    """Re-run authentication for an already-open stream.
+
+    Uses a short-lived session of its own rather than the request-scoped one:
+    the request outlives the handler here, and holding a pooled DB connection
+    for the life of an SSE stream is worse than opening one every 30s.
+
+    Args:
+        request: The still-open request, for its cookies.
+        user_id: The id the stream was opened for.
+
+    Returns:
+        True if the caller re-authenticates as the same user, False if the
+        token is gone, expired, revoked by ``tokens_valid_from``, or the
+        account has been deactivated.
+    """
+    try:
+        async with async_session_factory() as session:
+            current = await get_current_user_or_default(request, session)
+    except Exception:
+        # AuthenticationError, SessionRevokedError, or the DB being unreachable.
+        # All of them mean "cannot presently prove this stream is authorised".
+        return False
+    return str(current.id) == str(user_id)
+
+
+async def pipeline_event_stream(request: Request, artifact_id: str, user: User):
+    """Yield one user's pipeline events as SSE payloads.
+
+    Module-level rather than a closure so it can be driven directly in tests
+    without an HTTP client that never disconnects.
+
+    Scoping is structural: the only channel subscribed to is the caller's own
+    (``pipeline:events:{user.id}``), so a caller-supplied ``artifact_id`` can
+    narrow the stream but can never widen it to another tenant's artifact. The
+    ``user_id`` equality check below is a second lock on the same door — it can
+    only fire if a publisher wrote to the wrong channel.
+
+    Args:
+        request: The open request, used for disconnect detection and re-auth.
+        artifact_id: Optional client-side narrowing filter ("" = all of mine).
+        user: The authenticated caller.
+
+    Yields:
+        sse_starlette event dicts.
+    """
+    # Send initial comment so EventSource.onopen fires immediately
+    yield {"comment": "connected"}
+
+    # Connect timeout only: this is a long-lived subscriber, and a socket
+    # read timeout would fight the explicit `get_message(timeout=...)`
+    # below. The connect timeout is what stops an unreachable Redis from
+    # hanging the request forever.
+    redis = Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=settings.redis_socket_timeout,
+    )
+    channel = pipeline_events_channel(user.id)
+    pubsub = redis.pubsub()
+    await pubsub.subscribe(channel)
+    heartbeat_interval = 15
+    heartbeat_counter = 0
+    revalidate_at = time.monotonic() + STREAM_REVALIDATE_SECONDS
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+            if time.monotonic() >= revalidate_at:
+                if not await _stream_owner_still_valid(request, user.id):
+                    logger.info("pipeline_events_stream_revoked", user_id=user.id)
+                    break
+                revalidate_at = time.monotonic() + STREAM_REVALIDATE_SECONDS
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message and message["type"] == "message":
+                data = json.loads(message["data"])
+                # str() on both sides: the channel name is built by f-string
+                # interpolation on both ends, so a non-str id must not make the
+                # second lock reject every one of the owner's own events.
+                if str(data.pop("user_id", None)) != str(user.id):
+                    # Unreachable via the per-user channel; here so that a
+                    # future mis-addressed publish is dropped, not forwarded.
+                    logger.warning(
+                        "pipeline_event_channel_mismatch",
+                        channel=channel,
+                        user_id=user.id,
+                    )
+                    continue
+                if not artifact_id or data.get("artifact_id") == artifact_id:
+                    yield {"event": "pipeline", "data": json.dumps(data)}
+                heartbeat_counter = 0
+            else:
+                heartbeat_counter += 1
+                if heartbeat_counter >= heartbeat_interval:
+                    yield {"comment": "keepalive"}
+                    heartbeat_counter = 0
+                await asyncio.sleep(0.5)
+    finally:
+        await pubsub.unsubscribe(channel)
+        await redis.aclose()
+
+
 @router.get(
     "/uploads/pipeline-events",
     summary="Stream pipeline events (SSE)",
-    description="Server-Sent Events stream for real-time pipeline progress. Optionally filter by artifact_id.",
+    description=(
+        "Server-Sent Events stream for real-time pipeline progress. Scoped to the "
+        "caller's own artifacts; optionally narrowed further by artifact_id."
+    ),
 )
 async def pipeline_events(
     request: Request,
     artifact_id: str = Query(default=""),
     user: User = Depends(get_current_user_or_default),
 ) -> EventSourceResponse:
-    """SSE stream of pipeline events, optionally filtered by artifact_id."""
-
-    async def event_generator():
-        # Send initial comment so EventSource.onopen fires immediately
-        yield {"comment": "connected"}
-
-        # Connect timeout only: this is a long-lived subscriber, and a socket
-        # read timeout would fight the explicit `get_message(timeout=...)`
-        # below. The connect timeout is what stops an unreachable Redis from
-        # hanging the request forever.
-        redis = Redis.from_url(
-            settings.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=settings.redis_socket_timeout,
-        )
-        pubsub = redis.pubsub()
-        await pubsub.subscribe(PIPELINE_EVENTS_CHANNEL)
-        heartbeat_interval = 15
-        heartbeat_counter = 0
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-                if message and message["type"] == "message":
-                    data = json.loads(message["data"])
-                    if not artifact_id or data.get("artifact_id") == artifact_id:
-                        yield {"event": "pipeline", "data": json.dumps(data)}
-                    heartbeat_counter = 0
-                else:
-                    heartbeat_counter += 1
-                    if heartbeat_counter >= heartbeat_interval:
-                        yield {"comment": "keepalive"}
-                        heartbeat_counter = 0
-                    await asyncio.sleep(0.5)
-        finally:
-            await pubsub.unsubscribe(PIPELINE_EVENTS_CHANNEL)
-            await redis.aclose()
-
-    return EventSourceResponse(event_generator())
+    """SSE stream of the caller's pipeline events, optionally filtered by artifact_id."""
+    return EventSourceResponse(pipeline_event_stream(request, artifact_id, user))
