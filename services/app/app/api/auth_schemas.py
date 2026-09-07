@@ -21,6 +21,12 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
     totp_code: str | None = None
+    # An MFA backup code, submitted *instead of* `totp_code` by a user who has
+    # lost their authenticator. Consumed on use. Neither field replaces
+    # `password`: a backup code stands in for the second factor only.
+    # The max length is loose on purpose -- it has to hold the dashes and
+    # stray spaces people type when copying a code off paper.
+    backup_code: str | None = Field(default=None, max_length=64)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -119,6 +125,11 @@ class UserProfileResponse(BaseModel):
     # False for OAuth-only accounts. The client uses this to decide whether a
     # destructive action re-authenticates with a password or a typed username.
     has_password: bool = False
+    # Set only on a login that spent an MFA backup code, so the user is told
+    # how many they have left at the one moment they are thinking about it.
+    # None on every other response, including a normal TOTP login -- the count
+    # is not account state the client should be polling.
+    backup_codes_remaining: int | None = None
 
     model_config = {"from_attributes": True}
 
