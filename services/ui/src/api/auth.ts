@@ -10,6 +10,7 @@ import type {
   MFASetupResponse,
   MFAVerifyRequest,
   MFAVerifyResponse,
+  OAuthMFARequest,
   RegisterRequest,
   ResetPasswordRequest,
   SessionEndedResponse,
@@ -28,6 +29,13 @@ export const authApi = {
   register: (data: RegisterRequest) => api.post<AuthUser>('/auth/register', data),
 
   logout: () => api.post<{ detail: string }>('/auth/logout'),
+
+  /**
+   * Finish an OAuth sign-in the callback stopped to challenge MFA. Carries no
+   * first factor of its own — the pending-MFA cookie set by the callback is
+   * the first factor, and it is sent with the request like any other cookie.
+   */
+  oauthMfa: (data: OAuthMFARequest) => api.post<AuthUser>('/auth/oauth/mfa', data),
 
   refresh: () => api.post<{ detail: string }>('/auth/refresh'),
 
