@@ -25,7 +25,7 @@ def _reclassify_result(artifact_id: str = "art-001", source_artifact_id: str | N
 class TestReclassify:
     """Tests for the reclassify endpoint."""
 
-    async def test_reclassify_moves_and_enqueues_both_weeks(self, async_client):
+    async def test_reclassify_moves_and_enqueues_both_weeks(self, async_client, default_test_user):
         """Successful reclassify enqueues summarize for target AND source weeks."""
         with (
             patch(
@@ -50,6 +50,9 @@ class TestReclassify:
         _, kwargs = mock_reclassify.call_args
         assert kwargs.get("course_code") == "CSIT302"
         assert kwargs.get("week") == 4
+        # ...and with the caller's identity, so the move is scoped to an
+        # artifact this user owns. The 200 above holds without it.
+        assert kwargs.get("user_id") == default_test_user.id
 
         # Summarize enqueued for both affected weeks (target + source)
         assert mock_summarize.apply_async.call_count == 2

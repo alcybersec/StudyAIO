@@ -181,14 +181,14 @@ class TestAssessmentDocuments:
 class TestListDocuments:
     """Tests for GET /api/courseops/documents."""
 
-    async def test_list_documents(self, async_client):
-        """Returns documents for a course."""
+    async def test_list_documents(self, async_client, default_test_user):
+        """Returns the caller's own documents for a course."""
         docs = [_mock_document()]
         with patch(
             "app.api.courseops.courseops_service.list_course_documents",
             new_callable=AsyncMock,
             return_value=docs,
-        ):
+        ) as mock_list:
             response = await async_client.get("/api/courseops/documents?course_code=CSIT302")
 
         assert response.status_code == 200
@@ -196,6 +196,10 @@ class TestListDocuments:
         assert len(data) == 1
         assert data[0]["id"] == "doc-001"
         assert data[0]["document_type"] == "outline"
+        # course_code is caller-supplied, so the listing must be scoped or it
+        # returns another user's CSIT302 documents. The mock returns docs
+        # whoever asks, so the 200 above is satisfied either way.
+        assert mock_list.await_args.kwargs.get("user_id") == default_test_user.id
 
 
 @pytest.mark.asyncio
@@ -454,8 +458,8 @@ class TestDeleteDeadline:
 class TestCreateExamFromDeadline:
     """Tests for POST /api/courseops/deadlines/{id}/create-exam."""
 
-    async def test_creates_exam(self, async_client):
-        """Creates an exam from a deadline."""
+    async def test_creates_exam(self, async_client, default_test_user):
+        """Creates an exam from one of the caller's own deadlines."""
         mock_exam = MagicMock()
         mock_exam.id = "exam-001"
         mock_exam.title = "Final Exam"
@@ -466,13 +470,16 @@ class TestCreateExamFromDeadline:
             "app.api.courseops.courseops_service.create_exam_from_deadline",
             new_callable=AsyncMock,
             return_value=mock_exam,
-        ):
+        ) as mock_create:
             response = await async_client.post("/api/courseops/deadlines/dl-001/create-exam")
 
         assert response.status_code == 201
         data = response.json()
         assert data["exam_id"] == "exam-001"
         assert data["status"] == "active"
+        # WRITE off a path-supplied deadline id: without the caller's identity
+        # this mints an exam from someone else's deadline.
+        assert mock_create.await_args.kwargs.get("user_id") == default_test_user.id
 
     async def test_returns_404_for_missing(self, async_client):
         """Returns 404 when deadline not found."""
