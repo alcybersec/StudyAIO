@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { AppApiError, NetworkError, RateLimitError } from '../api/errors'
+import { AppApiError, NetworkError, RateLimitError, ValidationError } from '../api/errors'
 import { takeBackupCodesRemaining } from '../lib/backupCodeNotice'
 import { LoginPage } from './LoginPage'
 
@@ -118,6 +118,36 @@ describe('LoginPage error mapping', () => {
 
     expect(await screen.findByText(/valid email/i)).toBeInTheDocument()
     expect(login).not.toHaveBeenCalled()
+  })
+
+  it('routes a server field error onto that field, including backup_code', async () => {
+    // Guards isLoginField, which is derived from the login schema rather than
+    // a hand-kept list. A field the schema knows about must still be routed to
+    // its own input instead of collapsing into the form-level error.
+    const err = new ValidationError('Invalid input', 422)
+    err.fields = { backup_code: 'Backup code is not recognised' }
+    login.mockRejectedValueOnce(new AppApiError('MFA code required', 403))
+    setup()
+    const user = await submitCredentials()
+    await user.click(
+      await screen.findByRole('button', { name: /use a backup code instead/i }),
+    )
+    login.mockRejectedValueOnce(err)
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Backup code is not recognised')
+    expect(screen.getByLabelText(/backup code/i)).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('falls back to a form-level error for a field it does not own', async () => {
+    const err = new ValidationError('Invalid input', 422)
+    err.fields = { not_a_login_field: 'nope' }
+    login.mockRejectedValueOnce(err)
+    setup()
+    await submitCredentials()
+
+    // Unknown field, but fields was non-empty, so nothing is set anywhere.
+    expect(screen.queryByText('nope')).not.toBeInTheDocument()
   })
 
   it('navigates home on success', async () => {
