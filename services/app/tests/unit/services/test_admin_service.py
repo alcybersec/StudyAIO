@@ -1,6 +1,6 @@
 """Tests for admin service — user management and system metrics."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,6 +29,7 @@ def _make_user_model(
     email_verified=False,
     mfa_enabled=False,
     avatar_url=None,
+    tokens_valid_from=None,
 ):
     """Create a mock User model object."""
     user = MagicMock()
@@ -41,6 +42,10 @@ def _make_user_model(
     user.email_verified = email_verified
     user.mfa_enabled = mfa_enabled
     user.avatar_url = avatar_url
+    # Set explicitly: on a bare MagicMock this attribute would auto-create a
+    # child mock, and every "the cutoff was stamped" assertion below would pass
+    # against a mock that the code under test never touched.
+    user.tokens_valid_from = tokens_valid_from
     user.created_at = datetime(2025, 1, 15, 10, 0, 0)
     user.last_login_at = datetime(2025, 6, 1, 12, 0, 0)
     user.updated_at = datetime(2025, 6, 1, 12, 0, 0)
@@ -392,11 +397,13 @@ class TestUpdateUserEmail:
         mock_session.get = AsyncMock(return_value=user)
         clash = MagicMock()
         clash.scalar_one_or_none = MagicMock(return_value=None)
-        mock_session.execute = AsyncMock(side_effect=[clash, MagicMock()])
+        mock_session.execute = AsyncMock(side_effect=[clash, MagicMock(), MagicMock()])
 
         await admin_service.update_user(mock_session, "user-001", email="real@example.com")
 
-        assert mock_session.execute.call_count == 2
+        # Three statements: the clash select, this revocation, and the OAuth
+        # unlink covered in TestEmailChangeRevocation.
+        assert mock_session.execute.call_count == 3
         revoke_stmt = mock_session.execute.call_args_list[1].args[0]
         compiled = str(revoke_stmt)
         assert "magic_links" in compiled
@@ -416,4 +423,184 @@ class TestUpdateUserEmail:
         await admin_service.update_user(mock_session, "user-001", email="same@example.com")
 
         assert user.email_verified is True
+        mock_session.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+class TestSessionRevocationOnUpdate:
+    """`tokens_valid_from` is the only session-revocation lever there is.
+
+    `is_token_invalidated` compares a token's `iat` against this column, so
+    stamping it kills the 15-minute access token *and* the 7-day refresh token
+    that predate it. Password reset, password change and MFA disable all stamp
+    it; the admin-initiated changes below did not (issue #60).
+    """
+
+    async def test_reactivation_revokes_the_pre_deactivation_sessions(self, mock_session):
+        """Deactivation is a revocation, so reactivation must not undo it.
+
+        Deactivation only *suspends* tokens: `get_current_user` and
+        `/auth/refresh` both reject an inactive user, but neither invalidates
+        anything. Flip `is_active` back inside the 7-day refresh window and the
+        session that was cut resumes, minting fresh access tokens as if nothing
+        had happened.
+        """
+        user = _make_user_model(is_active=False)
+        mock_session.get = AsyncMock(return_value=user)
+        before = datetime.now(UTC)
+
+        await admin_service.update_user(mock_session, "user-001", is_active=True)
+
+        assert user.tokens_valid_from is not None
+        assert user.tokens_valid_from >= before
+
+    async def test_deactivation_alone_does_not_stamp_the_cutoff(self, mock_session):
+        """Deliberate, and the reason reactivation is where the stamp goes.
+
+        A deactivated account is refused at `get_current_user` and at
+        `/auth/refresh` before the cutoff is ever consulted, so stamping here
+        would buy nothing — and rows deactivated before this change exist
+        already, which a deactivation-time stamp could never reach.
+        """
+        user = _make_user_model(is_active=True)
+        mock_session.get = AsyncMock(return_value=user)
+
+        await admin_service.update_user(mock_session, "user-001", is_active=False)
+
+        assert user.is_active is False
+        assert user.tokens_valid_from is None
+
+    async def test_is_active_true_on_an_already_active_user_does_not_revoke(self, mock_session):
+        """The admin form submits every field, so most PATCHes change nothing."""
+        user = _make_user_model(is_active=True)
+        mock_session.get = AsyncMock(return_value=user)
+
+        await admin_service.update_user(mock_session, "user-001", is_active=True)
+
+        assert user.tokens_valid_from is None
+
+    async def test_demotion_to_demo_revokes(self, mock_session):
+        """The demo restriction is enforced from the JWT claim, not the row.
+
+        `DemoAccountMiddleware` reads `role` out of the access token, so
+        without the stamp a user demoted to `demo` keeps writing until that
+        token expires — up to 15 minutes of the writes the demotion was meant
+        to stop. `require_role` reads the database and is unaffected, which is
+        what makes this easy to miss.
+        """
+        user = _make_user_model(role="user")
+        mock_session.get = AsyncMock(return_value=user)
+        before = datetime.now(UTC)
+
+        await admin_service.update_user(mock_session, "user-001", role="demo")
+
+        assert user.role == "demo"
+        assert user.tokens_valid_from is not None
+        assert user.tokens_valid_from >= before
+
+    async def test_admin_demotion_revokes(self, mock_session):
+        """An admin losing the role should not carry an admin-claim token."""
+        user = _make_user_model(role="admin", is_active=True)
+        mock_session.get = AsyncMock(return_value=user)
+        # _guard_last_admin counts the *other* active admins before allowing it.
+        count = MagicMock()
+        count.scalar_one = MagicMock(return_value=1)
+        mock_session.execute = AsyncMock(return_value=count)
+        before = datetime.now(UTC)
+
+        await admin_service.update_user(mock_session, "user-001", role="user")
+
+        assert user.tokens_valid_from is not None
+        assert user.tokens_valid_from >= before
+
+    async def test_promotion_revokes_too(self, mock_session):
+        """Any role change, not only a downgrade.
+
+        The claim in the outstanding token is stale either way, and deciding
+        per-transition which direction counts as a downgrade is a judgement
+        that would have to be re-made every time a role is added.
+        """
+        user = _make_user_model(role="user")
+        mock_session.get = AsyncMock(return_value=user)
+        before = datetime.now(UTC)
+
+        await admin_service.update_user(mock_session, "user-001", role="admin")
+
+        assert user.tokens_valid_from is not None
+        assert user.tokens_valid_from >= before
+
+    async def test_the_same_role_again_does_not_revoke(self, mock_session):
+        """Re-submitting the role a user already has must not sign them out."""
+        user = _make_user_model(role="user")
+        mock_session.get = AsyncMock(return_value=user)
+
+        await admin_service.update_user(mock_session, "user-001", role="user")
+
+        assert user.tokens_valid_from is None
+
+    async def test_a_tier_change_does_not_revoke(self, mock_session):
+        """A tier moves a quota, not a privilege — no claim depends on it."""
+        user = _make_user_model(tier="free")
+        mock_session.get = AsyncMock(return_value=user)
+
+        await admin_service.update_user(mock_session, "user-001", tier="pro")
+
+        assert user.tier == "pro"
+        assert user.tokens_valid_from is None
+
+
+@pytest.mark.asyncio
+class TestEmailChangeRevocation:
+    """An email change is used as remediation, so it has to cut every route in.
+
+    PR #23 already revoked unused magic links. Sessions and linked OAuth
+    identities survived it (issue #60), and the two need different fixes.
+    """
+
+    def _repoint(self, mock_session, user):
+        """Wire session.execute for a clean repoint: no clash, then two writes."""
+        clash = MagicMock()
+        clash.scalar_one_or_none = MagicMock(return_value=None)
+        mock_session.get = AsyncMock(return_value=user)
+        mock_session.execute = AsyncMock(side_effect=[clash, MagicMock(), MagicMock()])
+
+    async def test_email_change_stamps_the_session_cutoff(self, mock_session):
+        """A token minted before the repoint is exactly what it must invalidate."""
+        user = _make_user_model(email="wrong@example.com")
+        self._repoint(mock_session, user)
+        before = datetime.now(UTC)
+
+        await admin_service.update_user(mock_session, "user-001", email="right@example.com")
+
+        assert user.tokens_valid_from is not None
+        assert user.tokens_valid_from >= before
+
+    async def test_email_change_unlinks_oauth_accounts(self, mock_session):
+        """The stamp cannot cover this one, which is why both exist.
+
+        `create_or_link_oauth` matches on `(provider, provider_user_id)` and
+        returns before the email is looked at, so whoever holds the provider
+        account attached to the *old* address signs straight back in as this
+        user — with a *new* token, whose `iat` postdates any cutoff. Only
+        deleting the link closes it.
+        """
+        user = _make_user_model(email="wrong@example.com")
+        self._repoint(mock_session, user)
+
+        await admin_service.update_user(mock_session, "user-001", email="right@example.com")
+
+        assert mock_session.execute.call_count == 3
+        unlink_stmt = str(mock_session.execute.call_args_list[2].args[0])
+        assert unlink_stmt.startswith("DELETE FROM oauth_accounts")
+        assert "user_id" in unlink_stmt
+
+    async def test_an_unchanged_email_neither_revokes_nor_unlinks(self, mock_session):
+        """A PATCH echoing the current address must not sign the user out."""
+        user = _make_user_model(email="same@example.com")
+        mock_session.get = AsyncMock(return_value=user)
+        mock_session.execute = AsyncMock()
+
+        await admin_service.update_user(mock_session, "user-001", email="same@example.com")
+
+        assert user.tokens_valid_from is None
         mock_session.execute.assert_not_called()

@@ -3,7 +3,7 @@
 from datetime import UTC, date, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -15,6 +15,7 @@ from app.models.chat_session import ChatSession
 from app.models.course import Course
 from app.models.exam import Exam
 from app.models.magic_link import MagicLink
+from app.models.oauth_account import OAuthAccount
 from app.models.pipeline_run import PipelineRun
 from app.models.study_session import StudySession
 from app.models.subscription import Subscription
@@ -85,13 +86,45 @@ async def list_users(
     ], total
 
 
+def _revoke_sessions(user: User) -> None:
+    """Stamp the session cutoff, killing every token minted before now.
+
+    The same lever `user_service` pulls on a password reset, a password change
+    and an MFA disable: `is_token_invalidated` compares a token's `iat` against
+    this column, so the access token (15 min) and the refresh token (7 days)
+    that predate the stamp both stop working immediately.
+    """
+    user.tokens_valid_from = datetime.now(UTC)
+
+
 async def _repoint_email(session: AsyncSession, user: User, email: str) -> None:
     """Move a user's login address, invalidating anything addressed to the old one.
 
-    Every unused MagicLink for this user is marked used: password-reset and
-    verification tokens are keyed on user_id and validated by hash, never
-    against the address they were sent to, so a link already delivered to the
-    old inbox would otherwise still redeem against the corrected account.
+    Three standing routes back into the account are cut, because an email change
+    is used as remediation ("this address was wrong, or is no longer under the
+    user's control") and each survives the change independently:
+
+    1. **Unused magic links.** Password-reset and verification tokens are keyed
+       on user_id and validated by hash, never against the address they were
+       sent to, so a link already delivered to the old inbox would otherwise
+       still redeem against the corrected account.
+    2. **Existing sessions.** A token minted before the change is untouched by
+       the change itself, so the sessions the repoint was meant to cut would
+       outlive it — up to the 7-day refresh window (issue #60).
+    3. **Linked OAuth identities.** `create_or_link_oauth` matches on
+       `(provider, provider_user_id)` and returns on that branch before the
+       email is looked at, so whoever controls the provider account linked to
+       the *old* address would otherwise keep signing straight in as this user.
+       Stamping `tokens_valid_from` does nothing about that: such a sign-in
+       mints a *new* token, whose `iat` is after the cutoff. Only removing the
+       link closes it. So (2) and (3) are not alternatives — (2) ends the
+       sessions that exist, (3) ends the ability to mint more.
+
+    Unlinking is unconditional rather than opt-in, so the safe behaviour is the
+    default one. The cost falls on the legitimate user, who re-links by signing
+    in with the provider again — automatic on an account with no password once
+    the provider vouches for the new address, and on a password-backed account
+    the deliberate "sign in with your password instead" refusal from issue #70.
 
     Raises:
         UserExistsError: If `email` already belongs to a different account.
@@ -107,6 +140,11 @@ async def _repoint_email(session: AsyncSession, user: User, email: str) -> None:
         .where(MagicLink.user_id == user.id, MagicLink.used_at.is_(None))
         .values(used_at=datetime.now(UTC))
     )
+    await session.execute(delete(OAuthAccount).where(OAuthAccount.user_id == user.id))
+    _revoke_sessions(user)
+    # Warning, not info: silently detaching someone's provider sign-in is
+    # exactly the event a confused support ticket gets read against.
+    logger.warning("admin_email_repointed", user_id=user.id)
 
 
 async def update_user(
@@ -119,6 +157,11 @@ async def update_user(
     acting_admin_id: str | None = None,
 ) -> dict | None:
     """Update user role, tier, active status, or email.
+
+    Changing the role, reactivating the account, or repointing the email each
+    revokes the user's outstanding sessions (see the comments at the call sites
+    and `_repoint_email`). A tier change does not — it moves a quota, not a
+    privilege, and nothing in a token depends on it.
 
     Args:
         session: Database session.
@@ -149,6 +192,13 @@ async def update_user(
     # instance, recoverable only with direct SQL access.
     await _guard_last_admin(session, user, role=role, is_active=is_active)
 
+    # Both are read before anything is mutated, and both compare against the
+    # stored value: only a *change* revokes sessions. A PATCH that echoes the
+    # user's current role or active flag — which is what a form that submits
+    # every field does — must not sign them out for nothing.
+    role_changed = role is not None and role != user.role
+    reactivated = is_active is True and not user.is_active
+
     old_email = user.email
     if email is not None and email != user.email:
         await _repoint_email(session, user, email)
@@ -159,6 +209,24 @@ async def update_user(
         user.tier = tier
     if is_active is not None:
         user.is_active = is_active
+
+    # Reactivation: deactivation is a revocation, so restoring access must not
+    # silently restore the sessions that were revoked with it. `get_current_user`
+    # and `/auth/refresh` both reject an inactive user, which makes deactivation
+    # look total — but it only *suspends* the tokens. A refresh token lives 7
+    # days, so an account deactivated and reactivated inside that window hands
+    # the pre-deactivation session straight back, still able to mint fresh
+    # access tokens. Whatever prompted the deactivation, that is not the intent.
+    #
+    # Role change: `require_role` reads the database, so an admin demotion binds
+    # at once — but `DemoAccountMiddleware` reads `role` from the JWT claim, so
+    # demoting someone to `demo` leaves them writing for the remaining life of
+    # their access token. The stamp is applied to any role change, not just the
+    # demotions: the claim is stale either way, and "which role transitions are
+    # really downgrades" is a judgement that would have to be re-made every time
+    # a role is added.
+    if reactivated or role_changed:
+        _revoke_sessions(user)
 
     user.updated_at = datetime.now(UTC)
     await session.commit()
@@ -171,6 +239,7 @@ async def update_user(
         is_active=is_active,
         old_email=old_email if user.email != old_email else None,
         new_email=user.email if user.email != old_email else None,
+        sessions_revoked=reactivated or role_changed or user.email != old_email,
         by=acting_admin_id,
     )
 
@@ -656,6 +725,10 @@ async def ensure_admin(
     undeliverable address, so neither the admin API nor a self-service reset
     can produce one.
 
+    Where it changes something — a promotion, a reactivation, a repointed
+    address — it also revokes the account's outstanding sessions, on the same
+    reasoning as `update_user`. A run that changes nothing revokes nothing.
+
     Args:
         session: Database session.
         email: Address the admin should be reachable at.
@@ -699,6 +772,16 @@ async def ensure_admin(
     # Demotion or deactivation is one of the lockouts this recovers from.
     user.role = "admin"
     user.is_active = True
+
+    # Same rule as `update_user`: a promotion or a reactivation revokes the
+    # sessions that predate it, and only when something actually changed. The
+    # no-op case matters here — re-running ensure-admin purely to mint a fresh
+    # link on a healthy admin account is a normal operator move, and it must
+    # not sign that admin out of the console they are working in. `_repoint_email`
+    # stamps the cutoff itself, so the repoint case is already covered.
+    if was_promoted or was_reactivated:
+        _revoke_sessions(user)
+
     user.updated_at = datetime.now(UTC)
     await session.flush()
 

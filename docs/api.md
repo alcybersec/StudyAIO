@@ -1961,7 +1961,23 @@ List all users with optional filters. Query params: `role`, `tier`, `offset`, `l
 
 ### `PATCH /api/admin/users/{user_id}`
 
-Update a user's role, tier, or active status.
+Update a user's role, tier, active status, or email.
+
+**Changing the role, reactivating the account, or changing the email ends that
+user's sessions.** Each stamps `users.tokens_valid_from`, so every token issued
+up to that moment stops working — including the 7-day refresh token, which
+otherwise survives a deactivate/reactivate cycle and hands the pre-deactivation
+session back intact. A role change matters even though `require_role` reads the
+database: `DemoAccountMiddleware` reads `role` from the JWT claim, so a
+demotion to `demo` would not bind until the access token expired. A tier change
+revokes nothing. Neither does a PATCH that submits a user's current values.
+
+An email change additionally **unlinks every OAuth account** on that user.
+OAuth sign-in matches on `(provider, provider_user_id)` and never on the email,
+so the identity attached to the old address would otherwise keep signing in as
+that user — and it would do so with a *new* token, which no session cutoff can
+reach. The user re-links by signing in with the provider again, or with their
+password if the account has one.
 
 **Body** `UpdateUserRequest`
 **Response** `200` `AdminUserResponse`
