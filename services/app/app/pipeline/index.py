@@ -163,15 +163,19 @@ def index_artifact(self, input_value: str | dict) -> dict:
         raise IndexingError("No artifact_id provided")
 
     logger.info("index_task_started", artifact_id=artifact_id, user_id=user_id)
-    publish_pipeline_event_sync(artifact_id, "index", "started")
+    publish_pipeline_event_sync(artifact_id, "index", "started", user_id=user_id)
     try:
         result = run_async(_index(artifact_id, user_id=user_id))
-        publish_pipeline_event_sync(artifact_id, "index", result.get("status", "completed"))
+        publish_pipeline_event_sync(
+            artifact_id, "index", result.get("status", "completed"), user_id=user_id
+        )
         return result
     except IndexingError:
-        publish_pipeline_event_sync(artifact_id, "index", "failed")
+        publish_pipeline_event_sync(artifact_id, "index", "failed", user_id=user_id)
         raise  # Don't retry on indexing errors
     except Exception as exc:
+        # str(exc) stays operator-side: it can carry filenames and storage
+        # paths, and the published event is client-facing (#69).
         logger.error("index_task_error", error=str(exc), artifact_id=artifact_id)
-        publish_pipeline_event_sync(artifact_id, "index", "failed", str(exc))
+        publish_pipeline_event_sync(artifact_id, "index", "failed", user_id=user_id)
         raise self.retry(exc=exc) from exc

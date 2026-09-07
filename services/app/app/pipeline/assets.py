@@ -265,15 +265,19 @@ def generate_assets(self, input_value: str | dict) -> dict:
         raise AssetGenerationError("No artifact_id provided")
 
     logger.info("assets_task_started", artifact_id=artifact_id, user_id=user_id)
-    publish_pipeline_event_sync(artifact_id, "assets", "started")
+    publish_pipeline_event_sync(artifact_id, "assets", "started", user_id=user_id)
     try:
         result = run_async(_generate_assets(artifact_id, user_id=user_id))
-        publish_pipeline_event_sync(artifact_id, "assets", result.get("status", "completed"))
+        publish_pipeline_event_sync(
+            artifact_id, "assets", result.get("status", "completed"), user_id=user_id
+        )
         return result
     except (AssetGenerationError, AgentError):
-        publish_pipeline_event_sync(artifact_id, "assets", "failed")
+        publish_pipeline_event_sync(artifact_id, "assets", "failed", user_id=user_id)
         raise  # Don't retry on asset/agent errors
     except Exception as exc:
+        # str(exc) stays operator-side: it can carry filenames and storage
+        # paths, and the published event is client-facing (#69).
         logger.error("assets_task_error", error=str(exc), artifact_id=artifact_id)
-        publish_pipeline_event_sync(artifact_id, "assets", "failed", str(exc))
+        publish_pipeline_event_sync(artifact_id, "assets", "failed", user_id=user_id)
         raise self.retry(exc=exc) from exc

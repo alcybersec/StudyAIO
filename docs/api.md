@@ -588,16 +588,29 @@ Retry a failed artifact, resuming from the stage that failed rather than from th
 
 Server-Sent Events (SSE) stream for real-time pipeline progress.
 
+Scoped to the caller: the stream subscribes only to the caller's own event
+channel (`pipeline:events:{user_id}`), so it can never carry another user's
+events. `artifact_id` narrows that stream further — it cannot widen it, and
+naming another user's artifact yields nothing.
+
+The connection re-checks the caller's session every 30 seconds and closes if the
+account is deactivated or the session has been revoked (password change, MFA
+disable), so a revoked session does not keep an open stream.
+
 **Query Parameters**
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `artifact_id` | string | `""` | Filter events to a specific artifact (empty = all) |
+| `artifact_id` | string | `""` | Narrow events to one of the caller's artifacts (empty = all of the caller's) |
 
 **Event Format**
 ```
 event: pipeline
 data: {"artifact_id": "0192...", "stage": "classify", "status": "completed"}
 ```
+
+`message` is present on some events and is safe to display. Raw exception text
+is deliberately not published — a failed stage sends `status: "failed"` with no
+`message`, and the detail stays in the server logs.
 
 ---
 
