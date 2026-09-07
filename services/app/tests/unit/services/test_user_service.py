@@ -1,5 +1,6 @@
 """Tests for user_service business logic."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,6 +9,11 @@ from sqlalchemy import Update
 
 from app.core.auth import hash_magic_link_token
 from app.core.exceptions import AuthenticationError, AuthorizationError, UserExistsError
+from app.core.security import (
+    generate_backup_codes,
+    hash_backup_codes,
+    normalize_backup_code,
+)
 from app.models.magic_link import MagicLink
 from app.models.user import User
 from app.services import user_service
@@ -470,6 +476,40 @@ class TestMFA:
         assert user.mfa_secret == "JBSWY3DPEHPK3PXP"
 
     @pytest.mark.asyncio
+    async def test_enable_mfa_stores_hashes_not_codes(self):
+        """The column must not hold anything a reader could log in with.
+
+        Same reasoning as magic link tokens (`core.auth.hash_magic_link_token`):
+        a database dump is not a credential.
+        """
+        user = _make_user()
+        session = _mock_session_returning(user)
+
+        with patch("app.services.user_service.verify_totp", return_value=True):
+            codes = await user_service.enable_mfa(session, "user-001", "123456", "JBSWY3DPEHPK3PXP")
+
+        stored = json.loads(user.backup_codes)
+        assert len(stored) == 10
+        for code in codes:
+            assert code not in user.backup_codes
+            assert normalize_backup_code(code) not in user.backup_codes
+        assert stored == hash_backup_codes(codes)
+
+    @pytest.mark.asyncio
+    async def test_enable_mfa_refuses_to_re_enroll_over_live_mfa(self):
+        """A hijacked session must not be able to swap in a secret of its own."""
+        user = _make_user(mfa_enabled=True, mfa_secret="JBSWY3DPEHPK3PXP")
+        session = _mock_session_returning(user)
+
+        with (
+            patch("app.services.user_service.verify_totp", return_value=True),
+            pytest.raises(ValueError, match="already enabled"),
+        ):
+            await user_service.enable_mfa(session, "user-001", "123456", "ATTACKERSECRET123")
+
+        assert user.mfa_secret == "JBSWY3DPEHPK3PXP"
+
+    @pytest.mark.asyncio
     async def test_enable_mfa_invalid_code(self):
         user = _make_user()
         session = _mock_session_returning(user)
@@ -493,6 +533,180 @@ class TestMFA:
         assert user.mfa_secret is None
         assert user.tokens_valid_from is not None
         assert user.tokens_valid_from >= before
+
+
+class TestConsumeBackupCode:
+    """Backup codes are single-use and leak nothing on a miss."""
+
+    @staticmethod
+    def _enrolled(count: int = 3) -> tuple[User, list[str]]:
+        codes = generate_backup_codes(count=count)
+        user = _make_user(
+            mfa_enabled=True,
+            mfa_secret="JBSWY3DPEHPK3PXP",
+            backup_codes=json.dumps(hash_backup_codes(codes)),
+        )
+        return user, codes
+
+    @pytest.mark.asyncio
+    async def test_a_valid_code_returns_the_remaining_count(self):
+        user, codes = self._enrolled()
+        session = AsyncMock()
+
+        remaining = await user_service.consume_backup_code(session, user, codes[0])
+
+        assert remaining == 2
+
+    @pytest.mark.asyncio
+    async def test_a_used_code_is_removed_from_the_account(self):
+        user, codes = self._enrolled()
+        session = AsyncMock()
+
+        await user_service.consume_backup_code(session, user, codes[0])
+
+        stored = json.loads(user.backup_codes)
+        assert len(stored) == 2
+        assert hash_backup_codes([codes[0]])[0] not in stored
+
+    @pytest.mark.asyncio
+    async def test_replaying_a_consumed_code_fails(self):
+        user, codes = self._enrolled()
+        session = AsyncMock()
+
+        assert await user_service.consume_backup_code(session, user, codes[0]) == 2
+        assert await user_service.consume_backup_code(session, user, codes[0]) is None
+        # The failed replay must not eat one of the survivors.
+        assert len(json.loads(user.backup_codes)) == 2
+
+    @pytest.mark.asyncio
+    async def test_the_other_codes_still_work_afterwards(self):
+        user, codes = self._enrolled()
+        session = AsyncMock()
+
+        await user_service.consume_backup_code(session, user, codes[0])
+
+        assert await user_service.consume_backup_code(session, user, codes[2]) == 1
+
+    @pytest.mark.asyncio
+    async def test_spending_the_last_code_reports_zero_not_none(self):
+        """0 and None mean different things: none left, versus wrong code."""
+        user, codes = self._enrolled(count=1)
+        session = AsyncMock()
+
+        assert await user_service.consume_backup_code(session, user, codes[0]) == 0
+        assert json.loads(user.backup_codes) == []
+
+    @pytest.mark.asyncio
+    async def test_a_wrong_code_consumes_nothing(self):
+        user, _ = self._enrolled()
+        session = AsyncMock()
+        before = user.backup_codes
+
+        assert await user_service.consume_backup_code(session, user, "AAAA-AAAA-AAAA-AAAA") is None
+        assert user.backup_codes == before
+        session.flush.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_an_account_with_no_codes_returns_none(self):
+        user = _make_user(mfa_enabled=True, backup_codes=None)
+        code = generate_backup_codes(count=1)[0]
+
+        assert await user_service.consume_backup_code(AsyncMock(), user, code) is None
+
+    @pytest.mark.asyncio
+    async def test_an_exhausted_account_returns_none(self):
+        user = _make_user(mfa_enabled=True, backup_codes="[]")
+        code = generate_backup_codes(count=1)[0]
+
+        assert await user_service.consume_backup_code(AsyncMock(), user, code) is None
+
+    @pytest.mark.asyncio
+    async def test_an_unparseable_column_fails_closed(self):
+        """Not an exception on the login path, and not an accepted code either."""
+        user = _make_user(mfa_enabled=True, backup_codes="not json {{{")
+        code = generate_backup_codes(count=1)[0]
+
+        assert await user_service.consume_backup_code(AsyncMock(), user, code) is None
+
+    @pytest.mark.asyncio
+    async def test_a_column_of_the_wrong_shape_fails_closed(self):
+        user = _make_user(mfa_enabled=True, backup_codes=json.dumps({"codes": []}))
+        code = generate_backup_codes(count=1)[0]
+
+        assert await user_service.consume_backup_code(AsyncMock(), user, code) is None
+
+    @pytest.mark.asyncio
+    async def test_a_code_typed_without_dashes_is_accepted(self):
+        user, codes = self._enrolled()
+
+        typed = codes[0].replace("-", "").lower()
+        assert await user_service.consume_backup_code(AsyncMock(), user, typed) == 2
+
+    @pytest.mark.asyncio
+    async def test_leftover_plaintext_codes_are_not_accepted(self):
+        """A row the migration has not reached must not authenticate anyone.
+
+        Pre-migration rows held the codes themselves. If the column were
+        compared raw, that value would be a working credential -- which is the
+        bypass this change exists to remove.
+        """
+        plaintext = ["ABCD1234", "EFGH5678"]
+        user = _make_user(mfa_enabled=True, backup_codes=json.dumps(plaintext))
+
+        assert await user_service.consume_backup_code(AsyncMock(), user, "ABCD1234") is None
+
+
+class TestClearMFA:
+    """The administrative escape hatch for a locked-out user."""
+
+    @pytest.mark.asyncio
+    async def test_it_clears_every_mfa_field_and_revokes_sessions(self):
+        codes = generate_backup_codes(count=2)
+        user = _make_user(
+            mfa_enabled=True,
+            mfa_secret="JBSWY3DPEHPK3PXP",
+            backup_codes=json.dumps(hash_backup_codes(codes)),
+        )
+        session = _mock_session_returning(user)
+
+        before = datetime.now(UTC)
+        assert await user_service.clear_mfa(session, "user-001") is True
+
+        assert user.mfa_enabled is False
+        assert user.mfa_secret is None
+        assert user.backup_codes is None
+        assert user.tokens_valid_from is not None
+        assert user.tokens_valid_from >= before
+
+    @pytest.mark.asyncio
+    async def test_it_needs_no_second_factor(self):
+        """That is the entire point: the user has lost both of them.
+
+        Nothing here calls `verify_totp`, so patching it to always fail must not
+        change the outcome.
+        """
+        user = _make_user(mfa_enabled=True, mfa_secret="JBSWY3DPEHPK3PXP")
+        session = _mock_session_returning(user)
+
+        with patch("app.services.user_service.verify_totp", return_value=False):
+            assert await user_service.clear_mfa(session, "user-001") is True
+
+        assert user.mfa_enabled is False
+
+    @pytest.mark.asyncio
+    async def test_clearing_an_account_without_mfa_does_not_sign_it_out(self):
+        user = _make_user(mfa_enabled=False)
+        session = _mock_session_returning(user)
+
+        assert await user_service.clear_mfa(session, "user-001") is False
+        assert user.tokens_valid_from is None
+
+    @pytest.mark.asyncio
+    async def test_unknown_user_raises(self):
+        session = _mock_session_returning(None)
+
+        with pytest.raises(ValueError, match="User not found"):
+            await user_service.clear_mfa(session, "nope")
 
 
 class TestOAuth:
