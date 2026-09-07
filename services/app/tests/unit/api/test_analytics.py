@@ -75,8 +75,8 @@ class TestGetHeatmap:
 class TestGetRetention:
     """Tests for GET /api/analytics/retention."""
 
-    async def test_get_retention(self, async_client):
-        """Returns retention curve data."""
+    async def test_get_retention(self, async_client, default_test_user):
+        """Returns retention curve data, computed over the caller's own reviews."""
         with patch(
             "app.api.analytics.analytics_service.get_retention_data",
             new_callable=AsyncMock,
@@ -85,13 +85,17 @@ class TestGetRetention:
                 {"interval_bucket": 7, "retention_pct": 80.0, "card_count": 30},
                 {"interval_bucket": 30, "retention_pct": 65.0, "card_count": 10},
             ],
-        ):
+        ) as mock_retention:
             response = await async_client.get("/api/analytics/retention")
 
         assert response.status_code == 200
         data = response.json()
         assert len(data["points"]) == 3
         assert data["points"][0]["retention_pct"] == 95.0
+        # Wiring: the mock answers the same whoever asks, so the 200 above holds
+        # just as well for an unscoped endpoint. The identity is passed
+        # positionally here.
+        assert mock_retention.await_args.args[1] == default_test_user.id
 
     async def test_get_retention_by_course(self, async_client):
         """Filters retention data by course_code."""
@@ -112,8 +116,8 @@ class TestGetRetention:
 class TestGetMastery:
     """Tests for GET /api/analytics/mastery."""
 
-    async def test_get_mastery(self, async_client):
-        """Returns mastery breakdown data."""
+    async def test_get_mastery(self, async_client, default_test_user):
+        """Returns mastery breakdown data, computed over the caller's own cards."""
         with patch(
             "app.api.analytics.analytics_service.get_mastery_breakdown",
             new_callable=AsyncMock,
@@ -128,7 +132,7 @@ class TestGetMastery:
                     "mastery_pct": 50.0,
                 },
             ],
-        ):
+        ) as mock_mastery:
             response = await async_client.get("/api/analytics/mastery")
 
         assert response.status_code == 200
@@ -136,6 +140,9 @@ class TestGetMastery:
         assert len(data["weeks"]) == 1
         assert data["weeks"][0]["mastery_pct"] == 50.0
         assert data["weeks"][0]["new"] == 2
+        # Wiring: identity passed positionally, and the 200 above does not
+        # depend on it having been passed at all.
+        assert mock_mastery.await_args.args[1] == default_test_user.id
 
     async def test_get_mastery_by_course(self, async_client):
         """Filters mastery by course_code."""
@@ -156,14 +163,20 @@ class TestGetMastery:
 class TestGetReadiness:
     """Tests for GET /api/analytics/readiness/{exam_id}."""
 
-    async def test_get_readiness_not_found(self, async_client):
-        """Returns 404 when exam not found."""
+    async def test_get_readiness_not_found(self, async_client, default_test_user):
+        """Returns 404 when the exam is not the caller's (or does not exist).
+
+        The 404 has two causes and the mock produces both, so it proves nothing
+        on its own -- an endpoint that never scoped would return exactly this.
+        The wiring assertion is what separates them.
+        """
         with patch(
             "app.api.analytics.analytics_service.get_exam_readiness",
             new_callable=AsyncMock,
             return_value=None,
-        ):
+        ) as mock_readiness:
             response = await async_client.get("/api/analytics/readiness/nonexistent")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
+        assert mock_readiness.await_args.args[1:] == ("nonexistent", default_test_user.id)

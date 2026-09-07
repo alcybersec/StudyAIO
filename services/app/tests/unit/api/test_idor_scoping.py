@@ -510,3 +510,57 @@ class TestCourseOpsIdorScoping:
         assert response.status_code == 404
         assert mock.await_args.kwargs.get("user_id") == default_test_user.id
         assert default_test_user.id != OWNER_A
+
+
+@pytest.mark.asyncio
+class TestExamHistoryIdorScoping:
+    """The study-history aggregate has no ownership check above it.
+
+    Unlike the other ``/exams/{id}/...`` routes, ``get_history`` does not
+    resolve the exam first -- ``get_study_history`` is the only call in the
+    handler, so the ``user_id`` it is handed *is* the whole authorization.
+    Nothing else in the request would 404 a foreign exam id.
+    """
+
+    async def test_history_scoped_to_the_caller(self, async_client, default_test_user):
+        """GET /api/exams/{id}/history must not report user A's study days."""
+
+        async def scoped(session, exam_id=None, days=30, user_id=None):
+            return (
+                [{"date": "2026-03-01", "minutes": 45.0, "cards": 20, "sessions": 2}]
+                if user_id == OWNER_A
+                else []
+            )
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.exams.streak_service.get_study_history", new=mock):
+            response = await async_client.get("/api/exams/exam-owned-by-a/history")
+
+        assert response.status_code == 200
+        assert response.json() == []
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A
+
+
+@pytest.mark.asyncio
+class TestExportsIdorScoping:
+    """The Obsidian export packages a whole course into a downloadable zip.
+
+    Its only lookup is the generator itself, so an unscoped call would hand a
+    stranger every summary, flashcard and quiz of a course they do not own --
+    in one request, as a file.
+    """
+
+    async def test_obsidian_vault_404_for_other_users_course(self, async_client, default_test_user):
+        """GET /api/exports/obsidian/{code} must not export user A's course."""
+
+        async def scoped(session, course_code, week_list, user_id=None):
+            return (io.BytesIO(b"PK\x03\x04"), "vault.zip") if user_id == OWNER_A else None
+
+        mock = AsyncMock(side_effect=scoped)
+        with patch("app.api.exports.export_service.generate_obsidian_vault", new=mock):
+            response = await async_client.get("/api/exports/obsidian/CSIT302")
+
+        assert response.status_code == 404
+        assert mock.await_args.kwargs.get("user_id") == default_test_user.id
+        assert default_test_user.id != OWNER_A

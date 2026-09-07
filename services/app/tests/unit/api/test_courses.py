@@ -105,16 +105,22 @@ class TestGetCourseDetail:
         assert data["weeks"][0]["week"] == 1
         assert data["weeks"][0]["summary_status"] == "generated"
 
-    async def test_get_course_detail_not_found(self, async_client):
-        """Get course detail returns 404 for unknown course."""
+    async def test_get_course_detail_not_found(self, async_client, default_test_user):
+        """404 for a course that is unknown -- or belongs to somebody else.
+
+        Both causes return this 404, and the mock returns None regardless of
+        who asks, so the status code alone is equally satisfied by an endpoint
+        that never scoped. The wiring assertion is what tells them apart.
+        """
         with patch(
             "app.api.courses.course_service.get_course_by_code",
             new_callable=AsyncMock,
             return_value=None,
-        ):
+        ) as mock_get:
             response = await async_client.get("/api/courses/UNKNOWN")
 
         assert response.status_code == 404
+        assert mock_get.await_args.kwargs.get("user_id") == default_test_user.id
 
 
 @pytest.mark.asyncio
@@ -170,13 +176,19 @@ class TestGetWeekDetail:
         assert len(data["artifacts"]) == 1
         assert data["artifacts"][0]["original_filename"] == "CSIT302_Week5.pdf"
 
-    async def test_get_week_detail_course_not_found(self, async_client):
-        """Get week detail returns 404 for unknown course."""
+    async def test_get_week_detail_course_not_found(self, async_client, default_test_user):
+        """404 for a course that is unknown -- or belongs to somebody else.
+
+        The week detail resolves the course first and everything below it
+        (artifacts, summary) hangs off that lookup, so this is the one call
+        that has to carry the caller.
+        """
         with patch(
             "app.api.courses.course_service.get_course_by_code",
             new_callable=AsyncMock,
             return_value=None,
-        ):
+        ) as mock_get:
             response = await async_client.get("/api/courses/UNKNOWN/weeks/1")
 
         assert response.status_code == 404
+        assert mock_get.await_args.kwargs.get("user_id") == default_test_user.id
