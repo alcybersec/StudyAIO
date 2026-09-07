@@ -349,15 +349,19 @@ def classify_artifact(self, input_value: str | dict) -> dict:
         raise ClassificationError("No artifact_id provided")
 
     logger.info("classify_task_started", artifact_id=artifact_id, user_id=user_id)
-    publish_pipeline_event_sync(artifact_id, "classify", "started")
+    publish_pipeline_event_sync(artifact_id, "classify", "started", user_id=user_id)
     try:
         result = run_async(_classify(artifact_id, user_id=user_id))
-        publish_pipeline_event_sync(artifact_id, "classify", result.get("status", "completed"))
+        publish_pipeline_event_sync(
+            artifact_id, "classify", result.get("status", "completed"), user_id=user_id
+        )
         return result
     except (ClassificationError, AgentError):
-        publish_pipeline_event_sync(artifact_id, "classify", "failed")
+        publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=user_id)
         raise  # Don't retry on classification/agent errors
     except Exception as exc:
+        # str(exc) stays operator-side: it can carry filenames and storage
+        # paths, and the published event is client-facing (#69).
         logger.error("classify_task_error", error=str(exc), artifact_id=artifact_id)
-        publish_pipeline_event_sync(artifact_id, "classify", "failed", str(exc))
+        publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=user_id)
         raise self.retry(exc=exc) from exc
