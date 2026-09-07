@@ -69,7 +69,7 @@ const DB_VERSION = 1
 const OWNER_KEY = 'queue-owner'
 
 /** Fallback for non-browser contexts (SSR, unit tests without IndexedDB). */
-let memoryOwner: QueueOwner = null
+let memoryOwner: QueueOwner | undefined = undefined
 
 function hasIndexedDB(): boolean {
   return typeof indexedDB !== 'undefined' && indexedDB !== null
@@ -90,25 +90,41 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 /**
- * The user the persisted offline state currently belongs to.
+ * The recorded owner, distinguishing "never recorded" from "signed out".
  *
- * Returns `null` — "drain nothing" — if the lookup fails for any reason. A
- * broken read must not open the replay gate.
+ * `undefined` means no marker has ever been written in this browser profile —
+ * a first load, or the first load after this fix shipped. `null` means a
+ * marker was written saying nobody is signed in. `reconcileSession` needs to
+ * tell those apart: on a first load there is no previous identity whose
+ * in-memory state could need purging, and purging anyway destroys the state of
+ * queries the page has already settled.
+ *
+ * Returns `null` — "drain nothing", and treated as a recorded sign-out — if
+ * the lookup fails. A broken read must not open the replay gate.
  */
-export async function getQueueOwner(): Promise<QueueOwner> {
+export async function readQueueOwner(): Promise<QueueOwner | undefined> {
   if (!hasIndexedDB()) return memoryOwner
   try {
     const db = await openDB()
-    return await new Promise<QueueOwner>((resolve, reject) => {
+    return await new Promise<QueueOwner | undefined>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly')
       const req = tx.objectStore(STORE_NAME).get(OWNER_KEY)
-      req.onsuccess = () => resolve((req.result as QueueOwner | undefined) ?? null)
+      req.onsuccess = () => resolve(req.result as QueueOwner | undefined)
       req.onerror = () => reject(req.error)
     })
   } catch (err) {
     console.warn('queueOwner: could not read the queue owner', err)
     return null
   }
+}
+
+/**
+ * The user the persisted offline state belongs to, for the drainers, which do
+ * not care why there is no owner — an unrecorded owner and a recorded
+ * sign-out both mean "replay nothing".
+ */
+export async function getQueueOwner(): Promise<QueueOwner> {
+  return (await readQueueOwner()) ?? null
 }
 
 /** Record who the persisted offline state belongs to from now on. */

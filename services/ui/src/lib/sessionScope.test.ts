@@ -67,7 +67,7 @@ describe('clearApiCaches', () => {
 })
 
 describe('reconcileSession', () => {
-  let owner: QueueOwner
+  let owner: QueueOwner | undefined
   let clearCaches: ReturnType<typeof vi.fn>
   let onIdentityChange: ReturnType<typeof vi.fn>
 
@@ -132,5 +132,42 @@ describe('reconcileSession', () => {
     ])
     expect(owner).toBe('user-b')
     expect(clearCaches).toHaveBeenCalledTimes(2)
+  })
+
+  // A first load — no owner marker has ever been written in this profile.
+  // Persisted caches can still hold a previous user's responses, but nothing
+  // in memory can: react-query only ever holds this page session's own data.
+  // Purging it here fires mid-load and destroys the state of queries the page
+  // has already settled, which left every dashboard widget stuck in a
+  // skeleton and broke two E2E specs.
+  describe('first load, with no owner ever recorded', () => {
+    beforeEach(() => {
+      owner = undefined
+    })
+
+    it('purges the persisted caches', async () => {
+      await expect(reconcileSession('user-a', deps())).resolves.toBe(true)
+      expect(clearCaches).toHaveBeenCalledTimes(1)
+      expect(owner).toBe('user-a')
+    })
+
+    it('does not touch in-memory state', async () => {
+      await reconcileSession('user-a', deps())
+      expect(onIdentityChange).not.toHaveBeenCalled()
+    })
+
+    it('purges nothing at all when nobody is signed in either', async () => {
+      await expect(reconcileSession(null, deps())).resolves.toBe(false)
+      expect(clearCaches).not.toHaveBeenCalled()
+      expect(onIdentityChange).not.toHaveBeenCalled()
+    })
+
+    it('still purges in-memory state once an identity has been recorded', async () => {
+      // Second transition in the same page session — A signs out, B signs in.
+      await reconcileSession('user-a', deps())
+      onIdentityChange.mockClear()
+      await reconcileSession('user-b', deps())
+      expect(onIdentityChange).toHaveBeenCalledWith('user-a', 'user-b')
+    })
   })
 })

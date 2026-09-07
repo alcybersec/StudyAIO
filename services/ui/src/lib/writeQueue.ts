@@ -102,14 +102,14 @@ interface WriteQueueOptions {
   /** When true (default), failures schedule retries and 'online' triggers a flush. */
   autoFlush?: boolean
   /** Who the current session belongs to; defaults to the persisted owner. */
-  getOwner?: () => Promise<QueueOwner>
+  getOwner?: () => Promise<QueueOwner | undefined>
 }
 
 export class WriteQueue {
   private storage: QueueStorage
   private fetchFn: typeof fetch
   private autoFlush: boolean
-  private getOwner: () => Promise<QueueOwner>
+  private getOwner: () => Promise<QueueOwner | undefined>
   private listeners = new Set<() => void>()
   private cachedSize = 0
   private backoffMs = 0
@@ -180,7 +180,7 @@ export class WriteQueue {
   /** Never throws — a failed lookup means "drain nothing", not "drain all". */
   private async resolveOwner(): Promise<QueueOwner> {
     try {
-      return await this.getOwner()
+      return (await this.getOwner()) ?? null
     } catch {
       return null
     }
