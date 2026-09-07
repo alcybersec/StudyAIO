@@ -475,12 +475,36 @@ export interface AuthUser {
   created_at: string
   /** False for OAuth-only accounts, which have no password to re-enter. */
   has_password: boolean
+  /**
+   * Set only on a sign-in that spent an MFA backup code, and absent on every
+   * other response — it is not account state to poll. 0 is a real value, so
+   * test against null/undefined rather than truthiness or the last remaining
+   * code reports nothing.
+   */
+  backup_codes_remaining?: number | null
 }
 
 export interface LoginRequest {
   email: string
   password: string
   totp_code?: string
+  /**
+   * An MFA backup code, submitted *instead of* `totp_code` by a user who has
+   * lost their authenticator. Consumed on use. Sent as typed: the server
+   * normalises dashes, case and the Crockford-base32 letter folds
+   * (I/L -> 1, O -> 0), so the client must not pre-chew it.
+   */
+  backup_code?: string
+}
+
+/**
+ * Second factor for an OAuth sign-in the callback stopped to challenge.
+ * The first factor was the provider, proved by the pending-MFA cookie rather
+ * than by anything in this body — so there is no password field here.
+ */
+export interface OAuthMFARequest {
+  totp_code?: string
+  backup_code?: string
 }
 
 export interface RegisterRequest {
