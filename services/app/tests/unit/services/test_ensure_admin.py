@@ -1,6 +1,6 @@
 """Tests for admin_service.ensure_admin — the first-admin bootstrap."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,6 +27,7 @@ def _make_user_model(
     role="admin",
     tier="pro",
     is_active=True,
+    tokens_valid_from=None,
 ):
     """Create a mock User model object."""
     user = MagicMock()
@@ -36,6 +37,9 @@ def _make_user_model(
     user.role = role
     user.tier = tier
     user.is_active = is_active
+    # Explicit: on a bare MagicMock this would auto-create a child mock, and
+    # the "cutoff was/was not stamped" assertions below would both pass.
+    user.tokens_valid_from = tokens_valid_from
     user.email_verified = True
     user.created_at = datetime(2026, 1, 1, 10, 0, 0)
     user.updated_at = datetime(2026, 1, 1, 10, 0, 0)
@@ -132,8 +136,11 @@ class TestEnsureAdmin:
         empty_result = MagicMock()
         empty_result.scalar_one_or_none = MagicMock(return_value=None)
         # Calls: find-fallback-admin select, email-clash select, then the
-        # MagicLink revocation update — its result value is never read.
-        mock_session.execute = AsyncMock(side_effect=[found_result, empty_result, MagicMock()])
+        # MagicLink revocation update and the OAuth unlink delete — neither of
+        # those two result values is ever read.
+        mock_session.execute = AsyncMock(
+            side_effect=[found_result, empty_result, MagicMock(), MagicMock()]
+        )
 
         with patch.object(
             admin_service.user_service,
@@ -195,3 +202,86 @@ class TestEnsureAdmin:
 
         assert existing.is_active is True
         assert existing.role == "admin"
+
+
+@pytest.mark.asyncio
+class TestEnsureAdminSessionRevocation:
+    """Break-glass recovery follows the same rule as `update_user` (issue #60).
+
+    A promotion or a reactivation revokes the sessions that predate it; a run
+    that changes nothing revokes nothing, because re-running the command just
+    to mint a fresh link is a normal operator move.
+    """
+
+    async def test_reactivation_revokes_the_pre_deactivation_sessions(self, mock_session):
+        """The account was deactivated for a reason; restoring it is not a reason
+        to hand back the refresh token that was cut with it."""
+        existing = _make_user_model(is_active=False, email="admin@studyaio.local")
+        mock_session.get = AsyncMock(return_value=existing)
+        _no_clash(mock_session)
+        before = datetime.now(UTC)
+
+        with patch.object(
+            admin_service.user_service,
+            "request_password_reset",
+            AsyncMock(return_value=_minted()),
+        ):
+            await admin_service.ensure_admin(mock_session, "admin@studyaio.local")
+
+        assert existing.tokens_valid_from is not None
+        assert existing.tokens_valid_from >= before
+
+    async def test_promotion_revokes(self, mock_session):
+        """Recovering from a demotion — the token still carries the old claim."""
+        existing = _make_user_model(role="user", email="admin@studyaio.local")
+        mock_session.get = AsyncMock(return_value=existing)
+        _no_clash(mock_session)
+        before = datetime.now(UTC)
+
+        with patch.object(
+            admin_service.user_service,
+            "request_password_reset",
+            AsyncMock(return_value=_minted()),
+        ):
+            await admin_service.ensure_admin(mock_session, "admin@studyaio.local")
+
+        assert existing.tokens_valid_from is not None
+        assert existing.tokens_valid_from >= before
+
+    async def test_a_repoint_revokes_and_unlinks(self, mock_session):
+        """Inherited from `_repoint_email`, and worth pinning here: this command
+        is what an operator reaches for when the admin account is suspect."""
+        existing = _make_user_model(email="old@example.com")
+        mock_session.get = AsyncMock(return_value=existing)
+        empty = MagicMock()
+        empty.scalar_one_or_none = MagicMock(return_value=None)
+        mock_session.execute = AsyncMock(side_effect=[empty, MagicMock(), MagicMock()])
+        before = datetime.now(UTC)
+
+        with patch.object(
+            admin_service.user_service,
+            "request_password_reset",
+            AsyncMock(return_value=_minted()),
+        ):
+            await admin_service.ensure_admin(mock_session, "new@example.com")
+
+        assert existing.tokens_valid_from >= before
+        assert str(mock_session.execute.call_args_list[2].args[0]).startswith(
+            "DELETE FROM oauth_accounts"
+        )
+
+    async def test_a_no_op_run_does_not_sign_the_admin_out(self, mock_session):
+        """`ensure-admin` on a healthy account is how an operator gets a fresh
+        link. Revoking there would sign them out of the console they are in."""
+        existing = _make_user_model(email="admin@studyaio.local")
+        mock_session.get = AsyncMock(return_value=existing)
+        _no_clash(mock_session)
+
+        with patch.object(
+            admin_service.user_service,
+            "request_password_reset",
+            AsyncMock(return_value=_minted()),
+        ):
+            await admin_service.ensure_admin(mock_session, "admin@studyaio.local")
+
+        assert existing.tokens_valid_from is None

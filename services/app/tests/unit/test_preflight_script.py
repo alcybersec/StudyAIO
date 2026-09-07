@@ -478,3 +478,71 @@ class TestPerUserProviderOverrides:
         )
         assert result.returncode == 0, result.stdout
         assert "Per-user provider overrides not checked" in result.stdout
+
+
+class TestMultiLineValues:
+    """A quoted value runs to its closing quote, not to the end of the line.
+
+    python-dotenv reads it that way, so a PEM private key or a pretty-printed
+    JSON blob is one value spanning several lines. `get_val` read a single
+    line, which handed every check below a fragment: not empty, so an "is it
+    set?" test passes, and a comparison then fails for a reason that appears
+    nowhere in the output (issue #60, item 4).
+
+    Nothing in `.env` is multi-line today. These pin the behaviour for the day
+    one is, because the failure is silent when it arrives.
+    """
+
+    def test_a_multi_line_value_is_read_whole(self, tmp_path):
+        """CORS_ORIGINS is the one check that echoes its value back, so it is
+        the one place the truncation is directly observable."""
+        text = _quoted_env_text(CORS_ORIGINS=None)
+        text += "CORS_ORIGINS='https://first.example.com\nhttps://second.example.com'\n"
+        result = _run(_write_raw_env(tmp_path, text))
+        assert "https://first.example.com" in result.stdout, result.stdout
+        assert "https://second.example.com" in result.stdout, result.stdout
+
+    def test_a_check_reads_the_continuation_lines_not_just_the_first(self, tmp_path):
+        """The headline case: truncation gives a *wrong answer*, not an error.
+
+        With `localhost` on the second line of a multi-line CORS_ORIGINS, a
+        one-line read sees only the production origin and reports [ OK ] — the
+        exact misconfiguration this check exists to catch, waved through.
+        """
+        text = _quoted_env_text(CORS_ORIGINS=None)
+        text += "CORS_ORIGINS='https://studyaio.example.com\nhttp://localhost:3001'\n"
+        result = _run(_write_raw_env(tmp_path, text))
+        assert any("[WARN]" in ln and "localhost" in ln for ln in result.stdout.splitlines()), (
+            result.stdout
+        )
+
+    def test_keys_after_a_multi_line_value_are_still_read(self, tmp_path):
+        """Guards the new reader rather than the old bug.
+
+        Spanning lines makes the reader stateful, and a stateful reader can
+        swallow the keys that follow the value it was collecting. Every check
+        after the multi-line block must still see its own key.
+        """
+        text = "PEM_LIKE_VALUE='<test-placeholder-line-1>\n<test-placeholder-line-2>'\n"
+        text += _quoted_env_text(SMTP_HOST=None, SMTP_FROM_EMAIL=None)
+        result = _run(_write_raw_env(tmp_path, text))
+        # SELF_HOSTED, REGISTRATION_MODE and the SMTP pair all sit after the
+        # multi-line value; the SMTP [FAIL] needs all of them read correctly.
+        assert any("[FAIL]" in ln and "SMTP" in ln for ln in result.stdout.splitlines())
+        assert any(
+            "[ OK ]" in ln and "REGISTRATION_MODE=invite" in ln for ln in result.stdout.splitlines()
+        ), result.stdout
+
+    def test_an_unterminated_quote_does_not_read_as_an_unset_key(self, tmp_path):
+        """Also a guard on the new reader, not a reproduction of the old bug.
+
+        A quote that is never closed leaves the line-spanning reader at EOF
+        with a half-collected value, and returning "" there would report the
+        key as *missing* — sending the operator to look for a line that is
+        right there in the file. It prints what it collected instead, so the
+        value fails a comparison loudly rather than vanishing.
+        """
+        text = _quoted_env_text(JWT_SECRET_KEY=None)
+        text += "JWT_SECRET_KEY='<test-placeholder-unterminated\n"
+        result = _run(_write_raw_env(tmp_path, text))
+        assert "JWT_SECRET_KEY is not set" not in result.stdout, result.stdout
