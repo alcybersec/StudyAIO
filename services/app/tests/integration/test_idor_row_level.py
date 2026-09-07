@@ -57,8 +57,12 @@ async def _stranger(db_session) -> str:
 async def _artifact(db_session, user_id: str, filename: str) -> LectureArtifact:
     """An artifact with content nobody else in the test has.
 
-    The digest has to be unique across the whole table, not merely per user --
-    see TestArtifactDigestUniquenessIsGlobal at the bottom of this file.
+    The digest is derived from the owner *and* the filename, so it is distinct
+    per row rather than merely per user. That was once forced on this helper by
+    the stale global UNIQUE(sha256); `c9d0e1f2g3h4` dropped it, and the digest
+    stays row-distinct anyway because these tests are about which rows a query
+    returns -- see TestArtifactDigestUniquenessIsPerUser at the bottom of this
+    file for the sharing case.
     """
     artifact = LectureArtifact(
         id=generate_id(),
@@ -309,42 +313,38 @@ class TestArtifactLookupIsScopedByRow:
 
 
 @pytest.mark.asyncio(loop_scope="session")
-class TestArtifactDigestUniquenessIsGlobal:
-    """A migration left `lecture_artifacts.sha256` globally unique.
+class TestArtifactDigestUniquenessIsPerUser:
+    """`lecture_artifacts.sha256` is unique per user, not globally.
 
-    `LectureArtifact.__table_args__` declares `UniqueConstraint("sha256",
-    "user_id")` -- per user, which is what a multi-tenant app needs. But the
-    migrated schema does not match the model: `c73364432b98` created the table
-    with a bare `sa.UniqueConstraint("sha256")` (Postgres names it
+    `LectureArtifact.__table_args__` has only ever declared
+    `UniqueConstraint("sha256", "user_id")`, and `artifact_service`'s dedup
+    query has only ever filtered on `(sha256, user_id)`. The migrated schema
+    used to disagree: `c73364432b98` created the table with a bare
+    `sa.UniqueConstraint("sha256")` (Postgres names it
     `lecture_artifacts_sha256_key`) *and* a unique index
-    `ix_lecture_artifacts_sha256`. The multi-tenant migration
-    `f7g8h9i0j1k2` drops the index and adds the per-user constraint -- and
-    never drops the table-level one. It is still there at head.
+    `ix_lecture_artifacts_sha256`. The multi-tenant migration `f7g8h9i0j1k2`
+    dropped the index and added the per-user constraint, but never dropped the
+    table-level one, so both were live at head and the second user to upload a
+    given file was refused -- a refusal that also disclosed that somebody else
+    held those exact bytes (issue #80).
 
-    So two users cannot both hold the same bytes. In a study app where a
-    lecturer's slide deck is downloaded by a whole cohort, the second uploader
-    gets an IntegrityError, and the failure itself discloses that somebody else
-    already has that exact file.
+    `c9d0e1f2g3h4` drops the stale constraint. These two tests are what proves
+    it: the first that the behaviour is fixed, the second that it was fixed by
+    the schema actually changing rather than by some unrelated shift in what
+    the insert does.
 
-    No test could see this before #56: `tests/unit` has no database, so it
-    tests the model's `__table_args__`, which are correct. Only the migrated
-    schema is wrong.
+    The other half of the rule -- that one user still cannot hold the same
+    digest twice -- is not retested here;
+    `test_db_constraints.TestArtifactConstraints.test_artifact_sha256_unique`
+    already covers it against the same schema, and it is what would catch this
+    revision dropping one constraint too many.
 
-    Marked `xfail(strict=True)` deliberately: the assertion below describes the
-    behaviour we want, so when the constraint is dropped this test starts
-    passing and strict xfail turns that into a failure -- which is the signal
-    to delete the marker. It is a pinned debt, not a resting place. Fixing it
-    is a migration, which does not belong in a test-coverage PR.
+    No test could see the original bug before #56: `tests/unit` has no
+    database, so it tests the model's `__table_args__`, which were correct all
+    along. Only the migrated schema was wrong, which is why this lives in the
+    integration suite -- it runs against a real `alembic upgrade head`.
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "lecture_artifacts_sha256_key survives at head: f7g8h9i0j1k2 drops "
-            "ix_lecture_artifacts_sha256 but not the table-level "
-            "UniqueConstraint('sha256') from c73364432b98"
-        ),
-    )
     async def test_two_users_can_hold_the_same_file(self, db_session, test_user_id):
         """The same digest under two owners must be two legal rows."""
         stranger_id = await _stranger(db_session)
@@ -365,11 +365,19 @@ class TestArtifactDigestUniquenessIsGlobal:
             )
         await db_session.flush()
 
-    async def test_the_stale_constraint_is_what_blocks_it(self, db_session):
-        """Name the constraint, so the xfail above cannot be blamed on something else.
+        owners = await db_session.execute(
+            sqlalchemy.select(LectureArtifact.user_id).where(LectureArtifact.sha256 == shared)
+        )
+        assert set(owners.scalars()) == {test_user_id, stranger_id}
 
-        Without this, a future unrelated IntegrityError would keep the xfail
-        green and hide the fact that the original one was fixed.
+    async def test_the_stale_constraint_is_gone_from_the_schema(self, db_session):
+        """Name the constraints, so the test above cannot pass for the wrong reason.
+
+        An insert of two rows can start succeeding for reasons that have
+        nothing to do with #80 -- a changed fixture, a rolled-back session, a
+        column that stopped being written. Asserting on `pg_constraint`
+        directly is what ties the green above to the migration: the global
+        rule is absent and the per-user one is still present.
         """
         rows = await db_session.execute(
             sqlalchemy.text(
@@ -382,9 +390,8 @@ class TestArtifactDigestUniquenessIsGlobal:
             "the per-user constraint the model declares is missing from the "
             f"migrated schema: {sorted(names)}"
         )
-        assert "lecture_artifacts_sha256_key" in names, (
-            "the stale global constraint is gone -- if the migration that drops "
-            "it has landed, remove the xfail on "
-            "test_two_users_can_hold_the_same_file too. Found: "
-            f"{sorted(names)}"
+        assert "lecture_artifacts_sha256_key" not in names, (
+            "the stale global UNIQUE(sha256) is back in the migrated schema -- "
+            "c9d0e1f2g3h4 drops it, so either that revision is not applied or "
+            f"something later re-added it. Found: {sorted(names)}"
         )
