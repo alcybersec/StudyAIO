@@ -173,25 +173,51 @@ async def login(
     # with no account is indistinguishable from one with an account.
     await login_throttle.apply_delay(body.email)
 
+    # Set only when a backup code was spent, so the response can tell the user
+    # how many are left. 0 is a real value here -- test against None, never
+    # truthiness, or the last code silently reports nothing.
+    backup_codes_remaining: int | None = None
+
     try:
         user = await user_service.authenticate_user(session, body.email, body.password)
 
-        # Check MFA if enabled
+        # Check MFA if enabled. Either second factor is accepted, and both are
+        # reached only after the password verified above: neither field is a way
+        # around the first factor.
         if user.mfa_enabled:
-            if not body.totp_code:
+            if body.totp_code:
+                if not user.mfa_secret or not verify_totp(user.mfa_secret, body.totp_code):
+                    raise AuthorizationError("Invalid MFA code")
+            elif body.backup_code:
+                backup_codes_remaining = await user_service.consume_backup_code(
+                    session, user, body.backup_code
+                )
+                if backup_codes_remaining is None:
+                    # Deliberately the same error as a wrong TOTP code. A caller
+                    # must not be able to tell a wrong recovery code from a
+                    # wrong authenticator code, from an account with no codes
+                    # left, or from an account that never enrolled any.
+                    raise AuthorizationError("Invalid MFA code")
+            else:
                 raise AuthorizationError("MFA code required")
-            if not user.mfa_secret or not verify_totp(user.mfa_secret, body.totp_code):
-                raise AuthorizationError("Invalid MFA code")
     except (AuthenticationError, AuthorizationError):
-        # A correct password with a wrong TOTP is still a failed attempt: an
-        # attacker holding the password must not get unlimited codes to guess.
+        # A correct password with a wrong second factor is still a failed
+        # attempt: an attacker holding the password must not get unlimited
+        # codes to guess. This covers backup codes too -- they are the weaker
+        # of the two factors on offer, so they need the throttle more.
         await login_throttle.record_failure(body.email)
         raise
 
     await login_throttle.clear(body.email)
     await session.commit()
     _set_auth_cookies(response, user)
-    return UserProfileResponse.model_validate(user)
+
+    profile = UserProfileResponse.model_validate(user)
+    if backup_codes_remaining is None:
+        return profile
+
+    logger.info("login_with_backup_code", user_id=user.id, remaining=backup_codes_remaining)
+    return profile.model_copy(update={"backup_codes_remaining": backup_codes_remaining})
 
 
 @router.post("/logout")
@@ -367,8 +393,19 @@ async def mfa_verify(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> dict:
-    """Verify TOTP code and enable MFA. Returns backup codes."""
-    backup_codes = await user_service.enable_mfa(session, user.id, body.totp_code, body.secret)
+    """Verify TOTP code and enable MFA. Returns backup codes, once.
+
+    The codes appear in this response and nowhere else -- only their hashes are
+    stored, so it cannot be reissued. Losing them is not a lockout: a user who
+    still has their authenticator can disable and re-enable MFA for a fresh set,
+    and one who has lost both needs an admin (`/admin/users/{id}/mfa-reset`).
+    """
+    try:
+        backup_codes = await user_service.enable_mfa(session, user.id, body.totp_code, body.secret)
+    except ValueError as exc:
+        # Refusing to re-enroll over live MFA is a client error, not a 500.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     await session.commit()
     return {"detail": "MFA enabled", "backup_codes": backup_codes}
 
