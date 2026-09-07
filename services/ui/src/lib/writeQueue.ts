@@ -6,9 +6,19 @@
  * worker's offline queue) and replayed FIFO with exponential backoff until
  * the server accepts them. 4xx responses are dropped with a warning — a bad
  * request will never succeed by retrying.
+ *
+ * Replay is scoped to the user who queued the write: rows are stamped with an
+ * owner and only the current session's rows are sent. See `queueOwner.ts`.
  */
 
-export interface QueuedWrite {
+import {
+  getQueueOwner,
+  selectDrainable,
+  type OwnedRow,
+  type QueueOwner,
+} from './queueOwner'
+
+export interface QueuedWrite extends OwnedRow {
   id?: number
   url: string
   method: string
@@ -91,12 +101,15 @@ interface WriteQueueOptions {
   fetchFn?: typeof fetch
   /** When true (default), failures schedule retries and 'online' triggers a flush. */
   autoFlush?: boolean
+  /** Who the current session belongs to; defaults to the persisted owner. */
+  getOwner?: () => Promise<QueueOwner>
 }
 
 export class WriteQueue {
   private storage: QueueStorage
   private fetchFn: typeof fetch
   private autoFlush: boolean
+  private getOwner: () => Promise<QueueOwner>
   private listeners = new Set<() => void>()
   private cachedSize = 0
   private backoffMs = 0
@@ -112,8 +125,8 @@ export class WriteQueue {
     this.storage = storage
     this.fetchFn = options.fetchFn ?? ((...args) => fetch(...args))
     this.autoFlush = options.autoFlush ?? true
-    this.readyPromise = this.storage
-      .count()
+    this.getOwner = options.getOwner ?? getQueueOwner
+    this.readyPromise = this.countOwn()
       .then((count) => {
         if (count !== this.cachedSize) {
           this.cachedSize = count
@@ -152,9 +165,30 @@ export class WriteQueue {
     for (const cb of this.listeners) cb()
   }
 
+  /**
+   * Rows the current session may replay. Rows belonging to another user are
+   * excluded from the count too: showing user B "3 queued" for user A's
+   * writes would be a lie, and `usePendingSync` would keep asking the service
+   * worker to replay rows it will never send.
+   */
+  private async countOwn(): Promise<number> {
+    const owner = await this.resolveOwner()
+    const rows = await this.storage.getAll()
+    return selectDrainable(rows, owner).length
+  }
+
+  /** Never throws — a failed lookup means "drain nothing", not "drain all". */
+  private async resolveOwner(): Promise<QueueOwner> {
+    try {
+      return await this.getOwner()
+    } catch {
+      return null
+    }
+  }
+
   private async refreshSize() {
     try {
-      this.cachedSize = await this.storage.count()
+      this.cachedSize = await this.countOwn()
     } catch {
       // keep last-known size
     }
@@ -164,7 +198,8 @@ export class WriteQueue {
   /** Persist a failed write for replay. Never throws. */
   async enqueue(req: { url: string; method: string; body: string }): Promise<void> {
     try {
-      await this.storage.add({ ...req, timestamp: Date.now() })
+      const owner = await this.resolveOwner()
+      await this.storage.add({ ...req, owner, timestamp: Date.now() })
       await this.refreshSize()
     } catch (err) {
       console.warn('writeQueue: failed to persist write', err)
@@ -176,13 +211,21 @@ export class WriteQueue {
   /**
    * Replay queued writes FIFO. Removes on 2xx, drops on 4xx (with warning),
    * keeps and backs off on 5xx/network failure.
+   *
+   * Only the current session's rows are replayed. Another user's rows are
+   * skipped and left untouched — they are that user's unsynced work, and
+   * sending them now would execute them under this session's cookies.
    */
   async flush(): Promise<void> {
     if (this.flushing) return
     this.flushing = true
     let failed = false
     try {
-      const rows = (await this.storage.getAll()).sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
+      const owner = await this.resolveOwner()
+      const rows = selectDrainable(
+        (await this.storage.getAll()).sort((a, b) => (a.id ?? 0) - (b.id ?? 0)),
+        owner,
+      )
       for (const row of rows) {
         let response: Response
         try {
