@@ -10,6 +10,7 @@ import { ShortcutOverlay } from '../ShortcutOverlay'
 import { ErrorBoundary } from '../ErrorBoundary'
 import { DemoBanner } from '../demo/DemoBanner'
 import { EmailVerificationBanner } from '../auth/EmailVerificationBanner'
+import { BackupCodeNotice } from '../auth/BackupCodeNotice'
 import { OnboardingTour } from '../tour/OnboardingTour'
 import { Toaster } from '../ui/Toast'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
@@ -103,6 +104,10 @@ export function AppLayout() {
 
         {/* Global toast notifications */}
         <Toaster />
+
+        {/* Reports remaining MFA backup codes after a sign-in that spent one.
+            Must live under the Toaster: the login page has none mounted. */}
+        <BackupCodeNotice />
 
         {/* PWA update notifications */}
         <PWAUpdateNotify />

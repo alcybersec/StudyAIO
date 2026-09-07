@@ -3,7 +3,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { AuthContext, type AuthContextValue } from '../contexts/AuthContext'
 import { authApi } from '../api/auth'
-import type { ChangePasswordRequest, MFAVerifyRequest, UpdateProfileRequest } from '../types'
+import type {
+  ChangePasswordRequest,
+  MFAVerifyRequest,
+  OAuthMFARequest,
+  UpdateProfileRequest,
+} from '../types'
 
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext)
@@ -49,6 +54,25 @@ export function useUpdateProfile() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (data: UpdateProfileRequest) => authApi.updateProfile(data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['auth', 'me'], data)
+    },
+  })
+}
+
+/**
+ * Complete an OAuth sign-in that stopped at the MFA challenge.
+ *
+ * `setQueryData`, matching the password login in AuthContext: the response is
+ * the signed-in profile, so seeding it is what makes the app consider the user
+ * authenticated. Deliberately not `invalidateQueries` — that would refetch
+ * `/auth/me` and leave a window where the challenge has succeeded but the app
+ * still reads as signed out.
+ */
+export function useOAuthMFA() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: OAuthMFARequest) => authApi.oauthMfa(data),
     onSuccess: (data) => {
       queryClient.setQueryData(['auth', 'me'], data)
     },
