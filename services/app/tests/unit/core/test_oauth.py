@@ -11,9 +11,31 @@ from app.core.oauth import (
     fetch_userinfo,
     generate_oauth_state,
     get_provider_config,
+    state_matches_cookie,
     store_oauth_state,
     validate_oauth_state,
 )
+
+# Not a credential: `fetch_userinfo` only carries the token through to a mocked
+# client, so a placeholder keeps a file of OAuth-shaped fixtures from tripping
+# secret scanners.
+PLACEHOLDER_TOKEN = "<test-placeholder>"
+
+
+def _mock_client(*responses):
+    """An AsyncOAuth2Client stand-in returning `responses` in order."""
+    mocks = []
+    for payload in responses:
+        resp = MagicMock()
+        resp.json.return_value = payload
+        resp.raise_for_status = MagicMock()
+        mocks.append(resp)
+
+    client = AsyncMock()
+    client.get = AsyncMock(side_effect=mocks)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    return client
 
 
 class TestGenerateOAuthState:
@@ -120,6 +142,34 @@ class TestBuildAuthorizeUrl:
         assert "prompt" not in url
 
 
+class TestStateMatchesCookie:
+    """#70: the state has to belong to *this* browser, not just to us.
+
+    Redis proves we minted the state. Only the cookie set alongside it proves
+    the browser presenting it at the callback is the one that started the flow
+    -- without which an attacker completes consent as themselves and lures the
+    victim to the callback URL to be signed into the attacker's account.
+    """
+
+    def test_matching_pair_passes(self):
+        assert state_matches_cookie("abc123", "abc123") is True
+
+    def test_mismatch_fails(self):
+        assert state_matches_cookie("abc123", "different") is False
+
+    def test_absent_cookie_fails(self):
+        """The whole attack: a state we really minted, in a browser we never
+        gave a cookie to."""
+        assert state_matches_cookie("abc123", None) is False
+        assert state_matches_cookie("abc123", "") is False
+
+    def test_absent_state_fails(self):
+        assert state_matches_cookie("", "abc123") is False
+
+    def test_empty_pair_does_not_pass_as_equal(self):
+        assert state_matches_cookie("", "") is False
+
+
 class TestValidProviders:
     def test_contains_google_and_github(self):
         assert "google" in VALID_PROVIDERS
@@ -188,6 +238,7 @@ class TestFetchUserInfo:
         google_data = {
             "sub": "google-uid-123",
             "email": "user@gmail.com",
+            "email_verified": True,
             "name": "Test User",
             "picture": "https://lh3.googleusercontent.com/photo.jpg",
         }
@@ -217,9 +268,11 @@ class TestFetchUserInfo:
         assert info.email == "user@gmail.com"
         assert info.name == "Test User"
         assert "googleusercontent.com" in info.avatar_url
+        assert info.email_verified is True
 
     @pytest.mark.asyncio
     async def test_github_userinfo_with_email(self):
+        """The profile email is used, but only once /user/emails confirms it."""
         github_data = {
             "id": 42,
             "email": "dev@github.com",
@@ -227,14 +280,9 @@ class TestFetchUserInfo:
             "login": "devuser",
             "avatar_url": "https://avatars.githubusercontent.com/u/42",
         }
-        mock_response = MagicMock()
-        mock_response.json.return_value = github_data
-        mock_response.raise_for_status = MagicMock()
+        github_emails = [{"email": "dev@github.com", "primary": True, "verified": True}]
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client = _mock_client(github_data, github_emails)
 
         with (
             patch(
@@ -247,11 +295,12 @@ class TestFetchUserInfo:
             ),
             patch("app.core.oauth.AsyncOAuth2Client", return_value=mock_client),
         ):
-            info = await fetch_userinfo("github", {"access_token": "tok"})
+            info = await fetch_userinfo("github", {"access_token": PLACEHOLDER_TOKEN})
 
         assert info.provider_user_id == "42"
         assert info.email == "dev@github.com"
         assert info.name == "Dev User"
+        assert info.email_verified is True
 
     @pytest.mark.asyncio
     async def test_github_userinfo_fallback_to_emails_endpoint(self):
@@ -291,7 +340,123 @@ class TestFetchUserInfo:
             ),
             patch("app.core.oauth.AsyncOAuth2Client", return_value=mock_client),
         ):
-            info = await fetch_userinfo("github", {"access_token": "tok"})
+            info = await fetch_userinfo("github", {"access_token": PLACEHOLDER_TOKEN})
 
         assert info.email == "primary@example.com"
         assert info.name == "ghostuser"  # Falls back to login
+        assert info.email_verified is True
+
+
+class TestProviderEmailVerification:
+    """#70: `fetch_userinfo` has to report whether the *provider* checked.
+
+    The address is what decides which account an identity lands in, so a
+    provider that will not vouch for it must not be reported as if it had.
+    """
+
+    _GITHUB_CONFIG = {
+        "client_id": "id",
+        "client_secret": "sec",
+        "userinfo_url": "https://api.github.com/user",
+    }
+    _GOOGLE_CONFIG = {
+        "client_id": "id",
+        "client_secret": "sec",
+        "userinfo_url": "https://googleapis.com/userinfo",
+    }
+
+    async def _fetch(self, provider, config, *responses):
+        client = _mock_client(*responses)
+        with (
+            patch("app.core.oauth.get_provider_config", return_value=config),
+            patch("app.core.oauth.AsyncOAuth2Client", return_value=client),
+        ):
+            return await fetch_userinfo(provider, {"access_token": PLACEHOLDER_TOKEN})
+
+    @pytest.mark.asyncio
+    async def test_google_email_verified_false_is_reported(self):
+        info = await self._fetch(
+            "google",
+            self._GOOGLE_CONFIG,
+            {"sub": "g-1", "email": "spoofed@example.com", "email_verified": False},
+        )
+        assert info.email == "spoofed@example.com"
+        assert info.email_verified is False
+
+    @pytest.mark.asyncio
+    async def test_google_missing_claim_is_unverified(self):
+        """Absent is not the same as true. Fail closed."""
+        info = await self._fetch(
+            "google",
+            self._GOOGLE_CONFIG,
+            {"sub": "g-2", "email": "nobody@example.com"},
+        )
+        assert info.email_verified is False
+
+    @pytest.mark.asyncio
+    async def test_github_unverified_profile_email_is_reported(self):
+        """`/user` carries no verification flag; `/user/emails` is the source.
+
+        A GitHub profile email need not be verified, and the old code took it
+        straight from `/user` as if it were.
+        """
+        info = await self._fetch(
+            "github",
+            self._GITHUB_CONFIG,
+            {"id": 7, "email": "unverified@example.com", "login": "someone"},
+            [{"email": "unverified@example.com", "primary": True, "verified": False}],
+        )
+        assert info.email == "unverified@example.com"
+        assert info.email_verified is False
+
+    @pytest.mark.asyncio
+    async def test_github_falls_through_to_a_verified_address(self):
+        """An unverified profile email must not cost a user their sign-in.
+
+        They have a confirmed address; use that one rather than reporting the
+        unconfirmed one and having the caller turn them away.
+        """
+        info = await self._fetch(
+            "github",
+            self._GITHUB_CONFIG,
+            {"id": 11, "email": "public@example.com", "login": "someone"},
+            [
+                {"email": "public@example.com", "primary": False, "verified": False},
+                {"email": "real@example.com", "primary": True, "verified": True},
+            ],
+        )
+        assert info.email == "real@example.com"
+        assert info.email_verified is True
+
+    @pytest.mark.asyncio
+    async def test_github_profile_email_absent_from_the_list_is_unverified(self):
+        """An address GitHub does not list at all cannot have been checked."""
+        info = await self._fetch(
+            "github",
+            self._GITHUB_CONFIG,
+            {"id": 8, "email": "typed-in@example.com", "login": "someone"},
+            [],
+        )
+        assert info.email == "typed-in@example.com"
+        assert info.email_verified is False
+
+    @pytest.mark.asyncio
+    async def test_github_emails_endpoint_failure_is_unverified_not_a_crash(self):
+        """Scope withheld, rate limit, outage -- refuse cleanly, do not 500."""
+        profile = MagicMock()
+        profile.json.return_value = {"id": 9, "email": "dev@example.com", "login": "someone"}
+        profile.raise_for_status = MagicMock()
+
+        client = AsyncMock()
+        client.get = AsyncMock(side_effect=[profile, RuntimeError("403 from /user/emails")])
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch("app.core.oauth.get_provider_config", return_value=self._GITHUB_CONFIG),
+            patch("app.core.oauth.AsyncOAuth2Client", return_value=client),
+        ):
+            info = await fetch_userinfo("github", {"access_token": PLACEHOLDER_TOKEN})
+
+        assert info.email == "dev@example.com"
+        assert info.email_verified is False

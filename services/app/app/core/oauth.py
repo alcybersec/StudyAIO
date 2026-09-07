@@ -32,6 +32,19 @@ VALID_PROVIDERS = frozenset({"google", "github"})
 STATE_TTL_SECONDS = 600  # 10 minutes
 STATE_KEY_PREFIX = "oauth:state:"
 
+# The state token is also mirrored into this cookie at redirect time and must
+# come back with the callback. Redis alone only proves *we* minted the state,
+# not that the browser now presenting it is the one that started the flow —
+# without the cookie an attacker can begin a flow, complete consent as
+# themselves, and lure the victim to the callback URL to be logged into the
+# attacker's account (login CSRF).
+#
+# SameSite must stay "lax": the callback is a cross-site top-level navigation
+# from the provider, which "strict" would not send the cookie on, breaking
+# every sign-in. The path scopes it to the two OAuth endpoints that use it.
+OAUTH_STATE_COOKIE = "oauth_state"
+OAUTH_STATE_COOKIE_PATH = "/api/auth/oauth"
+
 
 @dataclass
 class OAuthUserInfo:
@@ -41,11 +54,27 @@ class OAuthUserInfo:
     email: str
     name: str | None
     avatar_url: str | None
+    # Whether the *provider* vouches for the email above, not whether we do.
+    # Defaults to False so a provider branch that forgets to set it fails
+    # closed rather than silently asserting a verified address.
+    email_verified: bool = False
 
 
 def generate_oauth_state() -> str:
     """Generate a cryptographically random state token for CSRF protection."""
     return secrets.token_urlsafe(32)
+
+
+def state_matches_cookie(callback_state: str, cookie_state: str | None) -> bool:
+    """Check the callback's ``state`` against the cookie set at redirect time.
+
+    Both values must be present and identical. Compared with
+    ``compare_digest`` — the state is a secret for the length of one flow, and
+    a timing oracle on it would let it be recovered a byte at a time.
+    """
+    if not callback_state or not cookie_state:
+        return False
+    return secrets.compare_digest(callback_state, cookie_state)
 
 
 def get_provider_config(provider: str) -> dict[str, str]:
@@ -182,41 +211,84 @@ async def fetch_userinfo(provider: str, token: dict) -> OAuthUserInfo:
         data = resp.json()
 
         if provider == "google":
+            # `email_verified` sits right next to `email` in the userinfo
+            # response and is the only thing that makes the address mean
+            # anything. A Google Workspace admin can set an arbitrary address
+            # on a directory account, and the claim is how Google says whether
+            # it checked. Read it explicitly rather than assuming true.
             return OAuthUserInfo(
                 provider_user_id=str(data["sub"]),
                 email=data.get("email", ""),
                 name=data.get("name"),
                 avatar_url=data.get("picture"),
+                email_verified=bool(data.get("email_verified")),
             )
 
         # GitHub
-        email = data.get("email") or ""
-        if not email:
-            email = await _fetch_github_primary_email(client)
+        email, email_verified = await _resolve_github_email(client, data.get("email") or "")
 
         return OAuthUserInfo(
             provider_user_id=str(data["id"]),
             email=email,
             name=data.get("name") or data.get("login"),
             avatar_url=data.get("avatar_url"),
+            email_verified=email_verified,
         )
 
 
-async def _fetch_github_primary_email(client: AsyncOAuth2Client) -> str:
-    """Fetch the primary verified email from GitHub /user/emails endpoint."""
+async def _resolve_github_email(client: AsyncOAuth2Client, profile_email: str) -> tuple[str, bool]:
+    """Resolve a GitHub identity's email and whether GitHub verified it.
+
+    `/user`'s ``email`` field is the user's *public profile* email. GitHub does
+    not require it to be verified and returns no flag beside it, so it cannot
+    be trusted on its own — only ``/user/emails`` says which addresses were
+    confirmed. The profile value is therefore looked up in that list rather
+    than taken at face value, and the primary verified address is used when the
+    profile one is absent from the list or listed as unverified — a user who
+    publishes an unconfirmed address on their profile but has a confirmed one
+    should sign in as the confirmed one, not be turned away.
+
+    A failure to read ``/user/emails`` (the `user:email` scope withheld, say)
+    yields ``verified=False`` rather than an exception: the caller refuses an
+    unverified identity anyway, and a clean refusal beats a 500.
+
+    Returns:
+        (email, verified). ``verified`` is True only for an address GitHub
+        itself lists as verified.
+    """
+    try:
+        entries = await _fetch_github_emails(client)
+    except Exception:
+        logger.warning("github_emails_fetch_failed", exc_info=True)
+        entries = []
+
+    if profile_email:
+        for entry in entries:
+            if str(entry.get("email", "")).lower() == profile_email.lower():
+                if entry.get("verified"):
+                    return profile_email, True
+                break
+
+    # Prefer primary + verified
+    for entry in entries:
+        if entry.get("primary") and entry.get("verified"):
+            return entry["email"], True
+    # Fallback to any verified email
+    for entry in entries:
+        if entry.get("verified"):
+            return entry["email"], True
+
+    # Nothing verified. Hand back the profile address anyway so the caller can
+    # tell "no email at all" apart from "an email GitHub will not vouch for".
+    return profile_email, False
+
+
+async def _fetch_github_emails(client: AsyncOAuth2Client) -> list[dict]:
+    """Fetch the caller's addresses from GitHub /user/emails."""
     resp = await client.get("https://api.github.com/user/emails")
     resp.raise_for_status()
     emails = resp.json()
-
-    # Prefer primary + verified
-    for entry in emails:
-        if entry.get("primary") and entry.get("verified"):
-            return entry["email"]
-    # Fallback to any verified email
-    for entry in emails:
-        if entry.get("verified"):
-            return entry["email"]
-    return ""
+    return emails if isinstance(emails, list) else []
 
 
 # ── Redis state storage ─────────────────────────────────────────────

@@ -15,6 +15,7 @@ from app.api.auth_schemas import (
     MFADisableRequest,
     MFASetupResponse,
     MFAVerifyRequest,
+    OAuthMFARequest,
     RegisterRequest,
     ResetPasswordRequest,
     SessionEndedResponse,
@@ -27,8 +28,11 @@ from app.config import settings
 from app.core import login_throttle
 from app.core.auth import (
     ACCESS_TOKEN_COOKIE,
+    MFA_PENDING_COOKIE,
+    MFA_PENDING_TOKEN_EXPIRE_MINUTES,
     REFRESH_TOKEN_COOKIE,
     create_access_token,
+    create_mfa_pending_token,
     create_refresh_token,
     decode_token,
     is_token_invalidated,
@@ -38,15 +42,21 @@ from app.core.database import get_session
 from app.core.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    OAuthAccountLinkRequiredError,
+    OAuthEmailUnverifiedError,
     RegistrationClosedError,
     SessionRevokedError,
 )
 from app.core.oauth import (
+    OAUTH_STATE_COOKIE,
+    OAUTH_STATE_COOKIE_PATH,
+    STATE_TTL_SECONDS,
     VALID_PROVIDERS,
     build_authorize_url,
     exchange_code_for_token,
     fetch_userinfo,
     generate_oauth_state,
+    state_matches_cookie,
     store_oauth_state,
     validate_oauth_state,
 )
@@ -93,6 +103,58 @@ def _clear_auth_cookies(response: Response) -> None:
     """Clear auth cookies."""
     response.delete_cookie(ACCESS_TOKEN_COOKIE, path="/")
     response.delete_cookie(REFRESH_TOKEN_COOKIE, path="/")
+
+
+def _set_oauth_state_cookie(response: Response, state: str) -> None:
+    """Mirror the OAuth state into a short-lived cookie on this browser.
+
+    The pair is what binds the flow to one browser: Redis proves we minted the
+    state, the cookie proves the browser at the callback is the one we minted
+    it for. See ``app.core.oauth.OAUTH_STATE_COOKIE``.
+    """
+    response.set_cookie(
+        key=OAUTH_STATE_COOKIE,
+        value=state,
+        httponly=_COOKIE_HTTPONLY,
+        secure=settings.cookie_secure,
+        samesite=_COOKIE_SAMESITE,
+        path=OAUTH_STATE_COOKIE_PATH,
+        max_age=STATE_TTL_SECONDS,
+    )
+
+
+def _clear_oauth_state_cookie(response: Response) -> None:
+    """Drop the state cookie. Every exit from the callback does this."""
+    response.delete_cookie(OAUTH_STATE_COOKIE, path=OAUTH_STATE_COOKIE_PATH)
+
+
+def _oauth_failure_redirect(reason: str) -> RedirectResponse:
+    """Bounce back to the login page with a reason, clearing flow state.
+
+    Built through one helper so no failure path can forget the cookie: a state
+    left behind would be replayable for its full ten minutes.
+    """
+    redirect = RedirectResponse(url=f"/login?error={reason}", status_code=302)
+    _clear_oauth_state_cookie(redirect)
+    return redirect
+
+
+def _set_mfa_pending_cookie(response: Response, user: User) -> None:
+    """Hand the browser a half-finished sign-in awaiting its second factor."""
+    response.set_cookie(
+        key=MFA_PENDING_COOKIE,
+        value=create_mfa_pending_token(user.id),
+        httponly=_COOKIE_HTTPONLY,
+        secure=settings.cookie_secure,
+        samesite=_COOKIE_SAMESITE,
+        path="/",
+        max_age=MFA_PENDING_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
+def _clear_mfa_pending_cookie(response: Response) -> None:
+    """Drop the pending-MFA cookie."""
+    response.delete_cookie(MFA_PENDING_COOKIE, path="/")
 
 
 @router.get("/config")
@@ -434,8 +496,9 @@ async def mfa_disable(
 async def oauth_redirect(provider: str) -> Response:
     """Redirect the user to an OAuth provider's consent screen.
 
-    Generates a CSRF state token, stores it in Redis, and returns a
-    redirect to the provider's authorization URL.
+    Generates a CSRF state token, stores it in Redis, mirrors it into a
+    short-lived cookie so the callback can tell this browser from any other,
+    and returns a redirect to the provider's authorization URL.
     """
     if provider not in VALID_PROVIDERS:
         raise HTTPException(status_code=400, detail=f"Unknown OAuth provider: {provider}")
@@ -448,7 +511,9 @@ async def oauth_redirect(provider: str) -> Response:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     logger.info("oauth_redirect", provider=provider)
-    return RedirectResponse(url=url, status_code=302)
+    redirect = RedirectResponse(url=url, status_code=302)
+    _set_oauth_state_cookie(redirect, state)
+    return redirect
 
 
 @router.get("/oauth/{provider}/callback")
@@ -459,9 +524,10 @@ async def oauth_callback(
 ) -> Response:
     """Handle the OAuth provider callback after user consent.
 
-    Validates the state token, exchanges the authorization code for an
-    access token, fetches user info, creates or links the user account,
-    sets auth cookies, and redirects to the frontend.
+    Validates the state token against both Redis and the browser's state
+    cookie, exchanges the authorization code for an access token, fetches user
+    info, creates or links the user account, challenges MFA if the account has
+    it, and otherwise sets auth cookies and redirects to the frontend.
     """
     if provider not in VALID_PROVIDERS:
         raise HTTPException(status_code=400, detail=f"Unknown OAuth provider: {provider}")
@@ -473,10 +539,22 @@ async def oauth_callback(
 
     if error:
         logger.warning("oauth_callback_error", provider=provider, error=error)
-        return RedirectResponse(url="/login?error=oauth_failed", status_code=302)
+        return _oauth_failure_redirect("oauth_failed")
 
     if not code or not state:
-        return RedirectResponse(url="/login?error=oauth_failed", status_code=302)
+        return _oauth_failure_redirect("oauth_failed")
+
+    # Bind the state to *this* browser before spending the Redis entry. A state
+    # minted for someone else's browser is a login-CSRF attempt, not an expired
+    # flow, and consuming the Redis key on its behalf would be doing the
+    # attacker's cleanup for them.
+    if not state_matches_cookie(state, request.cookies.get(OAUTH_STATE_COOKIE)):
+        logger.warning(
+            "oauth_state_cookie_mismatch",
+            provider=provider,
+            cookie_present=OAUTH_STATE_COOKIE in request.cookies,
+        )
+        raise HTTPException(status_code=403, detail="Invalid or expired OAuth state")
 
     # Validate CSRF state
     if not await validate_oauth_state(state, provider):
@@ -496,29 +574,134 @@ async def oauth_callback(
                 detail=f"No email returned from {provider}. Check your account privacy settings.",
             )
 
-        # Create or link user
+        # Create or link user. `email_verified` is passed through rather than
+        # assumed: the service refuses to create or link on an address the
+        # provider will not vouch for.
         user = await user_service.create_or_link_oauth(
             session,
             provider=provider,
             provider_user_id=userinfo.provider_user_id,
             email=userinfo.email,
+            email_verified=userinfo.email_verified,
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             avatar_url=userinfo.avatar_url,
         )
         await session.commit()
 
+        # A second factor is a second factor whichever door the first one came
+        # through. The password path challenges TOTP before it sets cookies;
+        # skipping it here would mean anyone who took over the user's Google or
+        # GitHub account walked straight past the factor the user believes is
+        # protecting this one. There is nowhere to type a code inside a
+        # redirect, so the browser gets a pending-MFA token instead and
+        # finishes at POST /auth/oauth/mfa.
+        if user.mfa_enabled:
+            logger.info("oauth_mfa_challenge", provider=provider, user_id=user.id)
+            redirect = RedirectResponse(url="/login?mfa=required", status_code=302)
+            _clear_oauth_state_cookie(redirect)
+            _set_mfa_pending_cookie(redirect, user)
+            return redirect
+
         # Set cookies and redirect to dashboard
         redirect = RedirectResponse(url="/", status_code=302)
+        _clear_oauth_state_cookie(redirect)
         _set_auth_cookies(redirect, user)
         logger.info("oauth_login_success", provider=provider, user_id=user.id)
         return redirect
 
+    except OAuthEmailUnverifiedError:
+        logger.warning("oauth_email_unverified", provider=provider)
+        return _oauth_failure_redirect("oauth_email_unverified")
+    except OAuthAccountLinkRequiredError:
+        # Not a failure of the OAuth flow -- a deliberate refusal to link. The
+        # user has an account; they need to reach it with their password.
+        logger.warning("oauth_link_requires_password", provider=provider)
+        return _oauth_failure_redirect("oauth_account_exists")
     except HTTPException:
         raise
     except Exception:
         logger.exception("oauth_callback_failed", provider=provider)
-        return RedirectResponse(url="/login?error=oauth_failed", status_code=302)
+        return _oauth_failure_redirect("oauth_failed")
+
+
+@router.post("/oauth/mfa")
+@limiter.limit(lambda: "5/minute")
+async def oauth_mfa_complete(
+    request: Request,
+    body: OAuthMFARequest,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> UserProfileResponse:
+    """Finish an OAuth sign-in that the callback stopped to challenge MFA.
+
+    The pending-MFA cookie is the first factor, already proved against the
+    provider; this supplies the second. Nothing here can stand in for the
+    provider leg — the cookie names the user and cannot be minted by the
+    caller — so the two factors stay two factors.
+
+    Throttled per account as well as per address, like the password path: an
+    attacker holding a hijacked provider account must not get unlimited guesses
+    at the code that is supposed to stop them.
+    """
+    token = request.cookies.get(MFA_PENDING_COOKIE)
+    if not token:
+        raise AuthenticationError("No sign-in awaiting a second factor")
+
+    payload = decode_token(token)
+    if payload.get("type") != "mfa_pending":
+        raise AuthenticationError("Invalid token type")
+
+    user = await user_service.get_user_by_id(session, payload.get("sub"))
+    if not user or not user.is_active:
+        raise AuthenticationError("User not found or inactive")
+
+    # Disabling MFA, changing a password and an admin MFA reset all stamp
+    # `tokens_valid_from`, so a pending token that predates any of them is
+    # answering a challenge the account no longer has.
+    if is_token_invalidated(payload, user.tokens_valid_from):
+        _clear_mfa_pending_cookie(response)
+        raise SessionRevokedError("This sign-in expired; please start again")
+
+    if not user.mfa_enabled:
+        _clear_mfa_pending_cookie(response)
+        raise AuthenticationError("This sign-in expired; please start again")
+
+    await login_throttle.apply_delay(user.email)
+
+    backup_codes_remaining: int | None = None
+    try:
+        if body.totp_code:
+            if not user.mfa_secret or not verify_totp(user.mfa_secret, body.totp_code):
+                raise AuthorizationError("Invalid MFA code")
+        elif body.backup_code:
+            backup_codes_remaining = await user_service.consume_backup_code(
+                session, user, body.backup_code
+            )
+            if backup_codes_remaining is None:
+                # Same error as a wrong TOTP code, for the same reason as the
+                # password path: the caller must not learn which of the two
+                # kinds of code they got wrong, or that there are none left.
+                raise AuthorizationError("Invalid MFA code")
+        else:
+            raise AuthorizationError("MFA code required")
+    except AuthorizationError:
+        await login_throttle.record_failure(user.email)
+        raise
+
+    await login_throttle.clear(user.email)
+    await session.commit()
+
+    _clear_mfa_pending_cookie(response)
+    _set_auth_cookies(response, user)
+    logger.info("oauth_mfa_completed", user_id=user.id)
+
+    profile = UserProfileResponse.model_validate(user)
+    if backup_codes_remaining is None:
+        return profile
+
+    logger.info("oauth_login_with_backup_code", user_id=user.id, remaining=backup_codes_remaining)
+    return profile.model_copy(update={"backup_codes_remaining": backup_codes_remaining})
 
 
 DEMO_USER_ID = "00000000-0000-0000-0000-000000000002"
