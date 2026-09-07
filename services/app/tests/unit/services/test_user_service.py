@@ -8,7 +8,12 @@ import pytest
 from sqlalchemy import Update
 
 from app.core.auth import hash_magic_link_token
-from app.core.exceptions import AuthenticationError, AuthorizationError, UserExistsError
+from app.core.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    OAuthAccountLinkRequiredError,
+    UserExistsError,
+)
 from app.core.security import (
     generate_backup_codes,
     hash_backup_codes,
@@ -710,7 +715,11 @@ class TestClearMFA:
 
 
 class TestOAuth:
-    """OAuth account creation/linking."""
+    """OAuth account creation/linking.
+
+    The email-based half of this is gated since #70; the detail lives in
+    `test_user_service_oauth.py`.
+    """
 
     @pytest.mark.asyncio
     async def test_create_new_user_via_oauth(self):
@@ -721,13 +730,21 @@ class TestOAuth:
         session.execute.return_value = result_none
 
         user = await user_service.create_or_link_oauth(
-            session, "google", "goog-123", "new@example.com"
+            session, "google", "goog-123", "new@example.com", email_verified=True
         )
         assert user.email == "new@example.com"
         assert user.email_verified is True
 
     @pytest.mark.asyncio
-    async def test_link_existing_user_via_oauth(self):
+    async def test_link_existing_password_user_via_oauth_is_refused(self):
+        """#70: this used to assert the link succeeded.
+
+        `_make_user()` carries a password hash, so this was exactly the
+        pre-account-takeover shape -- an OAuth identity handed the session of a
+        password-backed account it had proved nothing about. The refusal is the
+        behaviour now; the passwordless account that *is* still linked is
+        covered in `test_user_service_oauth.py`.
+        """
         existing_user = _make_user()
         session = AsyncMock()
         # OAuth lookup: None, email lookup: existing user
@@ -737,10 +754,10 @@ class TestOAuth:
         result_user.scalar_one_or_none.return_value = existing_user
         session.execute.side_effect = [result_none, result_user]
 
-        user = await user_service.create_or_link_oauth(
-            session, "github", "gh-456", "test@example.com"
-        )
-        assert user.id == "user-001"
+        with pytest.raises(OAuthAccountLinkRequiredError):
+            await user_service.create_or_link_oauth(
+                session, "github", "gh-456", "test@example.com", email_verified=True
+            )
 
     @pytest.mark.asyncio
     async def test_oauth_no_email_raises(self):

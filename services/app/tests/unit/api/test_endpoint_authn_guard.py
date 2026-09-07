@@ -93,6 +93,10 @@ PUBLIC_BY_DESIGN: dict[str, str] = {
     "POST /api/auth/verify-email": "authenticates by the emailed single-use verification token",
     "GET /api/auth/oauth/{provider}": "starts the OAuth redirect; there is no session yet",
     "GET /api/auth/oauth/{provider}/callback": "OAuth callback, verified by the provider state token",
+    "POST /api/auth/oauth/mfa": (
+        "second leg of an OAuth sign-in; authenticates by the pending-MFA cookie the "
+        "callback issued, so there is no session cookie yet by construction"
+    ),
     "GET /api/auth/demo-login": "mints the shared demo session; inert unless DEMO_ENABLED",
     # Webhooks. Third parties cannot present a user cookie, so each carries its
     # own authentication — the check to keep an eye on is that one, not this.
