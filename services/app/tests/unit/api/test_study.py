@@ -12,8 +12,8 @@ from app.services.srs_service import StudyStats
 class TestGetDueCards:
     """Tests for GET /api/study/due."""
 
-    async def test_returns_due_cards(self, async_client):
-        """Returns flashcards due for review."""
+    async def test_returns_due_cards(self, async_client, default_test_user):
+        """Returns the caller's own flashcards due for review."""
         mock_card = MagicMock()
         mock_card.id = "fc-001"
         mock_card.course_id = "course-001"
@@ -30,7 +30,7 @@ class TestGetDueCards:
             "app.api.study.srs_service.get_due_cards",
             new_callable=AsyncMock,
             return_value=[mock_card],
-        ):
+        ) as mock_due:
             response = await async_client.get("/api/study/due?course_code=CSIT302&limit=10")
 
         assert response.status_code == 200
@@ -38,6 +38,9 @@ class TestGetDueCards:
         assert len(data) == 1
         assert data[0]["id"] == "fc-001"
         assert data[0]["front"] == "What is TCP?"
+        # course_code is caller-supplied, so an unscoped query would hand back
+        # another user's CSIT302 cards. The mock answers the same either way.
+        assert mock_due.await_args.kwargs.get("user_id") == default_test_user.id
 
     async def test_returns_empty_when_none_due(self, async_client):
         """Returns empty list when no cards due."""
@@ -139,13 +142,13 @@ class TestPostReview:
 class TestGetStats:
     """Tests for GET /api/study/stats."""
 
-    async def test_returns_stats(self, async_client):
-        """Returns study statistics."""
+    async def test_returns_stats(self, async_client, default_test_user):
+        """Returns study statistics over the caller's own cards."""
         with patch(
             "app.api.study.srs_service.get_study_stats",
             new_callable=AsyncMock,
             return_value=StudyStats(total=20, due_today=5, mastered=8, learning=7, new=5),
-        ):
+        ) as mock_stats:
             response = await async_client.get("/api/study/stats?course_code=CSIT302")
 
         assert response.status_code == 200
@@ -155,6 +158,7 @@ class TestGetStats:
         assert data["mastered"] == 8
         assert data["learning"] == 7
         assert data["new"] == 5
+        assert mock_stats.await_args.kwargs.get("user_id") == default_test_user.id
 
     async def test_stats_no_filter(self, async_client):
         """Stats work without course/week filters (global stats)."""

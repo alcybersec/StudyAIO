@@ -212,22 +212,27 @@ class TestDownloadCourseDocument:
 class TestPreviewArtifact:
     """Tests for GET /api/files/uploads/artifacts/{id}/preview (pptx/docx → pdf)."""
 
-    async def test_pptx_preview_serves_converted_pdf(self, async_client, tmp_path):
+    async def test_pptx_preview_serves_converted_pdf(
+        self, async_client, tmp_path, default_test_user
+    ):
         pdf_file = tmp_path / "converted.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 converted")
         art = AsyncMock()
         art.file_type = "pptx"
         art.file_path = "uploads/x.pptx"
+        mock_ensure = AsyncMock(return_value=str(pdf_file))
         with (
-            patch("app.api.files.artifact_service.get_artifact", return_value=art),
-            patch(
-                "app.services.preview_service.ensure_preview_pdf",
-                new=AsyncMock(return_value=str(pdf_file)),
-            ),
+            patch("app.api.files.artifact_service.get_artifact", return_value=art) as mock_get,
+            patch("app.services.preview_service.ensure_preview_pdf", new=mock_ensure),
         ):
             response = await async_client.get("/api/files/uploads/artifacts/a1/preview")
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("application/pdf")
+        # Both id-addressed lookups carry the caller. The conversion cache is
+        # keyed on artifact_id, so an unscoped ensure_preview_pdf would serve a
+        # rendered copy of another user's deck even once get_artifact was fixed.
+        assert mock_get.await_args.kwargs.get("user_id") == default_test_user.id
+        assert mock_ensure.await_args.kwargs.get("user_id") == default_test_user.id
 
     async def test_pdf_preview_serves_original(self, async_client, tmp_path):
         pdf_file = tmp_path / "orig.pdf"

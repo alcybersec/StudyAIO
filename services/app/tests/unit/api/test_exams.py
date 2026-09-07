@@ -343,8 +343,8 @@ class TestQuizAttempt:
 class TestGetStreak:
     """Tests for GET /api/study/streak."""
 
-    async def test_returns_streak(self, async_client):
-        """Returns streak data."""
+    async def test_returns_streak(self, async_client, default_test_user):
+        """Returns the caller's own streak data."""
         with patch(
             "app.api.study.streak_service.get_streak",
             new_callable=AsyncMock,
@@ -353,10 +353,13 @@ class TestGetStreak:
                 "longest_streak": 12,
                 "last_study_date": "2026-03-03",
             },
-        ):
+        ) as mock_streak:
             response = await async_client.get("/api/study/streak")
 
         assert response.status_code == 200
         data = response.json()
         assert data["current_streak"] == 5
         assert data["longest_streak"] == 12
+        # course_id is a caller-supplied query parameter, so the streak has to
+        # be computed over this user's sessions and not whoever owns that course.
+        assert mock_streak.await_args.kwargs.get("user_id") == default_test_user.id

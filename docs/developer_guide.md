@@ -149,15 +149,26 @@ make ingest path=/path/to/test.pdf
    # app/api/my_resource.py
    from fastapi import APIRouter, Depends
    from sqlalchemy.ext.asyncio import AsyncSession
+   from app.api.deps import get_current_user_or_default
    from app.core.database import get_session
+   from app.models.user import User
 
    router = APIRouter(prefix="/api/my-resource", tags=["My Resource"])
 
    @router.get("")
-   async def list_items(session: AsyncSession = Depends(get_session)):
-       # Call service layer — keep routes thin
-       return await my_service.list_items(session)
+   async def list_items(
+       user: User = Depends(get_current_user_or_default),
+       session: AsyncSession = Depends(get_session),
+   ):
+       # Call service layer — keep routes thin, and pass the caller's identity
+       # into every lookup that touches user-owned data.
+       return await my_service.list_items(session, user_id=user.id)
    ```
+
+   The identity dependency is not optional: `test_endpoint_authn_guard.py` walks
+   every route and fails on one that answers an anonymous caller. Anything that
+   resolves an id out of the path or query must additionally carry `user_id`
+   into the lookup — see [Owner-Scoped Endpoints](#owner-scoped-endpoints-assert-the-wiring).
 
 2. Register the router in `app/main.py`:
    ```python
@@ -167,7 +178,9 @@ make ingest path=/path/to/test.pdf
 
 3. Add Pydantic schemas in `app/api/schemas.py`.
 
-4. Write tests in `tests/unit/api/test_my_resource.py`.
+4. Write tests in `tests/unit/api/test_my_resource.py`. If the endpoint is
+   owner-scoped, the test must assert the *wiring* and not only the status code
+   — see [Owner-Scoped Endpoints](#owner-scoped-endpoints-assert-the-wiring).
 
 ### Adding a Pipeline Stage
 
@@ -320,6 +333,61 @@ async def test_list_courses(async_client, mock_session):
 **Integration tests use SAVEPOINT isolation** — each test runs in a transaction that rolls back, so tests don't affect each other.
 
 **Golden tests validate structure, not content** — they verify that extractors produce correct manifest schemas, summaries contain all 8 sections, and assets have required fields.
+
+### Owner-Scoped Endpoints: Assert the Wiring
+
+Any endpoint that resolves a request-supplied id must thread the caller's
+identity into the lookup, and **its test must assert that it did**:
+
+```python
+async def test_get_exam_progress_404_for_other_user(async_client, default_test_user):
+    async def scoped(session, exam_id, user_id=None):
+        return {"id": exam_id} if user_id == OWNER_A else None
+
+    mock = AsyncMock(side_effect=scoped)
+    with patch("app.api.exams.exam_service.get_exam_progress", new=mock):
+        response = await async_client.get("/api/exams/exam-owned-by-a")
+
+    assert response.status_code == 404
+    assert mock.await_args.kwargs.get("user_id") == default_test_user.id   # ← load-bearing
+```
+
+The status assertion on its own passes with the fix reverted: the mock returns
+`None` whichever id it is handed, so a completely unscoped endpoint still 404s.
+Every revert check run during the #47/#53/#58 fixes showed the same pair —
+`assert response.status_code == 404` green, the wiring line red. Where the
+identity is passed positionally, assert on `mock.await_args.args[n]` instead.
+`tests/unit/api/test_scoped_api.py` and `tests/unit/api/test_idor_scoping.py`
+are the worked examples.
+
+Two traps this has actually sprung:
+
+- **A mention of `user.id` is not scoping.** Before #53, `resolve_review_item`
+  passed `user_id=user.id` to `resume_pipeline` for logging while looking the
+  review item itself up unscoped. Assert on the mock for *the lookup*, not on
+  the handler's source and not on some other call it happens to make.
+- **A status code with several causes proves nothing.**
+  `test_dismiss_already_resolved_returns_400` was passing on a 400 raised by an
+  ownership miss, not by the already-resolved branch it exists to cover
+  (#58/PR #62). Where a status has more than one cause, assert the cause — the
+  `detail` string, or a fixture arranged so only the branch under test can fire.
+
+Three structural guards cover the endpoints nobody has written yet, and will
+fail a PR that adds an unprotected route:
+
+| Guard | Question it asks |
+|---|---|
+| `tests/unit/api/test_endpoint_authn_guard.py` | does this route require a caller at all? |
+| `tests/unit/api/test_endpoint_scoping_guard.py` | does an id-addressed lookup carry the caller's identity? |
+| `tests/unit/api/test_subscription_scoping_guard.py` | is the pub/sub channel it subscribes to the caller's own? |
+
+The guards prove an identity is passed. The per-endpoint wiring assertion is
+what proves it is the *right* one, so both are needed.
+
+**Verify a new wiring assertion by reverting the fix.** Strip the
+`user_id=user.id` from the endpoint, run the test, and confirm it fails on the
+wiring line and not on the status line. An assertion nobody has watched fail is
+worth nothing.
 
 ---
 
