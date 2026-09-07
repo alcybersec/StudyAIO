@@ -183,6 +183,12 @@ def find_backup_code_hash(code: str, stored_hashes: Iterable[str]) -> str | None
     candidate = hash_backup_code(code)
     matched: str | None = None
     for stored in stored_hashes:
+        if not isinstance(stored, str) or not stored.isascii():
+            # `compare_digest` raises TypeError on a non-ASCII str, which on the
+            # login path would be a 500. A value of that shape was not written
+            # by us and could never match a digest anyway, so skip it. Same
+            # fail-closed posture as the column checks in `consume_backup_code`.
+            continue
         if hmac.compare_digest(candidate, stored):
             matched = stored
     return matched

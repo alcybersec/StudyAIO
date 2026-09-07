@@ -165,6 +165,14 @@ class TestFindBackupCodeHash:
         code = generate_backup_codes(count=1)[0]
         assert find_backup_code_hash(code, []) is None
 
+    def test_a_junk_stored_value_does_not_crash_the_login_path(self):
+        """`compare_digest` raises on a non-ASCII str; a 500 at login is worse."""
+        codes = generate_backup_codes(count=2)
+        polluted = ["\u2014 not a digest", *hash_backup_codes(codes)]
+
+        assert find_backup_code_hash(codes[1], polluted) == hash_backup_code(codes[1])
+        assert find_backup_code_hash(generate_backup_codes(count=1)[0], polluted) is None
+
 
 class TestQRCode:
     """QR code generation."""
