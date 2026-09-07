@@ -1,6 +1,8 @@
-import { createContext, useCallback, type ReactNode } from 'react'
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
+import { createContext, useCallback, useEffect, type ReactNode } from 'react'
+import { useQuery, useQueryClient, useMutation, type QueryClient } from '@tanstack/react-query'
 import { authApi } from '../api/auth'
+import { SELF_HOSTED_OWNER, type QueueOwner } from '../lib/queueOwner'
+import { reconcileSession } from '../lib/sessionScope'
 import type { AuthConfig, AuthUser, LoginRequest, RegisterRequest } from '../types'
 
 export interface AuthContextValue {
@@ -17,6 +19,29 @@ export interface AuthContextValue {
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext<AuthContextValue | null>(null)
+
+/**
+ * Purge everything the browser is holding for the previous identity: the
+ * service worker's per-user API caches, the offline write queue's ownership
+ * marker, and react-query's in-memory data.
+ *
+ * Auth queries are deliberately left alone. Clearing `['auth', 'config']`
+ * would make `isSelfHosted` fall back to `true` for a frame, which reads as
+ * "authenticated" and would keep a signed-out user inside the app.
+ *
+ * `resetQueries`, not `removeQueries`: removing a query that still has mounted
+ * observers drops it from the cache underneath them. `resetQueries` clears the
+ * data — which is the whole point here — and lets the observers refetch
+ * cleanly. `reconcileSession` also guarantees this never runs on a first page
+ * load, where there is no previous identity and nothing to purge.
+ */
+function purgeSessionState(identity: QueueOwner, queryClient: QueryClient) {
+  return reconcileSession(identity, {
+    onIdentityChange: () => {
+      void queryClient.resetQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
+    },
+  })
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
@@ -78,11 +103,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await logoutMutation.mutateAsync()
-  }, [logoutMutation])
+    // Awaited here so the caller can navigate knowing the purge is done. The
+    // effect below would catch this too; `reconcileSession` is serialised and
+    // no-ops on the second call.
+    await purgeSessionState(null, queryClient)
+  }, [logoutMutation, queryClient])
 
   const isLoading = configLoading || (!isSelfHosted && userLoading)
   const isAuthenticated = !!user || isSelfHosted
   const isDemo = user?.role === 'demo'
+
+  // Keep persisted browser state tied to whoever is signed in.
+  //
+  // This watches the identity rather than hooking the logout button, because
+  // most sessions end without anyone clicking logout — the refresh token
+  // lapses, or an admin revokes it, and `['auth', 'me']` simply stops
+  // resolving to a user. That path has to purge too, otherwise the hole this
+  // closes stays open for the common case.
+  //
+  // `isLoading` gates it so the undefined-while-fetching state of the `me`
+  // query is not mistaken for a sign-out, which would wipe the offline caches
+  // on every page load.
+  const identity: QueueOwner = isSelfHosted ? SELF_HOSTED_OWNER : (user?.id ?? null)
+  useEffect(() => {
+    if (isLoading) return
+    void purgeSessionState(identity, queryClient)
+  }, [isLoading, identity, queryClient])
 
   return (
     <AuthContext.Provider
