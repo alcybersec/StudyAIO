@@ -7,6 +7,7 @@ import {
   CacheFirst,
 } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
+import { getQueueOwner, selectDrainable, type OwnedRow } from './lib/queueOwner'
 
 declare const self: ServiceWorkerGlobalScope
 
@@ -55,6 +56,20 @@ registerRoute(
 )
 
 // ── Extraction images — CacheFirst (immutable) ──────────────
+//
+// DEAD CODE, AND THE ORDERING IS LOAD-BEARING. Workbox returns on the first
+// matching route, and the general `/api/` NetworkFirst route above is
+// registered first, so it matches these URLs and this route never runs.
+// Extraction images are therefore served by NetworkFirst out of `api-general`
+// (1 hour), not CacheFirst out of `extraction-images` (7 days).
+//
+// Moving this registration above the `/api/` route looks like an obvious
+// tidy-up. It is not: it turns a 1-hour, network-checked cache of one user's
+// lecture images into a 7-day, network-free one. Before this ordering is
+// changed, confirm that `extraction-images` is still in `PER_USER_CACHES` in
+// `lib/sessionScope.ts` — that purge on every identity change is the only
+// thing keeping the longer-lived cache from being readable by the next person
+// to sign in on a shared browser (issue #73).
 registerRoute(
   ({ url }) => url.pathname.startsWith('/api/files/extractions/'),
   new CacheFirst({
@@ -91,7 +106,7 @@ function openDB(): Promise<IDBDatabase> {
   })
 }
 
-interface QueuedMutation {
+interface QueuedMutation extends OwnedRow {
   id?: number
   url: string
   method: string
@@ -109,14 +124,28 @@ async function enqueue(mutation: Omit<QueuedMutation, 'id'>): Promise<void> {
   })
 }
 
-async function drainQueue(): Promise<number> {
+async function getAllMutations(): Promise<QueuedMutation[]> {
   const db = await openDB()
-  const mutations: QueuedMutation[] = await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
     const req = tx.objectStore(STORE_NAME).getAll()
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => resolve(req.result as QueuedMutation[])
     req.onerror = () => reject(req.error)
   })
+}
+
+/**
+ * Replay queued mutations for the session currently signed in.
+ *
+ * These go out with `credentials: 'same-origin'`, so they execute as whoever
+ * holds the cookie right now. Rows queued by a different user are skipped and
+ * left in place — replaying them here would attribute one user's writes to
+ * another (issue #73).
+ */
+async function drainQueue(): Promise<number> {
+  const db = await openDB()
+  const owner = await getQueueOwner()
+  const mutations = selectDrainable(await getAllMutations(), owner)
 
   let replayed = 0
   for (const m of mutations) {
@@ -144,14 +173,14 @@ async function drainQueue(): Promise<number> {
   return replayed
 }
 
+/**
+ * Pending writes *for the current session*. Counting another user's rows here
+ * would show the wrong person a pending badge and make `usePendingSync` ask
+ * for a replay that can never drain them.
+ */
 async function getPendingCount(): Promise<number> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly')
-    const req = tx.objectStore(STORE_NAME).count()
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
+  const owner = await getQueueOwner()
+  return selectDrainable(await getAllMutations(), owner).length
 }
 
 // ── Intercept offline mutations ─────────────────────────────
@@ -182,6 +211,9 @@ self.addEventListener('fetch', (event: FetchEvent) => {
         method: request.method,
         body,
         timestamp: Date.now(),
+        // Stamped so this write can only ever be replayed as the user who
+        // made it, however long it sits in the queue (issue #73).
+        owner: await getQueueOwner(),
       })
 
       // Notify clients about pending count
