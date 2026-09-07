@@ -1,5 +1,5 @@
 # Build container images and push to GHCR.
-# Triggered on version tags (v*) and pushes to main.
+# Triggered on version tags (v*) and pushes to main — and nothing else.
 
 name: Build & Deploy
 
@@ -7,12 +7,13 @@ on:
   push:
     tags:
       - 'v*'
-    # develop is deliberately absent: only main/tags deploy (see the `if` on
-    # deploy-selfhosted), so building images for develop only queued work on the
-    # single self-hosted runner that real deploys were waiting behind.
+    # Only main deploys. develop is deliberately absent: building images for it
+    # only queued work on the single self-hosted runner that real deploys were
+    # waiting behind. master is deliberately absent too, and must stay that way:
+    # it is hundreds of commits stale, so a push there would have shipped a
+    # production rollback of every fix merged since (issue #68).
     branches:
       - main
-      - master
     paths:
       - 'services/**'
       - 'infra/**'
@@ -123,8 +124,40 @@ jobs:
     # Deploy on every push to main (or a version tag). The server runs the
     # production overlay (docker-compose.prod.yml) behind Caddy and pulls the
     # GHCR images CI just built — it never builds locally.
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    #
+    # There is deliberately no job-level `if:` on the ref here. A job-level
+    # condition that does not match makes the job *skip*, which reports as a
+    # green run — an unintended ref would look like a successful deploy. The
+    # first step below asserts the ref in shell instead, so a wrong ref is a
+    # red, self-explaining failure.
     steps:
+      # Ref guard — runs before checkout, before touching the server, before
+      # anything. Reads only the ref/event contexts, via env so a branch name
+      # can never be interpolated into the script itself.
+      - name: Verify deploy ref
+        env:
+          EXPECTED_BRANCH: main
+          ACTUAL_REF: ${{ github.ref }}
+          ACTUAL_REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "${ACTUAL_REF}" = "refs/heads/${EXPECTED_BRANCH}" ]; then
+            echo "Ref guard passed: branch '${ACTUAL_REF_NAME}' (event: ${EVENT_NAME})."
+            exit 0
+          fi
+          case "${ACTUAL_REF}" in
+            refs/tags/v*)
+              echo "Ref guard passed: version tag '${ACTUAL_REF_NAME}' (event: ${EVENT_NAME})."
+              exit 0
+              ;;
+          esac
+          echo "::error title=Deploy ref guard::Refusing to deploy from '${ACTUAL_REF}'"
+          echo "Expected : refs/heads/${EXPECTED_BRANCH}, or a refs/tags/v* version tag"
+          echo "Got      : ${ACTUAL_REF} (ref_name='${ACTUAL_REF_NAME}', event='${EVENT_NAME}')"
+          echo "Nothing was copied to the server and no containers were touched."
+          exit 1
+
       - name: Fix workspace permissions
         run: docker run --rm -v "${{ github.workspace }}:/__w" alpine chown -R $(id -u):$(id -g) /__w || true
 
