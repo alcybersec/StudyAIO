@@ -111,15 +111,29 @@ def ingest_file(self, input_value: str | dict) -> dict:
     )
     # Uploads always pass the real id here. Only a caller that has not created
     # the artifact yet falls back to the placeholder, which no client filters on.
-    publish_pipeline_event_sync(known_artifact_id or "pending", "ingest", "started")
+    publish_pipeline_event_sync(
+        known_artifact_id or "pending", "ingest", "started", user_id=user_id
+    )
     try:
         result = run_async(_ingest(file_path, user_id=user_id, artifact_id=known_artifact_id))
         artifact_id = result.get("artifact_id") or known_artifact_id or "unknown"
-        publish_pipeline_event_sync(artifact_id, "ingest", result.get("status", "completed"))
+        publish_pipeline_event_sync(
+            artifact_id, "ingest", result.get("status", "completed"), user_id=user_id
+        )
         return result
     except (DuplicateFileError, FileNotFoundError, ValueError):
         raise  # Don't retry on expected errors
     except Exception as exc:
-        logger.error("ingest_task_error", error=str(exc))
-        publish_pipeline_event_sync(known_artifact_id or "unknown", "ingest", "failed", str(exc))
+        # The exception text stays operator-side: it can carry storage paths
+        # and filenames, and the published event goes to a client.
+        logger.error(
+            "ingest_task_error",
+            error=str(exc),
+            artifact_id=known_artifact_id,
+            file_path=file_path,
+            user_id=user_id,
+        )
+        publish_pipeline_event_sync(
+            known_artifact_id or "unknown", "ingest", "failed", user_id=user_id
+        )
         raise self.retry(exc=exc) from exc

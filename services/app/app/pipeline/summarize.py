@@ -223,15 +223,19 @@ def summarize_artifact(self, input_value: str | dict) -> dict:
         raise SummarizationError("No artifact_id provided")
 
     logger.info("summarize_task_started", artifact_id=artifact_id, user_id=user_id)
-    publish_pipeline_event_sync(artifact_id, "summarize", "started")
+    publish_pipeline_event_sync(artifact_id, "summarize", "started", user_id=user_id)
     try:
         result = run_async(_summarize(artifact_id, user_id=user_id))
-        publish_pipeline_event_sync(artifact_id, "summarize", result.get("status", "completed"))
+        publish_pipeline_event_sync(
+            artifact_id, "summarize", result.get("status", "completed"), user_id=user_id
+        )
         return result
     except (SummarizationError, AgentError):
-        publish_pipeline_event_sync(artifact_id, "summarize", "failed")
+        publish_pipeline_event_sync(artifact_id, "summarize", "failed", user_id=user_id)
         raise  # Don't retry on summarization/agent errors
     except Exception as exc:
+        # str(exc) stays operator-side: it can carry filenames and storage
+        # paths, and the published event is client-facing (#69).
         logger.error("summarize_task_error", error=str(exc), artifact_id=artifact_id)
-        publish_pipeline_event_sync(artifact_id, "summarize", "failed", str(exc))
+        publish_pipeline_event_sync(artifact_id, "summarize", "failed", user_id=user_id)
         raise self.retry(exc=exc) from exc

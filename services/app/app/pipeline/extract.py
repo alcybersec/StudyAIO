@@ -198,15 +198,19 @@ def extract_artifact(self, input_value: str | dict) -> dict:
         raise ExtractionError("No artifact_id provided")
 
     logger.info("extract_task_started", artifact_id=artifact_id, user_id=user_id)
-    publish_pipeline_event_sync(artifact_id, "extract", "started")
+    publish_pipeline_event_sync(artifact_id, "extract", "started", user_id=user_id)
     try:
         result = run_async(_extract(artifact_id, user_id=user_id))
-        publish_pipeline_event_sync(artifact_id, "extract", result.get("status", "completed"))
+        publish_pipeline_event_sync(
+            artifact_id, "extract", result.get("status", "completed"), user_id=user_id
+        )
         return result
     except ExtractionError:
-        publish_pipeline_event_sync(artifact_id, "extract", "failed")
+        publish_pipeline_event_sync(artifact_id, "extract", "failed", user_id=user_id)
         raise  # Don't retry on extraction errors
     except Exception as exc:
+        # str(exc) stays operator-side: it can carry filenames and storage
+        # paths, and the published event is client-facing (#69).
         logger.error("extract_task_error", error=str(exc), artifact_id=artifact_id)
-        publish_pipeline_event_sync(artifact_id, "extract", "failed", str(exc))
+        publish_pipeline_event_sync(artifact_id, "extract", "failed", user_id=user_id)
         raise self.retry(exc=exc) from exc
