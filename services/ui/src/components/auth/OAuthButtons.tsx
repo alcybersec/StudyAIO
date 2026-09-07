@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 
 interface OAuthButtonsProps {
   providers: string[]
-  error?: string | null
 }
 
 const providerLabels: Record<string, string> = {
@@ -38,7 +37,7 @@ const providerIcons: Record<string, React.ReactNode> = {
   ),
 }
 
-export function OAuthButtons({ providers, error }: OAuthButtonsProps) {
+export function OAuthButtons({ providers }: OAuthButtonsProps) {
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
 
   if (providers.length === 0) return null
@@ -58,7 +57,6 @@ export function OAuthButtons({ providers, error }: OAuthButtonsProps) {
           <span className="bg-surface-1 px-2 text-text-muted">or continue with</span>
         </div>
       </div>
-      {error && <p className="text-sm text-red-fg text-center">{error}</p>}
       {providers.map((provider) => (
         <button
           key={provider}

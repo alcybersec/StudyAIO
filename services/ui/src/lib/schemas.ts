@@ -121,13 +121,39 @@ export type PipelineSettingsFormData = z.infer<typeof pipelineSettingsSchema>
 
 // ── Auth (D10) ─────────────────────────────────────────────────
 
+/**
+ * The server caps a backup code at 64 characters on purpose: it has to hold
+ * the dashes and stray spaces people type when copying one off paper. The
+ * form mirrors that cap rather than the 19 characters of a pristine
+ * `XXXX-XXXX-XXXX-XXXX`, so a slightly untidy paste is still accepted.
+ */
+export const BACKUP_CODE_MAX_LENGTH = 64
+
 export const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
   totp_code: z.string().optional(),
+  /**
+   * Deliberately unvalidated beyond a length cap. The server owns backup-code
+   * normalisation (dashes are cosmetic, I/L fold onto 1 and O onto 0); a
+   * client-side format rule could only ever reject a code the server would
+   * have accepted.
+   */
+  backup_code: z.string().max(BACKUP_CODE_MAX_LENGTH).optional(),
 })
 
 export type LoginFormData = z.infer<typeof loginSchema>
+
+/**
+ * The OAuth second-factor challenge. No email or password: the provider leg is
+ * already done and is carried by the pending-MFA cookie.
+ */
+export const oauthMfaSchema = z.object({
+  totp_code: z.string().optional(),
+  backup_code: z.string().max(BACKUP_CODE_MAX_LENGTH).optional(),
+})
+
+export type OAuthMFAFormData = z.infer<typeof oauthMfaSchema>
 
 export const registerSchema = z
   .object({
