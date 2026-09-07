@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WriteQueue, type QueueStorage, type QueuedWrite } from './writeQueue'
+import { SELF_HOSTED_OWNER, type QueueOwner } from './queueOwner'
+
+const OWNER = 'user-a'
 
 function createMemoryStorage(): QueueStorage & { rows: QueuedWrite[] } {
   let nextId = 1
@@ -47,7 +50,11 @@ describe('WriteQueue', () => {
     vi.useFakeTimers()
     storage = createMemoryStorage()
     fetchMock = vi.fn()
-    queue = new WriteQueue(storage, { fetchFn: fetchMock as typeof fetch, autoFlush: false })
+    queue = new WriteQueue(storage, {
+      fetchFn: fetchMock as typeof fetch,
+      autoFlush: false,
+      getOwner: async () => OWNER,
+    })
   })
 
   afterEach(() => {
@@ -142,6 +149,7 @@ describe('WriteQueue', () => {
     const autoQueue = new WriteQueue(storage, {
       fetchFn: fetchMock as typeof fetch,
       autoFlush: true,
+      getOwner: async () => OWNER,
     })
     fetchMock.mockResolvedValue(statusResponse(500))
     await autoQueue.enqueue(write(1))
@@ -155,10 +163,11 @@ describe('WriteQueue', () => {
   })
 
   it('initializes size from previously persisted writes', async () => {
-    await storage.add({ ...write(9), timestamp: Date.now() })
+    await storage.add({ ...write(9), owner: OWNER, timestamp: Date.now() })
     const restored = new WriteQueue(storage, {
       fetchFn: fetchMock as typeof fetch,
       autoFlush: false,
+      getOwner: async () => OWNER,
     })
     await restored.ready()
     expect(restored.size()).toBe(1)
@@ -175,5 +184,138 @@ describe('WriteQueue', () => {
 
     expect(sizes[0]).toBe(1)
     expect(sizes[sizes.length - 1]).toBe(0)
+  })
+
+  it('stamps the enqueuing user onto the row', async () => {
+    await queue.enqueue(write(1))
+    expect(storage.rows[0].owner).toBe(OWNER)
+  })
+})
+
+/**
+ * Issue #73: the queue is drained with `credentials: 'same-origin'`, so a row
+ * left over from a previous user would execute against whoever is signed in
+ * now — attributed to them, with nothing odd in the audit trail.
+ */
+describe('WriteQueue ownership', () => {
+  let storage: ReturnType<typeof createMemoryStorage>
+  let fetchMock: ReturnType<typeof vi.fn>
+  let owner: QueueOwner
+
+  function makeQueue() {
+    return new WriteQueue(storage, {
+      fetchFn: fetchMock as typeof fetch,
+      autoFlush: false,
+      getOwner: async () => owner,
+    })
+  }
+
+  beforeEach(() => {
+    storage = createMemoryStorage()
+    fetchMock = vi.fn().mockResolvedValue(okResponse())
+    owner = 'user-a'
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("does not replay another user's queued write into this session", async () => {
+    const alice = makeQueue()
+    await alice.enqueue(write(1))
+    alice.stop()
+
+    // Alice logs out (or her session simply expires); Bob signs in.
+    owner = 'user-b'
+    const bob = makeQueue()
+    await bob.ready()
+    await bob.flush()
+    bob.stop()
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    // Kept, not deleted — it is still Alice's unsynced work.
+    expect(storage.rows).toHaveLength(1)
+    expect(storage.rows[0].owner).toBe('user-a')
+    // And it is not counted against Bob's pending badge.
+    expect(bob.size()).toBe(0)
+  })
+
+  it('still replays the current user\'s own queued write', async () => {
+    // Positive control: a fix that silently drops everyone's offline work
+    // would pass the test above and fail this one.
+    const alice = makeQueue()
+    await alice.enqueue(write(1))
+    alice.stop()
+
+    const aliceAgain = makeQueue()
+    await aliceAgain.ready()
+    expect(aliceAgain.size()).toBe(1)
+    await aliceAgain.flush()
+    aliceAgain.stop()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(storage.rows).toHaveLength(0)
+  })
+
+  it("returns Alice's writes to her when she signs back in", async () => {
+    const alice = makeQueue()
+    await alice.enqueue(write(1))
+    alice.stop()
+
+    owner = 'user-b'
+    const bob = makeQueue()
+    await bob.flush()
+    bob.stop()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    owner = 'user-a'
+    const aliceAgain = makeQueue()
+    await aliceAgain.flush()
+    aliceAgain.stop()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(storage.rows).toHaveLength(0)
+  })
+
+  it('replays nothing at all while nobody is signed in', async () => {
+    const alice = makeQueue()
+    await alice.enqueue(write(1))
+    alice.stop()
+
+    owner = null
+    const signedOut = makeQueue()
+    await signedOut.flush()
+    signedOut.stop()
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(storage.rows).toHaveLength(1)
+  })
+
+  it('skips a foreign row without blocking the rest of the queue', async () => {
+    await storage.add({ ...write(1), owner: 'user-b', timestamp: Date.now() })
+    const alice = makeQueue()
+    await alice.enqueue(write(2))
+    await alice.flush()
+    alice.stop()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect((fetchMock.mock.calls[0][1] as RequestInit).body).toBe(JSON.stringify({ n: 2 }))
+    expect(storage.rows.map((r) => r.owner)).toEqual(['user-b'])
+  })
+
+  it('replays pre-fix rows with no owner only on a self-hosted instance', async () => {
+    await storage.add({ ...write(1), timestamp: Date.now() })
+
+    const multiUser = makeQueue()
+    await multiUser.flush()
+    multiUser.stop()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    owner = SELF_HOSTED_OWNER
+    const selfHosted = makeQueue()
+    await selfHosted.flush()
+    selfHosted.stop()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(storage.rows).toHaveLength(0)
   })
 })
