@@ -94,17 +94,21 @@ class TestDisconnectEndpoint:
     """Tests for DELETE /api/calendar/disconnect/{sync_id}."""
 
     @pytest.mark.asyncio
-    async def test_disconnect_endpoint(self, cal_client):
-        """Disconnect endpoint calls service."""
+    async def test_disconnect_endpoint(self, cal_client, default_test_user):
+        """Disconnect endpoint calls the service, scoped to the caller."""
         with patch(
             "app.api.calendar_sync.gcal_service.disconnect_calendar",
             new_callable=AsyncMock,
             return_value=True,
-        ):
+        ) as mock_disconnect:
             response = await cal_client.delete("/api/calendar/disconnect/sync-001")
 
         assert response.status_code == 200
         assert response.json()["detail"] == "Calendar disconnected"
+        # sync_id comes from the path, so the lookup has to carry the caller's
+        # identity or any user can disconnect anyone's calendar. The mock
+        # returns True regardless, so the 200 above proves nothing by itself.
+        assert mock_disconnect.await_args.args[1:] == (default_test_user.id, "sync-001")
 
 
 class TestSyncEndpoint:

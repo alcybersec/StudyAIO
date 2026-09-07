@@ -295,16 +295,19 @@ class TestSendMessageScoping:
 class TestDeleteSession:
     """Tests for DELETE /api/chat/sessions/{session_id}."""
 
-    async def test_delete_session_success(self, async_client, mock_session):
-        """Deletes a session and returns 204."""
+    async def test_delete_session_success(self, async_client, mock_session, default_test_user):
+        """Deletes the caller's own session and returns 204."""
         with patch(
             "app.api.chat.chat_service.delete_session",
             new_callable=AsyncMock,
             return_value=True,
-        ):
+        ) as mock_delete:
             response = await async_client.delete("/api/chat/sessions/session-001")
 
         assert response.status_code == 204
+        # session_id is attacker-supplied; the delete must be scoped or one user
+        # can destroy another's chat history. The mock returns True either way.
+        assert mock_delete.await_args.args[1:] == ("session-001", default_test_user.id)
 
     async def test_delete_session_not_found(self, async_client, mock_session):
         """Returns 404 when session not found."""

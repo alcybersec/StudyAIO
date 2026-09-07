@@ -64,12 +64,20 @@ class TestGetConceptGraph:
     @pytest.mark.asyncio
     @patch("app.api.concepts._resolve_course_id", new_callable=AsyncMock, return_value="course-001")
     @patch("app.api.concepts.concept_service")
-    async def test_filters_by_course(self, mock_service, mock_resolve, async_client):
-        """Accepts course_code query parameter."""
+    async def test_filters_by_course(
+        self, mock_service, mock_resolve, async_client, default_test_user
+    ):
+        """Accepts course_code query parameter, resolved against the caller's courses."""
         mock_service.get_concept_graph = AsyncMock(return_value={"nodes": [], "edges": []})
 
         resp = await async_client.get("/api/concepts/graph?course_code=CSIT302")
         assert resp.status_code == 200
+        # course_code is attacker-supplied, so _resolve_course_id must be told
+        # whose course to look for -- otherwise the graph is built over another
+        # user's course id. Both mocks answer identically either way, so the
+        # 200 above is not evidence of anything.
+        assert mock_resolve.await_args.args[1:] == ("CSIT302", default_test_user.id)
+        assert mock_service.get_concept_graph.await_args.args[1] == default_test_user.id
 
 
 class TestListConcepts:
@@ -77,8 +85,8 @@ class TestListConcepts:
 
     @pytest.mark.asyncio
     @patch("app.api.concepts.concept_service")
-    async def test_returns_concept_list(self, mock_service, async_client):
-        """Returns list of concepts."""
+    async def test_returns_concept_list(self, mock_service, async_client, default_test_user):
+        """Returns the caller's own concepts."""
         mock_service.get_concepts = AsyncMock(
             return_value=[
                 {
@@ -99,6 +107,7 @@ class TestListConcepts:
         data = resp.json()
         assert len(data) == 1
         assert data[0]["name"] == "Binary Search"
+        assert mock_service.get_concepts.await_args.args[1] == default_test_user.id
 
 
 class TestGetConceptDetail:
@@ -106,8 +115,8 @@ class TestGetConceptDetail:
 
     @pytest.mark.asyncio
     @patch("app.api.concepts.concept_service")
-    async def test_returns_detail(self, mock_service, async_client):
-        """Returns concept detail with relations."""
+    async def test_returns_detail(self, mock_service, async_client, default_test_user):
+        """Returns concept detail with relations, for a concept the caller owns."""
         mock_service.get_concept_detail = AsyncMock(
             return_value={
                 "id": "c-001",
@@ -139,15 +148,28 @@ class TestGetConceptDetail:
         assert data["name"] == "Binary Search"
         assert len(data["outgoing_relations"]) == 1
         assert data["outgoing_relations"][0]["concept_name"] == "Arrays"
+        # concept_id comes from the path; the lookup carries the caller.
+        assert mock_service.get_concept_detail.await_args.args[1:] == (
+            "c-001",
+            default_test_user.id,
+        )
 
     @pytest.mark.asyncio
     @patch("app.api.concepts.concept_service")
-    async def test_returns_404_when_not_found(self, mock_service, async_client):
-        """Returns 404 for nonexistent concept."""
+    async def test_returns_404_when_not_found(self, mock_service, async_client, default_test_user):
+        """Returns 404 for a concept that is nonexistent -- or not the caller's.
+
+        Both causes produce this 404 and the mock produces both, so the status
+        code alone is satisfied by an endpoint that never scoped at all.
+        """
         mock_service.get_concept_detail = AsyncMock(return_value=None)
 
         resp = await async_client.get("/api/concepts/nonexistent")
         assert resp.status_code == 404
+        assert mock_service.get_concept_detail.await_args.args[1:] == (
+            "nonexistent",
+            default_test_user.id,
+        )
 
 
 class TestFindRelatedConcepts:
@@ -155,8 +177,8 @@ class TestFindRelatedConcepts:
 
     @pytest.mark.asyncio
     @patch("app.api.concepts.concept_service")
-    async def test_returns_similar_concepts(self, mock_service, async_client):
-        """Returns semantically similar concepts."""
+    async def test_returns_similar_concepts(self, mock_service, async_client, default_test_user):
+        """Returns semantically similar concepts from the caller's own corpus."""
         mock_service.find_related_concepts = AsyncMock(
             return_value=[
                 {
@@ -175,6 +197,10 @@ class TestFindRelatedConcepts:
         data = resp.json()
         assert len(data) == 1
         assert data[0]["similarity"] == 0.85
+        assert mock_service.find_related_concepts.await_args.args[1:] == (
+            "c-001",
+            default_test_user.id,
+        )
 
 
 class TestExtractConcepts:
