@@ -36,15 +36,15 @@ if [[ ! -r "$ENV_FILE" ]]; then
 fi
 
 # Load .env (without exporting to avoid polluting shell)
-# The trailing `|| true` on the grep pipeline matters: under `set -euo
-# pipefail`, a key that is absent from the env file makes grep exit 1, which
-# (via pipefail) makes that pipeline return 1. Callers assign the result with
-# `VAR=$(get_val ...)`, and that assignment failing trips `set -e` and kills
-# the script right there — silently, with no error printed. `|| true` keeps a
-# missing key behaving the same as get_val's own documented contract: empty
-# string, not a crash. (The `local raw` declaration below is a separate
-# statement from the assignment that follows it, so it does not swallow that
-# assignment's exit status the way `local raw=$(...)` would.)
+# The trailing `|| true` on the reader pipeline matters: under `set -euo
+# pipefail`, a key that is absent from the env file makes the reader exit
+# non-zero, which (via pipefail) makes that pipeline return non-zero. Callers
+# assign the result with `VAR=$(get_val ...)`, and that assignment failing
+# trips `set -e` and kills the script right there — silently, with no error
+# printed. `|| true` keeps a missing key behaving the same as get_val's own
+# documented contract: empty string, not a crash. (The `local raw` declaration
+# below is a separate statement from the assignment that follows it, so it does
+# not swallow that assignment's exit status the way `local raw=$(...)` would.)
 #
 # Quoting mirrors python-dotenv's actual rules (config.py's env_file loader
 # uses python-dotenv, and .env.example ships commented-out lines like
@@ -56,13 +56,49 @@ fi
 #     Anything after the closing quote (e.g. a trailing comment) is
 #     discarded, but a `#` *inside* the quotes is literal value content, not
 #     a comment marker — `POSTGRES_PASSWORD='ab#cd'` must not be truncated.
-#   - An unquoted value: a whitespace-preceded `#...` inline comment is
-#     stripped, along with trailing whitespace. Without this, a value like
+#   - A quoted value may span lines, and the newlines are part of the value:
+#     python-dotenv reads to the *closing quote*, not to the end of the line.
+#     A PEM private key and a pretty-printed JSON blob both arrive this way.
+#     Reading one line of one would hand every check below a fragment — the
+#     first `-----BEGIN ... KEY-----` and nothing else — which is not empty,
+#     so an "is it set?" check passes and a comparison fails for a reason
+#     nobody can see. Nothing in .env is multi-line today; the point is that
+#     the day one is, this stops lying rather than starting to.
+#   - An unquoted value ends at the newline (again matching python-dotenv), and
+#     a whitespace-preceded `#...` inline comment is stripped along with
+#     trailing whitespace. Without this, a value like
 #     `GLOBAL_MAX_AI_CALLS_PER_DAY=0   # 0 = unlimited` would compare unequal
 #     to both "0" and "", and the comment text would leak into every message.
+#
+# The awk below is the line-spanning reader: it takes everything after the
+# first `KEY=`, and when that begins with a quote it keeps appending lines
+# until the matching quote turns up. An unterminated quote prints what was
+# accumulated rather than nothing — a malformed value should fail a comparison
+# loudly, not disappear and read as "this key is not set".
 get_val() {
     local raw
-    raw=$(grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true)
+    raw=$(awk -v key="$1" '
+        BEGIN { pat = "^" key "=" }
+        !collecting && $0 ~ pat {
+            raw = substr($0, length(key) + 2)
+            rest = raw
+            sub(/^[ \t]+/, "", rest)
+            q = substr(rest, 1, 1)
+            if (q == "\"" || q == "\047") {
+                if (index(substr(rest, 2), q) > 0) { print raw; exit }
+                collecting = 1
+                acc = raw
+                next
+            }
+            print raw
+            exit
+        }
+        collecting {
+            acc = acc "\n" $0
+            if (index($0, q) > 0) { print acc; exit }
+        }
+        END { if (collecting) print acc }
+    ' "$ENV_FILE" 2>/dev/null || true)
     if [[ "$raw" =~ ^[[:space:]]*\'(.*)\'[[:space:]]*(#.*)?$ ]]; then
         printf '%s' "${BASH_REMATCH[1]}"
     elif [[ "$raw" =~ ^[[:space:]]*\"(.*)\"[[:space:]]*(#.*)?$ ]]; then
