@@ -351,7 +351,7 @@ The pipeline runs as a Celery task chain. Each stage is an independent, retryabl
   - If no: generate a new summary from extraction
 - Summary follows the [Summary Format Specification](#12-summary-format-specification)
 - Embed relevant extracted images in the markdown (as relative paths)
-- Save markdown to `data/summaries/<course_code>/<course_code>_Week<N>.md`
+- Save markdown to `data/summaries/<course_id>/Week<N>.md` (the course **id**: codes are unique only per user, so a code-keyed path let two users overwrite each other — #92)
 - Create or update `Summary` record with incremented version
 
 **Output:** `Summary` record (new or updated), markdown file on disk

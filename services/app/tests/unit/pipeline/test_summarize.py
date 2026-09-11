@@ -99,9 +99,7 @@ class TestSummarizeStage:
         summary_record.id = "summary-001"
         summary_record.version = 1
         mock_summary_svc.create_or_update_summary = AsyncMock(return_value=summary_record)
-        mock_summary_svc.build_summary_storage_key.return_value = (
-            "summaries/CSIT302/CSIT302_Week5.md"
-        )
+        mock_summary_svc.build_summary_storage_key.return_value = "summaries/course-001/Week5.md"
 
         # Mock agent
         agent = AsyncMock()
@@ -119,6 +117,22 @@ class TestSummarizeStage:
         assert result["status"] == "summarized"
         assert result["summary_id"] == "summary-001"
         assert result["version"] == 1
+
+        # Wiring (#92): the stage must build the key from the course *id*.
+        # Course codes are unique only per user, so a code-keyed write lands
+        # on whichever user got there first -- silently, since `storage.put`
+        # replaces. The mocked builder returns the same string either way, so
+        # only this assertion can tell the two apart.
+        assert mock_summary_svc.build_summary_storage_key.call_args.args == ("course-001", 5)
+        assert course.id != course.code
+
+        # And the row stores the key that was actually written, so the two
+        # cannot drift apart again.
+        assert (tmp_path / "summaries" / "course-001" / "Week5.md").exists()
+        assert (
+            mock_summary_svc.create_or_update_summary.await_args.kwargs["file_path"]
+            == "summaries/course-001/Week5.md"
+        )
 
     @patch("app.pipeline.summarize.async_session_factory")
     async def test_summarize_not_classified_raises(self, mock_session_factory):
