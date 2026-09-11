@@ -24,18 +24,24 @@ def _estimate_tokens(text: str) -> int:
     return len(text) // 4
 
 
-def _build_stable_id(sha256_prefix: str, page_ref: int, chunk_idx: int) -> str:
-    """Build a deterministic chunk ID for idempotent upserts.
+def _build_stable_id(artifact_id: str, page_ref: int, chunk_idx: int) -> str:
+    """Build a deterministic chunk ID, stable within one artifact.
+
+    Scoped to the artifact, not to the file's content hash. `chunks.stable_id`
+    is globally UNIQUE, so a hash-derived id made two users who uploaded the
+    same file collide and the second one's index stage crash (#85). An
+    artifact id is a UUID, so this shape is globally unique on its own and the
+    existing constraint stops mattering.
 
     Args:
-        sha256_prefix: First 8 chars of the artifact's SHA-256 hash.
+        artifact_id: UUID of the artifact the chunk belongs to.
         page_ref: Page number the chunk starts on.
         chunk_idx: Sequential chunk index within the artifact.
 
     Returns:
-        Stable ID string like "a1b2c3d4_p1_c0".
+        Stable ID string like "<artifact-uuid>_p1_c0".
     """
-    return f"{sha256_prefix}_p{page_ref}_c{chunk_idx}"
+    return f"{artifact_id}_p{page_ref}_c{chunk_idx}"
 
 
 def chunk_pages(
@@ -128,7 +134,6 @@ def chunk_pages(
 async def index_artifact_chunks(
     session: AsyncSession,
     artifact_id: str,
-    sha256: str,
     pages: list[dict],
     embedding_provider: EmbeddingProvider,
     chunk_size_tokens: int | None = None,
@@ -140,8 +145,7 @@ async def index_artifact_chunks(
 
     Args:
         session: Async database session.
-        artifact_id: UUID of the artifact being indexed.
-        sha256: SHA-256 hash of the original file (for stable IDs).
+        artifact_id: UUID of the artifact being indexed. Also scopes stable IDs.
         pages: Extraction manifest pages.
         embedding_provider: Provider for generating embeddings.
         chunk_size_tokens: Optional override for chunk size.
@@ -150,8 +154,6 @@ async def index_artifact_chunks(
     Returns:
         List of created Chunk records.
     """
-    sha256_prefix = sha256[:8]
-
     # Chunk the text
     raw_chunks = chunk_pages(pages, chunk_size_tokens, chunk_overlap_tokens)
     if not raw_chunks:
@@ -181,7 +183,7 @@ async def index_artifact_chunks(
     # Create chunk records
     chunk_records = []
     for raw_chunk, embedding in zip(raw_chunks, embeddings, strict=True):
-        stable_id = _build_stable_id(sha256_prefix, raw_chunk["page_ref"], raw_chunk["chunk_idx"])
+        stable_id = _build_stable_id(artifact_id, raw_chunk["page_ref"], raw_chunk["chunk_idx"])
 
         chunk = Chunk(
             id=generate_id(),
