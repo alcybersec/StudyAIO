@@ -78,7 +78,6 @@ async def _index(artifact_id: str, user_id: str | None = None) -> dict:
             chunks = await index_service.index_artifact_chunks(
                 session=session,
                 artifact_id=artifact_id,
-                sha256=artifact.sha256,
                 pages=manifest["pages"],
                 embedding_provider=provider,
             )
