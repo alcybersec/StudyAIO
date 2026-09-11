@@ -14,6 +14,7 @@ from app.core.storage import get_storage
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.pipeline_run import PipelineRun
+from app.pipeline.failures import record_stage_failure
 from app.services import summary_service
 from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
@@ -172,19 +173,11 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
             }
 
         except (SummarizationError, AgentError) as e:
-            run.status = "failed"
-            run.error_message = str(e)
-            run.completed_at = datetime.now(UTC)
-            artifact.status = "failed"
-            await session.commit()
+            await record_stage_failure(session, run=run, artifact_id=artifact_id, error=e)
             raise
 
         except Exception as e:
-            run.status = "failed"
-            run.error_message = str(e)
-            run.completed_at = datetime.now(UTC)
-            artifact.status = "failed"
-            await session.commit()
+            await record_stage_failure(session, run=run, artifact_id=artifact_id, error=e)
             raise SummarizationError(f"Summarization failed: {e}") from e
 
 
