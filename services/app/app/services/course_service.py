@@ -60,6 +60,31 @@ async def get_course_by_code(
     return result.scalar_one_or_none()
 
 
+async def get_course_by_id(
+    session: AsyncSession, course_id: str, user_id: str | None = None
+) -> Course | None:
+    """Get a course by its id, optionally scoped by user.
+
+    Course *codes* are unique only per user (``uq_courses_code_user``), so
+    anything that has to be unique across the whole instance -- a storage key,
+    for instance (#92) -- is keyed on the id instead, and needs this getter to
+    resolve the owner back out of it.
+
+    Args:
+        session: Database session.
+        course_id: Course UUID.
+        user_id: If provided, only return the course if this user owns it.
+
+    Returns:
+        Course if found (and owned, when ``user_id`` is given), None otherwise.
+    """
+    query = select(Course).where(Course.id == course_id)
+    if user_id is not None:
+        query = query.where(Course.user_id == user_id)
+    result = await session.execute(query)
+    return result.scalar_one_or_none()
+
+
 async def list_courses_with_stats(
     session: AsyncSession,
     user_id: str | None = None,

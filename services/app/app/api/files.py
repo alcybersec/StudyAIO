@@ -177,11 +177,21 @@ async def _authorize_path(
     * ``extractions/<artifact_id>/...`` -- everything the extraction pipeline
       writes lives under the artifact's own id (``pipeline/extract.py``), so
       the owner-scoped artifact getter settles the whole subtree.
-    * ``summaries/<COURSE_CODE>/...`` -- summary keys are
-      ``summaries/<CODE>/<CODE>_Week<N>.md`` (``summary_service`` builds
-      them), so the owner-scoped course getter settles the whole subtree.
-      This is the half of #66 that was enumerable: course codes are standard
-      university codes and weeks run 1-15.
+    * ``summaries/<course_id>/...`` -- summary keys are
+      ``summaries/<course_id>/Week<N>.md`` (``summary_service`` builds them),
+      so the owner-scoped course getter settles the whole subtree.
+
+      The segment used to be the course *code*, which #92 changed: codes are
+      unique only per user, so two users with ``CSIT302`` shared one key and
+      one file. The ownership check passed for both of them -- each owns a
+      course by that code -- while the bytes belonged to whoever ran last, so
+      the code-shaped resolution was not merely stale here, it was the
+      disclosure. It is deliberately *not* kept as a fallback: an old-shape
+      path now resolves to no course and 404s, which is the correct answer for
+      a key nothing writes and nothing links to (the backfill in
+      ``summary_service`` deletes those files). The id also un-enumerates the
+      half of #66 that was guessable -- course codes are standard university
+      codes and weeks run 1-15, whereas a course id is a UUID.
 
     A path too short to carry an owner segment is unresolvable, so it is
     refused rather than served.
@@ -198,7 +208,7 @@ async def _authorize_path(
     if file_type == "extractions":
         owned = await artifact_service.get_artifact(session, owner_segment, user_id=user.id)
     elif file_type == "summaries":
-        owned = await course_service.get_course_by_code(session, owner_segment, user_id=user.id)
+        owned = await course_service.get_course_by_id(session, owner_segment, user_id=user.id)
     else:
         # A prefix added to _VALID_PREFIXES without an ownership rule here
         # fails closed, rather than inheriting whichever branch is last.
