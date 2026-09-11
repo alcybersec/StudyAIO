@@ -12,6 +12,35 @@ def generate_id() -> str:
     return str(uuid7())
 
 
+def normalize_email(email: str) -> str:
+    """Canonicalise an email address for storage and for lookup.
+
+    Strips surrounding whitespace and lower-cases the **whole** address, local
+    part included.
+
+    RFC 5321 §2.4 makes the local part — everything before the ``@`` — formally
+    case-sensitive, so to the letter ``Alex@example.com`` and
+    ``alex@example.com`` name two different mailboxes. That is ignored here on
+    purpose, and the choice is stated rather than left implicit: no mail
+    provider in practice routes them to different people, every address that
+    reaches this function was retyped by a human, and treating them as distinct
+    is what produced the duplicate accounts, the destructive no-op repoint and
+    the unrecoverable lockout in issue #91. Folding costs a user who genuinely
+    owns two case-differing mailboxes on a pedantic server a second account;
+    not folding costs a user their only way back in. The trade is not close.
+
+    This mirrors `invite_service.normalize_code`, which folds case for exactly
+    the same reason: a value people retype has to still match when they do.
+
+    Args:
+        email: The address as supplied by the caller.
+
+    Returns:
+        The normalized address.
+    """
+    return email.strip().lower()
+
+
 def compute_sha256(file_path: str | Path) -> str:
     """Compute SHA-256 hash of a file."""
     sha256 = hashlib.sha256()

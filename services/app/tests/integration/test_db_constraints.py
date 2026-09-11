@@ -7,6 +7,7 @@ from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.summary import Summary
+from app.models.user import User
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -118,3 +119,43 @@ class TestSummaryConstraints:
         db_session.add(s2)
         with pytest.raises(IntegrityError):
             await db_session.flush()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+class TestUserEmailConstraints:
+    """The case-insensitive unique index from issue #91.
+
+    The code normalizes on the way in, but a code-only fix leaves the next
+    `select(User).where(User.email == ...)` free to reintroduce the bug. This
+    is the half the database enforces: whatever a call site forgets, two rows
+    cannot claim one address. It exists only because the migration ran, so
+    this also proves `d0e1f2g3h4i5` created the index for real.
+    """
+
+    def _user(self, email: str, username: str) -> User:
+        return User(
+            id=generate_id(),
+            email=email,
+            username=username,
+            role="user",
+            tier="free",
+            is_active=True,
+            email_verified=False,
+            mfa_enabled=False,
+        )
+
+    async def test_case_differing_emails_are_rejected(self, db_session):
+        """`alex@…` and `Alex@…` were two valid accounts before #91."""
+        db_session.add(self._user("constraint.alex@example.com", "constraint_alex_1"))
+        await db_session.flush()
+
+        db_session.add(self._user("Constraint.Alex@Example.com", "constraint_alex_2"))
+        with pytest.raises(IntegrityError):
+            await db_session.flush()
+
+    async def test_genuinely_different_emails_are_still_accepted(self, db_session):
+        """The negative control: the index must not reject distinct addresses."""
+        db_session.add(self._user("distinct.one@example.com", "distinct_one"))
+        db_session.add(self._user("distinct.two@example.com", "distinct_two"))
+
+        await db_session.flush()  # would raise IntegrityError if over-broad
