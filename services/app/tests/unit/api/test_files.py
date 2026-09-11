@@ -9,6 +9,9 @@ import pytest
 from app.core.storage import get_storage, reset_storage
 
 OWNER_A = "owner-a-user-id"
+# Summary keys are ``summaries/<course_id>/Week<N>.md`` since #92, so the owner
+# segment in these paths is a course id, not a course code.
+COURSE_OWNED_BY_A = "course-owned-by-a"
 
 
 @pytest.mark.asyncio
@@ -276,9 +279,10 @@ class TestPreviewArtifact:
 # ``GET /api/files/{file_type}/{path}`` shipped with no auth dependency at
 # all while every sibling route in this module had one, and was confirmed
 # live against the production instance serving generated summaries and
-# original lecture uploads to anonymous callers. Summary keys are
-# ``summaries/<CODE>/<CODE>_Week<N>.md``, so the corpus was enumerable from a
-# guessed course code.
+# original lecture uploads to anonymous callers. Summary keys were
+# ``summaries/<CODE>/<CODE>_Week<N>.md`` at the time, so the corpus was
+# enumerable from a guessed course code. #92 has since re-keyed them on the
+# course id, which is a UUID -- the tests below use the current shape.
 #
 # Authentication alone would not have been enough: the path carries no owner,
 # so any signed-in user could still read anyone else's files. Each scoping
@@ -335,9 +339,10 @@ class TestServeFileRequiresAuth:
         assert response.status_code == 401
 
     async def test_summary_rejects_anonymous(self, anon_client):
-        """The enumerable shape from the issue, with no cookie."""
-        await get_storage().put("summaries/CSCI302/CSCI302_Week9.md", b"# CSCI302 - Week 9\n")
-        response = await anon_client.get("/api/files/summaries/CSCI302/CSCI302_Week9.md")
+        """The shape from the issue, re-keyed by #92, with no cookie."""
+        key = f"summaries/{COURSE_OWNED_BY_A}/Week9.md"
+        await get_storage().put(key, b"# CSCI302 - Week 9\n")
+        response = await anon_client.get(f"/api/files/{key}")
         assert response.status_code == 401
         assert b"CSCI302" not in response.content
 
@@ -413,24 +418,27 @@ class TestServeExtractionScoping:
 
 @pytest.mark.asyncio
 class TestServeSummaryScoping:
-    """#66: ``summaries/<COURSE_CODE>/...`` scopes on the course's owner.
+    """#66/#92: ``summaries/<course_id>/...`` scopes on the course's owner.
 
-    This is the half that was enumerable -- course codes are standard
-    university codes and week numbers run 1-15.
+    The owner segment was the course *code* until #92. Two things changed
+    with it: the segment is no longer guessable (a course id is a UUID, where
+    codes are standard university codes and weeks run 1-15), and it is no
+    longer *ambiguous* -- a code identifies a course only together with a
+    user, so the ownership check below used to pass for two different people
+    holding one file.
     """
 
     async def test_404_for_another_users_course(self, async_client, default_test_user):
         """The exact request from the issue must not return user A's summary."""
-        await get_storage().put(
-            "summaries/CSCI302/CSCI302_Week9.md", b"# CSCI302 - Week 9: Threat Intelligence\n"
-        )
+        key = f"summaries/{COURSE_OWNED_BY_A}/Week9.md"
+        await get_storage().put(key, b"# CSCI302 - Week 9: Threat Intelligence\n")
 
-        async def scoped(session, code, user_id=None):
+        async def scoped(session, course_id, user_id=None):
             return MagicMock() if user_id == OWNER_A else None
 
         mock = AsyncMock(side_effect=scoped)
-        with patch("app.api.files.course_service.get_course_by_code", new=mock):
-            response = await async_client.get("/api/files/summaries/CSCI302/CSCI302_Week9.md")
+        with patch("app.api.files.course_service.get_course_by_id", new=mock):
+            response = await async_client.get(f"/api/files/{key}")
 
         assert response.status_code == 404
         assert b"Threat Intelligence" not in response.content
@@ -438,27 +446,84 @@ class TestServeSummaryScoping:
         assert default_test_user.id != OWNER_A
 
     async def test_owner_is_served_their_own_summary(self, async_client, default_test_user):
-        key = "summaries/CSCI302/CSCI302_Week9.md"
+        key = "summaries/course-owned-by-me/Week9.md"
         await get_storage().put(key, b"# CSCI302 - Week 9\n")
 
-        async def scoped(session, code, user_id=None):
+        async def scoped(session, course_id, user_id=None):
             return MagicMock() if user_id == default_test_user.id else None
 
         with patch(
-            "app.api.files.course_service.get_course_by_code", new=AsyncMock(side_effect=scoped)
+            "app.api.files.course_service.get_course_by_id", new=AsyncMock(side_effect=scoped)
         ):
             response = await async_client.get(f"/api/files/{key}")
 
         assert response.status_code == 200
         assert response.content == b"# CSCI302 - Week 9\n"
 
-    async def test_scoped_lookup_receives_the_course_code_from_the_path(self, async_client):
+    async def test_scoped_lookup_receives_the_course_id_from_the_path(self, async_client):
         """The first path segment, not some other part of the key, is the owner."""
         mock = AsyncMock(return_value=None)
-        with patch("app.api.files.course_service.get_course_by_code", new=mock):
-            await async_client.get("/api/files/summaries/CSCI302/CSCI302_Week9.md")
+        with patch("app.api.files.course_service.get_course_by_id", new=mock):
+            await async_client.get(f"/api/files/summaries/{COURSE_OWNED_BY_A}/Week9.md")
 
-        assert mock.await_args.args[1] == "CSCI302"
+        assert mock.await_args.args[1] == COURSE_OWNED_BY_A
+
+    async def test_two_users_with_the_same_course_code_read_different_files(
+        self, async_client, default_test_user
+    ):
+        """#92: the collision, end to end through the route.
+
+        Both users have ``CSIT302`` week 3. Under the old key shape there was
+        one file for both of them and the ownership check passed for each, so
+        whoever ran the pipeline last decided what the other one read. Two
+        course ids mean two files, and the caller is served exactly one.
+        """
+        mine = "course-mine-csit302"
+        theirs = "course-theirs-csit302"
+        await get_storage().put(f"summaries/{mine}/Week3.md", b"# my week 3\n")
+        await get_storage().put(f"summaries/{theirs}/Week3.md", b"# their week 3\n")
+
+        async def scoped(session, course_id, user_id=None):
+            owner = {mine: default_test_user.id, theirs: OWNER_A}.get(course_id)
+            return MagicMock() if owner is not None and owner == user_id else None
+
+        with patch(
+            "app.api.files.course_service.get_course_by_id", new=AsyncMock(side_effect=scoped)
+        ):
+            ours = await async_client.get(f"/api/files/summaries/{mine}/Week3.md")
+            other = await async_client.get(f"/api/files/summaries/{theirs}/Week3.md")
+
+        assert ours.status_code == 200
+        assert ours.content == b"# my week 3\n"
+        assert other.status_code == 404
+        assert b"their week 3" not in other.content
+
+    async def test_a_legacy_code_shaped_path_no_longer_resolves(
+        self, async_client, default_test_user
+    ):
+        """#92 deliberately drops the old shape rather than falling back.
+
+        A fallback would re-open the hole: the caller does own a course by
+        that code, so the check would pass, while the file is whichever user's
+        summary survived the overwrite. The backfill deletes these files; the
+        route refuses them either way.
+        """
+        await get_storage().put(
+            "summaries/CSCI302/CSCI302_Week9.md", b"# CSCI302 - Week 9: Threat Intelligence\n"
+        )
+
+        async def by_id(session, course_id, user_id=None):
+            # The caller owns a *course code* CSCI302, but no course whose id
+            # is the string "CSCI302".
+            return None
+
+        with patch(
+            "app.api.files.course_service.get_course_by_id", new=AsyncMock(side_effect=by_id)
+        ):
+            response = await async_client.get("/api/files/summaries/CSCI302/CSCI302_Week9.md")
+
+        assert response.status_code == 404
+        assert b"Threat Intelligence" not in response.content
 
 
 @pytest.mark.asyncio
@@ -537,7 +602,7 @@ class TestServeFileTraversal:
 
     async def test_traversal_blocked_on_summaries(self, async_client):
         mock = AsyncMock(return_value=MagicMock())
-        with patch("app.api.files.course_service.get_course_by_code", new=mock):
+        with patch("app.api.files.course_service.get_course_by_id", new=mock):
             response = await async_client.get(
                 "/api/files/summaries/CSCI302/%2E%2E/%2E%2E/uploads/secret.pptx"
             )

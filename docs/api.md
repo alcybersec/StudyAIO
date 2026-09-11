@@ -768,9 +768,15 @@ Serve a file the caller owns from the data directories by relative path. Used fo
 rendering images embedded in summaries.
 
 Requires authentication, and the first path segment must name an object the caller
-owns — the artifact id for `extractions/<artifact_id>/...`, the course code for
-`summaries/<COURSE_CODE>/...`. Anything else is `404`, not `403`, so the route is
+owns — the artifact id for `extractions/<artifact_id>/...`, the course id for
+`summaries/<course_id>/...`. Anything else is `404`, not `403`, so the route is
 not an existence oracle.
+
+The summary segment was the course *code* until #92. Codes are unique only per
+user, so two users with `CSIT302` shared one key and one file, and the ownership
+check passed for both. Keys are `summaries/<course_id>/Week<N>.md` now; the old
+code-shaped paths are not served, and the backfill
+(`scripts/backfill_summary_files.py`) removes those files.
 
 `uploads` and `courseops` are **not** served here. Use the owner-scoped
 id-addressed routes above (`/api/files/uploads/artifacts/{id}`,

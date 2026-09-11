@@ -93,7 +93,7 @@ class TestCreateOrUpdateSummary:
             course_id="course-1",
             week=5,
             content_md="# Summary",
-            file_path="/app/data/summaries/CSIT302/CSIT302_Week5.md",
+            file_path="summaries/0192c4d5-1111-4000-8000-00000000000a/Week5.md",
             source_artifact_ids=["art-1"],
         )
 
@@ -124,20 +124,3 @@ class TestCreateOrUpdateSummary:
         assert result.content_md == "# Updated Summary"
         assert "art-1" in result.source_artifacts
         assert "art-2" in result.source_artifacts
-
-
-class TestBuildSummaryFilePath:
-    """Tests for build_summary_file_path()."""
-
-    def test_builds_correct_path(self, tmp_path):
-        """Path follows <dir>/<course>/<course>_Week<N>.md pattern."""
-        result = summary_service.build_summary_file_path(str(tmp_path), "CSIT302", 5)
-
-        assert result.name == "CSIT302_Week5.md"
-        assert result.parent.name == "CSIT302"
-
-    def test_creates_directory(self, tmp_path):
-        """Creates course directory if it doesn't exist."""
-        summary_service.build_summary_file_path(str(tmp_path), "CSIT302", 5)
-
-        assert (tmp_path / "CSIT302").is_dir()

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import ExtractionData
+from app.core.storage import StorageBackend, get_storage, normalize_storage_key
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
@@ -15,6 +16,10 @@ from app.models.extraction import Extraction
 from app.models.summary import Summary
 
 logger = structlog.get_logger()
+
+# Every summary storage key lives under this prefix. ``app.api.files`` serves
+# it, and the backfill below is scoped to it.
+SUMMARY_KEY_PREFIX = "summaries"
 
 
 async def get_week_extractions(
@@ -222,30 +227,131 @@ async def list_course_summaries(session: AsyncSession, course_id: str) -> list[S
     return list(result.scalars().all())
 
 
-def build_summary_file_path(summaries_dir: str, course_code: str, week: int) -> Path:
-    """Build the file path for a summary markdown file.
+def build_summary_file_path(summaries_dir: str, course_id: str, week: int) -> Path:
+    """Build the local file path for a summary markdown file.
 
     Args:
         summaries_dir: Base directory for summaries.
-        course_code: Course code (e.g., "CSIT302").
+        course_id: Course UUID (**not** the course code -- see
+            :func:`build_summary_storage_key`).
         week: Week number.
 
     Returns:
-        Path like <summaries_dir>/<course_code>/<course_code>_Week<N>.md
+        Path like <summaries_dir>/<course_id>/Week<N>.md
     """
-    course_dir = Path(summaries_dir) / course_code
+    course_dir = Path(summaries_dir) / course_id
     course_dir.mkdir(parents=True, exist_ok=True)
-    return course_dir / f"{course_code}_Week{week}.md"
+    return course_dir / f"Week{week}.md"
 
 
-def build_summary_storage_key(course_code: str, week: int) -> str:
+def build_summary_storage_key(course_id: str, week: int) -> str:
     """Build the storage key for a summary markdown file.
 
+    Keyed on the course **id**, not its code (#92). Course codes are unique
+    only per user (``uq_courses_code_user``), so the old
+    ``summaries/<CODE>/<CODE>_Week<N>.md`` shape gave two users who both take
+    ``CSIT302`` byte-identical keys: the second pipeline run silently
+    overwrote the first user's file, and both ``summaries`` rows then pointed
+    at it. ``courses.id`` is a per-user primary key, so the collision cannot
+    happen; it also survives a course rename (``rename_course``), which a
+    code-shaped key does not, and it keeps a user-supplied string out of a
+    filesystem path.
+
+    ``app.api.files._authorize_path`` resolves the owner back out of the first
+    segment, so the segment must stay something ``course_service`` can look up
+    scoped to a user.
+
     Args:
-        course_code: Course code (e.g., "CSIT302").
+        course_id: Course UUID.
         week: Week number.
 
     Returns:
-        Key like ``summaries/CSIT302/CSIT302_Week3.md``
+        Key like ``summaries/0192c4d5-.../Week3.md``
     """
-    return f"summaries/{course_code}/{course_code}_Week{week}.md"
+    return f"{SUMMARY_KEY_PREFIX}/{course_id}/Week{week}.md"
+
+
+async def backfill_summary_storage_keys(
+    session: AsyncSession,
+    storage: StorageBackend | None = None,
+    *,
+    delete_legacy: bool = True,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Re-derive every summary's storage key from its course id and rewrite it.
+
+    The #92 fix changes the key shape, so every existing row points at a key
+    of the old, colliding shape. This moves them, but deliberately does *not*
+    move the file: on an instance where two users shared a course code, the
+    single file at the old key holds whichever pipeline ran last, so copying
+    it would hand one user the other's content. ``summaries.content_md`` is
+    per-user and correct -- the row is the source of truth -- so each new file
+    is **written from the column**.
+
+    Idempotent: re-running rewrites the same bytes to the same keys, and the
+    legacy keys are already gone. Only keys under ``summaries/`` that some row
+    actually points at are deleted; nothing else in the data directory is
+    touched.
+
+    The caller commits.
+
+    Args:
+        session: Database session.
+        storage: Storage backend, defaulting to the configured singleton.
+        delete_legacy: Delete the old-shape files once every row has been
+            rewritten. They are unreachable afterwards either way -- the files
+            route no longer resolves that shape -- but they are also stale, and
+            possibly the wrong user's content.
+        dry_run: Report what would happen; write, update and delete nothing.
+
+    Returns:
+        Counts: ``rows``, ``files_written``, ``paths_updated``,
+        ``legacy_deleted``.
+    """
+    store = storage if storage is not None else get_storage()
+
+    result = await session.execute(select(Summary).order_by(Summary.course_id, Summary.week))
+    rows = list(result.scalars().all())
+
+    new_keys: set[str] = set()
+    legacy_keys: set[str] = set()
+    paths_updated = 0
+
+    for summary in rows:
+        new_key = build_summary_storage_key(summary.course_id, summary.week)
+        new_keys.add(new_key)
+
+        current = normalize_storage_key(summary.file_path or "")
+        if current != new_key:
+            paths_updated += 1
+            # Only ever a summary key: a row pointing somewhere else entirely
+            # is not ours to delete.
+            if current.startswith(f"{SUMMARY_KEY_PREFIX}/"):
+                legacy_keys.add(current)
+
+        if not dry_run:
+            await store.put(new_key, (summary.content_md or "").encode("utf-8"))
+            summary.file_path = new_key
+
+    # A legacy key can never equal a new one (a course code is not a course
+    # id), but an instance that has already been backfilled must not be able
+    # to delete what it just wrote.
+    stale = sorted(legacy_keys - new_keys)
+
+    deleted = 0
+    if not dry_run:
+        await session.flush()
+        if delete_legacy:
+            for key in stale:
+                await store.delete(key)
+                deleted += 1
+
+    # Counts describe the work, so a dry run reports what a real run would do.
+    counts = {
+        "rows": len(rows),
+        "files_written": len(rows),
+        "paths_updated": paths_updated,
+        "legacy_deleted": deleted if not dry_run else (len(stale) if delete_legacy else 0),
+    }
+    logger.info("summary_storage_key_backfill", dry_run=dry_run, **counts)
+    return counts
