@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.exceptions import LastAdminError, UserExistsError
-from app.core.utils import generate_id
+from app.core.utils import generate_id, normalize_email
 from app.models.artifact import LectureArtifact
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
@@ -129,6 +129,7 @@ async def _repoint_email(session: AsyncSession, user: User, email: str) -> None:
     Raises:
         UserExistsError: If `email` already belongs to a different account.
     """
+    email = normalize_email(email)
     clash = await session.execute(select(User).where(User.email == email, User.id != user.id))
     if clash.scalar_one_or_none():
         raise UserExistsError("email")
@@ -200,8 +201,27 @@ async def update_user(
     reactivated = is_active is True and not user.is_active
 
     old_email = user.email
-    if email is not None and email != user.email:
-        await _repoint_email(session, user, email)
+    # Compared normalized, on the same reasoning as `role_changed` above: a
+    # form that submits every field echoes the address back, and an admin
+    # retyping it as `Alex@Example.com` is not requesting a change. Before this
+    # the raw `!=` read that as one and ran the full destructive repoint —
+    # sessions revoked, OAuth unlinked, links killed, verification cleared —
+    # and then stored the new casing, which (lookups being exact-match) locked
+    # the user out of an account they could not reset their way back into
+    # (issue #91).
+    email_repointed = False
+    if email is not None:
+        normalized_email = normalize_email(email)
+        if normalized_email != user.email:
+            if normalized_email == normalize_email(user.email):
+                # Case- or whitespace-only difference against a row that
+                # predates the folding migration. Same mailbox, so repointing
+                # would be destructive for nothing; write the canonical form so
+                # the row becomes findable and move on.
+                user.email = normalized_email
+            else:
+                await _repoint_email(session, user, normalized_email)
+                email_repointed = True
 
     if role is not None:
         user.role = role
@@ -237,9 +257,9 @@ async def update_user(
         role=role,
         tier=tier,
         is_active=is_active,
-        old_email=old_email if user.email != old_email else None,
-        new_email=user.email if user.email != old_email else None,
-        sessions_revoked=reactivated or role_changed or user.email != old_email,
+        old_email=old_email if email_repointed else None,
+        new_email=user.email if email_repointed else None,
+        sessions_revoked=reactivated or role_changed or email_repointed,
         by=acting_admin_id,
     )
 
@@ -677,6 +697,10 @@ async def create_user(
     if tier not in VALID_TIERS:
         raise ValueError(f"tier must be one of {sorted(VALID_TIERS)}")
 
+    # Normalized on the way in, so an admin-created account cannot become the
+    # case-differing twin of one that already exists (issue #91).
+    email = normalize_email(email)
+
     existing = await session.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none():
         raise UserExistsError("email")
@@ -762,12 +786,21 @@ async def ensure_admin(
     if user is None:
         return await create_user(session, email, username or "admin", role="admin", tier="pro")
 
-    was_repointed = user.email != email
+    # Same normalized comparison as `update_user`, and for the same reason:
+    # re-running ensure-admin with the address typed in a different case is a
+    # no-op, not a repoint that would unlink the admin's own OAuth sign-in and
+    # revoke the console session they are running the command from (issue #91).
+    email = normalize_email(email)
+    was_repointed = normalize_email(user.email) != email
     was_promoted = user.role != "admin"
     was_reactivated = not user.is_active
 
     if was_repointed:
         await _repoint_email(session, user, email)
+    elif user.email != email:
+        # Pre-migration row stored with different casing: canonicalise it
+        # without treating it as a change.
+        user.email = email
 
     # Demotion or deactivation is one of the lockouts this recovers from.
     user.role = "admin"

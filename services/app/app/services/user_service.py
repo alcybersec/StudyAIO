@@ -29,7 +29,7 @@ from app.core.security import (
     hash_backup_codes,
     verify_totp,
 )
-from app.core.utils import generate_id
+from app.core.utils import generate_id, normalize_email
 from app.models.magic_link import MagicLink
 from app.models.oauth_account import OAuthAccount
 from app.models.user import User
@@ -98,6 +98,11 @@ async def register_user(
     """
     _validate_password(password)
 
+    # Normalized before the uniqueness check, not after: checking the raw
+    # string would let `Alex@example.com` register alongside an existing
+    # `alex@example.com` (issue #91).
+    email = normalize_email(email)
+
     # Check email uniqueness
     result = await session.execute(select(User).where(User.email == email))
     if result.scalar_one_or_none():
@@ -140,7 +145,10 @@ async def authenticate_user(
     Raises:
         AuthenticationError: If credentials are invalid or user is inactive.
     """
-    result = await session.execute(select(User).where(User.email == email))
+    # Normalized here rather than at the route, so no caller can forget and
+    # hand a user a "wrong password" for typing their own address in a
+    # different case (issue #91).
+    result = await session.execute(select(User).where(User.email == normalize_email(email)))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -176,16 +184,23 @@ async def get_user_by_id(session: AsyncSession, user_id: str) -> User | None:
 
 
 async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
-    """Fetch a user by email.
+    """Fetch a user by email, regardless of the casing supplied.
+
+    The address is normalized here rather than by each caller. Every route in
+    is a place the bug could come back otherwise: `request_password_reset`
+    returns 202 whether or not it found a row, so a miss there is silent, and
+    `create_or_link_oauth` reads a miss as "no local account holds this
+    address" and links an OAuth identity on the strength of it (issue #91,
+    which partially reopened #70).
 
     Args:
         session: Database session.
-        email: User email.
+        email: User email, in any casing.
 
     Returns:
         User or None if not found.
     """
-    result = await session.execute(select(User).where(User.email == email))
+    result = await session.execute(select(User).where(User.email == normalize_email(email)))
     return result.scalar_one_or_none()
 
 
@@ -758,6 +773,12 @@ async def create_or_link_oauth(
     """
     if not email:
         raise AuthenticationError(f"OAuth provider '{provider}' did not return an email")
+
+    # Normalized before any of the email-based decisions below. The lookup
+    # would fold it anyway, but the create branch stores it verbatim, and a
+    # provider that returns `Alex@example.com` would otherwise mint a second,
+    # case-differing row for an address the instance already has (issue #91).
+    email = normalize_email(email)
 
     # Check if OAuth account already exists
     result = await session.execute(
