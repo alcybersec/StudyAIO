@@ -11,6 +11,7 @@ from app.core.exceptions import CourseOpsError
 from app.core.storage import LocalStorageBackend, get_storage, normalize_storage_key
 from app.extractors import get_extractor
 from app.models.course_document import CourseDocument
+from app.pipeline.failures import record_document_failure
 from app.services import courseops_service
 from app.worker import celery_app
 
@@ -109,14 +110,12 @@ async def _process_document(document_id: str) -> dict:
 
             return result
 
-        except CourseOpsError:
-            doc.status = "failed"
-            await session.commit()
+        except CourseOpsError as e:
+            await record_document_failure(session, document_id=document_id, error=e)
             raise
 
         except Exception as e:
-            doc.status = "failed"
-            await session.commit()
+            await record_document_failure(session, document_id=document_id, error=e)
             raise CourseOpsError(f"CourseOps processing failed: {e}") from e
 
 
