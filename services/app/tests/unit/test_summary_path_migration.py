@@ -25,7 +25,7 @@ MIGRATION = (
     Path(__file__).resolve().parents[2]
     / "alembic"
     / "versions"
-    / "d0e1f2g3h4i5_summary_file_path_per_course.py"
+    / "6b2e9a4c71df_summary_file_path_per_course.py"
 )
 
 SHARED_CODE = "CSIT302"

@@ -10,7 +10,7 @@ same course code in the database, runs the backfill's real query against them,
 and checks that the owner-scoped getter the files route now depends on tells
 their courses apart.
 
-The migration itself (`d0e1f2g3h4i5`) has already run by the time any of this
+The migration itself (`6b2e9a4c71df`) has already run by the time any of this
 executes -- `_run_migrations` upgrades to head -- so its statements are known
 to be valid Postgres before a single assertion here.
 """

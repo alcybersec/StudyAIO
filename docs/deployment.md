@@ -174,7 +174,7 @@ so on an instance with more than one account two users taking the same course
 shared one file — the second pipeline run overwrote the first user's summary.
 Keys are `summaries/<course_id>/Week<N>.md` now.
 
-Alembic revision `d0e1f2g3h4i5` re-keys the `summaries.file_path` column when
+Alembic revision `6b2e9a4c71df` re-keys the `summaries.file_path` column when
 you run `alembic upgrade head`. The files themselves are moved by a separate
 one-time command, which has to run where the storage is (the API container, or
 anywhere with the same `DATA_DIR` / S3 settings):

@@ -7,7 +7,7 @@ one file: the second pipeline run overwrote the first user's summary, and both
 `summaries` rows pointed at the survivor. The keys are now
 `summaries/<course_id>/Week<N>.md`.
 
-Alembic revision `d0e1f2g3h4i5` rewrites the `file_path` column. This script
+Alembic revision `6b2e9a4c71df` rewrites the `file_path` column. This script
 does the storage half, which a migration cannot: it runs where the blobs are.
 
 What it does, per `summaries` row:
