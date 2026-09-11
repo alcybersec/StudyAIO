@@ -17,10 +17,12 @@ import {
   THead,
   TRow,
 } from '../components/ui'
+import { toast } from 'sonner'
 import type { AdminUser } from '../types'
 import { InvitePanel } from '../components/admin/InvitePanel'
 import { AddUserForm } from '../components/admin/AddUserForm'
 import { UserRowActions } from '../components/admin/UserRowActions'
+import { ConfirmAction } from '../components/admin/ConfirmAction'
 import { useAuth } from '../hooks/useAuth'
 
 const PAGE_SIZE = 25
@@ -79,35 +81,128 @@ function MetricsGrid() {
   )
 }
 
+/** A change held back until the admin has read what it does. */
+interface PendingChange {
+  field: 'role' | 'is_active'
+  value: string | boolean
+  title: string
+  confirmLabel: string
+  consequences: string[]
+  /** Reported after the PATCH succeeds, so the sign-out is not silent either. */
+  successMessage: string
+}
+
+// ── What the inline controls actually do ───────────────────────
+//
+// A role change and a reactivation both revoke the user's sessions (#88), and
+// both are fired from a control that commits on change — a dropdown pick, or a
+// single click on a badge. Until now the admin was told nothing, before or
+// after, and a stray click was enough.
+//
+// The tier select deliberately gets no confirmation: a tier moves a quota, not
+// a privilege, and nothing in a token depends on it. Confirming everything is
+// how a confirmation stops being read.
+
+function describeRoleChange(user: AdminUser, role: string): PendingChange {
+  const consequences = [
+    `Signs ${user.email} out on every device immediately — their access token and their 7-day refresh token both stop working, so they have to sign in again.`,
+  ]
+  if (role === 'demo') {
+    consequences.push('A demo account cannot write: their next session is read-only.')
+  }
+  if (role === 'admin') {
+    consequences.push(
+      'An admin can read and change every account on this instance, including yours.',
+    )
+  }
+  if (user.role === 'admin' && role !== 'admin') {
+    consequences.push(
+      'They lose admin access. If this is the last admin account, the change is refused rather than locking everyone out.',
+    )
+  }
+  return {
+    field: 'role',
+    value: role,
+    title: `Change ${user.email} from ${user.role} to ${role}?`,
+    confirmLabel: `Change role to ${role}`,
+    consequences,
+    successMessage: `${user.email} is now ${role} — signed out on every device.`,
+  }
+}
+
+function describeStatusChange(user: AdminUser): PendingChange {
+  if (user.is_active) {
+    return {
+      field: 'is_active',
+      value: false,
+      title: `Deactivate ${user.email}?`,
+      confirmLabel: 'Deactivate',
+      consequences: [
+        `Every request from this account is refused while it is inactive, a token refresh included, and ${user.email} cannot sign in again.`,
+        'Nothing is deleted, and their sessions are suspended rather than revoked — but reactivating the account later revokes them for real.',
+      ],
+      successMessage: `${user.email} deactivated.`,
+    }
+  }
+  return {
+    field: 'is_active',
+    value: true,
+    title: `Reactivate ${user.email}?`,
+    confirmLabel: 'Reactivate',
+    consequences: [
+      `Restores access for ${user.email}.`,
+      'Signs them out on every device first: every session from before the deactivation is revoked, including the 7-day refresh token, so they sign in fresh rather than resuming where they left off.',
+    ],
+    successMessage: `${user.email} reactivated — the sessions it had before are revoked.`,
+  }
+}
+
 function UserRow({
   user,
   onUpdate,
   currentUserId,
 }: {
   user: AdminUser
-  onUpdate: (id: string, field: string, value: string | boolean) => void
+  onUpdate: (
+    id: string,
+    change: { field: string; value: string | boolean; successMessage?: string },
+  ) => void
   currentUserId: string | undefined
 }) {
   const navigate = useNavigate()
+  const [pending, setPending] = useState<PendingChange | null>(null)
+
   return (
     <TRow onClick={() => navigate(`/admin/users/${user.id}`)}>
       <TCell className="text-text">{user.email}</TCell>
       <TCell className="text-text-muted">{user.username ?? '—'}</TCell>
       <TCell>
         <div onClick={(e) => e.stopPropagation()} className="w-24">
-          <Select options={ROLE_OPTIONS} value={user.role} onValueChange={(v) => onUpdate(user.id, 'role', v)} />
+          <Select
+            options={ROLE_OPTIONS}
+            value={user.role}
+            onValueChange={(v) => {
+              // A pick that matches the stored role changes nothing and revokes
+              // nothing, so it must not raise a dialog claiming otherwise.
+              if (v !== user.role) setPending(describeRoleChange(user, v))
+            }}
+          />
         </div>
       </TCell>
       <TCell>
         <div onClick={(e) => e.stopPropagation()} className="w-24">
-          <Select options={TIER_OPTIONS} value={user.tier} onValueChange={(v) => onUpdate(user.id, 'tier', v)} />
+          <Select
+            options={TIER_OPTIONS}
+            value={user.tier}
+            onValueChange={(v) => onUpdate(user.id, { field: 'tier', value: v })}
+          />
         </div>
       </TCell>
       <TCell>
         <button
           onClick={(e) => {
             e.stopPropagation()
-            onUpdate(user.id, 'is_active', !user.is_active)
+            setPending(describeStatusChange(user))
           }}
           className="cursor-pointer"
           aria-label={user.is_active ? 'Deactivate user' : 'Activate user'}
@@ -123,6 +218,24 @@ function UserRow({
       </TCell>
       <TCell>
         <UserRowActions user={user} currentUserId={currentUserId} />
+        {/* Shared by the role select and the status badge, and rendered here
+            only because a row has to render it somewhere: the dialog is
+            portalled to the body, so its position in the table is immaterial. */}
+        {pending && (
+          <ConfirmAction
+            open
+            onOpenChange={(open) => {
+              if (!open) setPending(null)
+            }}
+            title={pending.title}
+            consequences={pending.consequences}
+            confirmLabel={pending.confirmLabel}
+            onConfirm={() => {
+              onUpdate(user.id, pending)
+              setPending(null)
+            }}
+          />
+        )}
       </TCell>
     </TRow>
   )
@@ -163,8 +276,35 @@ export function AdminPage() {
   const updateUser = useUpdateAdminUser()
   const { user: currentUser } = useAuth()
 
-  const handleUpdate = (userId: string, field: string, value: string | boolean) => {
-    updateUser.mutate({ userId, data: { [field]: value } })
+  /**
+   * One field per PATCH, as before — but no longer silent either way.
+   *
+   * A failure used to vanish: demoting the last admin is refused with a 422
+   * (`_guard_last_admin`), and the only sign of it was the select snapping back.
+   * And a success that ends every one of the user's sessions deserves to be
+   * said out loud.
+   *
+   * The success line is derived from the change we asked for, not from the
+   * response: `UserResponse` does not carry whether sessions were revoked, even
+   * though `admin_service` knows and logs it (`sessions_revoked=`). Adding that
+   * field would let this report the server's answer instead of inferring it.
+   */
+  const handleUpdate = (
+    userId: string,
+    change: { field: string; value: string | boolean; successMessage?: string },
+  ) => {
+    updateUser.mutate(
+      { userId, data: { [change.field]: change.value } },
+      {
+        onSuccess: () => {
+          if (change.successMessage) toast.success(change.successMessage)
+        },
+        onError: (err: unknown) =>
+          toast.error(
+            err instanceof Error && err.message ? err.message : "Couldn't update this account",
+          ),
+      },
+    )
   }
 
   const totalPages = usersData ? Math.ceil(usersData.total / PAGE_SIZE) : 0
