@@ -26,21 +26,45 @@ class TestEstimateTokens:
 
 
 class TestBuildStableId:
-    """Tests for stable chunk ID generation."""
+    """Tests for stable chunk ID generation.
+
+    These assert the *artifact*-scoped shape. Until #85 they asserted a
+    hash-prefix shape -- the exact "a unit test would assert the broken shape
+    is correct" case the issue predicted -- so the format assertion is kept
+    here, pointed at the right format, and the collision itself is pinned
+    against a real database in
+    `tests/integration/test_chunk_stable_id_scoping.py`.
+    """
 
     def test_format(self):
-        result = _build_stable_id("a1b2c3d4", 1, 0)
-        assert result == "a1b2c3d4_p1_c0"
+        result = _build_stable_id("11111111-2222-3333-4444-555555555555", 1, 0)
+        assert result == "11111111-2222-3333-4444-555555555555_p1_c0"
 
     def test_different_page_and_chunk(self):
-        result = _build_stable_id("deadbeef", 5, 3)
-        assert result == "deadbeef_p5_c3"
+        result = _build_stable_id("11111111-2222-3333-4444-555555555555", 5, 3)
+        assert result == "11111111-2222-3333-4444-555555555555_p5_c3"
 
     def test_deterministic(self):
         """Same inputs produce same output."""
-        a = _build_stable_id("abc12345", 2, 1)
-        b = _build_stable_id("abc12345", 2, 1)
+        a = _build_stable_id("11111111-2222-3333-4444-555555555555", 2, 1)
+        b = _build_stable_id("11111111-2222-3333-4444-555555555555", 2, 1)
         assert a == b
+
+    def test_distinct_artifacts_never_share_a_stable_id(self):
+        """The invariant #85 is about: same page and index, two artifacts.
+
+        This passes on the pre-#85 code too -- the old function interpolated
+        whatever it was handed -- because it pins the *shape*. What it cannot
+        see is the caller passing something two users share; that is what
+        `tests/integration/test_chunk_stable_id_scoping.py` is for.
+        """
+        a = _build_stable_id("11111111-2222-3333-4444-555555555555", 1, 0)
+        b = _build_stable_id("66666666-7777-8888-9999-000000000000", 1, 0)
+        assert a != b
+
+    def test_fits_the_column(self):
+        """`stable_id` is String(255); a 36-char UUID plus the suffix is nowhere near it."""
+        assert len(_build_stable_id("11111111-2222-3333-4444-555555555555", 9999, 9999)) <= 255
 
 
 class TestChunkPages:
@@ -158,7 +182,6 @@ class TestIndexArtifactChunks:
             result = await index_artifact_chunks(
                 session=session,
                 artifact_id="art-001",
-                sha256="a" * 64,
                 pages=pages,
                 embedding_provider=mock_provider,
             )
@@ -182,7 +205,6 @@ class TestIndexArtifactChunks:
         result = await index_artifact_chunks(
             session=session,
             artifact_id="art-001",
-            sha256="a" * 64,
             pages=pages,
             embedding_provider=mock_provider,
         )
@@ -222,7 +244,6 @@ class TestIndexArtifactChunks:
             await index_artifact_chunks(
                 session=session,
                 artifact_id="art-001",
-                sha256="a" * 64,
                 pages=pages,
                 embedding_provider=mock_provider,
             )
