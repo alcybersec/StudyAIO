@@ -28,12 +28,19 @@ there yet. Nothing reads it: the UI renders `content_md` (`SummaryTab.tsx`,
 `export_service`, `pipeline/assets.py`), and the only reader of the file is
 `GET /api/files/summaries/...`, which nothing links to.
 
+The revision id is random rather than the next letter pair in the older
+sequence: two branches picked `d0e1f2g3h4i5` off `c9d0e1f2g3h4` independently
+because the sequence made the next value obvious, and duplicate identifiers
+are not two heads -- Alembic refuses to load the directory at all. This one
+chains onto `d0e1f2g3h4i5` (the email normalisation from #91), which reached
+`main` first.
+
 The key shape is spelled out here rather than imported from
 `summary_service`: a migration is pinned history and must keep meaning what it
 meant on the day it ran, even after the builder changes again.
 
-Revision ID: d0e1f2g3h4i5
-Revises: c9d0e1f2g3h4
+Revision ID: 6b2e9a4c71df
+Revises: d0e1f2g3h4i5
 Create Date: 2026-09-11 00:00:00.000000
 
 """
@@ -44,8 +51,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "d0e1f2g3h4i5"
-down_revision: str | None = "c9d0e1f2g3h4"
+revision: str = "6b2e9a4c71df"
+down_revision: str | None = "d0e1f2g3h4i5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
