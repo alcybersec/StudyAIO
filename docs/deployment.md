@@ -166,6 +166,33 @@ DATA_DIR=/app/data
 
 Files stored under `data/uploads/`, `data/extractions/`, `data/summaries/`.
 
+#### One-time: re-key existing summary files (issue #92)
+
+Summary files used to be keyed on the course *code*
+(`summaries/<CODE>/<CODE>_Week<N>.md`). Course codes are unique only per user,
+so on an instance with more than one account two users taking the same course
+shared one file — the second pipeline run overwrote the first user's summary.
+Keys are `summaries/<course_id>/Week<N>.md` now.
+
+Alembic revision `d0e1f2g3h4i5` re-keys the `summaries.file_path` column when
+you run `alembic upgrade head`. The files themselves are moved by a separate
+one-time command, which has to run where the storage is (the API container, or
+anywhere with the same `DATA_DIR` / S3 settings):
+
+```bash
+# Report what would change
+docker compose exec api python scripts/backfill_summary_files.py --dry-run
+
+# Do it
+docker compose exec api python scripts/backfill_summary_files.py
+```
+
+It writes each new file from the `summaries.content_md` column rather than
+moving the old file — where two users collided, the old file holds only one of
+them's text — then deletes the old-shape files. It is idempotent, safe to run
+before or after the migration, and touches nothing outside `summaries/`. Pass
+`--keep-legacy` to leave the old files in place; nothing serves them either way.
+
 ### S3-Compatible
 
 ```env
