@@ -32,8 +32,31 @@ MAX_CONVERT_BYTES = 60 * 1024 * 1024  # 60 MB
 PREVIEW_CACHE_VERSION = 2
 
 
-def _preview_key(artifact_id: str) -> str:
-    return f"previews/v{PREVIEW_CACHE_VERSION}/{artifact_id}.pdf"
+def _preview_key(artifact_id: str, version: int = PREVIEW_CACHE_VERSION) -> str:
+    return f"previews/v{version}/{artifact_id}.pdf"
+
+
+def preview_keys_for_artifact(artifact_id: str) -> list[str]:
+    """Every preview key an artifact may hold — current and superseded.
+
+    Bumping ``PREVIEW_CACHE_VERSION`` stops *serving* the old PDF but does not
+    remove it, so an instance that has been through a bump still has files at
+    every earlier version. Anything deleting an artifact's blobs has to sweep
+    all of them, not just the current one.
+
+    These are exact keys, not a prefix, and callers must delete them with
+    ``storage.delete``. ``delete_prefix("previews/v2/<id>")`` is not
+    equivalent: on S3 it string-matches the ``.pdf`` object, but
+    ``LocalStorageBackend`` resolves a prefix to a path and finds no such
+    directory, so the same call silently deletes nothing (#97).
+
+    Args:
+        artifact_id: Artifact UUID.
+
+    Returns:
+        One key per cache version, oldest first.
+    """
+    return [_preview_key(artifact_id, v) for v in range(1, PREVIEW_CACHE_VERSION + 1)]
 
 
 async def _convert_to_pdf(src: Path, out_dir: Path) -> Path | None:

@@ -244,6 +244,24 @@ def build_summary_file_path(summaries_dir: str, course_id: str, week: int) -> Pa
     return course_dir / f"Week{week}.md"
 
 
+def summary_key_prefix_for_course(course_id: str) -> str:
+    """The storage prefix holding every summary file for one course.
+
+    Summary keys are scoped by **course**, never by artifact. The account
+    purge enumerates from this rather than writing the shape out a second
+    time: deletion silently retained every summary file for the life of the
+    feature because it swept ``summaries/<artifact_id>``, a prefix no summary
+    key has ever had (#97).
+
+    Args:
+        course_id: Course UUID.
+
+    Returns:
+        Prefix like ``summaries/0192c4d5-...``
+    """
+    return f"{SUMMARY_KEY_PREFIX}/{course_id}"
+
+
 def build_summary_storage_key(course_id: str, week: int) -> str:
     """Build the storage key for a summary markdown file.
 
@@ -268,7 +286,7 @@ def build_summary_storage_key(course_id: str, week: int) -> str:
     Returns:
         Key like ``summaries/0192c4d5-.../Week3.md``
     """
-    return f"{SUMMARY_KEY_PREFIX}/{course_id}/Week{week}.md"
+    return f"{summary_key_prefix_for_course(course_id)}/Week{week}.md"
 
 
 async def backfill_summary_storage_keys(
