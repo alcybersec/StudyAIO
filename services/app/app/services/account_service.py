@@ -19,6 +19,13 @@ maintainable:
   `tests/unit/services/test_account_deletion.py` fails on any table that is
   neither, so a new user-owned table cannot be forgotten here.
 
+The rows are only half the job. `purge_user_storage()` removes the blobs, and
+it has no `Base.metadata` to enumerate from — every storage namespace has to be
+derived from a key builder by hand, which is a weaker guarantee. #97 is what
+that costs: the purge swept `summaries/<artifact_id>`, a prefix no summary key
+has ever used, so the rows vanished while the files stayed. Read that function's
+docstring before adding a namespace.
+
 `tests/integration/test_account_deletion.py` exercises all of this against a
 real database — the unit tests can only check the shape of the predicates.
 """
@@ -33,7 +40,7 @@ from sqlalchemy import Select, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Base
-from app.core.storage import get_storage
+from app.core.storage import StorageBackend, get_storage
 from app.models.artifact import LectureArtifact
 from app.models.chat_session import ChatSession
 from app.models.concept import Concept
@@ -41,6 +48,7 @@ from app.models.course import Course
 from app.models.exam import Exam
 from app.models.quiz import QuizQuestion
 from app.models.user import User
+from app.services import preview_service, summary_service
 
 logger = structlog.get_logger()
 
@@ -196,51 +204,115 @@ def classify_tables() -> tuple[list[str], list[str]]:
 # ── Deletion ─────────────────────────────────────────────────────────
 
 
-async def purge_user_storage(session: AsyncSession, user_id: str) -> int:
+async def purge_user_storage(
+    session: AsyncSession, user_id: str, storage: StorageBackend | None = None
+) -> int:
     """Delete the user's uploaded and generated files from blob storage.
 
-    Storage keys are not namespaced per user, so the artifacts are enumerated
-    from the database first. Runs before the rows are deleted, for that reason.
+    Storage keys are not namespaced per user, so every key has to be derived
+    from rows the user owns. That is why this runs *before* the table-driven
+    row deletion in `delete_user_account`, and why it issues its own queries
+    instead of taking `OwnedIds`: it is callable on its own, and a version that
+    depended on the caller having snapshotted first would be a trap.
+
+    **Each namespace is asked the same question: is this key reachable from
+    what the purge enumerates?** The shape of #97 was that it enumerated by
+    artifact only, which structurally cannot reach a key scoped any other way:
+
+    * ``uploads/<artifact_id>_<name>`` — ``lecture_artifacts.file_path``, by key.
+    * ``extractions/<artifact_id>/...`` — a prefix per artifact.
+    * ``previews/v<N>/<artifact_id>.pdf`` — exact keys, every cache version, via
+      `preview_service.preview_keys_for_artifact`. Artifact-scoped, but it was
+      *not* reachable before #97: nothing swept it at all.
+    * ``summaries/<course_id>/...`` — a prefix per **course**, via
+      `summary_service.summary_key_prefix_for_course`. This is the #97 bug:
+      the prefix used to be built from the artifact id, which no summary key
+      has ever carried, so the whole branch was a permanent no-op and every
+      summary file outlived the account that produced it.
+
+    The two course/preview prefixes come from the key builders rather than
+    being spelled out again here, so changing a key shape cannot leave this
+    sweeping a prefix nothing is stored under. ``extractions/`` is still
+    literal: its only builder is inline in `app.pipeline.extract`, and reaching
+    into the pipeline layer from here to borrow it is not worth the coupling.
+
+    The prefixes carry no trailing slash, which is only safe because
+    `generate_id` is UUID7: every id is the same length, so no id can be a
+    string prefix of another. `LocalStorageBackend` resolves a prefix to a
+    directory and is unaffected either way, but S3's `list_objects_v2` matches
+    on the raw string — under variable-length ids, one user's sweep could reach
+    another's objects, and a trailing slash would become load-bearing.
+
+    ``courseops/<sha256[:16]>_<name>`` is **deliberately not purged**. It is
+    content-addressed with no owner in the key, so it is reachable from neither
+    artifacts nor courses, and two users who upload the same handbook share one
+    blob byte for byte — deleting it on one account's closure would silently
+    remove the other user's document. Needs ownership tracking (or refcounting)
+    before it can be purged safely; see the issue thread on #97.
 
     Args:
         session: Database session.
         user_id: The user being purged.
+        storage: Storage backend, defaulting to the configured singleton.
 
     Returns:
         Number of storage objects deleted.
     """
-    storage = get_storage()
-    result = await session.execute(
-        select(LectureArtifact.id, LectureArtifact.file_path).where(
-            LectureArtifact.user_id == user_id
+    store = storage if storage is not None else get_storage()
+
+    artifacts = (
+        await session.execute(
+            select(LectureArtifact.id, LectureArtifact.file_path).where(
+                LectureArtifact.user_id == user_id
+            )
         )
+    ).all()
+    course_ids = list(
+        (await session.execute(select(Course.id).where(Course.user_id == user_id))).scalars().all()
     )
-    rows = result.all()
+
+    keys: list[str] = []
+    prefixes: list[str] = []
+    for artifact_id, storage_key in artifacts:
+        if storage_key:
+            keys.append(storage_key)
+        keys.extend(preview_service.preview_keys_for_artifact(artifact_id))
+        prefixes.append(f"extractions/{artifact_id}")
+    prefixes.extend(summary_service.summary_key_prefix_for_course(cid) for cid in course_ids)
 
     deleted = 0
-    for artifact_id, storage_key in rows:
-        if storage_key:
-            try:
-                await storage.delete(storage_key)
+    for key in keys:
+        try:
+            # Count what was actually there, so the number reported is not
+            # inflated by every cache version an artifact never had.
+            if await store.exists(key):
+                await store.delete(key)
                 deleted += 1
-            except Exception:
-                # A missing blob must not block the account deletion.
-                logger.warning(
-                    "storage_delete_failed", key=storage_key, user_id=user_id, exc_info=True
-                )
-        for prefix in (f"extractions/{artifact_id}", f"summaries/{artifact_id}"):
-            try:
-                deleted += await storage.delete_prefix(prefix)
-            except Exception:
-                logger.warning(
-                    "storage_delete_prefix_failed", prefix=prefix, user_id=user_id, exc_info=True
-                )
+        except Exception:
+            # A missing or unreadable blob must not block the account deletion.
+            logger.warning("storage_delete_failed", key=key, user_id=user_id, exc_info=True)
 
-    logger.info("user_storage_purged", user_id=user_id, objects_deleted=deleted)
+    for prefix in prefixes:
+        try:
+            deleted += await store.delete_prefix(prefix)
+        except Exception:
+            logger.warning(
+                "storage_delete_prefix_failed", prefix=prefix, user_id=user_id, exc_info=True
+            )
+
+    logger.info(
+        "user_storage_purged",
+        user_id=user_id,
+        objects_deleted=deleted,
+        artifacts=len(artifacts),
+        courses=len(course_ids),
+    )
     return deleted
 
 
-async def delete_user_account(session: AsyncSession, user_id: str) -> dict[str, int]:
+async def delete_user_account(
+    session: AsyncSession, user_id: str, storage: StorageBackend | None = None
+) -> dict[str, int]:
     """Hard-delete a user and everything they own.
 
     Deletes in reverse dependency order so no foreign key is violated, then
@@ -249,6 +321,9 @@ async def delete_user_account(session: AsyncSession, user_id: str) -> dict[str, 
     Args:
         session: Database session.
         user_id: The user to delete.
+        storage: Storage backend, defaulting to the configured singleton. Tests
+            pass a backend rooted in a temporary directory — this function
+            deletes files, so it must never be pointed at a real data dir.
 
     Returns:
         Mapping of table name to rows deleted (tables with 0 rows omitted).
@@ -256,8 +331,9 @@ async def delete_user_account(session: AsyncSession, user_id: str) -> dict[str, 
     # Snapshot ownership before anything is deleted — see OwnedIds.
     owned = await collect_owned_ids(session, user_id)
 
-    # Enumerate blobs before the rows that point at them are gone.
-    objects_deleted = await purge_user_storage(session, user_id)
+    # Enumerate blobs before the rows they are derived from are gone: the purge
+    # reads `lecture_artifacts` and `courses` to build its keys (#97).
+    objects_deleted = await purge_user_storage(session, user_id, storage)
 
     counts: dict[str, int] = {}
     for table in reversed(_ordered_tables()):
