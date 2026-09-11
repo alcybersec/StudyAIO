@@ -1,13 +1,16 @@
 import { useState } from 'react'
-import { KeyRound, MailCheck, Trash2 } from 'lucide-react'
+import { AtSign, KeyRound, MailCheck, ShieldOff, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../ui'
 import {
+  useClearUserMfa,
   useDeleteAdminUser,
   useResendVerification,
   useSendPasswordReset,
 } from '../../hooks/useApi'
 import type { AdminUser } from '../../types'
+import { ChangeEmailDialog } from './ChangeEmailDialog'
+import { ConfirmAction } from './ConfirmAction'
 
 interface UserRowActionsProps {
   user: AdminUser
@@ -20,16 +23,26 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 /**
- * Per-user admin actions: password reset, resend verification, delete.
+ * Per-user admin actions: password reset, resend verification, change email,
+ * clear MFA, delete.
  *
- * Deletion is irreversible and takes every row the user owns with it, so it
- * asks for a second click rather than firing on the first.
+ * Three of these are destructive and they do not all get the same friction,
+ * because they do not all carry the same risk of being misread:
+ *
+ * - Deletion is irreversible, and the word already says so: a second click.
+ * - Clearing MFA and changing the email both end the user's sessions and read
+ *   like housekeeping, so they state their consequences in a modal first.
+ * - Changing the email additionally asks for the address twice — this table is
+ *   paginated and its rows are one click apart.
  */
 export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [changingEmail, setChangingEmail] = useState(false)
+  const [confirmingMfaReset, setConfirmingMfaReset] = useState(false)
 
   const sendReset = useSendPasswordReset()
   const resendVerification = useResendVerification()
+  const clearMfa = useClearUserMfa()
   const deleteUser = useDeleteAdminUser()
 
   const isSelf = user.id === currentUserId
@@ -79,6 +92,58 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
         <MailCheck size={12} aria-hidden />
         <span className="sr-only">Resend verification to {user.email}</span>
       </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        title="Change the login email address"
+        onClick={() => setChangingEmail(true)}
+      >
+        <AtSign size={12} aria-hidden />
+        <span className="sr-only">Change email for {user.email}</span>
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={clearMfa.isPending}
+        title="Clear MFA for a user locked out of their authenticator"
+        onClick={() => setConfirmingMfaReset(true)}
+      >
+        <ShieldOff size={12} aria-hidden />
+        <span className="sr-only">Clear MFA for {user.email}</span>
+      </Button>
+
+      <ChangeEmailDialog open={changingEmail} onOpenChange={setChangingEmail} user={user} />
+
+      <ConfirmAction
+        open={confirmingMfaReset}
+        onOpenChange={setConfirmingMfaReset}
+        title={`Clear MFA for ${user.email}?`}
+        confirmLabel="Clear MFA"
+        pending={clearMfa.isPending}
+        consequences={[
+          'Turns two-factor authentication off. Only do this once you have confirmed out of band that the person asking really is the account holder — that check is the only one there is.',
+          `Signs ${user.email} out on every device: the account's security level just dropped, so tokens minted before it stop working.`,
+          'Until they enrol a new authenticator, their password is the only thing standing between anyone and the account.',
+        ]}
+        onConfirm={() =>
+          clearMfa.mutate(user.id, {
+            onSuccess: (r) => {
+              // `mfa_was_enabled` is the difference between a recovery and a
+              // no-op. Reporting both as success would tell the operator they
+              // fixed a lockout they did not touch.
+              if (r.mfa_was_enabled) {
+                toast.success(`MFA cleared for ${user.email} — they are signed out and can re-enrol`)
+              } else {
+                toast.message(`MFA was already off for ${user.email} — nothing changed`)
+              }
+            },
+            onError: (e) => toast.error(errorMessage(e, "Couldn't clear MFA for this account")),
+            onSettled: () => setConfirmingMfaReset(false),
+          })
+        }
+      />
 
       {confirmingDelete ? (
         <>

@@ -1,5 +1,6 @@
 import { api } from './client'
 import type {
+  AdminMfaCleared,
   AdminUser,
   AdminUserCreated,
   AdminUserCreateRequest,
@@ -58,6 +59,14 @@ export const adminApi = {
 
   resendVerification(userId: string): Promise<AdminUserLink> {
     return api.post<AdminUserLink>(`/admin/users/${userId}/resend-verification`)
+  },
+
+  /**
+   * Turn MFA off for a user who has lost both authenticator and backup codes.
+   * The operator's only recovery route — and it ends the user's sessions.
+   */
+  clearUserMfa(userId: string): Promise<AdminMfaCleared> {
+    return api.post<AdminMfaCleared>(`/admin/users/${userId}/mfa-reset`)
   },
 
   listInvites(): Promise<InviteCodeList> {

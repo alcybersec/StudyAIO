@@ -911,6 +911,13 @@ export interface AdminUserUpdate {
   role?: string
   tier?: string
   is_active?: boolean
+  /**
+   * Repointing the login address. Destructive: the server revokes the user's
+   * sessions, unlinks every OAuth identity, voids unused magic links and clears
+   * `email_verified`. Only ever sent from `ChangeEmailDialog`, which states all
+   * of that first — never from an inline control that commits on change.
+   */
+  email?: string
 }
 
 export interface SystemMetrics {
@@ -1230,4 +1237,10 @@ export interface AdminUserLink {
 export interface AdminUserDeleted {
   detail: string
   rows_deleted: number
+}
+
+export interface AdminMfaCleared {
+  detail: string
+  /** False means MFA was already off and nothing changed — report that honestly. */
+  mfa_was_enabled: boolean
 }
