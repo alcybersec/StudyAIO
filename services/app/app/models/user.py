@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -81,6 +81,22 @@ class User(Base):
 
     __table_args__ = (
         Index("ix_users_email", "email", unique=True),
+        # Case-insensitive uniqueness, enforced by the database rather than by
+        # every call site remembering (issue #91). `ix_users_email` above
+        # compares the stored strings, so it happily accepts `alex@example.com`
+        # and `Alex@example.com` as two accounts; this one does not.
+        #
+        # A functional index over `citext` on purpose: citext needs
+        # `CREATE EXTENSION`, which is a privilege self-hosted and managed
+        # Postgres both make awkward, and it changes comparison semantics
+        # invisibly at every `==` in generated SQL. This is additive DDL, needs
+        # no extension, and is readable right here beside the column.
+        #
+        # It stops duplicates; it does not make `WHERE email = 'Alex@…'` match
+        # a stored `alex@…`. Normalising on the way in — `normalize_email` in
+        # `user_service` and `admin_service` — is what makes lookups work, and
+        # this index is what stops the next call site from reintroducing the bug.
+        Index("ix_users_email_lower", text("lower(email)"), unique=True),
         Index("ix_users_username", "username", unique=True),
         Index("ix_users_role", "role"),
     )
