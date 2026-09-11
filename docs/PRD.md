@@ -618,14 +618,19 @@ Unique constraint on `(course_id, week)`.
 |---|---|---|
 | id | UUID | Primary key |
 | artifact_id | UUID | FK → LectureArtifact |
-| stable_id | VARCHAR(255) | Deterministic ID for idempotency. Unique. |
+| stable_id | VARCHAR(255) | Deterministic ID, scoped to the artifact. Unique. |
 | text | TEXT | Chunk text content |
 | page_ref | INTEGER | Source page/slide number |
 | slide_title | VARCHAR(500) | Slide/section title, nullable |
-| embedding | VECTOR(1536) | pgvector column, nullable |
+| embedding | VECTOR(384) | pgvector column, nullable |
 | created_at | TIMESTAMP | Auto-set |
 
-`stable_id` format: `<artifact_sha256_prefix>_p<page>_c<chunk_index>`
+`stable_id` format: `<artifact_id>_p<page>_c<chunk_index>`
+
+Scoped to the artifact, not to the file's content hash. The hash-derived form it
+replaced was the same string for any two users who uploaded the same file, so the
+second one's index stage died on the global UNIQUE (#85). An artifact id is a
+UUID, so this form is globally unique on its own.
 
 #### Flashcard
 
@@ -690,7 +695,9 @@ Unique constraint on `(course_id, week)`.
 ### Indexes
 
 - `LectureArtifact.sha256` — unique index for dedup
-- `Chunk.stable_id` — unique index for idempotency
+- `Chunk.stable_id` — unique index. Note that idempotent re-indexing does **not**
+  rely on it: `index_service.index_artifact_chunks` deletes the artifact's existing
+  chunks and re-inserts, and no code path uses `stable_id` as a conflict target.
 - `Chunk.embedding` — pgvector index (ivfflat or hnsw) for similarity search
 - `Summary(course_id, week)` — unique index
 - `ReviewItem.status` — partial index on `status = 'pending'` for inbox queries

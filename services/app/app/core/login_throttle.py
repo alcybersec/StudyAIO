@@ -31,6 +31,7 @@ import hmac
 import structlog
 
 from app.config import settings
+from app.core.utils import normalize_email
 
 logger = structlog.get_logger()
 
@@ -51,7 +52,10 @@ def _key(email: str) -> str:
     Returns:
         The Redis key.
     """
-    normalized = email.strip().lower().encode()
+    # Shares `normalize_email` with the account path so the counter follows the
+    # account, not the casing: two spellings of one address must not each get
+    # their own clean allowance (issue #91).
+    normalized = normalize_email(email).encode()
     digest = hmac.new(
         settings.jwt_secret_key.get_secret_value().encode(), normalized, hashlib.sha256
     ).hexdigest()
