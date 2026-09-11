@@ -178,7 +178,21 @@ class TestClassifyStage:
     async def test_error_message_stores_exception_not_artifact_id(
         self, mock_session_factory, mock_preview
     ):
-        """Error message in PipelineRun stores the exception, not artifact_id."""
+        """Error message in PipelineRun stores the exception, not artifact_id.
+
+        The failure is now recorded by `app.pipeline.failures.record_stage_failure`,
+        which rolls the session back and re-fetches the run rather than mutating
+        the instance the stage added (#93 — after a rollback the added object has
+        been expunged, so mutating it writes nothing). The mock therefore has to
+        answer `session.get(PipelineRun, ...)` with the run that was added, which
+        is what a real session does.
+
+        This test can only check *what* is written. Whether the write survives is
+        the thing a mock cannot answer — an `AsyncMock` has no pending-rollback
+        state, so this test passed against the broken code too. That question is
+        settled in `tests/integration/test_pipeline_failure_recording.py`.
+        """
+        from app.models.pipeline_run import PipelineRun
         from app.pipeline.classify import _classify
 
         artifact = MagicMock()
@@ -188,10 +202,18 @@ class TestClassifyStage:
         artifact.original_filename = "test.pdf"
 
         session = AsyncMock()
-        session.add = MagicMock()
+        added: list = []
+        session.add = MagicMock(side_effect=added.append)
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = artifact
         session.execute.return_value = mock_result
+
+        async def fake_get(model, _pk):
+            if model is PipelineRun:
+                return next((obj for obj in added if isinstance(obj, PipelineRun)), None)
+            return artifact
+
+        session.get = AsyncMock(side_effect=fake_get)
         mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
         mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -201,10 +223,9 @@ class TestClassifyStage:
         with pytest.raises(ClassificationError, match="Could not extract text preview"):
             await _classify("art-001")
 
-        # Verify the pipeline run error_message was set correctly
-        # The run object is the second positional arg to session.add
-        add_calls = session.add.call_args_list
-        assert len(add_calls) >= 1
-        run = add_calls[0][0][0]  # First call, first positional arg
+        runs = [obj for obj in added if isinstance(obj, PipelineRun)]
+        assert len(runs) == 1
+        run = runs[0]
+        assert run.status == "failed"
         assert run.error_message != "art-001"
         assert "Could not extract text preview" in run.error_message

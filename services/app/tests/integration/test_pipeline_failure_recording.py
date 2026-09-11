@@ -50,7 +50,11 @@ to some other bug. To stop them becoming silent no-ops if the schema changes,
 
 Two stages, on purpose: the fix is one shared helper
 (`app/pipeline/failures.record_stage_failure`), so the shared path is exercised
-from two different call sites and two different kinds of failing flush.
+from two different call sites and two different kinds of failing flush. A third
+class covers `record_document_failure`, the helper's other entry point, by
+poisoning a session the same way and calling it directly — `courseops_task`'s own
+prerequisites (an extractor, a storage backend, an agent) have nothing to do with
+this bug, and the session state the helper has to recover from is identical.
 """
 
 import asyncio
@@ -68,6 +72,7 @@ from app.core.exceptions import ClassificationError, IndexingError
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.chunk import Chunk
+from app.models.course_document import CourseDocument
 from app.models.extraction import Extraction
 from app.models.pipeline_run import PipelineRun
 
@@ -476,3 +481,103 @@ class TestTheTaskDoesNotRetryADeterministicFailure:
             f"decides not to retry cannot have matched: {outcome.result!r}"
         )
         assert _run_isolated(_artifact_status(artifact_id)) == "failed"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+class TestRecordDocumentFailureOnAPoisonedSession:
+    """The helper's second form, `courseops_task`'s, tested against the mechanism.
+
+    `courseops_task` has the same `commit()`-on-a-poisoned-session handler and the
+    same consequence — the `CourseDocument` sticks at `"processing"` and
+    `CourseOpsError` is replaced by `PendingRollbackError`, so the task retries —
+    but it opens no `PipelineRun`, so it takes the other entry point.
+
+    Driving the whole task would mean stubbing an extractor, a storage backend and
+    an agent, none of which this bug involves. So this poisons a real session the
+    same way a real flush failure does and calls the helper directly: the state it
+    has to recover from is identical, and the assertion is the one that matters —
+    the terminal status reaches the database.
+    """
+
+    async def test_the_document_reaches_failed_from_a_session_marked_for_rollback(
+        self, _run_migrations, test_user_id
+    ):
+        """Revert check — delete the `await session.rollback()` from
+        `failures._clean_transaction` and this fails with:
+
+            AssertionError: the document is 'processing', not 'failed' — the
+            terminal status was rolled back, so nothing will ever move this row on.
+
+        Not a `PendingRollbackError`, because the helper catches its own
+        bookkeeping failure by design and logs `pipeline_failure_not_recorded`
+        instead of letting it escape. That is the same "the status never reaches
+        the database" symptom the original bug produced, which is the symptom
+        that matters.
+        """
+        # DBAPIError, not DataError: asyncpg surfaces the truncation as a plain
+        # `asyncpg.Error`, so SQLAlchemy has nothing to classify it more narrowly
+        # by. The assertion on PG_TRUNCATION below is what pins the actual cause.
+        from sqlalchemy.exc import DBAPIError
+
+        from app.models.course import Course
+        from app.pipeline.failures import record_document_failure
+
+        course_id = generate_id()
+        document_id = generate_id()
+        try:
+            async with async_session_factory() as setup:
+                setup.add(Course(id=course_id, user_id=test_user_id, code="CSIT302"))
+                setup.add(
+                    CourseDocument(
+                        id=document_id,
+                        user_id=test_user_id,
+                        course_id=course_id,
+                        document_type="outline",
+                        original_filename="outline.pdf",
+                        file_path=f"/data/uploads/{test_user_id}/outline.pdf",
+                        file_type="pdf",
+                        sha256=hashlib.sha256(document_id.encode()).hexdigest(),
+                        file_size_bytes=1024,
+                        status="processing",
+                    )
+                )
+                await setup.commit()
+
+            # Poison a real session the way a real stage does: a flush that fails.
+            async with async_session_factory() as session:
+                document = await session.get(CourseDocument, document_id)
+                assert document is not None and document.status == "processing"
+
+                with pytest.raises(DBAPIError) as caught:
+                    session.add(
+                        Course(
+                            id=generate_id(),
+                            user_id=test_user_id,
+                            code=OVERSIZED_COURSE_CODE,
+                        )
+                    )
+                    await session.flush()
+                assert PG_TRUNCATION in str(caught.value)
+                assert session.in_transaction(), "the premise: the session is not clean"
+
+                await record_document_failure(session, document_id=document_id, error=caught.value)
+
+            async with async_session_factory() as check:
+                status = await check.scalar(
+                    sqlalchemy.select(CourseDocument.status).where(CourseDocument.id == document_id)
+                )
+            assert status == "failed", (
+                f"the document is {status!r}, not 'failed' — the terminal status "
+                "was rolled back, so nothing will ever move this row on."
+            )
+        finally:
+            async with async_session_factory() as cleanup:
+                await cleanup.execute(
+                    sqlalchemy.text("DELETE FROM course_documents WHERE id = :did"),
+                    {"did": document_id},
+                )
+                await cleanup.execute(
+                    sqlalchemy.text("DELETE FROM courses WHERE id = :cid OR code = :code"),
+                    {"cid": course_id, "code": OVERSIZED_COURSE_CODE},
+                )
+                await cleanup.commit()
