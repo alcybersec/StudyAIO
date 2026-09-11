@@ -221,3 +221,27 @@ export const captureSchema = z
   })
 
 export type CaptureFormData = z.infer<typeof captureSchema>
+
+// ── Admin ──────────────────────────────────────────────────────
+
+/**
+ * Canonicalise an address the way the server does, so the UI can tell a real
+ * change from a retype.
+ *
+ * Mirrors `core/utils.normalize_email`: trim, then lower-case the *whole*
+ * address, local part included. Kept in step with it deliberately — the admin
+ * email change is destructive, and the dialog decides *before sending anything*
+ * whether what the admin typed differs from the stored address at all. If this
+ * folded less than the server does, the dialog would offer to make a change the
+ * server treats as a no-op, and would recite consequences that do not happen.
+ * (#91 folded the server side; this is the client half of the same decision.)
+ */
+export function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+/** The same address rule the auth forms use, reused on the admin surface. */
+export const adminEmailSchema = z
+  .string()
+  .min(1, 'Email is required')
+  .email('Enter a valid email address')

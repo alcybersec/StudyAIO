@@ -628,6 +628,21 @@ export function useResendVerification() {
   return useMutation({ mutationFn: adminApi.resendVerification })
 }
 
+/**
+ * Clear a user's MFA enrollment.
+ *
+ * Invalidated rather than fire-and-forget because `mfa_enabled` is shown on the
+ * user detail page, whose key `['admin', 'users', id, 'details']` is
+ * prefix-matched by this invalidation.
+ */
+export function useClearUserMfa() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminApi.clearUserMfa,
+    onSuccess: () => invalidateAdminUsers(queryClient),
+  })
+}
+
 export function useInvites() {
   return useQuery({
     queryKey: ['admin', 'invites'],
