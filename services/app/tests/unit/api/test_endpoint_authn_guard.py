@@ -43,6 +43,7 @@ the two views are asserted to agree.
 import asyncio
 import contextlib
 import re
+import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -52,6 +53,7 @@ from fastapi.routing import APIRoute
 from app.api.deps import get_current_user, get_current_user_or_default
 from app.config import settings
 from app.core.database import get_session
+from app.core.storage import reset_storage
 from app.main import app
 
 # The dependencies that establish an identity. `require_role` / `require_plan`
@@ -230,12 +232,25 @@ async def _saas_client(user=None):
 
         app.dependency_overrides[get_current_user] = override_user
         app.dependency_overrides[get_current_user_or_default] = override_user
+    # The walk sends a real request to every protected route, so a route that
+    # has *lost* its auth dependency runs its real handler -- and one of those
+    # handlers is `DELETE /api/auth/account`, which purges the caller's files.
+    # That is the finding this test is for, not a licence to delete: the storage
+    # root is a throwaway directory of this test's own for the duration, so the
+    # failure stays a failure. The root conftest already keeps `data_dir` off
+    # real data (#100); this narrows it to one directory that goes away.
     try:
-        with patch.object(settings, "self_hosted", False):
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app), base_url="http://test"
-            ) as client:
-                yield client
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(settings, "self_hosted", False):
+                with patch.object(settings, "data_dir", tmpdir):
+                    reset_storage()
+                    try:
+                        async with httpx.AsyncClient(
+                            transport=httpx.ASGITransport(app=app), base_url="http://test"
+                        ) as client:
+                            yield client
+                    finally:
+                        reset_storage()
     finally:
         app.dependency_overrides.clear()
 

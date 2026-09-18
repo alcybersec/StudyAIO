@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.config import settings
 from app.core.storage import (
     LocalStorageBackend,
     S3StorageBackend,
@@ -191,12 +192,16 @@ class TestGetStorage:
         reset_storage()
 
     @patch("app.core.storage.settings")
-    def test_default_is_local(self, mock_settings):
+    def test_default_is_local(self, mock_settings, tmp_path):
         """Default storage_backend='local' returns LocalStorageBackend."""
         mock_settings.storage_backend = "local"
-        mock_settings.data_dir = "/tmp/test-storage"
+        # `LocalStorageBackend.__init__` mkdirs this, so it has to be a path
+        # this test owns. A fixed name under /tmp was shared with every other
+        # run and never cleaned up (#100).
+        mock_settings.data_dir = str(tmp_path / "storage")
         backend = get_storage()
         assert isinstance(backend, LocalStorageBackend)
+        assert backend.base_dir == tmp_path / "storage"
 
     @patch("app.core.storage.settings")
     def test_s3_returns_s3_backend(self, mock_settings):
@@ -207,10 +212,31 @@ class TestGetStorage:
         backend = get_storage()
         assert isinstance(backend, S3StorageBackend)
 
-    def test_normalize_strips_data_dir(self):
-        """normalize_storage_key() strips data_dir prefix."""
+    def test_normalize_strips_the_configured_data_dir(self):
+        """normalize_storage_key() strips whatever `data_dir` is set to.
+
+        Stated against the configured value, not a literal. The `/app/data`
+        version of this assertion passed for a different reason than it claimed:
+        it only worked while nothing set `DATA_DIR`, so `settings.data_dir`
+        happened to be the container default. Pinning the storage root to a temp
+        directory for tests (#100) is what exposed that.
+        """
+        key = normalize_storage_key(f"{settings.data_dir}/uploads/abc.pdf")
+        assert key == "uploads/abc.pdf"
+
+    @patch("app.core.storage.settings")
+    def test_normalize_strips_the_container_default(self, mock_settings):
+        """The same thing for the deployed shape, with the prefix made explicit."""
+        mock_settings.data_dir = "/app/data"
         key = normalize_storage_key("/app/data/uploads/abc.pdf")
         assert key == "uploads/abc.pdf"
+
+    @patch("app.core.storage.settings")
+    def test_normalize_keeps_a_path_under_a_different_root(self, mock_settings):
+        """A path that is absolute but not under `data_dir` is left alone."""
+        mock_settings.data_dir = "/app/data"
+        key = normalize_storage_key("/srv/elsewhere/uploads/abc.pdf")
+        assert key == "/srv/elsewhere/uploads/abc.pdf"
 
     def test_normalize_keeps_relative(self):
         """normalize_storage_key() keeps already-relative paths."""
