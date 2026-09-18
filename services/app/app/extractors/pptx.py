@@ -7,6 +7,7 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 from app.core.exceptions import ExtractionError
+from app.extractors.archive import check_archive_bounds
 from app.extractors.base import (
     BaseExtractor,
     ExtractionResult,
@@ -34,10 +35,14 @@ class PptxExtractor(BaseExtractor):
             ExtractionResult with per-slide content.
 
         Raises:
-            ExtractionError: If the PPTX cannot be opened or parsed.
+            ExtractionError: If the PPTX cannot be opened or parsed, or if the
+                archive expands past the configured bounds.
         """
         images_dir = output_dir / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
+
+        # Before python-pptx reads every member into memory (#59).
+        check_archive_bounds(file_path, kind="PPTX")
 
         try:
             prs = Presentation(str(file_path))

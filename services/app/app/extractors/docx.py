@@ -7,6 +7,7 @@ import docx
 import structlog
 
 from app.core.exceptions import ExtractionError
+from app.extractors.archive import check_archive_bounds
 from app.extractors.base import (
     BaseExtractor,
     ExtractionResult,
@@ -41,10 +42,14 @@ class DocxExtractor(BaseExtractor):
             ExtractionResult with per-section content.
 
         Raises:
-            ExtractionError: If the DOCX cannot be opened or parsed.
+            ExtractionError: If the DOCX cannot be opened or parsed, or if the
+                archive expands past the configured bounds.
         """
         images_dir = output_dir / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
+
+        # Before python-docx reads every part into memory (#59).
+        check_archive_bounds(file_path, kind="DOCX")
 
         try:
             document = docx.Document(str(file_path))
