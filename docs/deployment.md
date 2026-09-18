@@ -360,7 +360,9 @@ curl https://your-domain.com/health
 | `SELF_HOSTED` | `true` | Bypass tier/quota checks |
 | `JWT_SECRET_KEY` | (insecure default) | **Change in production** |
 | `CORS_ORIGINS` | `http://localhost:3001` | Comma-separated origins |
-| `MAX_UPLOAD_SIZE_MB` | `100` | Max upload file size |
+| `MAX_UPLOAD_SIZE_MB` | `100` | Max upload file size (compressed bytes on the wire) |
+| `MAX_ARCHIVE_DECOMPRESSED_MB` | `500` | Most a DOCX/PPTX archive may expand to in the worker. Checked before parsing; over it, that artifact fails |
+| `MAX_ARCHIVE_ENTRIES` | `10000` | Most members a DOCX/PPTX archive may hold, for the many-tiny-entries shape of the same attack |
 | `AGENT_BACKEND` | `claude_code` | The instance's own AI backend, used by everyone on "StudyAIO provided": `claude_code`, `anthropic_api`, `openai`, `zai`, `ollama`. Never exposed through the API; a user who picks their own provider never inherits it. |
 | `ZAI_API_KEY` | | Z.ai (GLM) API key, when `AGENT_BACKEND=zai` |
 | `ZAI_MODEL` | `glm-5.3` | GLM model id, e.g. `glm-5.3`, `glm-5.3-flash`, `glm-4.6` |
