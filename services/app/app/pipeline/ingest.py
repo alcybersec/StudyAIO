@@ -8,6 +8,7 @@ from app.core.database import async_session_factory, run_async
 from app.core.exceptions import DuplicateFileError
 from app.core.utils import generate_id
 from app.models.pipeline_run import PipelineRun
+from app.pipeline.failures import record_stage_failure
 from app.services import artifact_service
 from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
@@ -36,6 +37,15 @@ async def _ingest(
             status="running",
             started_at=datetime.now(UTC),
         )
+        # `pipeline_runs.artifact_id` is a NOT NULL foreign key, so the run row
+        # cannot exist before the artifact row does — which is also why this run
+        # is not inserted up front the way the other five stages insert theirs:
+        # the placeholder above would fail that constraint. Uploads always pass
+        # a committed artifact id (`api/uploads.py` creates the row so it can
+        # return a real id, then dispatches), so the failure an operator
+        # actually hits is recordable. A caller that lets ingest create the
+        # artifact has nothing to attach a run to until `ingest_file` returns.
+        recordable_artifact_id = artifact_id
 
         try:
             artifact = await artifact_service.ingest_file(
@@ -43,6 +53,7 @@ async def _ingest(
             )
 
             # Update pipeline run with real artifact_id
+            recordable_artifact_id = artifact.id
             run.artifact_id = artifact.id
             run.status = "completed"
             run.completed_at = datetime.now(UTC)
@@ -68,6 +79,16 @@ async def _ingest(
             }
 
         except DuplicateFileError as e:
+            # Deliberately records no PipelineRun (#103). A duplicate is not a
+            # failed run and not work performed: the only artifact involved is
+            # the one ingested earlier, and the FK would force the row onto it.
+            # `pipeline_runs` is read as "what the pipeline did to this
+            # artifact", so an ingest run stamped now, after that artifact's own
+            # extract/summarize/index runs, would describe a re-ingest that
+            # never happened. The duplicate is already visible: the existing
+            # artifact row, this log line, and the `duplicate` status the task
+            # publishes. Provenance for a rejected re-upload belongs to the
+            # upload attempt, not to the earlier artifact's stage history.
             logger.info("ingest_stage_duplicate", sha256=e.sha256)
             return {
                 "artifact_id": e.existing_artifact_id,
@@ -78,6 +99,26 @@ async def _ingest(
 
         except Exception as e:
             logger.error("ingest_stage_failed", error=str(e), file_path=file_path)
+            if recordable_artifact_id:
+                # Rolls back first, then (re-)creates the run row and marks the
+                # artifact failed. The rollback is needed here too: ingest's
+                # failure can arrive on a session already marked for rollback,
+                # since both the artifact INSERT inside `ingest_file` and the
+                # run INSERT above can fail at flush time — after which every
+                # further statement on this session, `commit()` included, raises
+                # `PendingRollbackError`.
+                await record_stage_failure(
+                    session, run=run, artifact_id=recordable_artifact_id, error=e
+                )
+            else:
+                # No artifact row yet, so the NOT NULL FK leaves nowhere to put
+                # the run. Say so rather than silently recording nothing.
+                logger.warning(
+                    "ingest_failure_not_recorded",
+                    reason="ingest failed before any artifact row existed",
+                    file_path=file_path,
+                    user_id=user_id,
+                )
             raise
 
 
