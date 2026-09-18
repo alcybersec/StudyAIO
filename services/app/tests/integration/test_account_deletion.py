@@ -14,12 +14,18 @@ existed, so the files outlived the account while this suite stayed green.
 `TestPurgeUserStorage` is the half that was missing: it asserts on bytes on
 disk, in both directions — the owner's files are gone, and nobody else's are.
 
-Every test that deletes an account passes the `storage` fixture below — a
+Every test that deletes an account passes the `storage` fixture (now in
+`tests/integration/conftest.py`, so the rest of the suite can use it too) — a
 backend rooted in pytest's `tmp_path`. The default is `get_storage()`, which
-resolves `settings.data_dir`; that is `/app/data` unless `DATA_DIR` says
-otherwise, and the integration runner does not set `DATA_DIR`. A suite whose
-subject is *deleting files* must not be one unset variable away from deleting
-a developer's real uploads, so nothing here is left on the default.
+resolves `settings.data_dir`; that used to be `/app/data` here, because nothing
+set `DATA_DIR` for a test run. A suite whose subject is *deleting files* must
+not be one unset variable away from deleting a developer's real uploads, so
+nothing here is left on the default.
+
+`DATA_DIR` is now pinned to a throwaway directory for the whole run, and a
+non-temp storage root is refused outright (`services/app/conftest.py`, #100).
+That is the floor, not a replacement for this fixture: the floor keeps the suite
+off real data, while `tmp_path` keeps each test off every other test's files.
 """
 
 import secrets
@@ -29,7 +35,6 @@ import pytest
 from sqlalchemy import func, select
 
 from app.core.database import Base
-from app.core.storage import LocalStorageBackend
 from app.models.artifact import LectureArtifact
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
@@ -47,12 +52,6 @@ from app.services import account_service, preview_service, summary_service
 def _tag() -> str:
     """A short, collision-free prefix for one test's rows."""
     return secrets.token_hex(5)
-
-
-@pytest.fixture
-def storage(tmp_path) -> LocalStorageBackend:
-    """A storage backend rooted in a throwaway directory — see the module docstring."""
-    return LocalStorageBackend(str(tmp_path))
 
 
 async def _seed_user(session, tag: str) -> dict[str, str]:
