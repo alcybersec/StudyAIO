@@ -12,6 +12,15 @@ when the pytest process starts:
 CI does the same thing with service containers and a job-level `env:` block, so
 local runs and CI take exactly the same code path.
 
+File storage is handled for you and needs no environment of its own. `DATA_DIR`
+defaults to `/app/data`, which on a developer machine can be a real, populated
+upload directory — and this suite calls `purge_user_storage`, whose job is
+deleting files. `services/app/conftest.py` therefore redirects `DATA_DIR` to a
+throwaway directory before `app.config` is first imported, and refuses to run if
+`settings.data_dir` is not disposable; `scripts/test-integration.sh` exports the
+same thing so subprocesses agree (issue #100). Individual tests still take a
+`tmp_path`-rooted storage fixture for per-test isolation.
+
 Why the environment must be set *before* pytest starts
 ------------------------------------------------------
 `app.config.settings` is a module-level singleton that reads the environment
@@ -34,6 +43,7 @@ immediately with an explanation instead of 35 opaque `TimeoutError`s.
 """
 
 import os
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -184,6 +194,50 @@ def _run_migrations(_verify_app_wiring, _require_env):
 def test_user_id():
     """Return the ID of the seeded integration test user."""
     return TEST_USER_ID
+
+
+# ── File storage ──────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _per_test_storage_root(tmp_path):
+    """Give every integration test its own storage root, fixture or not.
+
+    The root conftest guarantees the *suite* never resolves a real directory.
+    This narrows that to one directory per test, which is what the tests going
+    through the API need: `POST /api/uploads` and `artifact_service.ingest_file`
+    call `get_storage()` themselves and take no storage argument, so before this
+    they all wrote into one shared root and left their files there for the rest
+    of the run (#100).
+
+    `reset_storage()` on both sides is the part that is easy to forget: the
+    backend is memoised in `app.core.storage._storage_instance`, so patching
+    `data_dir` after it has been built does nothing at all.
+    """
+    from app.core.storage import reset_storage
+
+    root = tmp_path / "storage"
+    root.mkdir()
+    with patch("app.config.settings.data_dir", str(root)):
+        reset_storage()
+        try:
+            yield root
+        finally:
+            reset_storage()
+
+
+@pytest.fixture
+def storage(tmp_path):
+    """A storage backend rooted in a throwaway directory, for one test.
+
+    Pass it explicitly wherever the code under test accepts a backend —
+    `account_service.delete_user_account(..., storage=storage)` and friends. An
+    explicit argument beats the ambient default: the deletion tests are asserting
+    on bytes, and it should be impossible to misread which files they mean.
+    """
+    from app.core.storage import LocalStorageBackend
+
+    return LocalStorageBackend(str(tmp_path / "explicit-storage"))
 
 
 # ── Function-scoped fixtures ──────────────────────────────────────────
