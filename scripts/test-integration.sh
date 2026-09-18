@@ -11,12 +11,23 @@
 # This script starts throwaway containers, exports the three variables, runs
 # pytest, and removes the containers again on the way out.
 #
+# It also exports DATA_DIR, pointing at a throwaway directory it deletes on the
+# way out. settings.data_dir defaults to /app/data, which is correct inside the
+# container and wrong here: on a developer machine that can be a real, populated
+# upload directory, and the account-deletion tests call a function whose job is
+# deleting files. Nothing was ever lost only because the tests use random UUIDs
+# (issue #100). services/app/conftest.py enforces the same rule from inside
+# pytest; this export additionally covers Alembic and any subprocess the suite
+# starts.
+#
 # Usage:
 #   scripts/test-integration.sh                  # whole suite
 #   scripts/test-integration.sh -k test_health   # extra args go to pytest
 #
 # If DATABASE_URL is already set (CI, or your own long-lived services), no
-# containers are started and your environment is used as-is.
+# containers are started and your environment is used as-is. DATA_DIR is the
+# exception: an existing value is only honoured when it is already a temp path,
+# because letting the caller aim the suite at real data is the whole bug.
 
 set -euo pipefail
 
@@ -35,10 +46,21 @@ PG_DB=testdb
 
 STARTED_CONTAINERS=()
 
+# Set only when *this* script created the directory, so cleanup never removes a
+# path someone else handed us.
+OWNED_DATA_DIR=""
+
+TMP_ROOT="${TMPDIR:-/tmp}"
+TMP_ROOT="${TMP_ROOT%/}"
+
 cleanup() {
     if [ "${#STARTED_CONTAINERS[@]}" -gt 0 ]; then
         echo "==> Removing test containers"
         docker rm -f "${STARTED_CONTAINERS[@]}" >/dev/null 2>&1 || true
+    fi
+    if [ -n "$OWNED_DATA_DIR" ] && [ -d "$OWNED_DATA_DIR" ]; then
+        echo "==> Removing throwaway DATA_DIR"
+        rm -rf -- "$OWNED_DATA_DIR"
     fi
 }
 trap cleanup EXIT INT TERM
@@ -90,6 +112,22 @@ else
 
     echo "==> Postgres on 127.0.0.1:$PG_PORT, Redis on 127.0.0.1:$REDIS_PORT"
 fi
+
+# File storage. Must be exported before pytest starts for the same reason the
+# database URLs must: settings.data_dir is read once, at import time (#56).
+if [ -n "${DATA_DIR:-}" ] && [ "${DATA_DIR#"$TMP_ROOT"/}" != "$DATA_DIR" ]; then
+    echo "==> DATA_DIR is already a temp path; using $DATA_DIR"
+    mkdir -p "$DATA_DIR"
+else
+    if [ -n "${DATA_DIR:-}" ]; then
+        echo "==> WARNING: DATA_DIR=$DATA_DIR is not under $TMP_ROOT — redirecting." >&2
+        echo "    Tests must never be able to delete from a real data directory (#100)." >&2
+    fi
+    OWNED_DATA_DIR="$(mktemp -d "$TMP_ROOT/studyaio-itest-data-XXXXXXXX")"
+    DATA_DIR="$OWNED_DATA_DIR"
+    echo "==> DATA_DIR=$DATA_DIR (throwaway, removed on exit)"
+fi
+export DATA_DIR
 
 # Prefer an explicit $PYTEST, then the project venv, then whatever is on PATH —
 # so `make test-integration` works without activating anything first.

@@ -146,7 +146,11 @@ async def async_client(mock_session, default_test_user):
 
     limiter.reset()
 
-    # Use a writable temp dir for data_dir so upload tests work as non-root
+    # A per-test data_dir: writable as non-root, and not shared with any other
+    # test. The root conftest already guarantees that `settings.data_dir` is a
+    # throwaway directory rather than the real `/app/data` (#100) — that is the
+    # floor, not a substitute for this, which is what keeps each test's uploads
+    # out of every other test's storage.
     with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
         # Reset storage singleton so it picks up the patched data_dir
         reset_storage()

@@ -278,6 +278,34 @@ docker compose exec api pytest tests/unit -x -v
 docker compose exec api pytest tests/golden -x -v
 ```
 
+### File Storage During Tests
+
+`DATA_DIR` needs no setup: `services/app/conftest.py` points it at a fresh
+throwaway directory before `app.config` is first imported, and deletes it when
+the process exits. `scripts/test-integration.sh` exports the same thing so
+Alembic and any subprocess resolve the same root.
+
+This is not cosmetic. `settings.data_dir` defaults to `/app/data` — right inside
+the container, where it is the bind-mounted `./data`, and wrong on the host,
+where it may be a populated upload directory. `LocalStorageBackend` creates that
+directory on construction and the account-deletion path deletes from it, so a
+test that reached `get_storage()` without a fixture could write into, or delete
+from, real data. Nothing was ever lost only because those tests use random UUIDs
+(issue #100). Note that this applies to the in-container commands above too: the
+suite is redirected away from `/app/data` there as well, with a warning on
+stderr saying so.
+
+An inherited `DATA_DIR` is honoured only when it is already a temp path;
+anything else is replaced. If `settings.data_dir` still ends up outside the
+system temp directory, the run aborts with an explanation rather than touching
+files — there is deliberately no opt-out. Point `DATA_DIR` at a temp directory of
+your own if you need a specific location.
+
+Individual tests still take a `tmp_path`-rooted storage fixture — `storage` in
+`tests/integration/conftest.py`, or the per-test root the same file installs
+automatically. The global redirect is the floor that stops the suite reaching
+real data; the per-test root is what stops one test reading another's files.
+
 ### End-to-End Tests
 
 The Playwright suite lives in `services/ui/e2e/` and drives a running stack — it
