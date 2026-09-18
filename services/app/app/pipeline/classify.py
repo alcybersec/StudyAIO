@@ -12,6 +12,7 @@ from app.core.database import async_session_factory, run_async
 from app.core.exceptions import AgentError, ClassificationError
 from app.core.storage import LocalStorageBackend, get_storage, normalize_storage_key
 from app.core.utils import generate_id
+from app.extractors.archive import check_archive_bounds
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.pipeline_run import PipelineRun
@@ -72,6 +73,11 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
         elif file_type == "docx":
             import docx
 
+            # Classify runs *before* extract, so this is the first code to open
+            # the archive and the bound has to hold here too (#59). Raising is
+            # handled below: the preview is skipped and extract fails the
+            # artifact with the same message.
+            check_archive_bounds(path, kind="DOCX")
             document = docx.Document(str(path))
             texts = []
             for para in document.paragraphs[:50]:
@@ -82,6 +88,7 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
         elif file_type == "pptx":
             from pptx import Presentation
 
+            check_archive_bounds(path, kind="PPTX")
             prs = Presentation(str(path))
             texts = []
             for slide in list(prs.slides)[:3]:

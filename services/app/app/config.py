@@ -89,6 +89,13 @@ class Settings(BaseSettings):
     # Security
     cookie_secure: bool = False
     max_upload_size_mb: int = 100
+    # `max_upload_size_mb` bounds the *compressed* upload. DOCX and PPTX are ZIP
+    # archives, so these bound what one is allowed to expand to in the worker;
+    # see app/extractors/archive.py. The defaults sit well clear of real lecture
+    # material (a 200-slide deck is tens of MB over a few thousand entries)
+    # while keeping a bomb's cost finite.
+    max_archive_decompressed_mb: int = 500
+    max_archive_entries: int = 10_000
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
 
     # Rate limiting
