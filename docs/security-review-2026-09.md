@@ -35,8 +35,8 @@ runs — but measured over the internet it is 0.75/0.75s for a real account vers
 | # | Finding | State |
 |---|---|---|
 | [#36](https://github.com/alcybersec/StudyAIO/issues/36) | Origin accepted traffic from any address, bypassing Cloudflare | Fixed on the VPS |
-| [#39](https://github.com/alcybersec/StudyAIO/issues/39) | Every client shared one rate-limit bucket | Proxies fixed; app half in flight |
-| [#37](https://github.com/alcybersec/StudyAIO/issues/37) | No per-account brute-force throttle | Open |
+| [#39](https://github.com/alcybersec/StudyAIO/issues/39) | Every client shared one rate-limit bucket | Fixed (PR #40) |
+| [#37](https://github.com/alcybersec/StudyAIO/issues/37) | No per-account brute-force throttle | Fixed (PR #43) |
 | [#38](https://github.com/alcybersec/StudyAIO/pull/38) | Access log recorded no client address | Merged |
 
 ### The correction worth recording
@@ -132,8 +132,12 @@ surfaced a twelfth.
 
 - **`GET /api/files/{file_type}/{path}` served user content to anonymous callers** (#66).
   Confirmed live: an unauthenticated request returned 28,915 bytes of generated study
-  material, and the summaries path is `<COURSE_CODE>/<COURSE_CODE>_Week<N>.md` — guessable,
-  so the whole corpus was enumerable. Fixed and verified: the same request now 401s.
+  material, and the summaries path **was then** `<COURSE_CODE>/<COURSE_CODE>_Week<N>.md` —
+  guessable, so the whole corpus was enumerable. Fixed and verified: the same request now
+  401s, and #92 later re-keyed the path on a UUID, removing the enumerable half as a side
+  effect. No code-shaped fallback was kept, deliberately: a fallback *would have been* the
+  disclosure, because the caller genuinely owns a course by that code while the bytes
+  belong to whoever ran last (`api/files.py:192-194`).
 - **`GET /api/uploads/pipeline-events` streamed every user's events to any authenticated
   caller** (#69). A third shape: the endpoint *was* authenticated and had no object lookup
   to scope, so neither the authn nor the authz guard would ever have flagged it.
@@ -158,13 +162,17 @@ tokens non-interchangeable, and no endpoint anywhere accepting a client-supplied
 
 ### The structural lesson
 
-Four guards now exist that did not before, and each catches what the others structurally
+Five guards now exist that did not before, and each catches what the others structurally
 cannot:
 
 1. **authz route walk** — every id-addressed endpoint rejects a foreign object
 2. **authn route walk** — every non-public endpoint 401s an anonymous caller
 3. **subscription scoping** — every `subscribe()` is handed the caller's identity
 4. **the wiring-assertion convention** — documented in `developer_guide.md` §4
+5. **the test storage floor** — `DATA_DIR` is redirected to a temp root and a non-temp root
+   is *refused* (`services/app/conftest.py:116,154`). Redirect and refusal are separate on
+   purpose: a redirect that stops working fails silently, and the refusal is what makes
+   that loud.
 
 That last one exists because, **six separate times**, a revert check showed the obvious
 assertion still passing while the fix was reverted:
@@ -203,16 +211,170 @@ Three findings were reachable only from one layer:
   blind and verified only after push, which is exactly how one PR shipped a fixture that had
   encoded an IDOR.
 
+## Round three — the same defect, one layer down
+
+Twelve PRs merged after the round-two write-up: #84, #87, #88, #94, #95, #96, #98, #99, #102,
+#104, #105, #106. **No new route-level IDOR was found.** What the work did instead was show
+the same owner-less-namespace defect in places where there is no request to scope and nothing
+fails closed.
+
+### It was a chain, not a set — each fix's audit found the next member
+
+```
+#80/#84  UNIQUE(sha256) with no owner      -> unblocks the path to
+#85/#95  chunks.stable_id with no owner    -> its audit finds
+#92/#96  summaries/<CODE>/ with no owner   -> its audit finds
+#97/#99  purge enumerating by artifact     -> its audit finds previews/ and courseops/
+```
+
+- **#80 was migration drift** — the model was right, the schema wrong (a `DROP CONSTRAINT`
+  omitted while the same migration did it correctly for `courses` two lines above).
+  **#85 was a design gap** — model *and* schema both wrong, and `chunks` has no `user_id`
+  column at all. The dates settle it: `_build_stable_id` has one commit ever (`3b08d05`,
+  2026-02-28); multi-tenancy landed 2026-03-04 and never touched `chunks`.
+- The best one-line statement of the class came from #85's audit: at the **database** level
+  `chunks.stable_id` was the last owner-less constraint over user data. The remaining
+  instances live in **storage keys**, where there is no constraint to fail — so instead of
+  crashing, they overwrite silently. #92 was exactly that: two users with `CSIT302` shared one
+  key, the second run overwrote the first, `file_path` was stored on both rows, and nothing
+  raised.
+- **#97's lesson generalises best**: *artifact-scoped is not the same as reached*. The purge
+  deleted `file_path` by exact key and swept two prefixes; `previews/v<N>/<artifact_id>.pdf`
+  was neither, so nothing touched it — despite looking artifact-scoped.
+
+**A namespace registry was deliberately rejected** (#99). It would make the sweep uniform but
+cannot decide *whether* a namespace is owner-scoped, which is the actual judgement — and
+`courseops/` must be excluded for a reason no registry could express. What was done instead is
+the cheap half: `summary_key_prefix_for_course()` and `preview_keys_for_artifact()` live beside
+their writers, so the writer and the purge cannot disagree.
+
+Anchors: `services/app/app/services/index_service.py:27-44` ·
+`services/app/app/services/summary_service.py:247-289` ·
+`services/app/app/services/account_service.py:215-290` (its docstring is the best existing
+statement of the rule) · `services/app/app/api/files.py:164-209`
+
+### Transaction handling: `rollback()` alone is not enough
+
+Six stages committed on a session already marked for rollback (#93/PR #102), so
+`PendingRollbackError` replaced the typed error, the failure rows rolled back, and a
+deterministic failure **retried twice** against an explicit intent not to. #104 then made
+ingest a **seventh** caller of the shared helper — not because ingest had the commit bug, but
+because its failure can arrive on a session poisoned by either of two flushes.
+
+The non-obvious half, and why PR #54 looked at this code and correctly left it: the
+`PipelineRun` was inserted by a `flush()` inside the rolled-back transaction, so the rollback
+**un-inserts the row and expunges the object to transient** — `session.get()` returns `None`.
+A handler that merely re-fetched would still have recorded nothing. The correct order is: read
+identifiers off the ORM objects first (while that needs no SQL), roll back, re-materialise,
+commit — and a failure inside the bookkeeping is logged and swallowed so it can never again
+replace the stage's own error. See `app/pipeline/failures.py`.
+
+### One missing `.lower()`, three failures
+
+#91/PR #94. A case-only difference read as a change and ran the full `_repoint_email`:
+sessions revoked, OAuth unlinked, magic links killed, `email_verified` cleared. The new casing
+was then *stored*, and since every lookup was exact-match the user **could no longer log in** —
+with no signal, because `forgot-password` returns 202 either way. It also partially reopened
+#70, since `get_user_by_email` could not find a differently-cased account.
+
+Two details worth keeping: the fix folds a case-only difference against a pre-migration row
+**in place** rather than repointing it — otherwise the bug survives its own fix for exactly the
+rows most likely to hit it. And the migration **aborts, naming every row**, if two accounts
+already differ only by case, because merging them means choosing which keeps its sessions and
+courses.
+
+### The test suite was writing into real data
+
+Not a near-miss. `settings.data_dir` defaults to `/app/data`, nothing set `DATA_DIR`, and the
+integration suite had been writing test artifacts there **on every run** — caught live, nine
+files in three batches of three, while #105 was being developed. The fixed branch added zero.
+The deletion risk (`test_endpoint_authn_guard.py`'s walk requests `DELETE /api/auth/account`,
+which runs `purge_user_storage` for real) was the sharper edge of the same missing isolation,
+and the only thing preventing loss was UUID randomness.
+
+The ordering constraint is #56 again: `settings` reads the environment once at import, so the
+rootdir conftest **checks that no `app` module is in `sys.modules`** rather than assuming its
+own timing.
+
+### UI semantics lagging backend semantics
+
+A security fix that changes what a control *does* creates a UI honesty bug. Twice:
+
+- #76 made backup codes real; the login field was `maxLength={6}`/`inputMode="numeric"`, so a
+  16-symbol code could not be typed at all (#77/PR #87).
+- #88 gave admin mutations genuine destructive power; #98 then found the UI firing them from a
+  `Select` and a wrapped `button` with **no confirmation at all**. And the PATCH response does
+  not carry `sessions_revoked` even though the service logs it, so the UI could not have told
+  the truth if it wanted to. #101 is the residue.
+
+## Tests that passed for the wrong reason
+
+The most transferable thread in this document. Each was caught by a revert check or by an
+unrelated change disturbing the coincidence — none by reading the test, none by coverage.
+All were *covering* their code; none was testing it.
+
+1. **A status code from the wrong branch.** `test_dismiss_already_resolved_returns_400` (#58)
+   asserted `400` — supplied by the **ownership miss**, not the already-resolved branch it
+   existed to cover. PR #79 later retrofitted the *cause* to three more multi-cause 404s.
+2. **A mock that answers regardless of the SQL.** PR #94: "an `AsyncMock` session returns
+   whatever the test wired **regardless of the SQL it was handed** — every assertion here would
+   have passed against the unfixed code." Fixed by answering from the statement's real bound
+   parameters. Same class in `test_classify.py::test_error_message_stores_exception_not_artifact_id`
+   (an `AsyncMock` has no pending-rollback state) and in `cli._ensure_admin`, where reverting
+   the `commit()` failed both *integration* tests while the mock-based unit test stayed green.
+3. **A hardcoded path that matched by accident.** `test_normalize_strips_data_dir` asserted
+   against `/app/data`, which only matched *because nothing set `DATA_DIR`*. Pinning the root
+   broke it. Its docstring now says it: *"the `/app/data` version of this assertion passed for a
+   different reason than it claimed."*
+4. **A deletion test that never looked at the disk.** `test_account_deletion.py` before #99
+   asserted only on rows — which is precisely why summary files surviving deletion went
+   unnoticed. The one on this list with a security consequence.
+
+Also worth recording, though it left no artifact: while #73 was in development its
+`extraction-images` test **passed under revert**, because its expectation was derived from the
+same constant it was testing. It was rewritten before the commit, so the flawed version is not
+in the history — a reminder that the revert check catches these *during* the work, which is the
+only cheap moment.
+
+A related shape, from #95: `_build_stable_id`'s format tests asserted the **old, broken** shape
+as correct, restating the implementation's f-string using the test's own input. #85 predicted
+this exact case before it was looked at.
+
+## Corrections to this record's own issues
+
+A review record that hides its own errors is not a review record. Every one of these was found
+by someone reading the code rather than the issue.
+
+| Issue | Claimed | True |
+|---|---|---|
+| #93 | Six files including `ingest.py` | `ingest.py` does **not** have the bug — it logs and re-raises without committing. `courseops_task.py` **does**, and was missed. Net six either way, one swapped for another |
+| #97 | `previews/` "probably covered, verify" | **Not covered at all.** Now deleted by exact key across every cache version — not by prefix, because `delete_prefix` is backend-dependent and a `PREVIEW_CACHE_VERSION` bump orphans rather than removes |
+| #85 | The global uniqueness existed for idempotent upserts | **Never implemented that way.** Idempotency is an artifact-scoped `DELETE`; there is no `ON CONFLICT` anywhere and `stable_id` is never a conflict target. `docs/PRD.md` stated the same false rationale |
+| #85 | Existing rows need rewriting, or both shapes tolerating | `stable_id` is **write-only** — nothing reads it. Both shapes coexist; **code-only fix, no migration** |
+| #103 | "A corrupt upload, an unreadable file, a storage error" become visible | Those are pre-artifact failures the `NOT NULL` FK cannot record, and mostly never reach ingest — the endpoint validates and stores *before* dispatching. The real gain is that a vanished artifact row or a flush error stops being invisible, including to `GET /uploads/{id}/status` |
+| #68 | A push to `master` ships 233-commit-old code, reverting seven fixes | **Production was never at that risk** — the deploy job's own `if:` gate would have skipped. The real residual was a `workflow_dispatch` pushing a stale `:latest`. The substantive finding stands on other grounds: **a skipped job reports the run green** |
+| #68 | `gh pr create` defaults to `master` | The default branch **is `main`, and always was**. A cause was inferred that fit the symptom and written up as fact; the actual reason PR #64 targeted `master` is still unknown |
+| #100 | "Nothing was destroyed; safety came from id randomness" | True of the deletion hazard, understated overall — the suite had been writing into real data continuously |
+
+Two process errors belong here too. The extension to #60 item 1 **was never posted to the
+issue** — an agent was told to read a comment that did not exist, and worked from the brief
+instead. And #60 item 3's "a form that submits every field" hazard was **hypothetical**: there
+is no general edit form, while the live hazard ran the other way, from controls that commit on
+change.
+
 ## Still open
 
 | # | |
 |---|---|
-| **#80** | stale global `UNIQUE(sha256)` — confirmed on production; fires when two users upload the same file. Pinned with `xfail(strict=True)` so it turns red when fixed. |
-| **#82**, **#77** | login page has no UI for the backup-code login or the OAuth MFA challenge, and shows a misleading message for a refused OAuth link. Same shape; best done together. |
-| #63 | summary-backed review items are created silently and cannot be resolved — needs a product decision first |
-| #59 | no decompression bound on docx/pptx extraction |
-| #60 | four deferred follow-ups from the beta hardening work |
+| **#90** | `main` has no branch protection, no rulesets: no required checks, no required PR, force-push permitted. The highest-value item here, and not code |
+| **#101** | three fields the admin UI infers because the API does not surface them |
+| **#89** | `ci.yml` still lists `master` (lines 9, 11) which no longer exists; `developer_guide.md:327` repeats it. Plus a decision on `develop` |
+| **#63** | summary-backed review items are created silently and cannot be resolved — needs a product decision first |
+| **#107** | `courseops/<sha256[:16]>_<name>` is content-addressed with no owner, so two users share one blob and it is deliberately excluded from the deletion purge. Needs refcounting or per-user keys |
+| **#108** | 12 fixtures across 8 files patch `data_dir` without `reset_storage()`, so they no-op against the memoised singleton; `tests/unit` and `tests/golden` add no isolation of their own |
 
-Nothing in this list is live-exploitable. #80 is the highest priority because it is a plain
-functional bug that will present as a broken upload to the first two testers who share a
-lecture deck.
+Nothing here is live-exploitable. **#90 is the one to read**: roughly thirty PRs were merged on
+the convention of checking green first, with nothing enforcing it. PR #78 shipped a regression
+that only E2E caught, with five of six checks green; PR #64 was merged against the wrong base
+because nobody verified it. A security review whose own remediation record rests on a
+convention rather than a gate should say so.
