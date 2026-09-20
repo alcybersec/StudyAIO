@@ -15,6 +15,7 @@ import type {
   CourseDocument,
   CourseListItem,
   CourseMergeResult,
+  MergeConflictPolicy,
   CourseUpdatePayload,
   CreateSessionRequest,
   DailyPlan,
@@ -70,8 +71,16 @@ export const coursesApi = {
     api.patch<Course>(`/courses/${courseCode}`, data),
   archive: (courseCode: string) =>
     api.post<CourseArchiveResult>(`/courses/${courseCode}/archive`),
-  merge: (courseCode: string, into: string) =>
-    api.post<CourseMergeResult>(`/courses/${courseCode}/merge`, { into }),
+  /**
+   * Merge a course into another. `onConflict` decides what happens to a week
+   * summarized in both; the server defaults to 'regenerate', which re-summarizes
+   * the week from the merged artifact set and therefore spends AI budget.
+   */
+  merge: (courseCode: string, into: string, onConflict?: MergeConflictPolicy) =>
+    api.post<CourseMergeResult>(`/courses/${courseCode}/merge`, {
+      into,
+      ...(onConflict ? { on_conflict: onConflict } : {}),
+    }),
   /** Type-to-confirm delete: the API requires an X-Confirm header matching the code (428 otherwise). */
   remove: (courseCode: string) =>
     api.request<CourseDeleteResult>(`/courses/${courseCode}`, {

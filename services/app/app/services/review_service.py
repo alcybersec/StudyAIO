@@ -54,7 +54,9 @@ async def create_review_item(
         entity_id=entity_id,
     )
 
-    # Emit inbox notification to the artifact owner (best-effort)
+    # Emit inbox notification to the owner (best-effort). lecture_artifact is
+    # the only type this needs to cover, because it is the only type anything
+    # creates — see _owned_by on why the summary branch there outlives it.
     try:
         if entity_type == "lecture_artifact":
             from app.models.artifact import LectureArtifact
@@ -147,8 +149,13 @@ def _owned_by(user_id: str):
     user_id column, so ownership has to be resolved per entity type:
 
       * ``lecture_artifact`` -> LectureArtifact.user_id  (pipeline/classify.py)
-      * ``summary``          -> Summary -> Course.user_id (course_service
-                                merge_week_conflict)
+      * ``summary``          -> Summary -> Course.user_id  (legacy)
+
+    Nothing creates ``summary`` items any more — ``course_service.merge_courses``
+    settles week conflicts inline instead of filing one it had no way to resolve
+    (#63). The branch stays because rows written before that change can still be
+    in the table, and they must remain owner-scoped: dropping it would make a
+    user's own legacy item 404 for them while leaving it in the database.
 
     An entity type not listed here matches nothing, so a new one is invisible
     rather than public. That is deliberate: an authorization check should fail

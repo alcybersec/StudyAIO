@@ -15,6 +15,14 @@ from app.services import artifact_service, review_service
 
 logger = structlog.get_logger()
 
+#: Entity types the resolve endpoint knows how to apply a resolution to.
+#:
+#: Membership here is what makes a 200 from ``/resolve`` mean something. Keep it
+#: in step with the apply-branches in :func:`resolve_review_item`: a type listed
+#: with no branch reports success while doing nothing, which is the bug #63
+#: documented.
+RESOLVABLE_ENTITY_TYPES = frozenset({"lecture_artifact"})
+
 router = APIRouter()
 
 
@@ -82,6 +90,23 @@ async def resolve_review_item(
         )
 
     resolution = body.resolution
+
+    # Only entity types with an apply-branch below can be resolved. Without
+    # this, a type that has no branch fell through to `resolve_review_item`,
+    # committed, and returned 200 — so the UI showed "Review item resolved."
+    # for an operation that changed nothing, and the item left the pending
+    # count with its underlying problem untouched (#63). `merge_week_conflict`
+    # items are no longer created (course_service.merge_courses settles week
+    # conflicts inline), but rows predating that change can still be in the
+    # table, and a 400 is the honest answer for them.
+    if item.entity_type not in RESOLVABLE_ENTITY_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Review items of type '{item.entity_type}' cannot be resolved here. "
+                "Dismiss it instead."
+            ),
+        )
 
     # Apply resolution to the entity
     if item.entity_type == "lecture_artifact":

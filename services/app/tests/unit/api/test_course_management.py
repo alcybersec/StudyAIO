@@ -185,15 +185,17 @@ class TestDeleteCourse:
 class TestMergeCourse:
     """Tests for POST /api/courses/{code}/merge."""
 
-    async def test_merge_moves_weeks_and_flags_conflicts(self, async_client):
-        """Merge reports moved weeks and conflict review items."""
+    async def test_merge_reports_moved_weeks_and_the_policy_applied(self, async_client):
+        """Merge reports what it moved and how it settled the conflicts."""
         with patch(
             "app.api.courses.course_service.merge_courses",
             new_callable=AsyncMock,
             return_value={
                 "moved_summaries": 3,
                 "conflict_weeks": [2],
-                "review_items_created": 1,
+                "conflict_resolution": "regenerate",
+                "regenerated_weeks": [2],
+                "summarize_artifact_ids": [],
             },
         ) as mock_merge:
             response = await async_client.post(
@@ -204,10 +206,104 @@ class TestMergeCourse:
         data = response.json()
         assert data["moved_summaries"] == 3
         assert data["conflict_weeks"] == [2]
-        assert data["review_items_created"] == 1
+        assert data["conflict_resolution"] == "regenerate"
+        assert data["regenerated_weeks"] == [2]
+        # Internal work for the endpoint to enqueue, not part of the contract.
+        assert "summarize_artifact_ids" not in data
         _, kwargs = mock_merge.call_args
         assert mock_merge.call_args.args[1] == USER_ID
         assert kwargs.get("into_code") == "CSIT999"
+        # Omitting on_conflict must reach the service as the documented default
+        # rather than as None, which would trip its own validation.
+        assert kwargs.get("on_conflict") == "regenerate"
+
+    async def test_merge_forwards_an_explicit_policy(self, async_client):
+        """An explicit on_conflict reaches the service verbatim."""
+        with patch(
+            "app.api.courses.course_service.merge_courses",
+            new_callable=AsyncMock,
+            return_value={
+                "moved_summaries": 0,
+                "conflict_weeks": [2],
+                "conflict_resolution": "keep_target",
+                "regenerated_weeks": [],
+                "summarize_artifact_ids": [],
+            },
+        ) as mock_merge:
+            response = await async_client.post(
+                "/api/courses/CSIT302/merge",
+                json={"into": "CSIT999", "on_conflict": "keep_target"},
+            )
+
+        assert response.status_code == 200
+        assert mock_merge.call_args.kwargs.get("on_conflict") == "keep_target"
+
+    async def test_merge_rejects_an_unknown_policy_at_the_schema(self, async_client):
+        """An unknown policy is a 422, never reaching the service."""
+        with patch(
+            "app.api.courses.course_service.merge_courses",
+            new_callable=AsyncMock,
+        ) as mock_merge:
+            response = await async_client.post(
+                "/api/courses/CSIT302/merge",
+                json={"into": "CSIT999", "on_conflict": "delete_everything"},
+            )
+
+        assert response.status_code == 422
+        mock_merge.assert_not_awaited()
+
+    async def test_merge_enqueues_regeneration_after_the_commit(self, async_client):
+        """Returned artifact ids are handed to the pipeline, post-commit."""
+        with (
+            patch(
+                "app.api.courses.course_service.merge_courses",
+                new_callable=AsyncMock,
+                return_value={
+                    "moved_summaries": 0,
+                    "conflict_weeks": [2],
+                    "conflict_resolution": "regenerate",
+                    "regenerated_weeks": [2],
+                    "summarize_artifact_ids": ["artifact-42"],
+                },
+            ),
+            patch("app.api.courses.resume_pipeline") as mock_resume,
+        ):
+            response = await async_client.post(
+                "/api/courses/CSIT302/merge", json={"into": "CSIT999"}
+            )
+
+        assert response.status_code == 200
+        mock_resume.assert_called_once()
+        assert mock_resume.call_args.args[0] == "artifact-42"
+        assert mock_resume.call_args.kwargs.get("from_stage") == "summarize"
+
+    async def test_merge_survives_a_failed_enqueue(self, async_client):
+        """A broker failure must not fail a merge that is already committed."""
+        with (
+            patch(
+                "app.api.courses.course_service.merge_courses",
+                new_callable=AsyncMock,
+                return_value={
+                    "moved_summaries": 0,
+                    "conflict_weeks": [2],
+                    "conflict_resolution": "regenerate",
+                    "regenerated_weeks": [2],
+                    "summarize_artifact_ids": ["artifact-42"],
+                },
+            ),
+            patch(
+                "app.api.courses.resume_pipeline",
+                side_effect=RuntimeError("broker down"),
+            ),
+        ):
+            response = await async_client.post(
+                "/api/courses/CSIT302/merge", json={"into": "CSIT999"}
+            )
+
+        # The move is durable; the week simply keeps the target's existing
+        # summary, which is the keep_target outcome rather than a broken one.
+        assert response.status_code == 200
+        assert response.json()["conflict_weeks"] == [2]
 
     async def test_merge_unknown_target_404(self, async_client):
         """Unknown merge target → 404."""

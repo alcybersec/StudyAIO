@@ -273,67 +273,51 @@ class TestDeleteCourse:
 class TestMergeCourses:
     """Tests for merge_courses."""
 
-    def _course(self, course_id: str, code: str) -> MagicMock:
-        course = MagicMock()
-        course.id = course_id
-        course.code = code
-        course.archived_at = None
-        return course
+    # The conflict behaviour itself is covered by
+    # tests/integration/test_course_merge_conflicts.py, against a real database
+    # and a real storage root.
+    #
+    # It used to be covered here, by a mocked session whose `execute` returned a
+    # fixed `side_effect` list. That test asserted `create_review_item` had been
+    # awaited once -- which was true, and told us nothing about whether the
+    # review item it created could ever be acted on. It could not (#63). A test
+    # that can only see which methods were called cannot distinguish a working
+    # feature from a half-built one, and this was the case in point: it passed
+    # for the entire life of the bug, and its `side_effect` ordering broke the
+    # moment the statements were reordered to fix it.
+    #
+    # What stays here is the input validation, which needs no database.
 
-    async def test_merge_moves_and_creates_review_items_for_conflicts(self, mock_session):
-        """Colliding weeks get review items instead of silent overwrite."""
-        source = self._course("course-src", "CSIT302")
-        target = self._course("course-tgt", "CSIT999")
-
-        source_found = MagicMock()
-        source_found.scalar_one_or_none.return_value = source
-        target_found = MagicMock()
-        target_found.scalar_one_or_none.return_value = target
-
-        # Target already has a summary for week 2
-        target_weeks = MagicMock()
-        target_weeks.scalars.return_value.all.return_value = [2]
-
-        # Source has summaries for weeks 1 (clean) and 2 (conflict)
-        sum_w1 = MagicMock()
-        sum_w1.id = "sum-1"
-        sum_w1.week = 1
-        sum_w1.course_id = "course-src"
-        sum_w2 = MagicMock()
-        sum_w2.id = "sum-2"
-        sum_w2.week = 2
-        sum_w2.course_id = "course-src"
-        source_summaries = MagicMock()
-        source_summaries.scalars.return_value.all.return_value = [sum_w1, sum_w2]
-
-        update_result = MagicMock()
-        update_result.rowcount = 1
-
-        mock_session.execute = AsyncMock(
-            side_effect=[source_found, target_found, target_weeks, source_summaries]
-            + [update_result] * 12
-        )
-
-        with patch(
-            "app.services.review_service.create_review_item",
-            new_callable=AsyncMock,
-        ) as mock_review:
-            result = await course_service.merge_courses(
-                mock_session, "user-001", "CSIT302", into_code="CSIT999"
+    async def test_unknown_conflict_policy_raises(self, mock_session):
+        """An unrecognised on_conflict is refused before any lookup."""
+        with pytest.raises(ValueError, match="on_conflict"):
+            await course_service.merge_courses(
+                mock_session,
+                "user-001",
+                "CSIT302",
+                into_code="CSIT999",
+                on_conflict="whatever",
             )
+        # Refused without touching the session at all, so a typo in a script
+        # cannot leave a course half-merged.
+        mock_session.execute.assert_not_called()
 
-        # Clean week moved, conflict week untouched + review item
-        assert sum_w1.course_id == "course-tgt"
-        assert sum_w2.course_id == "course-src"
-        mock_review.assert_awaited_once()
-        review_kwargs = mock_review.call_args.kwargs
-        assert review_kwargs.get("entity_id") == "sum-2"
+    async def test_api_literal_matches_the_service_policy_set(self):
+        """The request schema and the service's accepted set cannot drift.
 
-        assert result["moved_summaries"] == 1
-        assert result["conflict_weeks"] == [2]
-        assert result["review_items_created"] == 1
-        # Source course archived, not deleted
-        assert source.archived_at is not None
+        The endpoint validates `on_conflict` with a `Literal`, and the service
+        validates it again against `MERGE_CONFLICT_POLICIES`. Two lists of the
+        same strings in two files is exactly the shape that rots: adding a
+        policy to one side alone yields either a 422 for a policy the service
+        supports, or a `ValueError` surfacing as a 400 for one the schema
+        advertises. So assert the wiring rather than restating the strings.
+        """
+        import typing
+
+        from app.api.courses import CourseMergeRequest
+
+        literal = CourseMergeRequest.model_fields["on_conflict"].annotation
+        assert set(typing.get_args(literal)) == course_service.MERGE_CONFLICT_POLICIES
 
     async def test_merge_into_itself_raises(self, mock_session):
         """Merging a course into itself raises ValueError."""
