@@ -7,11 +7,12 @@ on:
   push:
     tags:
       - 'v*'
-    # Only main deploys. develop is deliberately absent: building images for it
-    # only queued work on the single self-hosted runner that real deploys were
-    # waiting behind. master is deliberately absent too, and must stay that way:
-    # it is hundreds of commits stale, so a push there would have shipped a
-    # production rollback of every fix merged since (issue #68).
+    # Only main deploys, and main is now the only branch in the repository —
+    # develop and master were removed from this trigger (#68, #74) and have since
+    # been deleted outright (#89). Keep this list at main alone. master carried
+    # hundreds of stale commits, so building from it would have pushed a
+    # :latest image that rolled back every fix merged since (#68); develop only
+    # queued work on the single self-hosted runner that real deploys wait behind.
     branches:
       - main
     paths:

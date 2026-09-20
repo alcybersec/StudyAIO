@@ -1,14 +1,21 @@
 name: CI
 
-# Runs on pull requests (the gate) and on pushes to long-lived branches (the
-# post-merge safety net). Every job runs on GitHub-hosted runners so the single
-# self-hosted homelab runner stays free for image builds and deploys.
+# Runs on pull requests (the gate) and on pushes to main (the post-merge safety
+# net). Every job runs on GitHub-hosted runners so the single self-hosted
+# homelab runner stays free for image builds and deploys.
+#
+# main is the only branch listed, and the only one worth listing. master and
+# develop were two names for a single abandoned commit (f1ba596, zero commits
+# ahead of main, no PR ever opened against either); master is already deleted
+# and develop is going the same way. A trigger naming a branch nobody merges to
+# does not add a safety net, it just tells the next reader that branch is
+# live. See #89.
 
 on:
   pull_request:
-    branches: [main, master, develop]
+    branches: [main]
   push:
-    branches: [main, master, develop]
+    branches: [main]
   workflow_dispatch:
 
 # Only one CI run per branch. A new push cancels the superseded PR run; runs on
