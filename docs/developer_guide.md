@@ -324,7 +324,7 @@ present (self-hosted vs SaaS), so skipped tests are expected, not failures.
 ### Continuous Integration
 
 `.github/workflows/ci.yml` runs on every pull request and on pushes to
-`main`/`master`/`develop`: Python lint, backend unit + golden tests with a 75%
+`main`: Python lint, backend unit + golden tests with a 75%
 coverage floor, integration tests against real Postgres + Redis, frontend
 typecheck/lint/unit/build with the color-token and bundle-size guards, and the
 Playwright suite. A newer push to a PR cancels the run it supersedes.
