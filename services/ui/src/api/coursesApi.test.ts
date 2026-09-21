@@ -48,7 +48,12 @@ describe('coursesApi course management', () => {
 
   it('merge POSTs the target course code', async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({ moved_summaries: 2, conflict_weeks: [], review_items_created: 0 }),
+      jsonResponse({
+        moved_summaries: 2,
+        conflict_weeks: [],
+        conflict_resolution: 'regenerate',
+        regenerated_weeks: [],
+      }),
     )
 
     await coursesApi.merge('CSIT302', 'CSCI368')
@@ -56,7 +61,30 @@ describe('coursesApi course management', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/courses/CSIT302/merge')
     expect(init.method).toBe('POST')
+    // on_conflict is omitted rather than sent as undefined, so the server's own
+    // default applies instead of the client pinning one it did not choose.
     expect(JSON.parse(init.body as string)).toEqual({ into: 'CSCI368' })
+  })
+
+  it('merge forwards an explicit conflict policy', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        moved_summaries: 0,
+        conflict_weeks: [3],
+        conflict_resolution: 'keep_target',
+        regenerated_weeks: [],
+      }),
+    )
+
+    const result = await coursesApi.merge('CSIT302', 'CSCI368', 'keep_target')
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({
+      into: 'CSCI368',
+      on_conflict: 'keep_target',
+    })
+    expect(result.conflict_resolution).toBe('keep_target')
+    expect(result.regenerated_weeks).toEqual([])
   })
 
   it('archive POSTs to the archive endpoint', async () => {

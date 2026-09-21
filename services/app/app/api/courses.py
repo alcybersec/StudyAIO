@@ -1,5 +1,7 @@
 """Course API endpoints."""
 
+from typing import Literal
+
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -17,6 +19,7 @@ from app.api.schemas import (
 )
 from app.core.database import get_session
 from app.models.user import User
+from app.pipeline.orchestrator import resume_pipeline
 from app.services import artifact_service, course_service, summary_service
 
 logger = structlog.get_logger()
@@ -50,6 +53,18 @@ class CourseMergeRequest(BaseModel):
     """Request body for merging a course into another."""
 
     into: str = Field(..., min_length=1, max_length=20)
+    on_conflict: Literal["regenerate", "keep_target", "keep_source"] = Field(
+        "regenerate",
+        description=(
+            "What to do with a week summarized in both courses. 'regenerate' "
+            "(default) discards the source summary and re-summarizes the week "
+            "from the merged artifact set — the only option that loses nothing, "
+            "but it spends AI budget and completes asynchronously. "
+            "'keep_target' keeps the target's summary and discards the "
+            "source's. 'keep_source' overwrites the target's with the "
+            "source's. Neither of the latter two spends anything."
+        ),
+    )
 
 
 class CourseMergeResponse(BaseModel):
@@ -57,7 +72,13 @@ class CourseMergeResponse(BaseModel):
 
     moved_summaries: int
     conflict_weeks: list[int]
-    review_items_created: int
+    #: Echo of the policy applied, so a caller relying on the default can see
+    #: which one that was.
+    conflict_resolution: str
+    #: Weeks whose summary is being rebuilt in the background. Empty unless
+    #: on_conflict was "regenerate" and the week still had an artifact to
+    #: summarize from.
+    regenerated_weeks: list[int]
 
 
 @router.get(
@@ -214,9 +235,9 @@ async def delete_course(
     "/courses/{course_code}/merge",
     response_model=CourseMergeResponse,
     summary="Merge a course into another",
-    description="Moves all content into the target course. Colliding week "
-    "summaries create review items instead of overwriting. The source course "
-    "is archived afterwards.",
+    description="Moves all content into the target course and archives the "
+    "source. A week summarized in both courses is settled by the on_conflict "
+    "policy — it no longer files a review item the inbox cannot act on (#63).",
 )
 async def merge_course(
     course_code: str,
@@ -227,7 +248,11 @@ async def merge_course(
     """Merge a course into another course."""
     try:
         result = await course_service.merge_courses(
-            session, user.id, course_code, into_code=body.into
+            session,
+            user.id,
+            course_code,
+            into_code=body.into,
+            on_conflict=body.on_conflict,
         )
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -235,4 +260,24 @@ async def merge_course(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     await session.commit()
+
+    # Enqueue regeneration only after the move is durable. Queuing inside the
+    # transaction would hand a worker artifact ids that a rollback then takes
+    # back, and the task reads the course/week it was told about — so it would
+    # summarize the pre-merge artifact set, or nothing at all. Same ordering as
+    # the resume in review_items.resolve_review_item.
+    for artifact_id in result.pop("summarize_artifact_ids", []):
+        try:
+            resume_pipeline(artifact_id, from_stage="summarize", user_id=user.id)
+        except Exception:
+            # The merge itself is committed and correct; a failed enqueue leaves
+            # the target's existing summary in place, which is the keep_target
+            # outcome rather than a broken one.
+            logger.error(
+                "merge_regenerate_enqueue_failed",
+                course_code=course_code,
+                artifact_id=artifact_id,
+                exc_info=True,
+            )
+
     return CourseMergeResponse(**result)

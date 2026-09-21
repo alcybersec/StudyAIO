@@ -1134,10 +1134,16 @@ export interface CourseDeleteResult {
   counts: Record<string, number>
 }
 
+/** What to do with a week summarized in both the source and target course. */
+export type MergeConflictPolicy = 'regenerate' | 'keep_target' | 'keep_source'
+
 export interface CourseMergeResult {
   moved_summaries: number
   conflict_weeks: number[]
-  review_items_created: number
+  /** Echo of the policy the server applied. */
+  conflict_resolution: MergeConflictPolicy
+  /** Weeks being re-summarized in the background; only ever non-empty for 'regenerate'. */
+  regenerated_weeks: number[]
 }
 
 // ── Global search (E1) ─────────────────────────────────────────────

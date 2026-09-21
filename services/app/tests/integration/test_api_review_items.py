@@ -4,7 +4,9 @@ import pytest
 
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
+from app.models.course import Course
 from app.models.review_item import ReviewItem
+from app.models.summary import Summary
 
 
 async def _owned_artifact(db_session, user_id, filename="review_test.pdf"):
@@ -110,3 +112,95 @@ class TestReviewItemsEndpoints:
         resp = await integration_client.post(f"/api/review-items/{item.id}/dismiss")
         assert resp.status_code == 400
         assert "already" in resp.json()["detail"]
+
+
+async def _owned_summary_review_item(db_session, user_id):
+    """A legacy `merge_week_conflict` item, owner-reachable and unresolvable.
+
+    Nothing creates these any more -- `course_service.merge_courses` settles
+    week conflicts during the merge (#63) -- but rows written before that
+    change can still be in the table, so the endpoints have to answer for them
+    honestly. Ownership runs Summary -> Course.user_id, so the row has to be
+    anchored to a real course the caller owns or it 404s for reasons unrelated
+    to what is being tested.
+    """
+    course = Course(id=generate_id(), user_id=user_id, code="LEGACY1", name="Legacy")
+    db_session.add(course)
+    await db_session.flush()
+
+    summary = Summary(
+        id=generate_id(),
+        course_id=course.id,
+        week=2,
+        content_md="# week 2\n",
+        file_path=f"summaries/{course.id}/Week2.md",
+        version=1,
+        source_artifacts=[],
+    )
+    db_session.add(summary)
+    await db_session.flush()
+
+    item = ReviewItem(
+        id=generate_id(),
+        review_type="merge_week_conflict",
+        entity_type="summary",
+        entity_id=summary.id,
+        payload_json={"reason": "Week 2 already has a summary in TGT202"},
+        suggested_values={"action": "regenerate_week_summary"},
+        status="pending",
+    )
+    db_session.add(item)
+    await db_session.flush()
+    return item
+
+
+@pytest.mark.asyncio(loop_scope="session")
+class TestUnresolvableEntityTypes:
+    """#63: resolve must not report success for a type it cannot apply.
+
+    The bug was not that resolving a `summary` item did nothing -- it was that
+    it did nothing and returned 200, so the UI showed "Review item resolved."
+    and the item left the pending count with its conflict untouched. A silent
+    no-op would have been better than a confirmed one.
+    """
+
+    async def test_resolving_a_summary_item_is_a_400(
+        self, integration_client, db_session, test_user_id
+    ):
+        item = await _owned_summary_review_item(db_session, test_user_id)
+
+        resp = await integration_client.post(
+            f"/api/review-items/{item.id}/resolve",
+            json={"resolution": {"course_code": "TGT202"}},
+        )
+
+        assert resp.status_code == 400
+        assert "summary" in resp.json()["detail"]
+
+    async def test_a_refused_resolve_leaves_the_item_pending(
+        self, integration_client, db_session, test_user_id
+    ):
+        item = await _owned_summary_review_item(db_session, test_user_id)
+
+        await integration_client.post(
+            f"/api/review-items/{item.id}/resolve",
+            json={"resolution": {"course_code": "TGT202"}},
+        )
+        await db_session.refresh(item)
+
+        # The distinction that matters: the old behaviour marked it resolved.
+        # It must stay pending so the count keeps telling the truth, and so the
+        # owner can still dismiss it.
+        assert item.status == "pending"
+
+    async def test_the_item_can_still_be_dismissed(
+        self, integration_client, db_session, test_user_id
+    ):
+        """Refusing to resolve must not trap the item in the inbox forever."""
+        item = await _owned_summary_review_item(db_session, test_user_id)
+
+        resp = await integration_client.post(f"/api/review-items/{item.id}/dismiss")
+        await db_session.refresh(item)
+
+        assert resp.status_code == 200
+        assert item.status == "dismissed"

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { analyticsApi, artifactsApi, assetsApi, chatApi, conceptsApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
 import { adminApi } from '../api/admin'
-import type { AdminUserUpdate, CreateSessionRequest, DashboardData, DeadlineUpdate, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
+import type { AdminUserUpdate, CreateSessionRequest, DashboardData, DeadlineUpdate, MergeConflictPolicy, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -788,8 +788,15 @@ export function useDeleteCourse() {
 export function useMergeCourse() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ courseCode, into }: { courseCode: string; into: string }) =>
-      coursesApi.merge(courseCode, into),
+    mutationFn: ({
+      courseCode,
+      into,
+      onConflict,
+    }: {
+      courseCode: string
+      into: string
+      onConflict?: MergeConflictPolicy
+    }) => coursesApi.merge(courseCode, into, onConflict),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['courses'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })

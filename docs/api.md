@@ -692,6 +692,8 @@ Get a single review item by ID.
 
 Resolve a review item. Applies the resolution to the referenced entity (e.g., updates artifact classification fields), marks the review as resolved, and resumes the pipeline from the extract stage.
 
+Only `entity_type: "lecture_artifact"` can be resolved here — it is the only type with an apply-branch, and the only type anything creates. Any other type returns `400`; dismiss it instead. This previously fell through to a `200` that changed nothing, so the UI reported success for a no-op (#63).
+
 **Request Body**
 ```json
 {
@@ -708,7 +710,7 @@ Resolve a review item. Applies the resolution to the referenced entity (e.g., up
 **Errors**
 | Status | Detail |
 |--------|--------|
-| 400 | Review item already resolved/dismissed |
+| 400 | Review item already resolved/dismissed, or its `entity_type` has no apply-branch |
 | 404 | Review item or referenced entity not found |
 
 ---
@@ -2247,8 +2249,20 @@ Permanently deletes the course and its children (summaries, flashcards, quiz que
 
 ### `POST /api/courses/{course_code}/merge`
 
-Moves all content into the target course. Colliding week summaries create review items instead of silently overwriting. The source course is archived afterwards.
+Moves all content into the target course and archives the source. A week summarized in **both** courses is a conflict, settled during the merge by `on_conflict`:
 
-**Body** `{ "into": "CSIT302" }`
-**Response** `200` `{ "moved_summaries": 5, "conflict_weeks": [3], "review_items_created": 1 }`
-**Response** `400` invalid target | `404` course not found
+| `on_conflict` | Effect | AI spend |
+|---|---|---|
+| `regenerate` *(default)* | Discards the source summary and re-summarizes the week from the merged artifact set. The only option that loses nothing, since the target now holds both courses' artifacts for that week. Runs in the background — the response returns before the new summary exists, and the target's existing summary stands until it does. | yes |
+| `keep_target` | Discards the source summary; the target's stands unchanged. | no |
+| `keep_source` | The source summary's content replaces the target's (version bumped, `source_artifacts` merged). The target's previous text is lost, but its artifacts survive the merge, so a later `regenerate` can rebuild it. | no |
+
+A discarded source summary is deleted outright, row and stored markdown. Its artifacts are **not** deleted — they move to the target like everything else.
+
+Earlier versions filed a `merge_week_conflict` review item instead of resolving anything, and `review_items_created` reported how many. That path is gone: the resolve endpoint never had an apply-branch for summaries, so those items could be dismissed but never acted on (#63). The field has been removed from the response; `POST /review-items/{id}/resolve` now returns `400` for any legacy row still carrying `entity_type: "summary"`.
+
+**Body** `{ "into": "CSIT302", "on_conflict": "regenerate" }`
+**Response** `200` `{ "moved_summaries": 5, "conflict_weeks": [3], "conflict_resolution": "regenerate", "regenerated_weeks": [3] }`
+**Response** `400` invalid target | `404` course not found | `422` unknown `on_conflict`
+
+`regenerated_weeks` lists the weeks actually queued for rebuild. It is empty for the other two policies, and a `regenerate` week whose artifacts no longer exist is omitted rather than promised.
