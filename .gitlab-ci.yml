@@ -1,0 +1,211 @@
+# GitLab CI for StudyAIO. Ported from .github/workflows/ci.yml (2026-09-26).
+#
+# The GitHub CI jobs all ran on GitHub-HOSTED ubuntu-latest with `container:` +
+# `services:`, which maps almost 1:1 onto GitLab. Four deliberate differences:
+#
+#  1. GitLab has no `--health-cmd`. `services:` start in PARALLEL with the job,
+#     so readiness is the job's own responsibility (before_script below).
+#  2. Service containers are reached by ALIAS, not localhost. GitLab derives an
+#     alias from the image name, so `redis:7-alpine` is already `redis` -- but
+#     `pgvector/pgvector:pg16` derives to `pgvector`, NOT `postgres`, so that one
+#     needs an explicit alias. (Setting an alias that matches the derived one is
+#     skipped with "alias is already in use by another service".)
+#  3. `e2e-tests` changes execution model. On GitHub it ran on the runner HOST,
+#     so Playwright, uvicorn and the published service ports all met on
+#     localhost. Here it runs INSIDE a container: postgres/redis move to
+#     aliases, while the API and the previewed UI really are on localhost
+#     because the job starts them itself.
+#  4. Runners are registered run_untagged:false -- every job MUST carry tags.
+#
+# Deploy is NOT here yet: it needs DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY and
+# a GHCR push token as CI variables. See the runbook session log.
+
+stages:
+  - lint
+  - test
+  - e2e
+
+default:
+  tags: [homelab, docker]
+  interruptible: true
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  # The torch CPU wheel alone is ~200MB; the CPU index keeps CI off the CUDA build.
+  PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+  PIP_CACHE_DIR: $CI_PROJECT_DIR/.cache/pip
+  npm_config_cache: $CI_PROJECT_DIR/.cache/npm
+
+# Redis has no client binary in these images, so reachability is checked in pure
+# Python. The official image binds its port only once ready to serve.
+.wait-for-redis: &wait-for-redis
+  - |
+    python3 - <<'PY'
+    import socket, sys, time
+    for _ in range(60):
+        try:
+            socket.create_connection(("redis", 6379), timeout=2).close()
+            print("redis:6379 ready"); break
+        except OSError:
+            time.sleep(1)
+    else:
+        sys.exit("FATAL: redis:6379 never became reachable")
+    PY
+
+.pip-cache: &pip-cache
+  key:
+    files: [services/app/requirements.txt]
+    prefix: pip
+  paths: [.cache/pip]
+
+python-lint:
+  stage: lint
+  image: python:3.12-slim
+  script:
+    - pip install "ruff>=0.8,<1.0"
+    - cd services/app
+    - ruff check .
+    - ruff format --check .
+
+backend-tests:
+  stage: test
+  image: python:3.12-slim
+  needs: [python-lint]
+  cache: *pip-cache
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends build-essential libpq-dev
+    - cd services/app
+    - pip install -r requirements.txt
+  script:
+    - python -m pytest tests/unit -x -v -n auto --cov=app --cov-report=term-missing
+      --cov-report=xml:coverage.xml --cov-fail-under=75
+    - python -m pytest tests/golden -x -v
+  artifacts:
+    when: always
+    paths: [services/app/coverage.xml]
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: services/app/coverage.xml
+
+integration-tests:
+  stage: test
+  image: python:3.12-slim
+  needs: [python-lint]
+  services:
+    # Explicit alias REQUIRED: the derived alias would be `pgvector`.
+    - name: pgvector/pgvector:pg16
+      alias: postgres
+    - redis:7-alpine
+  cache: *pip-cache
+  variables:
+    POSTGRES_USER: testuser
+    POSTGRES_PASSWORD: testpass
+    POSTGRES_DB: testdb
+    DATABASE_URL: postgresql+asyncpg://testuser:testpass@postgres:5432/testdb
+    DATABASE_URL_SYNC: postgresql://testuser:testpass@postgres:5432/testdb
+    REDIS_URL: redis://redis:6379/0
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends build-essential libpq-dev postgresql-client
+    # pg_isready means "accepting queries", which TCP reachability does not.
+    - for i in $(seq 1 60); do pg_isready -h postgres -U testuser -d testdb && break; sleep 1; done
+    - *wait-for-redis
+    - PGPASSWORD=testpass psql -h postgres -U testuser -d testdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+    - cd services/app
+    - pip install -r requirements.txt
+  script:
+    - python -m pytest tests/integration -x -v
+
+frontend-checks:
+  stage: test
+  image: node:20-slim
+  cache:
+    key:
+      files: [services/ui/package-lock.json]
+      prefix: npm
+    paths: [.cache/npm]
+  before_script:
+    - cd services/ui
+    - npm ci
+  script:
+    - npx tsc --noEmit
+    # `npm run lint` already runs check-colors.sh; the explicit call is kept so
+    # the guard still runs if the lint script is ever changed.
+    - npm run lint
+    - bash scripts/check-colors.sh
+    # package.json's "test" is already `vitest run`, so it exits rather than watching.
+    - npm test
+    - npm run build
+    - bash scripts/check-bundle.sh
+  # Hand the built bundle to e2e so it isn't rebuilt from scratch.
+  artifacts:
+    expire_in: 1 day
+    paths: [services/ui/dist]
+
+e2e-tests:
+  stage: e2e
+  # Tag MUST track @playwright/test in services/ui/package-lock.json (^1.58.2).
+  # A mismatch makes `playwright install` re-download the browser and defeats the
+  # point of using this image. Python is added below rather than adding a browser
+  # and its system libraries to python:3.12-slim.
+  image: mcr.microsoft.com/playwright:v1.58.2-jammy
+  needs: [frontend-checks]
+  services:
+    - name: pgvector/pgvector:pg16
+      alias: postgres
+    - redis:7-alpine
+  variables:
+    POSTGRES_USER: studyaio
+    POSTGRES_PASSWORD: studyaio
+    POSTGRES_DB: studyaio
+    # Aliases, not localhost: this job now runs inside a container.
+    DATABASE_URL: postgresql+asyncpg://studyaio:studyaio@postgres:5432/studyaio
+    DATABASE_URL_SYNC: postgresql://studyaio:studyaio@postgres:5432/studyaio
+    REDIS_URL: redis://redis:6379/0
+    SELF_HOSTED: "true"
+    JWT_SECRET_KEY: e2e-ephemeral-secret-not-used-outside-ci
+    DATA_DIR: $CI_PROJECT_DIR/e2e-data
+    LOG_FORMAT: json
+    # The API and the previewed UI run inside THIS container, so these really
+    # are localhost.
+    E2E_BASE_URL: http://localhost:3001
+    E2E_API_URL: http://localhost:8000
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-pip python3-venv libpq-dev postgresql-client
+    - for i in $(seq 1 60); do pg_isready -h postgres -U studyaio -d studyaio && break; sleep 1; done
+    - *wait-for-redis
+    - PGPASSWORD=studyaio psql -h postgres -U studyaio -d studyaio -c "CREATE EXTENSION IF NOT EXISTS vector;"
+    - python3 -m pip install --break-system-packages -r services/app/requirements.txt
+  script:
+    - mkdir -p "$DATA_DIR"
+    - cd services/app
+    - alembic upgrade head
+    # No Celery worker: the suite asserts uploads are accepted and queued, never
+    # that the pipeline finishes, so the broker alone is enough.
+    - nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$CI_PROJECT_DIR/api.log" 2>&1 &
+    - |
+      for i in $(seq 1 60); do
+        curl -fsS http://localhost:8000/health/ready > /dev/null && { echo "API ready after ${i}s"; break; }
+        if [ "$i" = "60" ]; then echo "API failed to become ready"; cat "$CI_PROJECT_DIR/api.log"; exit 1; fi
+        sleep 1
+      done
+    - cd ../ui
+    - npm ci
+    - nohup npx vite preview --port 3001 > "$CI_PROJECT_DIR/ui.log" 2>&1 &
+    - |
+      for i in $(seq 1 30); do
+        curl -fsS http://localhost:3001/ > /dev/null && { echo "UI ready after ${i}s"; break; }
+        if [ "$i" = "30" ]; then echo "UI failed to become ready"; cat "$CI_PROJECT_DIR/ui.log"; exit 1; fi
+        sleep 1
+      done
+    - npx playwright test
+  artifacts:
+    when: on_failure
+    expire_in: 7 days
+    paths:
+      - services/ui/playwright-report
+      - api.log
+      - ui.log
