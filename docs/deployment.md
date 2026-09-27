@@ -215,6 +215,43 @@ them's text — then deletes the old-shape files. It is idempotent, safe to run
 before or after the migration, and touches nothing outside `summaries/`. Pass
 `--keep-legacy` to leave the old files in place; nothing serves them either way.
 
+#### One-time: give existing course documents per-user blobs (issue #107)
+
+Course document keys used to be `courseops/<sha256[:16]>_<name>` —
+content-addressed, with **no owner in the key**. Two users who uploaded the same
+course handbook wrote to one blob. Nothing was corrupted (the same key means the
+same bytes), but account deletion could not remove it: deleting one user's copy
+would pull the file out from under another user's live `course_documents` row, so
+`courseops/` was skipped entirely and closing an account left its course
+documents on disk indefinitely. Keys are
+`courseops/<user_id>/<sha256[:16]>_<name>` now, and the purge sweeps that prefix
+like every other namespace.
+
+Alembic revision `4f1c7a2e9b63` re-keys the `course_documents.file_path` column
+when you run `alembic upgrade head`. The blobs are copied by a separate one-time
+command, which has to run where the storage is:
+
+```bash
+# Report what would change
+docker compose exec api python scripts/backfill_courseops_files.py --dry-run
+
+# Do it
+docker compose exec api python scripts/backfill_courseops_files.py
+```
+
+It **copies** each legacy blob to every referencing user's prefix rather than
+moving it — several accounts may point at one blob and each needs its own — then
+deletes the legacy blob once nothing references it. Copying is safe here for the
+same reason the bug was harmless: content addressing means every referrer wants
+those identical bytes. It is idempotent, safe to run before or after the
+migration, and touches nothing outside `courseops/`. Pass `--keep-legacy` to
+leave the old blobs in place.
+
+**Until this runs, the gap it closes stays open.** A row still on the legacy key
+points at a blob under no user's prefix, so the deletion purge cannot reach it
+and deliberately does not try — guessing would risk another account's document.
+Run it on any instance that accepted a course document before this release.
+
 ### S3-Compatible
 
 ```env

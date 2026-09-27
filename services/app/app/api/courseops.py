@@ -70,7 +70,7 @@ async def upload_course_document(
 
     # Save file to storage backend
     storage = get_storage()
-    await storage.ensure_dir("courseops")
+    await storage.ensure_dir(courseops_service.courseops_key_prefix_for_user(user.id))
 
     safe_name = sanitize_filename(file.filename)
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
@@ -80,8 +80,7 @@ async def upload_course_document(
     import hashlib
 
     sha256 = hashlib.sha256(content).hexdigest()
-    stored_name = f"{sha256[:16]}_{safe_name}"
-    storage_key = f"courseops/{stored_name}"
+    storage_key = courseops_service.courseops_key(user.id, sha256, safe_name)
     await storage.put(storage_key, content)
 
     try:
@@ -219,7 +218,7 @@ async def upload_assessment_document(
         )
 
     storage = get_storage()
-    await storage.ensure_dir("courseops")
+    await storage.ensure_dir(courseops_service.courseops_key_prefix_for_user(user.id))
 
     safe_name = sanitize_filename(file.filename)
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
@@ -228,8 +227,7 @@ async def upload_assessment_document(
     import hashlib
 
     sha256 = hashlib.sha256(content).hexdigest()
-    stored_name = f"{sha256[:16]}_{safe_name}"
-    storage_key = f"courseops/{stored_name}"
+    storage_key = courseops_service.courseops_key(user.id, sha256, safe_name)
     await storage.put(storage_key, content)
 
     doc = await courseops_service.attach_assessment_document(

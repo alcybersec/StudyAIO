@@ -3,12 +3,13 @@
 from datetime import UTC, date, datetime
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.agents.base import CourseOpsResult
 from app.core.exceptions import CourseOpsError
+from app.core.storage import StorageBackend, get_storage
 from app.core.utils import generate_id
 from app.models.assessment import Assessment
 from app.models.course import Course
@@ -18,6 +19,71 @@ from app.models.exam import Exam
 from app.services import course_service
 
 logger = structlog.get_logger()
+
+#: Storage prefix for every course/assessment document blob.
+COURSEOPS_PREFIX = "courseops"
+
+
+def courseops_key(user_id: str, sha256: str, safe_name: str) -> str:
+    """Build the storage key for a course document blob.
+
+    ``courseops/<user_id>/<sha256[:16]>_<safe_name>``.
+
+    The key used to be ``courseops/<sha256[:16]>_<safe_name>`` — content
+    addressed with **no owner** — so two users who uploaded the same course
+    handbook wrote to one blob. Nothing was corrupted (the same key means the
+    same bytes, which is what content addressing buys) but the *lifecycle* was
+    broken: `account_service.purge_user_storage` could not delete it, because
+    removing one user's copy would pull the file out from under another user's
+    still-live `CourseDocument` row. So closing an account left files behind
+    (issue #107 / GL#4).
+
+    Per-user keys trade that deduplication away, and it is worth very little
+    here — a handful of shared handbooks — against a deletion path that would
+    otherwise need cross-user reference counting, taken inside the deleting
+    transaction, to avoid two concurrent closures each seeing the other's
+    reference and neither deleting.
+
+    The hash stays in the key even though it no longer has to be unique across
+    users: within one user it still collapses a re-upload of the same file onto
+    one blob, and it keeps two documents with the same filename but different
+    content apart.
+
+    Args:
+        user_id: Owner of the document.
+        sha256: Full hex digest of the content; only the first 16 chars are used.
+        safe_name: Filename already through `sanitize_filename`, which strips
+            everything but alphanumerics and ``" ._-()"`` — so it cannot
+            introduce a path separator and the key always has exactly three
+            segments.
+
+    Returns:
+        The storage key.
+    """
+    return f"{COURSEOPS_PREFIX}/{user_id}/{sha256[:16]}_{safe_name}"
+
+
+def courseops_key_prefix_for_user(user_id: str) -> str:
+    """Prefix covering every courseops blob owned by one user.
+
+    Lives beside `courseops_key` so the writer and
+    `account_service.purge_user_storage` cannot disagree about the shape — the
+    same reason `summary_service.summary_key_prefix_for_course` and
+    `preview_service.preview_keys_for_artifact` exist.
+
+    No trailing slash, matching the other prefixes the purge sweeps. That is
+    only safe because `generate_id` is UUID7 and every id is the same length,
+    so no user id can be a string prefix of another. `LocalStorageBackend`
+    resolves a prefix to a directory either way, but S3's ``list_objects_v2``
+    matches on the raw string.
+
+    Args:
+        user_id: Owner whose blobs the prefix covers.
+
+    Returns:
+        The storage prefix.
+    """
+    return f"{COURSEOPS_PREFIX}/{user_id}"
 
 
 async def _get_course_owned(
@@ -467,22 +533,92 @@ async def attach_assessment_document(
     return doc
 
 
+async def _delete_blob_if_unreferenced(
+    session: AsyncSession,
+    owner_id: str,
+    storage_key: str,
+    storage: StorageBackend | None = None,
+) -> bool:
+    """Delete a courseops blob once no row of the same owner points at it.
+
+    A user who uploads one handbook to two courses gets two `CourseDocument`
+    rows and — because the key carries the content hash — **one** blob. So
+    deleting a row cannot unconditionally delete the file.
+
+    Refuses any key not under this owner's own prefix. That is what keeps a
+    pre-#107 row safe: a legacy ``courseops/<sha256[:16]>_<name>`` key may be
+    shared with *another user*, and a count over this user's rows says nothing
+    about theirs. Those blobs stay until `scripts/backfill_courseops_files.py`
+    gives each owner their own copy, which is the same "residue beats
+    destroying someone else's data" trade the shared blob was left under
+    before.
+
+    Concurrency resolves in the safe direction. Two simultaneous deletions of
+    two rows sharing a blob can both still see the other's row and both skip,
+    leaving an orphan — residue. They cannot leave a surviving row pointing at
+    a deleted blob, because the count runs after this deletion has committed.
+    The one narrow exception is a delete racing a *fresh upload* of the same
+    bytes: the upload's `put` precedes its row insert, so the blob can be
+    removed between the two and that new document 404s. Not worth a lock; the
+    blob is re-uploadable and nothing is disclosed.
+
+    Args:
+        session: Database session, after the row deletion has committed.
+        owner_id: Owner of the document that was deleted.
+        storage_key: The deleted row's ``file_path``.
+        storage: Storage backend, defaulting to the configured singleton.
+
+    Returns:
+        True if the blob was deleted.
+    """
+    if not storage_key.startswith(f"{courseops_key_prefix_for_user(owner_id)}/"):
+        return False
+
+    remaining = (
+        await session.execute(
+            select(func.count(CourseDocument.id)).where(
+                CourseDocument.user_id == owner_id,
+                CourseDocument.file_path == storage_key,
+            )
+        )
+    ).scalar_one()
+    if remaining:
+        return False
+
+    store = storage if storage is not None else get_storage()
+    try:
+        if await store.exists(storage_key):
+            await store.delete(storage_key)
+            return True
+    except Exception:
+        # The row is already gone; a stuck blob must not turn a successful
+        # delete into a 500. The account purge sweeps the prefix regardless.
+        logger.warning("courseops_blob_delete_failed", key=storage_key, exc_info=True)
+    return False
+
+
 async def delete_course_document(
     session: AsyncSession,
     document_id: str,
     user_id: str | None = None,
+    storage: StorageBackend | None = None,
 ) -> bool:
-    """Delete a course document.
+    """Delete a course document, and its blob when nothing else needs it.
 
     Resolves the document through the same owner-scoped getter #50 added for
     the read path, so the delete beside it can no longer destroy another
     user's document.
+
+    The blob half only became safe with #107's per-user keys: while the key was
+    content-addressed across users, this method deliberately deleted the row
+    only, and every deleted document left its file on disk forever.
 
     Args:
         session: Database session.
         document_id: UUID of the document.
         user_id: If provided, only delete the document when it is owned by
             this user. Endpoints MUST pass this.
+        storage: Storage backend, defaulting to the configured singleton.
 
     Returns:
         True if it existed and, when ``user_id`` is given, is owned by them.
@@ -490,9 +626,11 @@ async def delete_course_document(
     doc = await get_course_document(session, document_id, user_id=user_id)
     if not doc:
         return False
+    owner_id, storage_key = doc.user_id, doc.file_path
     await session.delete(doc)
     await session.commit()
-    logger.info("course_document_deleted", document_id=document_id)
+    blob_deleted = await _delete_blob_if_unreferenced(session, owner_id, storage_key, storage)
+    logger.info("course_document_deleted", document_id=document_id, blob_deleted=blob_deleted)
     return True
 
 
@@ -801,3 +939,119 @@ async def get_upcoming_deadlines_all_courses(
             }
         )
     return deadlines
+
+
+async def backfill_courseops_storage_keys(
+    session: AsyncSession,
+    storage: StorageBackend | None = None,
+    *,
+    delete_legacy: bool = True,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Give every existing course document its own per-user blob (#107).
+
+    Alembic revision ``4f1c7a2e9b63`` rewrites the ``file_path`` column. This
+    does the storage half, which a migration cannot: it runs where the blobs
+    are (a mounted volume, or S3).
+
+    Per row still holding a legacy ``courseops/<sha256[:16]>_<name>`` key:
+
+        1. **copies** the blob to ``courseops/<user_id>/<same basename>``
+        2. points ``file_path`` at the new key
+        3. deletes the legacy blob, once no row references it any more
+
+    It copies rather than moves because several users may reference one legacy
+    blob and each needs their own. That is safe here for the same reason the
+    bug was benign: the key is content-addressed, so every referrer wants those
+    identical bytes. #92's backfill had to do the opposite — there the single
+    file held *one* user's content under both rows' key, so copying it would
+    have been the disclosure.
+
+    A legacy blob that is already missing is not an error: the row is still
+    re-keyed, so it agrees with the migration either way, and it is counted
+    separately so a surprising number is visible rather than silent.
+
+    Idempotent and order-independent with respect to the migration: both derive
+    the same key from the same columns, and a row already on the new shape is
+    skipped. Only keys under ``courseops/`` that some row actually points at are
+    read or deleted.
+
+    The caller commits.
+
+    Args:
+        session: Database session.
+        storage: Storage backend, defaulting to the configured singleton.
+        delete_legacy: Delete each legacy blob once nothing references it.
+        dry_run: Count what would change and write nothing.
+
+    Returns:
+        Counts: ``rows``, ``blobs_copied``, ``paths_updated``,
+        ``legacy_missing``, ``legacy_deleted``.
+    """
+    store = storage if storage is not None else get_storage()
+
+    rows = (
+        await session.execute(
+            select(CourseDocument.id, CourseDocument.user_id, CourseDocument.file_path)
+        )
+    ).all()
+
+    counts = {
+        "rows": len(rows),
+        "blobs_copied": 0,
+        "paths_updated": 0,
+        "legacy_missing": 0,
+        "legacy_deleted": 0,
+    }
+    legacy_keys: set[str] = set()
+
+    for doc_id, user_id, file_path in rows:
+        if not file_path:
+            continue
+        parts = file_path.split("/")
+        if not (len(parts) == 2 and parts[0] == COURSEOPS_PREFIX):
+            continue  # already per-user, or not a courseops key at all
+
+        new_key = f"{courseops_key_prefix_for_user(user_id)}/{parts[1]}"
+        legacy_keys.add(file_path)
+
+        if await store.exists(file_path):
+            if not await store.exists(new_key):
+                counts["blobs_copied"] += 1
+                if not dry_run:
+                    await store.put(new_key, await store.get(file_path))
+        else:
+            counts["legacy_missing"] += 1
+
+        counts["paths_updated"] += 1
+        if not dry_run:
+            await session.execute(
+                update(CourseDocument).where(CourseDocument.id == doc_id).values(file_path=new_key)
+            )
+
+    if delete_legacy:
+        for key in sorted(legacy_keys):
+            if not await store.exists(key):
+                continue
+            if dry_run:
+                # Nothing was rewritten, so every row still points here and the
+                # reference count below would veto every deletion. The loop
+                # rewrites *every* legacy-shaped row, so a real run leaves none
+                # referenced — report it as deletable.
+                counts["legacy_deleted"] += 1
+                continue
+            # Re-read the column rather than trusting the loop: a row inserted
+            # concurrently, or one whose shape the loop declined to touch, may
+            # still point here. Residue beats deleting a live document's file.
+            still_referenced = (
+                await session.execute(
+                    select(func.count(CourseDocument.id)).where(CourseDocument.file_path == key)
+                )
+            ).scalar_one()
+            if still_referenced:
+                continue
+            await store.delete(key)
+            counts["legacy_deleted"] += 1
+
+    logger.info("courseops_backfill", dry_run=dry_run, **counts)
+    return counts

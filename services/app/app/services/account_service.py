@@ -48,7 +48,7 @@ from app.models.course import Course
 from app.models.exam import Exam
 from app.models.quiz import QuizQuestion
 from app.models.user import User
-from app.services import preview_service, summary_service
+from app.services import courseops_service, preview_service, summary_service
 
 logger = structlog.get_logger()
 
@@ -229,10 +229,19 @@ async def purge_user_storage(
       the prefix used to be built from the artifact id, which no summary key
       has ever carried, so the whole branch was a permanent no-op and every
       summary file outlived the account that produced it.
+    * ``courseops/<user_id>/...`` — a prefix per **user**, via
+      `courseops_service.courseops_key_prefix_for_user`. This one was
+      unreachable by construction until #107: the key was
+      ``courseops/<sha256[:16]>_<name>``, content-addressed with no owner, so
+      two users who uploaded the same handbook shared one blob byte for byte
+      and deleting it on one account's closure would have removed the other
+      user's document. The fix was to put the owner in the key rather than to
+      teach the purge to count references, so the sweep is now the same
+      one-line prefix as the others.
 
-    The two course/preview prefixes come from the key builders rather than
-    being spelled out again here, so changing a key shape cannot leave this
-    sweeping a prefix nothing is stored under. ``extractions/`` is still
+    The course, preview and courseops prefixes come from the key builders
+    rather than being spelled out again here, so changing a key shape cannot
+    leave this sweeping a prefix nothing is stored under. ``extractions/`` is still
     literal: its only builder is inline in `app.pipeline.extract`, and reaching
     into the pipeline layer from here to borrow it is not worth the coupling.
 
@@ -242,13 +251,6 @@ async def purge_user_storage(
     directory and is unaffected either way, but S3's `list_objects_v2` matches
     on the raw string — under variable-length ids, one user's sweep could reach
     another's objects, and a trailing slash would become load-bearing.
-
-    ``courseops/<sha256[:16]>_<name>`` is **deliberately not purged**. It is
-    content-addressed with no owner in the key, so it is reachable from neither
-    artifacts nor courses, and two users who upload the same handbook share one
-    blob byte for byte — deleting it on one account's closure would silently
-    remove the other user's document. Needs ownership tracking (or refcounting)
-    before it can be purged safely; see the issue thread on #97.
 
     Args:
         session: Database session.
@@ -279,6 +281,7 @@ async def purge_user_storage(
         keys.extend(preview_service.preview_keys_for_artifact(artifact_id))
         prefixes.append(f"extractions/{artifact_id}")
     prefixes.extend(summary_service.summary_key_prefix_for_course(cid) for cid in course_ids)
+    prefixes.append(courseops_service.courseops_key_prefix_for_user(user_id))
 
     deleted = 0
     for key in keys:
