@@ -46,7 +46,7 @@ from app.models.review_item import ReviewItem
 from app.models.summary import Summary
 from app.models.user import User
 from app.models.user_settings import UserSettings
-from app.services import account_service, preview_service, summary_service
+from app.services import account_service, courseops_service, preview_service, summary_service
 
 
 def _tag() -> str:
@@ -147,9 +147,14 @@ async def _seed_user(session, tag: str) -> dict[str, str]:
     return {"user": uid, "course": cid, "artifact": aid, "chat": sid}
 
 
-# The one blob deliberately left behind: `courseops/` is content-addressed, so
-# the same bytes uploaded by two users are one object with no owner in the key.
-SHARED_COURSEOPS_KEY = "courseops/0123456789abcdef_handbook.pdf"
+# A pre-#107 courseops key: content-addressed, no owner. Still reachable by no
+# prefix the purge sweeps, which is what `scripts/backfill_courseops_files.py`
+# exists to resolve. Spelled out as a literal deliberately — no builder produces
+# this shape any more, and the point is that the old shape is not swept.
+LEGACY_COURSEOPS_KEY = "courseops/0123456789abcdef_handbook.pdf"
+
+#: Shared by two users pre-#107; post-#107 each gets this under their own prefix.
+SHARED_COURSEOPS_DIGEST = "0123456789abcdef"
 
 
 async def _seed_storage(storage, ids: dict[str, str]) -> dict[str, str]:
@@ -173,6 +178,9 @@ async def _seed_storage(storage, ids: dict[str, str]) -> dict[str, str]:
         "preview_current": preview_service.preview_keys_for_artifact(aid)[-1],
         "summary": summary_service.build_summary_storage_key(cid, 1),
         "summary_other_week": summary_service.build_summary_storage_key(cid, 7),
+        "courseops": courseops_service.courseops_key(
+            ids["user"], SHARED_COURSEOPS_DIGEST, "handbook.pdf"
+        ),
     }
     for label, key in keys.items():
         await storage.put(key, f"{label} for {aid}".encode())
@@ -240,23 +248,52 @@ class TestPurgeUserStorage:
         survivors = [label for label, key in keys.items() if await storage.exists(key)]
         assert survivors == [], f"files survived account deletion: {survivors}"
 
-    async def test_shared_courseops_blob_is_left_alone(self, db_session, storage):
-        """A decision, not an oversight — hold it in place with a test.
+    async def test_courseops_blob_goes_but_another_users_copy_stays(self, db_session, storage):
+        """#107 inverted a decision this class used to hold, so state both halves.
 
-        `courseops/<sha256[:16]>_<name>` is content-addressed and has no owner
-        in the key, so two users who upload the same handbook share one object.
-        Purging it on one account's closure would delete the other user's
-        document. Until that store tracks ownership, leaving the blob is the
-        correct trade: residue beats destroying someone else's data.
+        The old test here — `test_shared_courseops_blob_is_left_alone` — asserted
+        that `courseops/` survived a purge, and it was right to: the key was
+        content-addressed with no owner, two users who uploaded the same handbook
+        shared one object, and deleting it would have destroyed the other user's
+        document. Residue beat data loss.
+
+        Per-user keys removed the reason for that trade, so the assertion flips:
+        the owner's blob must go, and another user's copy of the *identical*
+        bytes must not. Both halves matter — sweeping a prefix that turns out to
+        be too broad is exactly the failure the old decision was avoiding.
         """
         ids = await _seed_user(db_session, _tag())
-        await _seed_storage(storage, ids)
-        await storage.put(SHARED_COURSEOPS_KEY, b"%PDF-1.4 shared by two users")
+        other = await _seed_user(db_session, _tag())
+        mine = courseops_service.courseops_key(ids["user"], SHARED_COURSEOPS_DIGEST, "handbook.pdf")
+        theirs = courseops_service.courseops_key(
+            other["user"], SHARED_COURSEOPS_DIGEST, "handbook.pdf"
+        )
+        await storage.put(mine, b"%PDF-1.4 shared by two users")
+        await storage.put(theirs, b"%PDF-1.4 shared by two users")
 
         await account_service.delete_user_account(db_session, ids["user"], storage=storage)
         await db_session.flush()
 
-        assert await storage.exists(SHARED_COURSEOPS_KEY)
+        assert not await storage.exists(mine)
+        assert await storage.exists(theirs)
+
+    async def test_a_pre_migration_courseops_blob_still_survives(self, db_session, storage):
+        """The residual gap, held in place so it is not mistaken for a fix.
+
+        A row written before #107 points at `courseops/<sha256[:16]>_<name>`,
+        which is under no user's prefix and so is not swept. That blob may still
+        be shared with another account, so the purge must *not* guess at it —
+        `scripts/backfill_courseops_files.py` gives each owner their own copy
+        first, and only then is it safe to delete. Until an instance has run
+        that script, closing an account leaves these behind.
+        """
+        ids = await _seed_user(db_session, _tag())
+        await storage.put(LEGACY_COURSEOPS_KEY, b"%PDF-1.4 pre-migration")
+
+        await account_service.delete_user_account(db_session, ids["user"], storage=storage)
+        await db_session.flush()
+
+        assert await storage.exists(LEGACY_COURSEOPS_KEY)
 
     async def test_reports_how_many_objects_it_deleted(self, db_session, storage):
         """The count must not be inflated by keys that were never there."""
