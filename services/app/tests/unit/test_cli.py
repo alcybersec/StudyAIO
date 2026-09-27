@@ -196,3 +196,97 @@ class TestBackfillConceptEmbeddingsCommand:
     def test_it_is_listed_when_no_subcommand_is_given(self, capsys):
         assert cli.main([]) == 2
         assert "backfill-concept-embeddings" in capsys.readouterr().err
+
+
+class TestBackfillCourseopsKeysCommand:
+    """Course document blobs written before #107 have no owner in their key.
+
+    The command exists because repo-root `scripts/` is in neither the image nor
+    any compose mount, so `scripts/backfill_courseops_files.py` cannot be run
+    from a deployed container. These cover the wiring; the re-keying itself is
+    covered by `tests/unit/services/test_courseops_storage_keys.py`.
+    """
+
+    COUNTS = {
+        "rows": 3,
+        "blobs_copied": 2,
+        "paths_updated": 3,
+        "legacy_missing": 1,
+        "legacy_deleted": 2,
+    }
+
+    def _run(self, factory, argv, counts=None):
+        backfill = AsyncMock(return_value=counts if counts is not None else self.COUNTS)
+        with (
+            patch("app.cli.async_session_factory", factory),
+            patch(
+                "app.services.courseops_service.backfill_courseops_storage_keys",
+                backfill,
+            ),
+        ):
+            return cli.main(argv), backfill
+
+    def test_commits_and_reports(self, fake_session_factory, capsys):
+        factory, session = fake_session_factory
+
+        code, backfill = self._run(factory, ["backfill-courseops-keys"])
+
+        assert code == 0
+        session.commit.assert_awaited_once()
+        out = capsys.readouterr().out
+        assert "3 course document(s)" in out
+        assert "copied 2 blob(s)" in out
+        assert "2 legacy blob(s) deleted" in out
+
+    def test_reports_rows_whose_legacy_blob_was_already_gone(self, fake_session_factory, capsys):
+        """A missing blob is not an error, but it must not be silent either."""
+        factory, _ = fake_session_factory
+
+        self._run(factory, ["backfill-courseops-keys"])
+
+        assert "1 row(s) pointed at a legacy blob that was already missing" in (
+            capsys.readouterr().out
+        )
+
+    def test_dry_run_rolls_back_and_writes_nothing(self, fake_session_factory, capsys):
+        factory, session = fake_session_factory
+
+        code, backfill = self._run(factory, ["backfill-courseops-keys", "--dry-run"])
+
+        assert code == 0
+        session.rollback.assert_awaited_once()
+        session.commit.assert_not_awaited()
+        assert backfill.await_args.kwargs["dry_run"] is True
+        assert "Dry run: nothing was copied" in capsys.readouterr().out
+
+    def test_keep_legacy_leaves_the_old_blobs(self, fake_session_factory):
+        """`--keep-legacy` must invert into `delete_legacy=False`, not pass through."""
+        factory, _ = fake_session_factory
+
+        _, backfill = self._run(factory, ["backfill-courseops-keys", "--keep-legacy"])
+
+        assert backfill.await_args.kwargs["delete_legacy"] is False
+
+    def test_deletes_legacy_by_default(self, fake_session_factory):
+        factory, _ = fake_session_factory
+
+        _, backfill = self._run(factory, ["backfill-courseops-keys"])
+
+        assert backfill.await_args.kwargs["delete_legacy"] is True
+        assert backfill.await_args.kwargs["dry_run"] is False
+
+    def test_nothing_to_do_is_not_an_error(self, fake_session_factory, capsys):
+        """An instance that has never used CourseOps must exit zero and say so."""
+        factory, _ = fake_session_factory
+        empty = dict.fromkeys(self.COUNTS, 0)
+
+        code, _ = self._run(factory, ["backfill-courseops-keys"], counts=empty)
+
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "0 course document(s)" in out
+        assert "already missing" not in out
+
+    def test_it_is_listed_when_no_subcommand_is_given(self, capsys):
+        assert cli.main([]) == 2
+        assert "backfill-courseops-keys" in capsys.readouterr().err

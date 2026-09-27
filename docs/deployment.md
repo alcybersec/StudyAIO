@@ -215,6 +215,14 @@ them's text — then deletes the old-shape files. It is idempotent, safe to run
 before or after the migration, and touches nothing outside `summaries/`. Pass
 `--keep-legacy` to leave the old files in place; nothing serves them either way.
 
+> **The `docker compose exec` form above does not work**, for the same reason
+> given under the #107 step: repo-root `scripts/` is not in the image and not
+> mounted by any compose file. Run it from a host checkout with the app's
+> environment (`DATABASE_URL`, `DATA_DIR` / S3 settings), or give it an `app.cli`
+> subcommand as `backfill-courseops-keys` has. Tracked separately; left as-is here
+> rather than quietly changed, since nobody has needed it yet on an instance with
+> colliding course codes.
+
 #### One-time: give existing course documents per-user blobs (issue #107)
 
 Course document keys used to be `courseops/<sha256[:16]>_<name>` —
@@ -229,15 +237,23 @@ like every other namespace.
 
 Alembic revision `4f1c7a2e9b63` re-keys the `course_documents.file_path` column
 when you run `alembic upgrade head`. The blobs are copied by a separate one-time
-command, which has to run where the storage is:
+command, which has to run where the storage is — so it ships **in the image**, as
+an `app.cli` subcommand:
 
 ```bash
 # Report what would change
-docker compose exec api python scripts/backfill_courseops_files.py --dry-run
+docker compose exec api python -m app.cli backfill-courseops-keys --dry-run
 
 # Do it
-docker compose exec api python scripts/backfill_courseops_files.py
+docker compose exec api python -m app.cli backfill-courseops-keys
 ```
+
+> Use the CLI, not `scripts/backfill_courseops_files.py`, inside a container. The
+> repo-root `scripts/` directory is in neither the image (the API build context is
+> `services/app/`) nor any compose mount, in dev or in prod — so a
+> `docker compose exec api python scripts/…` invocation cannot find the file. The
+> script remains useful from a host checkout that has the app's environment; both
+> it and the CLI call the same `courseops_service` function.
 
 It **copies** each legacy blob to every referencing user's prefix rather than
 moving it — several accounts may point at one blob and each needs its own — then

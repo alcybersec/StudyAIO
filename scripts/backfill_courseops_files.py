@@ -33,11 +33,20 @@ directory is touched. It is idempotent — a second run finds every row already
 per-user and nothing left to delete — and can be run before or after the
 migration, since both derive the same key from the same columns.
 
-Run it with the application's own environment (same `DATABASE_URL`, same
-`DATA_DIR` / S3 settings), e.g. inside the app container:
+**Inside a container, use the CLI instead:**
+
+    docker compose exec api python -m app.cli backfill-courseops-keys --dry-run
+    docker compose exec api python -m app.cli backfill-courseops-keys
+
+This file is not reachable from a deployed container — repo-root `scripts/` is in
+neither the image (the API build context is `services/app/`) nor any compose
+mount. It is for a host checkout that has the application's own environment (same
+`DATABASE_URL`, same `DATA_DIR` / S3 settings):
 
     python scripts/backfill_courseops_files.py --dry-run   # report only
     python scripts/backfill_courseops_files.py
+
+Both entrypoints call the same `courseops_service` function.
 
 Options:
     --dry-run       Report the counts and change nothing.
