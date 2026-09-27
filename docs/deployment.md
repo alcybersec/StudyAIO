@@ -124,32 +124,54 @@ docker compose up -d
 
 ## CI/CD Pipeline
 
-GitHub Actions workflow (`.github/workflows/deploy.yml`) automates:
+GitLab CI (`.gitlab-ci.yml`) runs five stages — `lint`, `test`, `e2e`, `build`,
+`deploy` — on every branch push. Only the last two are deployment-relevant:
 
-1. **Build** — On push to `main` or version tags (`v*`):
-   - Builds API and UI Docker images
-   - Pushes to GitHub Container Registry (GHCR)
-   - Tags: `latest`, semver, git SHA
+1. **Build** — on `main` or a `v*` tag:
+   - Builds the API and UI images on the `shell` runner (the only one with a real
+     Docker socket)
+   - Pushes to the **GitHub** Container Registry (GHCR), not the GitLab registry.
+     `docker-compose.prod.yml` pins `ghcr.io/${GHCR_OWNER}/studyaio-{api,ui}` and
+     the deploy host logs in to GHCR to pull, so moving CI forges deliberately did
+     not move the registry.
+   - Tags: the 7-character commit SHA and `latest`
 
-2. **Deploy** — After successful build:
-   - Updates ECS services with `--force-new-deployment`
-   - Waits for stable deployment
+2. **Deploy** (`deploy-selfhosted`) — after build and E2E both pass:
+   - Sends **only the commit SHA** over SSH. The deploy key on the server is
+     command-restricted to `/opt/studyaio/deploy.sh`, which reads it from
+     `SSH_ORIGINAL_COMMAND` — CI cannot run an arbitrary command on the host.
+   - `deploy.sh` pins the host `.env` to that tag, pulls, runs
+     `alembic upgrade head`, and restarts the stack.
+   - Holds `resource_group: studyaio-prod`, so two deploys never interleave, and
+     is `interruptible: false` so a newer push cannot cancel one midway.
+   - Re-checks the ref as a **shell assertion**, not only via `rules:`. A
+     `rules:` mismatch *skips* the job, and a skipped job reports the pipeline
+     green — which would read as a deploy that succeeded but never ran.
 
-### Required Secrets
+There is **no automated ECS deployment.** The AWS Terraform in `infra/cloud/aws/`
+is applied out of band; an ECS rollout is a manual `terraform apply` plus a
+service update against a tag CI has already published. (Earlier revisions of this
+document and of `PROGRESS.md` M29.4 described an ECS deploy job. It never
+existed — the retired `deploy.yml` had only `build-api`, `build-ui` and
+`deploy-selfhosted`.)
 
-| Secret | Description |
-|--------|-------------|
-| `AWS_ACCESS_KEY_ID` | IAM user for ECS deployment |
-| `AWS_SECRET_ACCESS_KEY` | IAM user secret |
+### Required CI/CD Variables
 
-### Required Variables
+Set in GitLab → Settings → CI/CD → Variables. Mask every credential; none of
+these belong in the repository.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AWS_REGION` | `us-east-1` | AWS region |
-| `ECS_CLUSTER` | `studyaio-prod-cluster` | ECS cluster name |
-| `ECS_API_SERVICE` | `studyaio-prod-api` | API service name |
-| `ECS_WORKER_SERVICE` | `studyaio-prod-worker` | Worker service name |
+| Variable | Protected | Description |
+|----------|-----------|-------------|
+| `GHCR_OWNER` | no | GHCR namespace — also the `docker login` username |
+| `GHCR_TOKEN` | yes | GitHub PAT with `write:packages`, for pushing images |
+| `DEPLOY_SSH_KEY` | yes | File-type variable: private key whose public half is command-restricted to `deploy.sh` on the host |
+| `DEPLOY_HOST` | yes | Deployment target host |
+| `DEPLOY_USER` | yes | SSH user on that host |
+| `VITE_SENTRY_DSN` | yes | Frontend Sentry DSN. Vite inlines `VITE_*` at **build** time, so this is consumed by `build-ui`, not at runtime. Unset builds a UI with monitoring off. |
+
+> Runners are registered `run_untagged:false`, so every job must carry tags. The
+> default is `[homelab, docker]`; the image builds override to `[shell]`. A job
+> that loses its tags sits pending forever rather than failing.
 
 ---
 
@@ -325,9 +347,9 @@ The frontend DSN is compiled in at **build** time, not read at runtime:
 docker build --build-arg VITE_SENTRY_DSN=https://... services/ui
 ```
 
-In CI this comes from the `VITE_SENTRY_DSN` repository secret (see
-`.github/workflows/deploy.yml`); leaving the secret unset builds a UI with
-monitoring disabled.
+In CI this comes from the `VITE_SENTRY_DSN` CI/CD variable, consumed by the
+`build-ui` job in `.gitlab-ci.yml`; leaving it unset builds a UI with monitoring
+disabled.
 
 **What is scrubbed.** `send_default_pii=False`, plus a `before_send` hook that
 filters `Authorization`/`Cookie`/`x-api-key` headers, drops cookies entirely, and

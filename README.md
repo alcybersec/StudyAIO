@@ -1,7 +1,5 @@
 # StudyAIO
 
-[![CI](https://github.com/alcybersec/StudyAIO/actions/workflows/ci.yml/badge.svg)](https://github.com/alcybersec/StudyAIO/actions/workflows/ci.yml)
-
 A local-first, fully dockerized AI study workspace that turns raw university lecture files (PDF, DOCX, PPTX) into organized, searchable, exam-ready study materials.
 
 **v2:** 39 models, 137 API endpoints, 20 pages, 1942 tests (1484 backend + 394 frontend unit + 64 E2E).
@@ -220,7 +218,7 @@ studyaio/
 │   ├── architecture.md         # Architecture guide
 │   ├── deployment.md           # Deployment guide
 │   └── migration-v1-v2.md     # v1 → v2 migration guide
-└── .github/workflows/          # CI/CD (lint, test, deploy)
+└── .gitlab-ci.yml              # CI/CD (lint, test, e2e, build, deploy)
 ```
 
 ## Documentation
