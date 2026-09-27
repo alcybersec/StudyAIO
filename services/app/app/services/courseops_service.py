@@ -954,6 +954,12 @@ async def backfill_courseops_storage_keys(
     does the storage half, which a migration cannot: it runs where the blobs
     are (a mounted volume, or S3).
 
+    Two entrypoints call this: ``python -m app.cli backfill-courseops-keys``,
+    which is the one to use inside a container, and
+    ``scripts/backfill_courseops_files.py`` for a host checkout. The CLI exists
+    because repo-root ``scripts/`` is in neither the image nor any compose mount,
+    so the script is unreachable from a deployed container.
+
     Per row still holding a legacy ``courseops/<sha256[:16]>_<name>`` key:
 
         1. **copies** the blob to ``courseops/<user_id>/<same basename>``

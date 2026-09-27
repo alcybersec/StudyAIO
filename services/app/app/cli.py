@@ -121,6 +121,61 @@ async def _backfill_concept_embeddings(batch_size: int) -> int:
     return 0
 
 
+async def _backfill_courseops_keys(dry_run: bool, keep_legacy: bool) -> int:
+    """Give existing course document blobs a per-user key.
+
+    `courseops/<sha256[:16]>_<name>` was content-addressed with no owner, so two
+    users who uploaded the same handbook shared one blob and the account-deletion
+    purge could not touch it (#107). Keys are
+    `courseops/<user_id>/<sha256[:16]>_<name>` now, and revision `4f1c7a2e9b63`
+    re-keys the column — this moves the files, which a migration cannot, because
+    it runs wherever alembic runs and not necessarily where the blobs are.
+
+    Lives here rather than only in `scripts/backfill_courseops_files.py` because
+    the repo-root `scripts/` directory is in neither the image (the build context
+    is `services/app`) nor any compose mount, so the script is unreachable from
+    a deployed container. This entrypoint ships in the image.
+
+    Idempotent. Copies rather than moves, since several accounts may reference
+    one legacy blob and each needs their own.
+
+    Args:
+        dry_run: Report what would change and write nothing.
+        keep_legacy: Leave the old-shape blobs on disk.
+
+    Returns:
+        A process exit code.
+    """
+    from app.services import courseops_service
+
+    async with async_session_factory() as session:
+        counts = await courseops_service.backfill_courseops_storage_keys(
+            session,
+            delete_legacy=not keep_legacy,
+            dry_run=dry_run,
+        )
+        if dry_run:
+            await session.rollback()
+        else:
+            await session.commit()
+
+    verb = "would copy" if dry_run else "copied"
+    print(
+        f"{counts['rows']} course document(s): {verb} {counts['blobs_copied']} blob(s), "
+        f"{counts['paths_updated']} file_path value(s) re-keyed, "
+        f"{counts['legacy_deleted']} legacy blob(s) "
+        f"{'would be deleted' if dry_run else 'deleted'}."
+    )
+    if counts["legacy_missing"]:
+        print(
+            f"{counts['legacy_missing']} row(s) pointed at a legacy blob that was already "
+            "missing; they were re-keyed anyway."
+        )
+    if dry_run:
+        print("Dry run: nothing was copied, updated or deleted.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and dispatch. Returns a process exit code."""
     configure_logging("WARNING")
@@ -150,6 +205,21 @@ def main(argv: list[str] | None = None) -> int:
         help="Concepts per provider call and per commit (default: 128)",
     )
 
+    courseops = sub.add_parser(
+        "backfill-courseops-keys",
+        help="Give existing course document blobs a per-user storage key (issue #107)",
+    )
+    courseops.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would change without copying, updating or deleting anything",
+    )
+    courseops.add_argument(
+        "--keep-legacy",
+        action="store_true",
+        help="Leave the old-shape blobs on disk",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "ensure-admin":
@@ -176,9 +246,22 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
 
+    if args.command == "backfill-courseops-keys":
+        try:
+            return asyncio.run(_backfill_courseops_keys(args.dry_run, args.keep_legacy))
+        except (OSError, OperationalError, InterfaceError) as exc:
+            print(
+                f"error: cannot reach the database ({type(exc).__name__}: {exc}) — "
+                "is the db service up, and are you running this inside the api "
+                "container?",
+                file=sys.stderr,
+            )
+            return 1
+
     parser.print_usage(sys.stderr)
     print(
-        "error: a command is required (ensure-admin, backfill-concept-embeddings)",
+        "error: a command is required (ensure-admin, backfill-concept-embeddings, "
+        "backfill-courseops-keys)",
         file=sys.stderr,
     )
     return 2
