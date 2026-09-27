@@ -17,13 +17,18 @@
 #     because the job starts them itself.
 #  4. Runners are registered run_untagged:false -- every job MUST carry tags.
 #
-# Deploy is NOT here yet: it needs DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY and
-# a GHCR push token as CI variables. See the runbook session log.
+# Images keep going to GHCR, deliberately. docker-compose.prod.yml references
+# ghcr.io/${GHCR_OWNER}/studyaio-{api,ui} in several places and the deploy host
+# logs in to GHCR to pull, so repointing at the GitLab registry would mean
+# changing production compose, the host's docker login and the .env pinning.
+# Keeping GHCR makes this migration purely a change of WHO RUNS THE BUILD.
 
 stages:
   - lint
   - test
   - e2e
+  - build
+  - deploy
 
 default:
   tags: [homelab, docker]
@@ -219,3 +224,141 @@ e2e-tests:
       - services/ui/playwright-report/
       - api.log
       - ui.log
+
+# ---------------------------------------------------------------------------
+# Image build + deploy. Ported from .github/workflows/deploy.yml (2026-09-27).
+#
+# Both build jobs need real host Docker, so they are the only ones on the shell
+# runner -- the docker runner is privileged:false with no socket.
+# ---------------------------------------------------------------------------
+.ghcr-build:
+  stage: build
+  tags: [shell]
+  interruptible: false          # an interrupted push can leave a partial tag
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG =~ /^v/
+  variables:
+    # MANDATORY on LXC 207: Docker 29.x uses the containerd image store, so
+    # `docker build` runs via BuildKit and attaches a provenance attestation by
+    # default. The resulting OCI index references the empty-JSON blob
+    # sha256:44136fa355b3..., and a GitLab/GHCR manifest PUT then fails with
+    # `blob unknown to registry` / MANIFEST_BLOB_UNKNOWN -- AFTER every layer has
+    # pushed successfully, so it reads as a registry fault. Cost a pipeline on
+    # the_arbitrage_project (288) to diagnose.
+    BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
+    # 7 characters, NOT CI_COMMIT_SHORT_SHA (which is 8). The deploy script
+    # computes IMAGE_TAG with `cut -c1-7` and pulls that exact tag, so an 8-char
+    # push would 404 at deploy time with CI already green.
+    IMAGE_TAG: ${CI_COMMIT_SHA:0:7}
+  before_script:
+    - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_OWNER" --password-stdin
+  script:
+    - docker build --provenance=false --sbom=false
+      $EXTRA_BUILD_ARGS
+      -t "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:$IMAGE_TAG"
+      -t "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:latest"
+      "$BUILD_CONTEXT"
+    - docker push "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:$IMAGE_TAG"
+    - docker push "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:latest"
+  after_script:
+    # This host shares one Docker daemon and has already hit 100% disk once.
+    - docker image rm "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:$IMAGE_TAG" || true
+
+build-api:
+  extends: .ghcr-build
+  needs: [backend-tests, integration-tests]
+  variables:
+    IMAGE_NAME: studyaio-api
+    BUILD_CONTEXT: services/app
+
+build-ui:
+  extends: .ghcr-build
+  needs: [frontend-checks]
+  variables:
+    IMAGE_NAME: studyaio-ui
+    BUILD_CONTEXT: services/ui
+    # Vite inlines VITE_* at BUILD time, so frontend Sentry must be configured
+    # here, not at runtime. Unset secret -> empty -> monitoring stays off.
+    EXTRA_BUILD_ARGS: >-
+      --build-arg VITE_SENTRY_DSN=$VITE_SENTRY_DSN
+      --build-arg VITE_SENTRY_ENVIRONMENT=production
+      --build-arg VITE_SENTRY_RELEASE=$CI_COMMIT_SHA
+
+deploy-selfhosted:
+  stage: deploy
+  image: alpine:latest
+  needs: [build-api, build-ui, e2e-tests]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG =~ /^v/
+  resource_group: studyaio-prod   # serialize deploys; never cancel one midway
+  variables:
+    IMAGE_TAG: ${CI_COMMIT_SHA:0:7}
+  before_script:
+    - apk add --no-cache openssh-client
+    - chmod 600 "$DEPLOY_SSH_KEY"
+  script:
+    # Ref guard, kept as a SHELL assertion on purpose. The GitHub job deliberately
+    # avoided a job-level `if:` because a condition that does not match makes the
+    # job SKIP, and a skipped job reports as a green run -- an unintended ref would
+    # look like a successful deploy. GitLab `rules:` have exactly the same
+    # property, so the assertion stays.
+    - |
+      if [ "$CI_COMMIT_BRANCH" != "main" ] && ! echo "${CI_COMMIT_TAG:-}" | grep -qE '^v'; then
+        echo "Deploy ref guard: refusing to deploy from branch='${CI_COMMIT_BRANCH:-}' tag='${CI_COMMIT_TAG:-}'"
+        echo "Expected: branch main, or a v* tag. Nothing was copied and no containers were touched."
+        exit 1
+      fi
+      echo "Ref guard passed: branch='${CI_COMMIT_BRANCH:-}' tag='${CI_COMMIT_TAG:-}'"
+    - |
+      scp -i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+        -P "${DEPLOY_SSH_PORT:-22}" \
+        docker-compose.yml docker-compose.prod.yml \
+        "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/"
+      scp -i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+        -P "${DEPLOY_SSH_PORT:-22}" \
+        scripts/preflight-check.sh scripts/backup.sh scripts/restore.sh \
+        "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/scripts/"
+    - |
+      # DEPLOY_DIR is passed explicitly rather than relying on the remote default:
+      # the `${DEPLOY_DIR:-/opt/studyaio}` fallback below would silently deploy to
+      # the right place today and the wrong place the day the directory moves.
+      #
+      # NOTE: GHCR_TOKEN is passed as a remote env assignment, so it is briefly
+      # visible in `ps` on the deploy host. Acceptable on a single-admin box, and
+      # no worse than the GitHub job which interpolated the secret into the script
+      # text -- but it is the reason this must never run against a shared host.
+      ssh -i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+        -p "${DEPLOY_SSH_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST" \
+        GHCR_OWNER="$GHCR_OWNER" IMAGE_TAG="$IMAGE_TAG" GHCR_TOKEN="$GHCR_TOKEN" \
+        DEPLOY_DIR="$DEPLOY_DIR" 'bash -s' <<'REMOTE'
+      set -euo pipefail
+      cd "${DEPLOY_DIR:-/opt/studyaio}"
+      API_IMAGE="ghcr.io/${GHCR_OWNER}/studyaio-api:${IMAGE_TAG}"
+      UI_IMAGE="ghcr.io/${GHCR_OWNER}/studyaio-ui:${IMAGE_TAG}"
+      COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+
+      echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_OWNER}" --password-stdin
+
+      docker pull "${API_IMAGE}"
+      docker pull "${UI_IMAGE}"
+      docker tag "${API_IMAGE}" "ghcr.io/${GHCR_OWNER}/studyaio-api:latest"
+      docker tag "${UI_IMAGE}" "ghcr.io/${GHCR_OWNER}/studyaio-ui:latest"
+
+      # Pin the deployed build so a later manual `up` reproduces this exact SHA
+      # instead of drifting to a stale image or a local build.
+      touch .env
+      sed -i '/^GHCR_OWNER=/d;/^IMAGE_TAG=/d' .env
+      printf 'GHCR_OWNER=%s\nIMAGE_TAG=%s\n' "${GHCR_OWNER}" "${IMAGE_TAG}" >> .env
+
+      $COMPOSE up -d --no-build --remove-orphans
+      $COMPOSE exec -T api alembic upgrade head
+
+      sleep 5
+      $COMPOSE exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
+      curl -fsS -o /dev/null "http://localhost:${UI_PORT:-3001}/"
+      echo "Deployment successful"
+      REMOTE
+  environment:
+    name: production
