@@ -354,7 +354,10 @@ TLS via Let's Encrypt. Single `docker-compose.selfhosted.yml`.
 ```
 ALB → ECS (API + Worker) → RDS (PostgreSQL) + ElastiCache (Redis) + S3
 ```
-Terraform in `infra/cloud/aws/`. CI/CD via GitHub Actions → GHCR → ECS deploy.
+Terraform in `infra/cloud/aws/`, applied out of band — no pipeline deploys to
+ECS. GitLab CI builds the images to GHCR and automatically rolls only the
+self-hosted VM; an ECS rollout is a manual `terraform apply` plus a service
+update against the tag CI published.
 
 ### Development
 ```
