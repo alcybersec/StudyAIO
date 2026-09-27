@@ -150,7 +150,15 @@ e2e-tests:
   # A mismatch makes `playwright install` re-download the browser and defeats the
   # point of using this image. Python is added below rather than adding a browser
   # and its system libraries to python:3.12-slim.
-  image: mcr.microsoft.com/playwright:v1.58.2-jammy
+  #
+  # -noble, NOT -jammy. The GitHub job installed Python 3.12 explicitly via
+  # actions/setup-python, and services/app/Dockerfile is built FROM
+  # python:3.12-slim -- so e2e must run on 3.12 or it exercises a different
+  # interpreter than production. jammy (Ubuntu 22.04) ships python3 = 3.10;
+  # noble (24.04) ships 3.12. jammy also ships pip 22.x, which predates
+  # --break-system-packages and fails with `no such option` (seen in pipeline
+  # 293); noble enforces PEP 668, so that flag is required there.
+  image: mcr.microsoft.com/playwright:v1.58.2-noble
   needs: [frontend-checks]
   services:
     - name: pgvector/pgvector:pg16
@@ -202,10 +210,12 @@ e2e-tests:
         sleep 1
       done
     - npx playwright test
+  # Paths are relative to CI_PROJECT_DIR, not the job's cwd. api.log/ui.log are
+  # written with an explicit $CI_PROJECT_DIR prefix for exactly this reason.
   artifacts:
     when: on_failure
     expire_in: 7 days
     paths:
-      - services/ui/playwright-report
+      - services/ui/playwright-report/
       - api.log
       - ui.log
