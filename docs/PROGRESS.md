@@ -458,6 +458,19 @@ Full stream log: `docs/frontend-rework/PROGRESS.md`. Design brief and plan: `doc
 **Tests:** +32 golden, +33 invite service, +28 account deletion, +18 observability,
 +10 registration gate (backend); +13 monitoring, +6 register page (frontend).
 
+## Forge Consolidation (GitLab)
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| FC.1 | Port CI to GitLab | ✅ Done | `.gitlab-ci.yml` reproduces all five jobs across `lint`/`test`/`e2e`/`build`/`deploy`. Four deliberate differences from the GitHub original, documented in the file header: no `--health-cmd` (services start in parallel, so readiness is the job's own `before_script`); services reached by alias, and `pgvector/pgvector:pg16` derives to `pgvector` so it needs an explicit `postgres` alias; `e2e-tests` runs *inside* a container, so Postgres/Redis move to aliases while the API and previewed UI are genuinely on localhost; and every job must carry tags because the runners are registered `run_untagged:false`. Images still publish to **GHCR** on purpose — `docker-compose.prod.yml` pins those names and the deploy host logs in to pull, so the migration changed only who runs the build. First deploy verified as job 2459 on 2026-09-27 (VM 210: `.env` pinned to the tested tag, all four containers on it). |
+| FC.2 | Retire GitHub Actions | ✅ Done | `.github/workflows/{ci,deploy}.yml` deleted — they were the only files under `.github/`, so the directory is gone. Both were already `disabled_manually` earlier the same day, and neither had run since 2026-09-21 despite two mirrored pushes — so **deleting them disarms nothing**. What it removes is a tree that still reads as live CI: two workflow files present at the conventional path, with nothing in the repository recording that they are switched off. That misled a reader into reporting them as armed, which is the whole argument for deleting rather than leaving them disabled. The README's Actions badge was removed rather than repointed: the GitLab instance is LAN-only and cannot serve a public badge. `developer_guide.md` § Continuous Integration rewritten against `.gitlab-ci.yml`. Corrected `architecture.md`, which claimed "CI/CD via GitHub Actions → GHCR → ECS deploy" — the deleted `deploy.yml` had only `build-api`, `build-ui` and `deploy-selfhosted`; **no ECS deploy job ever existed**, and `PROGRESS.md` M29.4 above records the same overstatement. |
+| FC.3 | Move issues to GitLab | ✅ Done | The four open issues moved: GH#90→GL#2, GH#101→GL#3, GH#107→GL#4 (`bug` label preserved), GH#108→GL#5. Bodies were captured from the GitHub API first and reused verbatim, so each GitLab issue carries the full original text (2.5–3.4 KB) plus a provenance footer linking the GitHub original. The GitHub issues were commented with their successor URL and closed as `not_planned`; **StudyAIO now has 0 open issues on GitHub**. Done token-free via `gitlab-rails runner` on VM 212 rather than the API — `alex` has passwordless sudo on the GitLab host, so no personal access token was created for this and none needs revoking. The route needs its key named explicitly (`ssh -i ~/.ssh/devbox_ops -o IdentitiesOnly=yes`); default key selection returns `Permission denied (publickey)`, which is evidence about the key offered, not about the host. |
+
+**Note on this file's own currency:** entries between PR #22 (2026-09-03) and this
+section are missing — roughly thirty PRs of security work, the three review rounds
+in `docs/security-review-2026-09.md`, and the quota/metering/ceiling change. That
+document is the record for the security work; this tracker is not yet backfilled.
+
 ## Issues & Blockers
 
 | Date | Issue | Status | Resolution |

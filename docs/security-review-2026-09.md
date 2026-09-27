@@ -368,10 +368,27 @@ change.
 |---|---|
 | **#90** | `main` has no branch protection, no rulesets: no required checks, no required PR, force-push permitted. The highest-value item here, and not code |
 | **#101** | three fields the admin UI infers because the API does not surface them |
-| **#89** | `ci.yml` still lists `master` (lines 9, 11) which no longer exists; `developer_guide.md:327` repeats it. Plus a decision on `develop` |
-| **#63** | summary-backed review items are created silently and cannot be resolved — needs a product decision first |
 | **#107** | `courseops/<sha256[:16]>_<name>` is content-addressed with no owner, so two users share one blob and it is deliberately excluded from the deletion purge. Needs refcounting or per-user keys |
 | **#108** | 12 fixtures across 8 files patch `data_dir` without `reset_storage()`, so they no-op against the memoised singleton; `tests/unit` and `tests/golden` add no isolation of their own |
+
+Since written: **#89** and **#63** are closed, and #89's subject is gone outright — CI moved to
+GitLab CI on 2026-09-27 and `.github/workflows/` was deleted, so there is no `ci.yml` left to
+name a dead branch. **The four issues above now live on GitLab and are read there**: #90→GL#2,
+#101→GL#3, #107→GL#4, #108→GL#5. The GitHub originals are closed with a link to each successor,
+so the numbers in this document resolve in both places.
+
+**#90 (GL#2) is half-satisfied, and wider than this repo.** `allow_force_push = false` is
+already set on `main` across all three projects — that half is done. But
+`only_allow_merge_if_pipeline_succeeds` is **`false`** on StudyAIO,
+`the_arbitrage_project` and `txn` alike, so an MR can still merge with a red pipeline or with
+none at all. The gap this document described is therefore real and fleet-wide, not
+StudyAIO-specific. It is deliberately not flipped: changing merge policy across three
+repositories is a decision GL#2 exists to hold, not a side effect of a CI migration.
+
+One more thing changed the risk picture here: StudyAIO's `main` auto-deploys again as of
+2026-09-27, and `/opt/studyaio`'s origin is now GitLab rather than GitHub, so a deploy no
+longer waits on mirror propagation. An unenforced pipeline and an automatic deploy on `main`
+are a worse pair than either alone — a red merge now reaches production directly.
 
 Nothing here is live-exploitable. **#90 is the one to read**: roughly thirty PRs were merged on
 the convention of checking green first, with nothing enforcing it. PR #78 shipped a regression
