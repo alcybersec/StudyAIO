@@ -247,11 +247,20 @@ e2e-tests:
     # pushed successfully, so it reads as a registry fault. Cost a pipeline on
     # the_arbitrage_project (288) to diagnose.
     BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
-    # 7 characters, NOT CI_COMMIT_SHORT_SHA (which is 8). The deploy script
-    # computes IMAGE_TAG with `cut -c1-7` and pulls that exact tag, so an 8-char
-    # push would 404 at deploy time with CI already green.
-    IMAGE_TAG: ${CI_COMMIT_SHA:0:7}
   before_script:
+    # IMAGE_TAG is computed HERE, not in `variables:`. GitLab expands only $VAR /
+    # ${VAR} in a variables block -- it does NOT do bash substring expansion, so
+    # `IMAGE_TAG: ${CI_COMMIT_SHA:0:7}` silently yields an EMPTY string and the
+    # build dies on `invalid tag "ghcr.io/owner/name:"` (pipeline 299).
+    # before_script shares a shell with script, so this assignment carries over;
+    # after_script does not, so it recomputes the value.
+    #
+    # 7 characters, NOT CI_COMMIT_SHORT_SHA (which is 8): deploy.sh derives the
+    # tag with ${SHA:0:7} and pulls that exact tag, so an 8-char push would 404
+    # at deploy time with CI already green.
+    - IMAGE_TAG="${CI_COMMIT_SHA:0:7}"
+    - test -n "$IMAGE_TAG" || { echo "IMAGE_TAG is empty - refusing to push an untagged image"; exit 1; }
+    - echo "Building ${IMAGE_NAME}:${IMAGE_TAG}"
     - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_OWNER" --password-stdin
   script:
     - docker build --provenance=false --sbom=false
@@ -263,7 +272,8 @@ e2e-tests:
     - docker push "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:latest"
   after_script:
     # This host shares one Docker daemon and has already hit 100% disk once.
-    - docker image rm "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:$IMAGE_TAG" || true
+    # after_script is a SEPARATE shell, so IMAGE_TAG must be recomputed.
+    - docker image rm "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:${CI_COMMIT_SHA:0:7}" || true
 
 build-api:
   extends: .ghcr-build
