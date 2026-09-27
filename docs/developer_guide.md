@@ -70,6 +70,52 @@ Verify:
 
 ## 2. Development Workflow
 
+### Forge: GitLab is canonical
+
+**Everything lives on GitLab** — code, issues, merge requests and CI. As of
+2026-09-27 GitHub is not used for any of it.
+
+| | Where | How |
+|---|---|---|
+| Code | `origin` → `git@192.168.1.174:alcybersec/StudyAIO.git` | `git push origin <branch>` |
+| Issues | GitLab issues | `glab issue list` / `create` / `view` / `close` |
+| Reviews | GitLab merge requests | `glab mr create` / `view` / `merge` |
+| CI | `.gitlab-ci.yml` | `glab ci list` / `get` / `trace` / `retry` |
+
+`glab` is installed and authenticated against `gitlab.home.aleksanlab.me`
+(`glab auth status` to confirm). Prefer it over raw `curl` — it already holds the
+token and resolves the project from the remote.
+
+The GitHub repository is kept for exactly two things and **must not be used for
+anything else**: it is the GHCR namespace the build jobs publish images to
+(`ghcr.io/${GHCR_OWNER}/studyaio-{api,ui}`, which prod compose pins and the
+deploy host logs in to pull), and it receives a push mirror from GitLab. It holds
+no open issues — the four that were there moved to GitLab as GL#2–GL#5 — and it
+has no workflows, since `.github/` was deleted when CI moved.
+
+Pushing to it from a working copy is therefore always a mistake, and
+`git remote set-url --push github DISABLED-USE-GITLAB` makes that fail loudly
+rather than silently diverging from the mirror. Fetch still works, so the
+history stays readable. Undo with
+`git remote set-url --push github https://github.com/alcybersec/StudyAIO.git` if
+you ever genuinely need it.
+
+> **Do not open issues, PRs or reviews on GitHub, and do not consult GitHub
+> issues for current state.** Issue numbers below GL#6 in older documents
+> (`docs/security-review-2026-09.md`, `PROGRESS.md`) are *GitHub* numbers from
+> before the move; the mapping is #90→GL#2, #101→GL#3, #107→GL#4, #108→GL#5.
+
+### Branch and merge
+
+Branch off `main`, push to `origin`, open an MR, let the pipeline run, merge.
+Note that `main` has **no protection yet** and
+`only_allow_merge_if_pipeline_succeeds` is `false` (GL#2), so nothing enforces a
+green pipeline — checking it is still a convention, and `main` auto-deploys on
+success, so a red merge is a real risk.
+
+Commit messages and MR descriptions must not mention the tooling used to write
+them.
+
 ### Backend Development
 
 The API and worker containers bind-mount source code from `services/app/app/` and `services/app/prompts/`. The API runs with `--reload`, so code changes take effect immediately:
