@@ -323,21 +323,42 @@ present (self-hosted vs SaaS), so skipped tests are expected, not failures.
 
 ### Continuous Integration
 
-`.github/workflows/ci.yml` runs on every pull request and on pushes to
-`main`: Python lint, backend unit + golden tests with a 75%
-coverage floor, integration tests against real Postgres + Redis, frontend
-typecheck/lint/unit/build with the color-token and bundle-size guards, and the
-Playwright suite. A newer push to a PR cancels the run it supersedes.
+`.gitlab-ci.yml` runs on every branch push — GitLab attaches the branch pipeline
+to any merge request for that branch — in five stages: `lint`, `test`, `e2e`,
+`build`, `deploy`. Python lint (`ruff check` **and** `ruff format --check`),
+backend unit + golden tests with a 75% coverage floor, integration tests against
+real Postgres + Redis, frontend typecheck/lint/unit/build with the color-token
+and bundle-size guards, and the Playwright suite. Jobs are `interruptible` by
+default, so a newer push cancels the run it supersedes.
 
-CI runs on GitHub-hosted runners. The self-hosted homelab runner is reserved for
-`.github/workflows/deploy.yml`, which builds and pushes the GHCR images and
-deploys — so a long test run never sits in front of a deploy.
+Every job runs on the homelab runners and must carry tags — they are registered
+`run_untagged:false`, so a tagless job would sit pending forever. The default is
+`[homelab, docker]`; the two image-build jobs override it to `[shell]` because
+they need a real host Docker socket, which the docker runner does not have.
 
-The E2E job reproduces the stack without Docker: Postgres and Redis as service
-containers, the API under uvicorn, and the production bundle from the frontend
-job served by `vite preview` (its `/api` proxy is configured in
-`vite.config.ts`). No Celery worker runs there — the suite asserts that uploads
-are accepted and queued, never that the pipeline completes.
+`build-api`/`build-ui` and `deploy-selfhosted` run only on `main` or a `v*` tag.
+They build and push the GHCR images and deploy VM 210. Images deliberately still
+go to **GHCR**, not the GitLab registry: `docker-compose.prod.yml` pins
+`ghcr.io/${GHCR_OWNER}/studyaio-{api,ui}` and the deploy host logs in to GHCR to
+pull, so the migration changed only *who runs the build*. Deploy takes
+`resource_group: studyaio-prod` so two deploys never interleave, and it re-checks
+the ref in the shell rather than relying on `rules:` alone — a `rules:` mismatch
+*skips* the job, and a skipped job reports the pipeline green, which would read as
+a successful deploy that never happened.
+
+The E2E job reproduces the stack without Docker. It runs *inside* a container, so
+Postgres and Redis are reached by service alias while the API and the previewed UI
+are on `localhost` because the job starts them itself. Note that GitLab derives a
+service alias from the image name: `redis:7-alpine` is already `redis`, but
+`pgvector/pgvector:pg16` derives to `pgvector`, so it carries an explicit
+`postgres` alias. There is also no `--health-cmd` equivalent — services start in
+parallel with the job, so readiness is the job's own `before_script`. No Celery
+worker runs there; the suite asserts that uploads are accepted and queued, never
+that the pipeline completes.
+
+> CI moved from GitHub Actions to GitLab CI on 2026-09-27. `.github/workflows/`
+> is gone; the GitHub repository is kept only as the GHCR image namespace. Issues
+> live on GitLab.
 
 ### Key Testing Patterns
 
