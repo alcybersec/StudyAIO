@@ -368,14 +368,24 @@ change.
 |---|---|
 | **#90** | `main` has no branch protection, no rulesets: no required checks, no required PR, force-push permitted. The highest-value item here, and not code |
 | **#101** | three fields the admin UI infers because the API does not surface them |
-| **#107** | `courseops/<sha256[:16]>_<name>` is content-addressed with no owner, so two users share one blob and it is deliberately excluded from the deletion purge. Needs refcounting or per-user keys |
 | **#108** | 12 fixtures across 8 files patch `data_dir` without `reset_storage()`, so they no-op against the memoised singleton; `tests/unit` and `tests/golden` add no isolation of their own |
 
 Since written: **#89** and **#63** are closed, and #89's subject is gone outright — CI moved to
 GitLab CI on 2026-09-27 and `.github/workflows/` was deleted, so there is no `ci.yml` left to
-name a dead branch. **The four issues above now live on GitLab and are read there**: #90→GL#2,
-#101→GL#3, #107→GL#4, #108→GL#5. The GitHub originals are closed with a link to each successor,
+name a dead branch. **All four now live on GitLab and are read there** — the three
+still open above plus #107, which is fixed: #90→GL#2, #101→GL#3, #107→GL#4, #108→GL#5. The GitHub originals are closed with a link to each successor,
 so the numbers in this document resolve in both places.
+
+**#107 (GL#4) is fixed.** Keys are `courseops/<user_id>/<sha256[:16]>_<name>`, so the purge
+sweeps them as one prefix per user like every other namespace — per-user keys rather than the
+refcounting this table suggested, because the dedup preserved is worth a handful of shared
+handbooks against a count that has to be taken inside the deleting transaction. The audit found
+one more instance of the same class on the way: `delete_course_document` removed the row only,
+so *every* deleted course document leaked its file, not just those on a closed account. One
+caveat carries forward — a row still on the legacy key points at a blob under no user's prefix,
+and the purge deliberately does not guess at it, so
+`scripts/backfill_courseops_files.py` must run on any instance that accepted a course document
+before this release. An integration test pins that residue so it is not mistaken for a bug.
 
 **#90 (GL#2) is half-satisfied, and wider than this repo.** `allow_force_push = false` is
 already set on `main` across all three projects — that half is done. But

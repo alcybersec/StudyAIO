@@ -1284,7 +1284,15 @@ Get a course document with its extracted assessments and deadlines.
 
 ### `DELETE /api/courseops/documents/{document_id}`
 
-Delete a course or assessment document.
+Delete a course or assessment document, and its stored file when no other
+document of the same user still points at it — one handbook attached to two
+courses is two rows and, because the key carries the content hash, one blob.
+
+A file written before the #107 re-keying (`courseops/<sha256[:16]>_<name>`, with
+no owner in the key) is left on disk: it may be shared with another account, and
+a reference count over this user's rows says nothing about theirs.
+`scripts/backfill_courseops_files.py` gives each owner their own copy, after
+which deletion reaches it normally.
 
 **Response** `204` — No content.
 
