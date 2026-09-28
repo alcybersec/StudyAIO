@@ -1,5 +1,6 @@
 """Shared test fixtures for StudyAIO."""
 
+import contextlib
 import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,6 +14,32 @@ from app.agents.base import (
 from app.core.storage import reset_storage
 
 # ── Sample data dicts ──────────────────────────────────────────────
+
+
+@contextlib.contextmanager
+def isolated_storage():
+    """A per-test storage root that actually takes effect.
+
+    Patching `settings.data_dir` alone does nothing: `get_storage()` memoises,
+    so a singleton built by an earlier test keeps the old root and the patch is
+    a silent no-op. Twelve fixtures across eight files did exactly that (GL#5) —
+    harmless, because the rootdir conftest's `DATA_DIR` floor already keeps the
+    suite off real data, but actively misleading to read, since it stops anyone
+    asking where the isolation actually comes from.
+
+    The floor is not a substitute for this. It keeps the suite out of `/app/data`
+    (#100); this keeps each test's files out of every other test's storage.
+
+    Reset on the way in *and* on the way out, so a test that follows one using
+    this does not inherit a singleton pointing at a directory that has since
+    been deleted.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+        reset_storage()
+        try:
+            yield tmpdir
+        finally:
+            reset_storage()
 
 
 @pytest.fixture

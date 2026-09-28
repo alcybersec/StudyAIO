@@ -1,12 +1,12 @@
 """Tests for admin API endpoints."""
 
-import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from app.models.user import User
+from tests.conftest import isolated_storage
 
 
 def _make_admin_user():
@@ -57,7 +57,7 @@ async def admin_client(mock_session):
 
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+    with isolated_storage():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url="http://test",
@@ -88,7 +88,7 @@ async def nonadmin_client(mock_session):
 
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+    with isolated_storage():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url="http://test",
@@ -149,6 +149,8 @@ class TestAdminUpdateUser:
             "is_active": True,
             "created_at": "2025-01-01T00:00:00",
             "last_login_at": None,
+            "mfa_enabled": False,
+            "sessions_revoked": True,
         }
         with patch(
             "app.api.admin.admin_service.update_user",
@@ -204,6 +206,8 @@ class TestAdminUpdateUser:
             "is_active": True,
             "created_at": "2025-01-01T00:00:00",
             "last_login_at": None,
+            "mfa_enabled": False,
+            "sessions_revoked": True,
         }
         with patch(
             "app.api.admin.admin_service.update_user",
