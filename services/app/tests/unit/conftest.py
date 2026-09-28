@@ -151,3 +151,48 @@ def fake_redis(monkeypatch):
     yield FakeRedis
 
     FakeRedis.reset()
+
+
+class NoDatabaseInUnitTests(RuntimeError):
+    """Raised when a unit test reaches for a real database session."""
+
+
+@pytest.fixture(autouse=True)
+def no_real_database(monkeypatch):
+    """A unit test must never open a database socket (GL#6).
+
+    Endpoints normally take their session from the `get_session` dependency,
+    which a test overrides. Two do not: `POST /api/uploads` awards XP through
+    its own `async_session_factory()` session, and the SSE stream re-checks
+    authorisation through another. Neither is reachable by overriding the
+    dependency, so in the unit suite both tried to connect to the compose
+    hostname `db:5432` and blocked for **asyncpg's 60-second default connect
+    timeout** — once per test. `tests/unit/api/test_uploads.py` took minutes,
+    and under `-n 4` the whole suite looked deadlocked.
+
+    Both call sites wrap the session in `try/except` and treat failure as "no
+    XP" / "not authorised", so raising here preserves their behaviour exactly
+    and only makes it immediate. A *new* bypass that does not swallow will fail
+    loudly with this message, which is the point: silently returning a mock
+    would let the next one reintroduce the stall unnoticed.
+
+    Sibling of `fake_redis` above, for the same reason and with the same autouse
+    rationale: opting in per test is exactly what gets forgotten.
+    """
+
+    def _refuse(*args, **kwargs):
+        raise NoDatabaseInUnitTests(
+            "A unit test tried to open a real database session via "
+            "async_session_factory(). Unit tests must not open sockets — "
+            "override the `get_session` dependency, or patch this factory in "
+            "the test if the code under test deliberately opens its own "
+            "session. See tests/unit/conftest.py::no_real_database (GL#6)."
+        )
+
+    database = pytest.importorskip("app.core.database")
+    monkeypatch.setattr(database, "async_session_factory", _refuse)
+    # `app.api.uploads` imports the name directly, so its namespace binding is
+    # a separate reference and has to be patched too.
+    uploads = pytest.importorskip("app.api.uploads")
+    if hasattr(uploads, "async_session_factory"):
+        monkeypatch.setattr(uploads, "async_session_factory", _refuse)
