@@ -101,9 +101,24 @@ async def _judge(agent, case: dict, summary: str, score: CaseScore) -> None:
     findings are worth reporting even when the model half is unavailable.
     """
     source = "\n\n".join(p["text"] for p in case["pages"])
+    # The field names are the contract `prompts/answer_question.txt` renders:
+    # `chunk.text`, `chunk.course_code`, `chunk.week`, `chunk.page_ref`. An
+    # earlier version passed `content`, so every chunk rendered blank and the
+    # judge replied that it had been given "empty placeholders" — it graded
+    # nothing, three times, and reported it as a parse failure.
     chunks = [
-        {"content": f"SOURCE MATERIAL:\n{source}", "metadata": {"role": "source"}},
-        {"content": f"SUMMARY UNDER REVIEW:\n{summary}", "metadata": {"role": "summary"}},
+        {
+            "text": f"SOURCE MATERIAL (what the lecture actually said):\n{source}",
+            "course_code": case.get("course", "EVAL"),
+            "week": case.get("week", 0),
+            "page_ref": 1,
+        },
+        {
+            "text": f"SUMMARY UNDER REVIEW (grade this):\n{summary}",
+            "course_code": case.get("course", "EVAL"),
+            "week": case.get("week", 0),
+            "page_ref": 2,
+        },
     ]
     try:
         result = await agent.answer_question(JUDGE_INSTRUCTION, chunks)

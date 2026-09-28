@@ -107,6 +107,34 @@ class TestRequiredSections:
 
 
 class TestJudgeReplyParsing:
+    def test_the_line_format_the_judge_is_asked_for(self):
+        """The primary format. It is line-oriented rather than JSON because the
+        judge rides on `answer_question`, whose adapters parse the reply as
+        `{"answer", "citations"}` and return only the answer string — a bare
+        JSON verdict was swallowed whole and came back empty."""
+        score, unsupported, error = scoring.parse_judge_reply(
+            "FAITHFULNESS: 3\nUNSUPPORTED: claims BCNF\nUNSUPPORTED: claims 4NF"
+        )
+
+        assert (score, unsupported, error) == (3, ["claims BCNF", "claims 4NF"], None)
+
+    def test_a_clean_verdict_has_no_claims(self):
+        score, unsupported, error = scoring.parse_judge_reply("FAITHFULNESS: 5")
+
+        assert (score, unsupported, error) == (5, [], None)
+
+    def test_a_none_placeholder_is_not_a_claim(self):
+        _, unsupported, _ = scoring.parse_judge_reply("FAITHFULNESS: 5\nUNSUPPORTED: none")
+
+        assert unsupported == []
+
+    def test_an_empty_reply_is_named_as_such(self):
+        """The failure that actually happened, three times, while being paid for."""
+        score, _, error = scoring.parse_judge_reply("")
+
+        assert score is None
+        assert error and "empty" in error
+
     def test_plain_json(self):
         score, unsupported, error = scoring.parse_judge_reply(
             '{"faithfulness": 4, "unsupported": ["claims BCNF"]}'
@@ -132,7 +160,7 @@ class TestJudgeReplyParsing:
         score, _, error = scoring.parse_judge_reply("I could not complete that request.")
 
         assert score is None
-        assert error and "no JSON" in error
+        assert error and "no verdict" in error
 
     def test_malformed_json_is_reported(self):
         score, _, error = scoring.parse_judge_reply('{"faithfulness": 4,,}')
@@ -293,6 +321,7 @@ class _StubAgent:
         self._judge_reply = judge_reply
         self.usage = TokenUsage()
         self.judged = False
+        self.judge_chunks = None
 
     def reset_usage(self):
         from app.agents.base import TokenUsage
@@ -309,6 +338,7 @@ class _StubAgent:
         from app.agents.base import AnswerResult
 
         self.judged = True
+        self.judge_chunks = context_chunks
         if self._judge_reply is None:
             raise RuntimeError("judge unavailable")
         self.usage.add(input_tokens=200, output_tokens=40)
@@ -370,3 +400,28 @@ class TestRunnerEndToEnd:
 
         assert agent.judged is False
         assert report.total_calls == 1
+
+    async def test_the_judge_actually_receives_the_source_and_summary(self):
+        """The contract `prompts/answer_question.txt` renders, pinned.
+
+        The template reads `chunk.text`; an earlier version of the runner passed
+        `content`, so every chunk rendered blank and the judge replied that it
+        had been handed "empty placeholders". It graded nothing on three cases
+        and the failure surfaced only as a parse error — the harness reported
+        "judge unavailable" and looked like a flaky model.
+
+        Every other test here passed against that bug, because none of them
+        looked at what the judge was given.
+        """
+        case = runner.load_cases(only="normalisation")[0]
+        summary = _summary(body="covers " + " ".join(case["must_mention"]))
+
+        _, agent = await self._run(summary, judge_reply='{"faithfulness": 5}')
+
+        chunks = agent.judge_chunks
+        assert len(chunks) == 2
+        for chunk in chunks:
+            assert chunk.get("text"), "chunk rendered blank — wrong field name"
+        # The source has to be the lecture, not the summary echoed back.
+        assert case["pages"][0]["text"][:40] in chunks[0]["text"]
+        assert summary[:40] in chunks[1]["text"]
