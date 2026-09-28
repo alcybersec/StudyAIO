@@ -172,14 +172,39 @@ no way to tell whether the reconcile prompt is working.
 - replace the constraint with `(course_id, week, source)`
 - backfill every existing row to `slides`
 
-**Existing behaviour is preserved exactly** by one reader rule: the published
-summary for a week is `final` if it exists, otherwise `slides`. Today no `final`
-rows exist, so every read resolves to the row it resolves to now. That rule must
-live in a single accessor in `summary_service` — if it is inlined at each call
-site, the UI, exports, and assets will drift apart.
-
 `version` and `source_artifacts` already exist and work per-row, so each source
 versions independently for free.
+
+### One source is a complete summary — never reconcile against nothing
+
+**Reconcile runs only when both a `slides` and an `audio` summary exist for the
+week.** With one source there is nothing to weigh, and a reconcile pass over a
+single input is a paid AI call that can only degrade it.
+
+So the published summary for a week is the first of these that exists:
+
+1. `final` — both sources, reconciled
+2. `slides` — deck only, which is every summary in the database today
+3. `audio` — recording only, for a lecture with no deck, or a deck not uploaded yet
+
+**Existing behaviour is preserved exactly**: no `final` or `audio` rows exist
+today, so every read resolves to the row it resolves to now.
+
+That rule must live in **a single accessor** in `summary_service`. Inlined at each
+call site, the UI, exports, chunking and assets will drift apart — and they will
+drift silently, because each one looks right in isolation.
+
+Two consequences worth building for:
+
+- **A `final` row can go stale.** Delete the week's last audio artifact and
+  `final` still holds audio-derived content whose source is gone, and the reader
+  still prefers it over `slides`. Deleting the last artifact of either source for
+  a week must drop the `final` row, letting the reader fall back to the survivor.
+- **The provenance marks belong to the reconcile pass, not the transcript
+  summariser.** In an audio-only week every point came from the lecture, so
+  marking each one is pure noise. `summarize_transcript.txt` should emit clean
+  prose and reconcile should add the marks as it folds that prose into the
+  spine.
 
 ### Re-runs
 
@@ -192,15 +217,18 @@ a student uploads slides during the week and the recording afterwards.
   which matters because transcription is the part that costs money
 
 Reconcile is week-scoped rather than artifact-scoped, so it belongs outside the
-per-artifact chain: a task that fires after `summarize` and no-ops unless both a
-`slides` and an `audio` summary exist for that week. It reads two rows and writes
-one, so it is idempotent by construction.
+per-artifact chain: a task that fires after `summarize` and returns immediately
+unless both sources are present for that week. It reads two rows and writes one,
+so it is idempotent by construction — and in the common slides-only case it costs
+nothing at all, because it never calls the model.
 
 ### Cost
 
-A week with audio costs **three summarisation calls instead of one**, plus the
-transcription itself. The up-front quota check on an audio upload has to budget
-for that, and the global daily ceiling should see all three.
+A week with **both** sources costs three summarisation calls instead of one, plus
+the transcription itself. A week with one source costs exactly what it costs
+today — one call — since reconcile returns without calling the model. The
+up-front quota check on an audio upload has to budget for the worst case, and the
+global daily ceiling should see every call.
 
 ### Testing it
 
