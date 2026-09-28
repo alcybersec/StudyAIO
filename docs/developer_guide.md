@@ -141,6 +141,17 @@ protected-branch push rules do not govern.
 Work on a branch and open an MR — including for a one-line fix, and including
 when you are the only person on the repository.
 
+> **A commit message that merely *mentions* `[skip ci]` skips the pipeline.**
+> GitLab scans the entire message for that token, not just a leading tag, so
+> writing about it — "the commits carry no `[skip ci]`" — is enough to trigger
+> it. The pipeline is then created with **zero jobs** and reported `skipped`,
+> which is not obviously distinguishable from a CI misconfiguration.
+>
+> Since `allow_merge_on_skipped_pipeline` is `false`, that also makes the MR
+> unmergeable. This bit exactly once, on the branch documenting the gate.
+> Write it as "a skip-ci directive" in prose; the literal token is fine in a
+> file, only commit messages are scanned.
+
 Commit messages and MR descriptions must not mention the tooling used to write
 them.
 
