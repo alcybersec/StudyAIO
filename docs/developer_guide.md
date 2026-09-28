@@ -445,6 +445,56 @@ that the pipeline completes.
 > is gone; the GitHub repository is kept only as the GHCR image namespace. Issues
 > live on GitLab.
 
+### Summary Quality Evals
+
+`tests/golden/` checks that a summary has the right **shape**. Nothing checked
+whether it was any **good** — so a change to `prompts/summarize.txt` could be an
+improvement or a regression and the suite said the same thing either way.
+
+```bash
+# Deterministic scores only: no model, no credentials, no cost
+docker compose exec api python -m app.cli evals --no-judge
+
+# With model-graded faithfulness (two AI calls per case)
+docker compose exec api python -m app.cli evals
+
+docker compose exec api python -m app.cli evals --case normalisation
+docker compose exec api python -m app.cli evals --out /app/data/evals-$(date +%F).json
+```
+
+**Not part of CI, on purpose.** It costs money and is not deterministic, and a
+non-deterministic gate is worse than no gate — it would fail randomly and get
+ignored, taking the rest of the pipeline's credibility with it. Run it by hand
+when a prompt changes and read it against the previous run; `--out` exists so
+two runs can be diffed.
+
+Four scores, of which only the last needs a model:
+
+| Score | How | What a drop means |
+|---|---|---|
+| Coverage | Terms from `must_mention` present | The summary dropped something the lecture taught |
+| **Fabrication** | Terms from `must_not_mention` present | The summary told a student their lecture covered something it never mentioned |
+| Structure | Sections derived from the prompt itself | The output stopped following its own format |
+| Faithfulness | Model graded, 1–5 | It asserts something the source does not support |
+
+Fabrication is the one to watch. Each case's `must_not_mention` lists the
+*adjacent* topics a model is most likely to volunteer from general knowledge —
+BCNF after third normal form, CUBIC after Reno. Those are not wrong about the
+world; they are wrong about the lecture, and for a study tool that is the
+failure that matters.
+
+Faithfulness deliberately does **not** decide pass or fail: it is one model's
+opinion, and gating on it would make the result depend on which backend happened
+to judge.
+
+**Adding a case.** Drop a JSON file in `services/app/evals/cases/`. It needs
+`id`, `pages`, `must_mention`, `must_not_mention` and `notes` saying why those
+terms were chosen — the reasoning is the part a later reader cannot reconstruct.
+`tests/unit/test_eval_harness.py` validates every case: each `must_mention` must
+actually appear in its own source, and no `must_not_mention` may, or the case
+would produce a confident wrong number. Keep the source synthetic, per
+`.claude/rules/tests.md`.
+
 ### Key Testing Patterns
 
 **Mocking async services in pipeline tests:**
