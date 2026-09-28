@@ -154,7 +154,58 @@ def fake_redis(monkeypatch):
 
 
 class NoDatabaseInUnitTests(RuntimeError):
-    """Raised when a unit test reaches for a real database session."""
+    """Raised when a unit test actually uses a real database session."""
+
+
+class _RefusingSession:
+    """A session that can be built and closed, but not used.
+
+    The distinction is the whole design. `async_session_factory()` does **not**
+    connect — SQLAlchemy sessions are lazy, and the connection is opened by the
+    first query. So `get_session`, which constructs one and yields it to an
+    endpoint that may never touch it, is harmless and must keep working. An
+    earlier version of this guard refused *construction* and broke
+    `test_rate_limit_returns_429`, where the service under the endpoint is
+    patched and the session is therefore never used — a real regression that CI
+    caught and a local `-n 4` run did not.
+
+    Refusing at first *use* puts the error exactly where a socket would
+    otherwise be opened.
+    """
+
+    async def __aenter__(self) -> "_RefusingSession":
+        return self
+
+    async def __aexit__(self, *exc_info) -> bool:
+        return False
+
+    # Construction and teardown touch no database, so they stay silent.
+    def add(self, *args, **kwargs) -> None:
+        pass
+
+    def add_all(self, *args, **kwargs) -> None:
+        pass
+
+    def expunge_all(self, *args, **kwargs) -> None:
+        pass
+
+    async def close(self) -> None:
+        pass
+
+    async def rollback(self) -> None:
+        pass
+
+    def __getattr__(self, name):
+        async def _refuse(*args, **kwargs):
+            raise NoDatabaseInUnitTests(
+                f"A unit test called session.{name}() on a real database "
+                "session. Unit tests must not open sockets — override the "
+                "`get_session` dependency, or patch `async_session_factory` if "
+                "the code under test deliberately opens its own session. "
+                "See tests/unit/conftest.py::no_real_database (GL#6)."
+            )
+
+        return _refuse
 
 
 @pytest.fixture(autouse=True)
@@ -162,37 +213,27 @@ def no_real_database(monkeypatch):
     """A unit test must never open a database socket (GL#6).
 
     Endpoints normally take their session from the `get_session` dependency,
-    which a test overrides. Two do not: `POST /api/uploads` awards XP through
-    its own `async_session_factory()` session, and the SSE stream re-checks
-    authorisation through another. Neither is reachable by overriding the
-    dependency, so in the unit suite both tried to connect to the compose
-    hostname `db:5432` and blocked for **asyncpg's 60-second default connect
-    timeout** — once per test. `tests/unit/api/test_uploads.py` took minutes,
-    and under `-n 4` the whole suite looked deadlocked.
+    which a test overrides. Some code does not: `POST /api/uploads` awards XP
+    through its own `async_session_factory()` session, and the SSE stream
+    re-checks authorisation through another. Neither is reachable by overriding
+    the dependency, so in the unit suite both dialled the compose hostname
+    `db:5432` and waited out **asyncpg's 60-second default connect timeout** —
+    once per test. `tests/unit/api/test_uploads.py` took minutes, and under
+    `-n 4` the whole suite looked deadlocked.
 
     Both call sites wrap the session in `try/except` and treat failure as "no
-    XP" / "not authorised", so raising here preserves their behaviour exactly
-    and only makes it immediate. A *new* bypass that does not swallow will fail
-    loudly with this message, which is the point: silently returning a mock
-    would let the next one reintroduce the stall unnoticed.
+    XP" / "not authorised", so refusing preserves their behaviour exactly and
+    only makes it immediate. A caller that does *not* swallow fails loudly with
+    a message naming the fix, which is the point: a silently working mock would
+    let the next bypass reintroduce the stall unnoticed.
 
     Sibling of `fake_redis` above, for the same reason and with the same autouse
     rationale: opting in per test is exactly what gets forgotten.
     """
-
-    def _refuse(*args, **kwargs):
-        raise NoDatabaseInUnitTests(
-            "A unit test tried to open a real database session via "
-            "async_session_factory(). Unit tests must not open sockets — "
-            "override the `get_session` dependency, or patch this factory in "
-            "the test if the code under test deliberately opens its own "
-            "session. See tests/unit/conftest.py::no_real_database (GL#6)."
-        )
-
     database = pytest.importorskip("app.core.database")
-    monkeypatch.setattr(database, "async_session_factory", _refuse)
+    monkeypatch.setattr(database, "async_session_factory", _RefusingSession)
     # `app.api.uploads` imports the name directly, so its namespace binding is
     # a separate reference and has to be patched too.
     uploads = pytest.importorskip("app.api.uploads")
     if hasattr(uploads, "async_session_factory"):
-        monkeypatch.setattr(uploads, "async_session_factory", _refuse)
+        monkeypatch.setattr(uploads, "async_session_factory", _RefusingSession)
