@@ -2027,6 +2027,45 @@ destructive action breaks no links on no evidence.
 
 **Response** `200` `UserDetailResponse` | `404` user not found
 
+### `GET /api/admin/funnel`
+
+Where invited testers stop: invited → registered → verified → uploaded →
+processed → returned. Admin only.
+
+**Derived entirely from data the app already records** — `invite_codes`,
+`users`, `lecture_artifacts`, `usage_records` — so it is accurate retroactively,
+for testers who signed up long before anyone thought to measure them. There is no
+event pipeline behind it and nothing to backfill.
+
+**Query Parameters**
+| Param | Type | Description |
+|-------|------|-------------|
+| `include_admins` | bool | Count admin accounts as testers. Default `false`. |
+
+Reading the steps:
+
+- `invites_issued` is outstanding capacity — `max_uses` summed over codes that
+  are neither revoked nor expired, so a revoked code stops flattering it.
+  `invites_redeemed` counts uses, including those on codes since revoked.
+- `verified` is `email_verified`. A drop here is usually SMTP, not disinterest.
+- `uploaded` counts *people*, not files.
+- `processed` minus `uploaded` is the pipeline failing users, which is a
+  different problem from users losing interest.
+- `returned` is activity on **two or more distinct days**, from
+  `usage_records.record_date` — the cheapest honest retention signal available
+  without new instrumentation.
+- `stalled_after_registering` is `registered - uploaded`: signed up, never tried
+  it.
+
+**Admins are excluded by default.** On an instance with a handful of testers the
+operator's own account moves every percentage. `excluded_admins` and
+`excluded_demo` are returned so the steps reconcile against
+`GET /api/admin/metrics`, which counts every account — the two will not otherwise
+agree, and that is expected rather than a bug. Demo accounts are never counted:
+they are a product feature, not people trying the app.
+
+**Response** `200` `BetaFunnelResponse`
+
 ### `GET /api/admin/metrics`
 
 Get aggregate system metrics (user count, course count, artifact count, pipeline runs, storage).

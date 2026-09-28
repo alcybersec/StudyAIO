@@ -96,6 +96,30 @@ class SystemMetricsResponse(BaseModel):
 # ── User Detail Schemas ──────────────────────────────────────────
 
 
+class BetaFunnelResponse(BaseModel):
+    """Where invited testers stop, derived from data already recorded.
+
+    Every field comes from tables the app already writes, so this answers
+    questions about testers who signed up before anyone thought to measure them.
+    """
+
+    invites_issued: int
+    invites_redeemed: int
+    registered: int
+    verified: int
+    uploaded: int
+    processed: int
+    returned: int
+    active_7d: int
+    #: Registered and never uploaded. The single most actionable number here.
+    stalled_after_registering: int
+    #: Returned so the steps reconcile against `GET /admin/metrics`, which
+    #: counts every account.
+    excluded_admins: int
+    excluded_demo: int
+    include_admins: bool
+
+
 class UserProfileSection(BaseModel):
     """User profile data (always present)."""
 
@@ -319,6 +343,34 @@ async def get_system_metrics(
     """Get aggregate system metrics (admin only)."""
     metrics = await admin_service.get_system_metrics(session)
     return SystemMetricsResponse(**metrics)
+
+
+@router.get(
+    "/admin/funnel",
+    response_model=BetaFunnelResponse,
+    summary="Beta funnel",
+    description=(
+        "Where invited testers stop: invited → registered → verified → "
+        "uploaded → processed → returned. Derived entirely from existing data, "
+        "so it is accurate retroactively. Admin only."
+    ),
+)
+async def get_beta_funnel(
+    include_admins: bool = Query(
+        False,
+        description=(
+            "Count admin accounts as testers. Off by default: on an instance "
+            "with a handful of testers the operator's own account moves every "
+            "percentage."
+        ),
+    ),
+    _admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> BetaFunnelResponse:
+    """Beta funnel counts (admin only)."""
+    return BetaFunnelResponse(
+        **await admin_service.get_beta_funnel(session, include_admins=include_admins)
+    )
 
 
 @router.get(
