@@ -108,10 +108,49 @@ you ever genuinely need it.
 ### Branch and merge
 
 Branch off `main`, push to `origin`, open an MR, let the pipeline run, merge.
-Note that `main` has **no protection yet** and
-`only_allow_merge_if_pipeline_succeeds` is `false` (GL#2), so nothing enforces a
-green pipeline — checking it is still a convention, and `main` auto-deploys on
-success, so a red merge is a real risk.
+`main` is protected, and since 2026-09-28 a **green pipeline is enforced, not
+merely conventional** (GL#2):
+
+| Setting | Value |
+|---|---|
+| `allow_force_push` | `false` |
+| `only_allow_merge_if_pipeline_succeeds` | `true` |
+| `allow_merge_on_skipped_pipeline` | `false` |
+| push access | **No one** |
+| merge access | Maintainers |
+
+The second and third go together. Requiring pipeline success while still allowing
+a merge on a *skipped* pipeline reproduces the hole at the merge gate that the
+deploy job's shell ref-guard exists to close: a skipped job reports the run
+green, so "succeeded" and "never ran" would be indistinguishable.
+
+**`git push origin main` is refused for everybody**, so a merge request is the
+only way in. Push access and merge access are separate levels: "No one" governs
+pushes, while merges are performed server-side under `merge_access_level`, so
+MRs are unaffected.
+
+That closes the last gap in GL#2. It matters here more than on most projects
+because `main` auto-deploys on success — a direct push would otherwise reach
+production with no pipeline in front of it.
+
+Nothing automated is affected: no CI job or script runs `git push`, `git commit`
+or `git tag`; `deploy-selfhosted` sends only a commit SHA over SSH and the host
+checks it out; and the GitHub mirror is *outbound* (GitLab → GitHub), which
+protected-branch push rules do not govern.
+
+Work on a branch and open an MR — including for a one-line fix, and including
+when you are the only person on the repository.
+
+> **A commit message that merely *mentions* `[skip ci]` skips the pipeline.**
+> GitLab scans the entire message for that token, not just a leading tag, so
+> writing about it — "the commits carry no `[skip ci]`" — is enough to trigger
+> it. The pipeline is then created with **zero jobs** and reported `skipped`,
+> which is not obviously distinguishable from a CI misconfiguration.
+>
+> Since `allow_merge_on_skipped_pipeline` is `false`, that also makes the MR
+> unmergeable. This bit exactly once, on the branch documenting the gate.
+> Write it as "a skip-ci directive" in prose; the literal token is fine in a
+> file, only commit messages are scanned.
 
 Commit messages and MR descriptions must not mention the tooling used to write
 them.
