@@ -324,11 +324,17 @@ the identical job. Because `only_allow_merge_if_pipeline_succeeds` is enabled, a
 flake in that job blocks every merge in the project until someone retries it by
 hand. Pinned versions remove the dependency on what the index offers on the day.
 
-**`services/app/Dockerfile` deliberately does not use the lock.** Production
-images still resolve fresh, so the versions CI tests are not guaranteed to be
-the versions a deployed image gets. Pinning the Dockerfile too would close that
-gap and make image builds reproducible; it is a larger change, because a bad
-lock would then break deploys rather than a test job.
+**`services/app/Dockerfile` uses the lock too**, so the versions CI tests are
+the versions a deployed image gets, and two builds of the same commit ship the
+same dependencies. The trade-off is deliberate: a bad lock now fails the image
+build rather than only a test job. In practice the build runs in CI
+(`build-api`) before any deploy, so a bad lock is caught there — but treat the
+lock as production configuration, not a test fixture.
+
+The Dockerfile keeps its `--extra-index-url` and must keep it: `torch` is pinned
+to a `+cpu` local version that exists only on the PyTorch CPU index. Removing
+the flag makes the install fail outright rather than silently fetch the CUDA
+build.
 
 ---
 
