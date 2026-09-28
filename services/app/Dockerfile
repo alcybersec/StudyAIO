@@ -9,9 +9,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# The lock is a CONSTRAINTS file: requirements.txt still decides what is
+# installed, the lock only pins which version, transitive deps included. Both
+# are copied so this layer rebuilds when either moves.
+#
+# Production resolved fresh until GL#7, which meant the versions CI tested were
+# not guaranteed to be the versions a deployed image got, and two builds of the
+# same commit could ship different dependencies. Pinning here makes the image
+# reproducible and makes CI's green a statement about what actually deploys.
+#
+# --extra-index-url must stay, and must match the index the lock was generated
+# under (scripts/lock-requirements.sh). torch is pinned to 2.14.0+cpu, a local
+# version that exists only on the PyTorch CPU index -- drop the flag and this
+# install fails outright rather than quietly fetching the CUDA build and its 15
+# nvidia wheels, which is what resolving without it produces.
+COPY requirements.txt requirements.lock.txt ./
 RUN pip install --no-cache-dir --prefix=/install \
     --extra-index-url https://download.pytorch.org/whl/cpu \
+    -c requirements.lock.txt \
     -r requirements.txt
 
 # === Stage 2: Runtime — lean image, no build tools ===
