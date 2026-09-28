@@ -31,6 +31,7 @@ from app.api import (
     dashboard_router,
     exams_router,
     exports_router,
+    feedback_router,
     files_router,
     gamification_router,
     notifications_inbox_router,
@@ -375,6 +376,7 @@ app.add_middleware(
 
 # Register API routers
 app.include_router(dashboard_router, prefix="/api", tags=["dashboard"])
+app.include_router(feedback_router, prefix="/api", tags=["feedback"])
 app.include_router(courses_router, prefix="/api", tags=["courses"])
 app.include_router(uploads_router, prefix="/api", tags=["uploads"])
 app.include_router(artifacts_router, prefix="/api", tags=["uploads"])

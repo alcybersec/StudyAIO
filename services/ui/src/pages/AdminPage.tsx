@@ -23,6 +23,7 @@ import { InvitePanel } from '../components/admin/InvitePanel'
 import { AddUserForm } from '../components/admin/AddUserForm'
 import { UserRowActions } from '../components/admin/UserRowActions'
 import { BetaFunnel } from '../components/admin/BetaFunnel'
+import { FeedbackInbox } from '../components/admin/FeedbackInbox'
 import { ConfirmAction } from '../components/admin/ConfirmAction'
 import { useAuth } from '../hooks/useAuth'
 
@@ -342,6 +343,8 @@ export function AdminPage() {
       <MetricsGrid />
 
       <BetaFunnel />
+
+      <FeedbackInbox />
 
       <InvitePanel />
 

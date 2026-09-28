@@ -11,6 +11,7 @@ import {
   Search,
   Upload,
   type LucideIcon,
+  MessageSquare,
 } from 'lucide-react'
 import { searchApi } from '../api/search'
 import { useCourses } from '../hooks/useApi'
@@ -25,6 +26,7 @@ import {
 } from '../lib/searchResults'
 import { Kbd } from './ui/Kbd'
 import { QuickCaptureModal } from './QuickCaptureModal'
+import { FeedbackModal } from './FeedbackModal'
 import { Skeleton } from './ui/Skeleton'
 
 const SEARCH_MIN_CHARS = 2
@@ -43,6 +45,7 @@ interface PaletteItem {
 export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [captureOpen, setCaptureOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
@@ -103,6 +106,15 @@ export function CommandPalette() {
         hint: '⌘V',
         icon: ClipboardPaste,
         run: () => setCaptureOpen(true),
+      },
+      {
+        id: 'action-feedback',
+        section: 'Actions',
+        // Reachable from anywhere, because the moment someone wants to report
+        // something is the moment they hit it — not after hunting for a form.
+        label: 'Send feedback — report a bug or an idea',
+        icon: MessageSquare,
+        run: () => setFeedbackOpen(true),
       },
       {
         id: 'action-theme',
@@ -300,6 +312,7 @@ export function CommandPalette() {
 
       {/* Quick capture (E4) */}
       <QuickCaptureModal open={captureOpen} onOpenChange={setCaptureOpen} />
+      <FeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </>
   )
 }
