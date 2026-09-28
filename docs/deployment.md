@@ -154,13 +154,26 @@ execute the tail of the new file against the state of the old one.
 That means changes are applied by hand. From a workstation with host access:
 
 ```bash
-scp infra/deploy/deploy.sh alex@192.168.1.169:/tmp/deploy.sh
-ssh alex@192.168.1.169 'cd /opt/studyaio   && cp -a deploy.sh "deploy.sh.bak-$(date -u +%Y%m%dT%H%M%SZ)"   && bash -n /tmp/deploy.sh   && install -m 755 /tmp/deploy.sh deploy.sh'
+# Stage and syntax-check first, so a broken script never occupies the live name.
+ssh alex@192.168.1.169 \
+  'cat > /opt/studyaio/.deploy.sh.new \
+   && chmod 755 /opt/studyaio/.deploy.sh.new \
+   && bash -n /opt/studyaio/.deploy.sh.new' < infra/deploy/deploy.sh
+
+ssh alex@192.168.1.169 'cd /opt/studyaio \
+  && cp -a deploy.sh "deploy.sh.bak-$(date -u +%Y%m%dT%H%M%SZ)" \
+  && mv -f .deploy.sh.new deploy.sh'
 ```
 
-Never apply it while a deploy is running (`resource_group: studyaio-prod` means
-at most one is). Keep the repo copy and the host copy in step — a divergence is
-invisible until a deploy behaves unexpectedly.
+**`mv`, not `install` or `cp` onto the live name.** The rename swaps a directory
+entry, so a deploy already executing keeps reading the inode it opened and
+finishes against the script it started with. Writing over the file in place hands
+that running bash the *new* bytes at its current byte offset — the exact
+mid-execution rewrite that keeping this file untracked is meant to prevent.
+
+With the rename it is safe to apply at any time, including while a deploy is in
+flight; the next deploy picks up the new script. Keep the repo copy and the host
+copy in step — a divergence is invisible until a deploy behaves unexpectedly.
 
 ### Disk
 
