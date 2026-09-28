@@ -296,6 +296,40 @@ make ingest path=/path/to/test.pdf
 3. Add a nav item in `services/ui/src/components/layout/Sidebar.tsx`.
 4. Use React Query hooks from `services/ui/src/hooks/useApi.ts` for data fetching.
 
+### Adding a Python Dependency
+
+`services/app/requirements.txt` is the source of truth for **what** is
+installed. `services/app/requirements.lock.txt` pins **which version** of
+everything the resolver reaches, direct and transitive, and CI applies it to
+every `pip install` through `PIP_CONSTRAINT`.
+
+1. Add the requirement to `requirements.txt` as usual.
+2. Run `./scripts/lock-requirements.sh` to regenerate the lock.
+3. Commit both files together.
+
+If you skip step 2, nothing drifts silently: the install fails the moment the new
+dependency conflicts with an existing pin, and that failure is the cue to
+regenerate. A new dependency that happens not to conflict will install with its
+transitive versions unpinned until you do.
+
+The script resolves inside `python:3.12-slim` with the same
+`PIP_EXTRA_INDEX_URL` (the torch CPU index) that `.gitlab-ci.yml` sets, because
+pins produced under a different image or index configuration are not necessarily
+ones CI can install. Do not hand-edit the lock, and do not generate it with a
+bare `pip freeze` from a local virtualenv.
+
+**Why it exists — GL#7.** `e2e-tests` failed with `ResolutionImpossible` on a
+`requirements.txt` that no commit had touched, then passed on a plain retry of
+the identical job. Because `only_allow_merge_if_pipeline_succeeds` is enabled, a
+flake in that job blocks every merge in the project until someone retries it by
+hand. Pinned versions remove the dependency on what the index offers on the day.
+
+**`services/app/Dockerfile` deliberately does not use the lock.** Production
+images still resolve fresh, so the versions CI tests are not guaranteed to be
+the versions a deployed image gets. Pinning the Dockerfile too would close that
+gap and make image builds reproducible; it is a larger change, because a bad
+lock would then break deploys rather than a test job.
+
 ---
 
 ## 4. Testing
