@@ -1,6 +1,5 @@
 """Tests for email verification delivery on register and resend-verification."""
 
-import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -8,6 +7,7 @@ import pytest
 
 from app.core.exceptions import UserExistsError
 from app.models.user import User
+from tests.conftest import isolated_storage
 
 
 def _make_user(email_verified: bool) -> User:
@@ -60,7 +60,7 @@ def _make_auth_client(mock_session, user: User):
 
     @contextlib.asynccontextmanager
     async def _client():
-        with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+        with isolated_storage():
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
                 base_url="http://test",
