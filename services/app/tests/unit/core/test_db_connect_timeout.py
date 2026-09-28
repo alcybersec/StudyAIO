@@ -52,25 +52,52 @@ class TestConnectTimeoutIsBounded:
 
 
 class TestUnitTestsCannotOpenADatabase:
-    """The autouse guard in `tests/unit/conftest.py`."""
+    """The autouse guard in `tests/unit/conftest.py`.
 
-    def test_the_factory_refuses(self):
+    It refuses a session's *use*, not its construction. SQLAlchemy sessions are
+    lazy — `async_session_factory()` opens no socket — so `get_session` building
+    one and handing it to an endpoint that never touches it must keep working.
+    An earlier version refused construction and broke
+    `test_rate_limit_returns_429`, where the service is patched and the session
+    is never used. CI caught that; a local `-n 4` run did not.
+    """
+
+    async def test_building_a_session_is_allowed(self):
+        """The case the first version of this guard got wrong."""
+        from app.core.database import async_session_factory
+
+        async with async_session_factory() as session:
+            assert session is not None
+
+    async def test_using_one_is_refused(self):
         from app.core.database import async_session_factory
 
         with pytest.raises(Exception) as exc:
-            async_session_factory()
+            async with async_session_factory() as session:
+                await session.execute("SELECT 1")
 
         assert "unit test" in str(exc.value).lower()
 
-    def test_the_uploads_module_binding_is_patched_too(self):
+    async def test_the_uploads_module_binding_is_patched_too(self):
         """`app.api.uploads` imports the name, so it holds a second reference.
 
         Patching only `app.core.database` would leave the endpoint that actually
-        caused this reaching the real factory.
+        caused this — awarding upload XP through its own session — reaching the
+        real factory.
         """
         from app.api import uploads
 
         with pytest.raises(Exception) as exc:
-            uploads.async_session_factory()
+            async with uploads.async_session_factory() as session:
+                await session.execute("SELECT 1")
 
         assert "unit test" in str(exc.value).lower()
+
+    async def test_teardown_operations_stay_silent(self):
+        """`close`/`rollback` run on the way out and touch no database."""
+        from app.core.database import async_session_factory
+
+        async with async_session_factory() as session:
+            session.add(object())
+            await session.rollback()
+            await session.close()
