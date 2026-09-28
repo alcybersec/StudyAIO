@@ -1,0 +1,40 @@
+{
+  "id": "tcp_congestion",
+  "title": "TCP Congestion Control",
+  "course": "CSIT314",
+  "week": 7,
+  "notes": "The must_not_mention list names algorithms a model is likely to volunteer from general knowledge — CUBIC and BBR are what modern Linux actually uses, so they are the most tempting additions. This lecture covers only Tahoe and Reno. Naming CUBIC here would tell a student their lecture taught something it did not.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 7 — TCP Congestion Control.\n\nTCP must share a link with other flows without collapsing it. The sender keeps a congestion window (cwnd) limiting unacknowledged bytes in flight. The effective send rate is min(cwnd, receiver window).\n\nSlow start begins with cwnd of one segment and doubles it every round trip. Despite the name it is exponential growth, and it ends when cwnd reaches the slow start threshold (ssthresh) or a loss occurs."
+    },
+    {
+      "page": 2,
+      "text": "After ssthresh is reached, congestion avoidance increases cwnd by roughly one segment per round trip — additive increase rather than doubling.\n\nLoss is treated as the congestion signal. TCP Tahoe responds to any loss by setting ssthresh to half of cwnd, dropping cwnd back to one segment, and re-entering slow start. This is drastic: a single lost packet costs the whole window."
+    },
+    {
+      "page": 3,
+      "text": "TCP Reno distinguishes two kinds of loss. A timeout is treated as Tahoe treats it. But three duplicate ACKs suggest the network is still delivering packets, so Reno performs fast retransmit — resending the missing segment immediately — followed by fast recovery, halving cwnd rather than collapsing it to one.\n\nThe resulting cwnd graph is the familiar sawtooth: additive increase, multiplicative decrease, usually written AIMD."
+    }
+  ],
+  "must_mention": [
+    "congestion window",
+    "slow start",
+    "ssthresh",
+    "congestion avoidance",
+    "Tahoe",
+    "Reno",
+    "fast retransmit",
+    "fast recovery",
+    "AIMD"
+  ],
+  "must_not_mention": [
+    "CUBIC",
+    "BBR",
+    "Vegas",
+    "ECN",
+    "explicit congestion notification",
+    "QUIC"
+  ]
+}

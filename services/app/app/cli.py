@@ -12,6 +12,7 @@ goes to stdout and is never written to the structured log — the same rule
 
 import argparse
 import asyncio
+import pathlib
 import sys
 from urllib.parse import quote_plus
 
@@ -176,6 +177,41 @@ async def _backfill_courseops_keys(dry_run: bool, keep_legacy: bool) -> int:
     return 0
 
 
+async def _run_evals(only: str | None, no_judge: bool, out: str | None) -> int:
+    """Score generated summaries against the eval cases.
+
+    `tests/golden/` checks that a summary has the right shape; nothing measured
+    whether it is any good, so a prompt change could be an improvement or a
+    regression and the suite said the same either way.
+
+    Deliberately not part of CI: it costs money and is not deterministic, and a
+    non-deterministic gate is worse than no gate. Run it when a prompt changes
+    and read it against the previous run.
+
+    Args:
+        only: Run a single case id.
+        no_judge: Skip the model-graded faithfulness check, leaving only the
+            deterministic scores — which need no credentials and cost nothing.
+        out: Write the full report as JSON here, for diffing against last time.
+
+    Returns:
+        A process exit code: non-zero if any case failed, so it is usable in a
+        script even though it is not wired into CI.
+    """
+    from evals.runner import format_report, run
+
+    report = await run(only=only, judge=not no_judge)
+    print(format_report(report))
+
+    if out:
+        import json as _json
+
+        pathlib.Path(out).write_text(_json.dumps(report.to_dict(), indent=2) + "\n")
+        print(f"\nJSON written to {out}")
+
+    return 0 if report.passed == len(report.scores) else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and dispatch. Returns a process exit code."""
     configure_logging("WARNING")
@@ -220,6 +256,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Leave the old-shape blobs on disk",
     )
 
+    evals = sub.add_parser(
+        "evals",
+        help="Score generated summaries against the eval cases (costs AI calls)",
+    )
+    evals.add_argument("--case", default=None, help="Run a single case by id")
+    evals.add_argument(
+        "--no-judge",
+        action="store_true",
+        help="Deterministic scores only — no model needed, no cost",
+    )
+    evals.add_argument("--out", default=None, help="Write the full report as JSON here")
+
     args = parser.parse_args(argv)
 
     if args.command == "ensure-admin":
@@ -258,10 +306,17 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
 
+    if args.command == "evals":
+        try:
+            return asyncio.run(_run_evals(args.case, args.no_judge, args.out))
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
     parser.print_usage(sys.stderr)
     print(
         "error: a command is required (ensure-admin, backfill-concept-embeddings, "
-        "backfill-courseops-keys)",
+        "backfill-courseops-keys, evals)",
         file=sys.stderr,
     )
     return 2
