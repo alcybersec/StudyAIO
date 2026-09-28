@@ -1,12 +1,12 @@
 """Tests for quota enforcement integration in API endpoints."""
 
-import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from app.core.exceptions import QuotaExceededError
+from tests.conftest import isolated_storage
 
 
 @pytest.fixture
@@ -42,8 +42,7 @@ async def saas_client(mock_session, free_user):
     limiter.reset()
 
     with (
-        tempfile.TemporaryDirectory() as tmpdir,
-        patch("app.config.settings.data_dir", tmpdir),
+        isolated_storage(),
         patch("app.config.settings.self_hosted", False),
         patch("app.api.uploads.settings.self_hosted", False),
     ):

@@ -16,6 +16,9 @@ vi.mock('../../hooks/useApi', () => ({
   useResendVerification: vi.fn(),
   useSendPasswordReset: vi.fn(),
   useUpdateAdminUser: vi.fn(),
+  // The change-email dialog reads the linked providers to name what it will
+  // unlink. `undefined` data is the unknown case, which keeps the generic wording.
+  useAdminUserDetail: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
 }))
 
 const asResult = (q: object) => q as never
@@ -32,6 +35,7 @@ const USER = {
   role: 'user',
   tier: 'free',
   is_active: true,
+  mfa_enabled: true,
   created_at: null,
   last_login_at: null,
 }
@@ -225,5 +229,33 @@ describe('UserRowActions: clear MFA', () => {
     await user.click(screen.getByRole('button', { name: /^clear mfa$/i }))
 
     expect(clearMfaMutate).toHaveBeenCalledWith('u-1', expect.anything())
+  })
+})
+
+describe('UserRowActions: clear MFA when there is none', () => {
+  // GL#3: the list row now carries `mfa_enabled`, so this can be answered
+  // before the click. Previously the only way to learn it was to fire the
+  // action and read `mfa_was_enabled` off the response.
+  const noMfa = { ...USER, mfa_enabled: false }
+
+  it('disables the action', () => {
+    render(<UserRowActions user={noMfa} currentUserId="admin-001" />)
+
+    expect(screen.getByRole('button', { name: /clear mfa/i })).toBeDisabled()
+  })
+
+  it('says why, rather than just being dead', () => {
+    render(<UserRowActions user={noMfa} currentUserId="admin-001" />)
+
+    expect(screen.getByRole('button', { name: /clear mfa/i })).toHaveAttribute(
+      'title',
+      expect.stringContaining('no MFA configured'),
+    )
+  })
+
+  it('stays enabled for a user who does have MFA', () => {
+    render(<UserRowActions user={USER} currentUserId="admin-001" />)
+
+    expect(screen.getByRole('button', { name: /clear mfa/i })).toBeEnabled()
   })
 })

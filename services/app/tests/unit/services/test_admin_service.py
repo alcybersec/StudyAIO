@@ -259,36 +259,37 @@ class TestGetUserDetails:
         user = _make_user_model()
         mock_session.get = AsyncMock(return_value=user)
 
-        # Track execute calls to intercept storage queries
-        call_count = 0
+        # Answer from the statement rather than from the call position. The
+        # position-keyed version of this broke the moment `get_user_details`
+        # gained one more query — the storage assertions started reading the
+        # subscription slot and failed somewhere unrelated. Dispatching on the
+        # SQL keeps it honest and survives a new section being added.
+        async def execute_side_effect(stmt, *args, **kwargs):
+            sql = str(stmt)
+            r = MagicMock()
 
-        async def execute_side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
+            if "oauth_accounts" in sql:
+                r.scalars.return_value.all.return_value = ["google"]
+                return r
 
-            # Call 1: subscription query (return empty)
-            if call_count == 1:
-                r = MagicMock()
+            if "subscriptions" in sql:
                 r.scalars.return_value.first.return_value = None
                 return r
 
-            # Call 2: storage totals (SUM bytes, COUNT files)
-            if call_count == 2:
-                r = MagicMock()
-                r.one.return_value = (5242880, 10)  # 5MB, 10 files
-                return r
-
-            # Call 3: storage status breakdown
-            if call_count == 3:
-                r = MagicMock()
+            if "lecture_artifacts" in sql and "count" in sql.lower() and "status" in sql:
+                # Storage status breakdown, grouped by status.
                 r.all.return_value = [("processed", 8), ("ingested", 2)]
                 return r
 
-            # Default fallback for remaining calls
-            r = MagicMock()
+            if "lecture_artifacts" in sql and "sum" in sql.lower():
+                # Storage totals: SUM(bytes), COUNT(files).
+                r.one.return_value = (5242880, 10)
+                return r
+
             r.scalars.return_value.first.return_value = None
+            r.scalars.return_value.all.return_value = []
             r.scalar_one.return_value = 0
-            r.one.return_value = (0, 0, 0, 0)
+            r.one.return_value = (0, 0, 0, 0, 0)
             r.all.return_value = []
             return r
 
@@ -604,3 +605,122 @@ class TestEmailChangeRevocation:
 
         assert user.tokens_valid_from is None
         mock_session.execute.assert_not_called()
+
+
+class TestAdminApiSurfacesFacts:
+    """GL#3: three things the admin UI had to infer because nothing told it.
+
+    Each is a field, and each replaces a UI inference with the server's answer.
+    """
+
+    async def test_update_reports_that_a_role_change_revoked_sessions(self, mock_session):
+        """The value was computed for the log line and thrown away."""
+        user = _make_user_model(role="user")
+        mock_session.get = AsyncMock(return_value=user)
+
+        result = await admin_service.update_user(mock_session, "user-001", role="admin")
+
+        assert result["sessions_revoked"] is True
+
+    async def test_update_reports_that_a_tier_change_did_not(self, mock_session):
+        """A tier moves a quota, not a privilege — nothing in a token depends on it.
+
+        The important half of the pair: a UI that assumed every PATCH signs the
+        user out would be wrong here, and wrong in the direction that alarms an
+        admin for nothing.
+        """
+        user = _make_user_model(tier="free")
+        mock_session.get = AsyncMock(return_value=user)
+
+        result = await admin_service.update_user(mock_session, "user-001", tier="pro")
+
+        assert result["sessions_revoked"] is False
+
+    async def test_a_no_op_role_echo_does_not_claim_a_revocation(self, mock_session):
+        """A form that submits every field echoes the current role back."""
+        user = _make_user_model(role="user")
+        mock_session.get = AsyncMock(return_value=user)
+
+        result = await admin_service.update_user(mock_session, "user-001", role="user")
+
+        assert result["sessions_revoked"] is False
+
+    async def test_update_carries_mfa_enabled(self, mock_session):
+        user = _make_user_model()
+        user.mfa_enabled = True
+        mock_session.get = AsyncMock(return_value=user)
+
+        result = await admin_service.update_user(mock_session, "user-001", tier="pro")
+
+        assert result["mfa_enabled"] is True
+
+    async def test_details_lists_linked_providers_sorted(self, mock_session):
+        user = _make_user_model()
+        mock_session.get = AsyncMock(return_value=user)
+
+        async def execute_side_effect(stmt, *args, **kwargs):
+            r = MagicMock()
+            if "oauth_accounts" in str(stmt):
+                r.scalars.return_value.all.return_value = ["google", "github"]
+                return r
+            r.scalars.return_value.first.return_value = None
+            r.scalars.return_value.all.return_value = []
+            r.scalar_one.return_value = 0
+            r.one.return_value = (0, 0, 0, 0, 0)
+            r.all.return_value = []
+            return r
+
+        mock_session.execute = AsyncMock(side_effect=execute_side_effect)
+
+        result = await admin_service.get_user_details(mock_session, "user-001")
+
+        assert result["profile"]["oauth_providers"] == ["github", "google"]
+
+    async def test_details_reports_an_empty_list_when_nothing_is_linked(self, mock_session):
+        """`[]` is what lets the dialog drop the unlink warning entirely."""
+        user = _make_user_model()
+        mock_session.get = AsyncMock(return_value=user)
+
+        async def execute_side_effect(stmt, *args, **kwargs):
+            r = MagicMock()
+            r.scalars.return_value.all.return_value = []
+            r.scalars.return_value.first.return_value = None
+            r.scalar_one.return_value = 0
+            r.one.return_value = (0, 0, 0, 0, 0)
+            r.all.return_value = []
+            return r
+
+        mock_session.execute = AsyncMock(side_effect=execute_side_effect)
+
+        result = await admin_service.get_user_details(mock_session, "user-001")
+
+        assert result["profile"]["oauth_providers"] == []
+
+    async def test_a_failed_lookup_is_unknown_not_empty(self, mock_session):
+        """The distinction that keeps a query error from becoming a false promise.
+
+        Defaulting a failure to `[]` would have the dialog state "this unlinks
+        nothing" about a destructive action, on no evidence. `None` means the
+        UI falls back to the generic warning.
+        """
+        user = _make_user_model()
+        mock_session.get = AsyncMock(return_value=user)
+        mock_session.execute = AsyncMock(side_effect=RuntimeError("db gone"))
+
+        result = await admin_service.get_user_details(mock_session, "user-001")
+
+        assert result["profile"]["oauth_providers"] is None
+
+    async def test_details_never_exposes_mfa_material(self, mock_session):
+        """`mfa_enabled` is a boolean about setup; the secret must not follow it."""
+        user = _make_user_model()
+        user.mfa_secret = "JBSWY3DPEHPK3PXP"
+        mock_session.get = AsyncMock(return_value=user)
+
+        result = await admin_service.get_user_details(mock_session, "user-001")
+
+        profile = result["profile"]
+        assert profile["mfa_enabled"] is False
+        assert "mfa_secret" not in profile
+        assert "backup_codes" not in profile
+        assert "JBSWY3DPEHPK3PXP" not in str(profile)

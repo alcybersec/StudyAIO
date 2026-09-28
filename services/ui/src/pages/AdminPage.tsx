@@ -88,8 +88,15 @@ interface PendingChange {
   title: string
   confirmLabel: string
   consequences: string[]
-  /** Reported after the PATCH succeeds, so the sign-out is not silent either. */
-  successMessage: string
+  /**
+   * Reported after the PATCH succeeds, so the sign-out is not silent either.
+   *
+   * Takes the server's `sessions_revoked` rather than assuming: a PATCH that
+   * turns out to be a no-op — our copy of the row was stale, and the user
+   * already had that role — revokes nothing, and saying "signed out on every
+   * device" there would be a confident falsehood about a destructive effect.
+   */
+  successMessage: (sessionsRevoked: boolean) => string
 }
 
 // ── What the inline controls actually do ───────────────────────
@@ -126,7 +133,10 @@ function describeRoleChange(user: AdminUser, role: string): PendingChange {
     title: `Change ${user.email} from ${user.role} to ${role}?`,
     confirmLabel: `Change role to ${role}`,
     consequences,
-    successMessage: `${user.email} is now ${role} — signed out on every device.`,
+    successMessage: (revoked) =>
+      revoked
+        ? `${user.email} is now ${role} — signed out on every device.`
+        : `${user.email} is now ${role}. No sessions needed revoking.`,
   }
 }
 
@@ -141,7 +151,10 @@ function describeStatusChange(user: AdminUser): PendingChange {
         `Every request from this account is refused while it is inactive, a token refresh included, and ${user.email} cannot sign in again.`,
         'Nothing is deleted, and their sessions are suspended rather than revoked — but reactivating the account later revokes them for real.',
       ],
-      successMessage: `${user.email} deactivated.`,
+      successMessage: (revoked) =>
+        revoked
+          ? `${user.email} deactivated — signed out on every device.`
+          : `${user.email} deactivated. Their sessions are suspended, not revoked.`,
     }
   }
   return {
@@ -153,7 +166,10 @@ function describeStatusChange(user: AdminUser): PendingChange {
       `Restores access for ${user.email}.`,
       'Signs them out on every device first: every session from before the deactivation is revoked, including the 7-day refresh token, so they sign in fresh rather than resuming where they left off.',
     ],
-    successMessage: `${user.email} reactivated — the sessions it had before are revoked.`,
+    successMessage: (revoked) =>
+      revoked
+        ? `${user.email} reactivated — the sessions it had before are revoked.`
+        : `${user.email} reactivated.`,
   }
 }
 
@@ -165,7 +181,11 @@ function UserRow({
   user: AdminUser
   onUpdate: (
     id: string,
-    change: { field: string; value: string | boolean; successMessage?: string },
+    change: {
+      field: string
+      value: string | boolean
+      successMessage?: (sessionsRevoked: boolean) => string
+    },
   ) => void
   currentUserId: string | undefined
 }) {
@@ -284,20 +304,25 @@ export function AdminPage() {
    * And a success that ends every one of the user's sessions deserves to be
    * said out loud.
    *
-   * The success line is derived from the change we asked for, not from the
-   * response: `UserResponse` does not carry whether sessions were revoked, even
-   * though `admin_service` knows and logs it (`sessions_revoked=`). Adding that
-   * field would let this report the server's answer instead of inferring it.
+   * The success line is the server's answer, not our inference: the PATCH
+   * response carries `sessions_revoked` (GL#3), which `admin_service` had been
+   * computing and logging all along. Before that field existed this described
+   * the change we *requested*, which overstates what happened whenever the row
+   * we held was stale.
    */
   const handleUpdate = (
     userId: string,
-    change: { field: string; value: string | boolean; successMessage?: string },
+    change: {
+      field: string
+      value: string | boolean
+      successMessage?: (sessionsRevoked: boolean) => string
+    },
   ) => {
     updateUser.mutate(
       { userId, data: { [change.field]: change.value } },
       {
-        onSuccess: () => {
-          if (change.successMessage) toast.success(change.successMessage)
+        onSuccess: (updated) => {
+          if (change.successMessage) toast.success(change.successMessage(updated.sessions_revoked))
         },
         onError: (err: unknown) =>
           toast.error(

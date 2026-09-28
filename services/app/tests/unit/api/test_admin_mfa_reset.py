@@ -16,7 +16,6 @@ the same way.
 """
 
 import json
-import tempfile
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -26,6 +25,7 @@ import pytest
 from app.core.auth import hash_password
 from app.core.security import generate_backup_codes, hash_backup_codes
 from app.models.user import User
+from tests.conftest import isolated_storage
 
 TEST_PASSWORD = "TestPass1!"
 
@@ -95,7 +95,7 @@ async def admin_client(mock_session):
     app.dependency_overrides[get_current_user] = override_user
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+    with isolated_storage():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -121,7 +121,7 @@ async def nonadmin_client(mock_session):
     app.dependency_overrides[get_current_user] = override_user
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+    with isolated_storage():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
