@@ -1306,6 +1306,10 @@ export interface InviteSendRequest {
  * The link is returned whether or not the email was delivered, so a broken
  * SMTP config never blocks onboarding — the admin can pass it on by hand.
  */
+export interface InviteResendRequest {
+  expires_in_days?: number | null
+}
+
 export interface InviteSendResult {
   invite: InviteCode
   invite_url: string
