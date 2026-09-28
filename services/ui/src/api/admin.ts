@@ -1,7 +1,7 @@
 import { api } from './client'
 import type {
   AdminMfaCleared,
-  AdminUser,
+  AdminUserUpdated,
   AdminUserCreated,
   AdminUserCreateRequest,
   AdminUserDeleted,
@@ -33,8 +33,8 @@ export const adminApi = {
     return api.get<AdminUserList>(`/admin/users${qs ? `?${qs}` : ''}`)
   },
 
-  updateUser(userId: string, data: AdminUserUpdate): Promise<AdminUser> {
-    return api.patch<AdminUser>(`/admin/users/${userId}`, data)
+  updateUser(userId: string, data: AdminUserUpdate): Promise<AdminUserUpdated> {
+    return api.patch<AdminUserUpdated>(`/admin/users/${userId}`, data)
   },
 
   getMetrics(): Promise<SystemMetrics> {

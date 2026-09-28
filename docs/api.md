@@ -1973,6 +1973,11 @@ Requires `admin` role.
 
 List all users with optional filters. Query params: `role`, `tier`, `offset`, `limit`.
 
+Each row carries `mfa_enabled`, so the admin UI can tell before the click whether
+`POST /admin/users/{id}/mfa-reset` has anything to reset. It is a boolean about
+the account's own setup — the secret and the backup codes are never exposed here
+or anywhere else.
+
 **Response** `200` `AdminUsersResponse`
 
 ### `PATCH /api/admin/users/{user_id}`
@@ -1995,12 +2000,30 @@ that user — and it would do so with a *new* token, which no session cutoff can
 reach. The user re-links by signing in with the provider again, or with their
 password if the account has one.
 
+The response carries **`sessions_revoked`**: whether this particular PATCH
+actually ended the user's sessions. It is the server's answer, not a restatement
+of the request — a PATCH that turns out to be a no-op (the caller's copy of the
+row was stale and the user already had that role) revokes nothing and says so.
+The field is on the update response only; on a list row it could never be
+anything but a meaningless `false`.
+
 **Body** `UpdateUserRequest`
-**Response** `200` `AdminUserResponse`
+**Response** `200` `AdminUserUpdateResponse`
 
 ### `GET /api/admin/users/{user_id}/details`
 
 Comprehensive detail for a single user: profile, subscription, storage, usage, pipeline, study, content, gamification and chat sections (every section but `profile` may be null). Cached in Redis for the dashboard TTL.
+
+`profile.oauth_providers` lists the providers linked to the account, e.g.
+`["google"]`, so a caller about to change the email can name what it will unlink
+instead of warning generically. Provider names only — nothing from the token or
+the provider account.
+
+Three states, and they are not interchangeable: a list names what breaks, `[]`
+means nothing is linked (so the warning can be dropped entirely), and **`null`
+means the lookup failed** and the answer is unknown. Treat `null` as unknown and
+fall back to a generic warning; reading it as "nothing linked" would state that a
+destructive action breaks no links on no evidence.
 
 **Response** `200` `UserDetailResponse` | `404` user not found
 

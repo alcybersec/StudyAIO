@@ -103,15 +103,31 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
         <span className="sr-only">Change email for {user.email}</span>
       </Button>
 
+      {/*
+        Greyed out when there is nothing to clear. The list row now carries
+        `mfa_enabled` (GL#3), so this can be answered before the click instead
+        of from the response after it — the action stays honest either way,
+        because `mfa_was_enabled` still reports what actually happened, but an
+        operator chasing a lockout should not have to fire a destructive-looking
+        action to discover it was a no-op.
+      */}
       <Button
         variant="ghost"
         size="sm"
-        disabled={clearMfa.isPending}
-        title="Clear MFA for a user locked out of their authenticator"
+        disabled={clearMfa.isPending || !user.mfa_enabled}
+        title={
+          user.mfa_enabled
+            ? 'Clear MFA for a user locked out of their authenticator'
+            : `${user.email} has no MFA configured — nothing to clear`
+        }
         onClick={() => setConfirmingMfaReset(true)}
       >
         <ShieldOff size={12} aria-hidden />
-        <span className="sr-only">Clear MFA for {user.email}</span>
+        <span className="sr-only">
+          {user.mfa_enabled
+            ? `Clear MFA for ${user.email}`
+            : `Clear MFA for ${user.email} (no MFA configured)`}
+        </span>
       </Button>
 
       <ChangeEmailDialog open={changingEmail} onOpenChange={setChangingEmail} user={user} />
