@@ -517,6 +517,17 @@ document is the record for the security work; this tracker is not yet backfilled
 | BF.4 | Endpoint + admin panel | ✅ Done | `GET /api/admin/funnel`, and a `BetaFunnel` panel on the admin page with a bar per step, a hint on each explaining how to read a drop, and an include-admins toggle. |
 | BF.5 | Tests | ✅ Done | 15 **integration** tests against real Postgres, because the funnel is almost entirely SQL — a mocked session would assert that `execute` was called and nothing about whether the queries answer the question. 4 endpoint wiring tests (including that `include_admins` defaults to false) and 6 component tests. Revert-checked: dropping the `tester_ids` filter from the uploaded query fails `test_an_excluded_users_upload_is_excluded_too`, which is the guard against filtering users but not their rows. |
 
+## In-App Feedback (product instrumentation, slice 2)
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| FB.1 | A channel that did not exist | ✅ Done | The instance had no way for a tester to say anything. Sentry records what crashed; the beta funnel records that somebody stopped after their first upload. Neither records *why*, and no instrumentation infers it. `POST /api/feedback` (authenticated, `RATE_LIMIT_FEEDBACK`, default 10/min), plus `GET /api/admin/feedback` and `PATCH /api/admin/feedback/{id}` for triage. |
+| FB.2 | Route and build attached automatically | ✅ Done | The client sends `route` (the server only ever sees `/api/feedback`) and the build's commit SHA. Without them "the summary looked empty" is unactionable; with them it is a page and a commit, which is the difference between a report you can reproduce and one you can only sympathise with. |
+| FB.3 | Deleted with the account | ✅ Done | `user_id` is a non-nullable FK, so `account_service` classifies the table as user-scoped automatically and `delete_user_account` removes it. That loses the signal when a tester leaves — a real cost — but the message is free text the reporter wrote and may name them or somebody else. Anonymising by nulling `user_id` would keep exactly the part that carries the risk. Asserted against a real database, both directions: the author's feedback goes, another user's survives. |
+| FB.4 | It has to reach a person | ✅ Done | Linked admins are pinged on Telegram through the existing `telegram_service`, best effort and after the commit — so a Telegram outage cannot roll back stored feedback, and a ping can never describe something that was not saved. Feedback nobody reads is worse than none, because it looks like a channel. User content is HTML-escaped: the ping is sent as HTML. |
+| FB.5 | UI | ✅ Done | A modal on the ⌘K palette — reachable from anywhere, because the moment somebody wants to report something is the moment they hit it, not after hunting for a form. Three kinds (broke / confusing / idea), each with its own prompt. A failed send keeps the text on screen rather than closing over it, which is the one thing guaranteed to stop a second report. `FeedbackInbox` on the admin page reads them with an unread badge and triage buttons. |
+| FB.6 | Tests | ✅ Done | 18 service + 14 API unit tests, 6 integration tests against real Postgres (the deletion contract and the reporter join, neither checkable with a mock), 8 modal and 10 inbox component tests. The IDOR guard caught the admin triage route resolving an id without scoping — correct for an admin route, so it is in `GUARDED_ELSEWHERE` with the reason rather than silenced. |
+
 ## Issues & Blockers
 
 | Date | Issue | Status | Resolution |
