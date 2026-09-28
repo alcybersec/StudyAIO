@@ -12,7 +12,7 @@ for a full minute before failing, which reads as a deadlock rather than an
 outage.
 """
 
-import importlib
+import pathlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,77 +27,114 @@ class TestConnectTimeoutIsBounded:
     def test_the_engine_is_built_with_it(self):
         """Assert the wiring, not just the setting.
 
-        A configured value nothing passes to the driver is the failure this
+        A configured value nothing hands to the driver is the failure this
         guards: the setting would read as active while asyncpg kept its own
         60-second default.
+
+        Loaded as a throwaway module rather than `importlib.reload`-ing the live
+        one. Reloading swaps `app.core.database.engine` for a new object, which
+        silently detaches the `do_connect` guard in `tests/unit/conftest.py` for
+        every test that runs afterwards — this test used to break the two below
+        it, and only in file order.
         """
+        import importlib.util
+
         captured = {}
 
         def fake_create_async_engine(*args, **kwargs):
             captured.update(kwargs)
             return MagicMock()
 
-        # Patch the *source* module: reloading re-executes
-        # `from sqlalchemy.ext.asyncio import create_async_engine`, which would
-        # rebind the real function over a patch applied to `app.core.database`.
-        with patch("sqlalchemy.ext.asyncio.create_async_engine", fake_create_async_engine):
-            importlib.reload(importlib.import_module("app.core.database"))
+        spec = importlib.util.spec_from_file_location(
+            "throwaway_database_module",
+            pathlib.Path(__file__).resolve().parents[3] / "app" / "core" / "database.py",
+        )
+        module = importlib.util.module_from_spec(spec)
 
-        try:
-            assert "connect_args" in captured, "engine built without connect_args"
-            assert captured["connect_args"]["timeout"] == settings.db_connect_timeout
-        finally:
-            # Leave the real engine in place for everything after this test.
-            importlib.reload(importlib.import_module("app.core.database"))
+        # Patch the *source*: executing the module runs
+        # `from sqlalchemy.ext.asyncio import create_async_engine`, which would
+        # otherwise rebind the real function over any patch on the module.
+        with patch("sqlalchemy.ext.asyncio.create_async_engine", fake_create_async_engine):
+            spec.loader.exec_module(module)
+
+        assert "connect_args" in captured, "engine built without connect_args"
+        assert captured["connect_args"]["timeout"] == settings.db_connect_timeout
 
 
 class TestUnitTestsCannotOpenADatabase:
     """The autouse guard in `tests/unit/conftest.py`.
 
-    It refuses a session's *use*, not its construction. SQLAlchemy sessions are
-    lazy — `async_session_factory()` opens no socket — so `get_session` building
-    one and handing it to an endpoint that never touches it must keep working.
-    An earlier version refused construction and broke
-    `test_rate_limit_returns_429`, where the service is patched and the session
-    is never used. CI caught that; a local `-n 4` run did not.
+    It hooks SQLAlchemy's `do_connect` — the one moment a socket would be opened
+    — so everything short of that is the real `AsyncSession` behaving normally.
+
+    The first three attempts replaced the session with a hand-written stand-in
+    and drew the line in the wrong place each time: refusing construction, then
+    `commit`, then `flush`. None of those opens a connection, so each revision
+    broke a test that was doing nothing wrong. These cases pin the boundary
+    where it actually is.
     """
 
     async def test_building_a_session_is_allowed(self):
-        """The case the first version of this guard got wrong."""
+        """Sessions are lazy; constructing one opens nothing."""
         from app.core.database import async_session_factory
 
         async with async_session_factory() as session:
             assert session is not None
 
-    async def test_using_one_is_refused(self):
+    async def test_committing_an_unused_session_is_allowed(self):
+        """The case that broke `main`.
+
+        `POST /api/auth/forgot-password` commits the session itself after the
+        service it calls has been patched out. SQLAlchemy acquires no connection
+        committing a session with nothing pending.
+        """
+        from app.core.database import async_session_factory
+
+        async with async_session_factory() as session:
+            await session.commit()
+            await session.flush()
+            await session.rollback()
+
+    async def test_querying_is_refused(self):
+        """The first operation that genuinely needs a socket."""
+        from sqlalchemy import text
+
         from app.core.database import async_session_factory
 
         with pytest.raises(Exception) as exc:
             async with async_session_factory() as session:
-                await session.execute("SELECT 1")
+                await session.execute(text("SELECT 1"))
 
         assert "unit test" in str(exc.value).lower()
 
-    async def test_the_uploads_module_binding_is_patched_too(self):
-        """`app.api.uploads` imports the name, so it holds a second reference.
+    async def test_the_uploads_bypass_is_covered(self):
+        """`app/api/uploads.py` imports the factory directly and opens its own
+        session to award XP — the bypass that caused GL#6.
 
-        Patching only `app.core.database` would leave the endpoint that actually
-        caused this — awarding upload XP through its own session — reaching the
-        real factory.
+        The engine-level hook covers it without patching that binding, which the
+        factory-level versions of this guard had to do separately.
         """
+        from sqlalchemy import text
+
         from app.api import uploads
 
         with pytest.raises(Exception) as exc:
             async with uploads.async_session_factory() as session:
-                await session.execute("SELECT 1")
+                await session.execute(text("SELECT 1"))
 
         assert "unit test" in str(exc.value).lower()
 
-    async def test_teardown_operations_stay_silent(self):
-        """`close`/`rollback` run on the way out and touch no database."""
+    async def test_it_fails_fast_rather_than_waiting_out_a_timeout(self):
+        """The point of the whole exercise: no 60-second stall."""
+        import time
+
+        from sqlalchemy import text
+
         from app.core.database import async_session_factory
 
-        async with async_session_factory() as session:
-            session.add(object())
-            await session.rollback()
-            await session.close()
+        started = time.monotonic()
+        with pytest.raises(RuntimeError):
+            async with async_session_factory() as session:
+                await session.execute(text("SELECT 1"))
+
+        assert time.monotonic() - started < 5
