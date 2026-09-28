@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button, ErrorState, Input } from '../components/ui'
@@ -19,6 +19,10 @@ export function RegisterPage() {
   const navigate = useNavigate()
   const { register: registerUser, authConfig } = useAuth()
   const inviteRequired = authConfig?.invite_required ?? false
+  // An emailed invite arrives as /register?invite=<token>. The token goes into
+  // the same field a typed code does, so the server has one redemption path.
+  const [searchParams] = useSearchParams()
+  const inviteFromLink = searchParams.get('invite')?.trim() ?? ''
   const [cooldown, setCooldown] = useState<{ key: number; seconds: number } | null>(null)
   const [networkFailed, setNetworkFailed] = useState(false)
 
@@ -27,7 +31,10 @@ export function RegisterPage() {
     handleSubmit,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm<RegisterFormData>({ resolver: zodResolver(registerSchema) })
+  } = useForm<RegisterFormData>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: { invite_code: inviteFromLink },
+  })
 
   const onSubmit = handleSubmit(async (data) => {
     setNetworkFailed(false)
@@ -110,19 +117,36 @@ export function RegisterPage() {
           error={errors.confirm?.message}
           {...register('confirm')}
         />
-        {inviteRequired && (
-          <Input
-            id="invite_code"
-            type="text"
-            label="Invite code"
-            placeholder="BETA-XXXXXXXX"
-            autoComplete="off"
-            autoCapitalize="characters"
-            spellCheck={false}
-            error={errors.invite_code?.message}
-            {...register('invite_code')}
-          />
-        )}
+        {inviteRequired &&
+          (inviteFromLink ? (
+            // Registered but not rendered as a text input on purpose. The code
+            // field carries autoCapitalize="characters", which is right for a
+            // hand-typed BETA- code and would destroy a base64url token if the
+            // recipient so much as focused it.
+            <>
+              <input type="hidden" {...register('invite_code')} />
+              <p className="text-xs text-text-muted">
+                You&rsquo;re signing up with an invite link.
+              </p>
+              {errors.invite_code?.message && (
+                <p role="alert" className="text-xs text-red-fg">
+                  {errors.invite_code.message}
+                </p>
+              )}
+            </>
+          ) : (
+            <Input
+              id="invite_code"
+              type="text"
+              label="Invite code"
+              placeholder="BETA-XXXXXXXX"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              error={errors.invite_code?.message}
+              {...register('invite_code')}
+            />
+          ))}
         {errors.root?.message && (
           <p role="alert" className="text-xs text-red-fg">
             {errors.root.message}

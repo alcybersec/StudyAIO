@@ -12,7 +12,13 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=100)
     password: str = Field(min_length=8, max_length=128)
     # Required only when REGISTRATION_MODE=invite; ignored otherwise.
-    invite_code: str | None = Field(default=None, max_length=32)
+    #
+    # Accepts either flavour: a shared code ("BETA-7F3KQ2MN", 13 chars) or the
+    # raw token from an emailed invite link, which is secrets.token_urlsafe(32)
+    # -- 43 characters. The old limit of 32 predates email invites and would
+    # have rejected every one of them at validation, before the service ever
+    # saw it. 100 leaves room without inviting a giant body.
+    invite_code: str | None = Field(default=None, max_length=100)
 
 
 class LoginRequest(BaseModel):

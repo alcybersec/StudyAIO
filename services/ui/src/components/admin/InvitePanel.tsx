@@ -3,6 +3,7 @@ import { Check, Copy, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, ErrorState, Input, Table, TBody, TCell, THead, TRow } from '../ui'
 import { useCreateInvite, useInvites, useRevokeInvite } from '../../hooks/useApi'
+import { SendInviteForm } from './SendInviteForm'
 import type { InviteCode } from '../../types'
 
 /** Why a code can't be redeemed — shown instead of a bare "no". */
@@ -58,6 +59,8 @@ export function InvitePanel() {
           Required to register when REGISTRATION_MODE=invite
         </span>
       </div>
+
+      <SendInviteForm />
 
       <div className="flex flex-wrap items-end gap-3 p-4 border-b border-border">
         <Input
@@ -122,8 +125,10 @@ export function InvitePanel() {
           <Table>
             <THead>
               <TCell header>Code</TCell>
+              <TCell header>Sent to</TCell>
               <TCell header>Note</TCell>
               <TCell header>Uses</TCell>
+              <TCell header>Accepted</TCell>
               <TCell header>Status</TCell>
               <TCell header>Expires</TCell>
               <TCell header />
@@ -137,11 +142,32 @@ export function InvitePanel() {
                       <CopyButton code={invite.code} />
                     </TCell>
                     <TCell>
+                      {invite.email ? (
+                        <span className="text-xs text-text-muted">
+                          {invite.email}
+                          {/* Created but never delivered: an SMTP problem, not
+                              a disinterested tester. Worth distinguishing. */}
+                          {!invite.sent_at && (
+                            <span className="ml-1 text-[10px] text-amber-fg">not sent</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-text-faint">shared code</span>
+                      )}
+                    </TCell>
+                    <TCell>
                       <span className="text-xs text-text-muted">{invite.note ?? '—'}</span>
                     </TCell>
                     <TCell>
                       <span className="text-xs font-mono text-text-muted">
                         {invite.used_count}/{invite.max_uses}
+                      </span>
+                    </TCell>
+                    <TCell>
+                      <span className="text-xs text-text-faint">
+                        {invite.accepted_at
+                          ? new Date(invite.accepted_at).toLocaleDateString()
+                          : '—'}
                       </span>
                     </TCell>
                     <TCell>

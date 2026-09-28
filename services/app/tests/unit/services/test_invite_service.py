@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app.core.auth import generate_magic_link_token, hash_magic_link_token
 from app.core.exceptions import InviteError
 from app.models.invite_code import InviteCode
 from app.services import invite_service
@@ -19,6 +20,10 @@ def make_invite(**overrides) -> InviteCode:
         "used_count": 0,
         "expires_at": datetime.now(UTC) + timedelta(days=30),
         "revoked_at": None,
+        "email": None,
+        "token_hash": None,
+        "sent_at": None,
+        "accepted_at": None,
     }
     defaults.update(overrides)
     return InviteCode(**defaults)
@@ -225,3 +230,145 @@ class TestRevokeInvite:
     @pytest.mark.asyncio
     async def test_returns_none_for_unknown_invite(self, mock_session):
         assert await invite_service.revoke_invite(mock_session, "nope") is None
+
+
+class TestCreateEmailInvite:
+    """Email invites: addressed to one person, redeemed with a token."""
+
+    @pytest.mark.asyncio
+    async def test_returns_the_raw_token_only_here(self, mock_session):
+        """The token is never recoverable afterwards — only its hash is stored."""
+        minted = await invite_service.create_email_invite(mock_session, email="tester@example.com")
+
+        assert minted.raw_token
+        assert minted.invite.token_hash == hash_magic_link_token(minted.raw_token)
+        # The load-bearing assertion: the raw value is NOT on the row.
+        assert minted.raw_token not in (minted.invite.token_hash or "")
+
+    @pytest.mark.asyncio
+    async def test_is_single_use(self, mock_session):
+        """Multi-use would let a forwarded invite be redeemed by someone else,
+        and accepted_at would still credit the addressee."""
+        minted = await invite_service.create_email_invite(mock_session, email="tester@example.com")
+        assert minted.invite.max_uses == 1
+
+    @pytest.mark.asyncio
+    async def test_normalizes_the_address(self, mock_session):
+        minted = await invite_service.create_email_invite(
+            mock_session, email="  Tester@Example.COM  "
+        )
+        assert minted.invite.email == "tester@example.com"
+
+    @pytest.mark.asyncio
+    async def test_is_not_marked_sent_on_creation(self, mock_session):
+        """Created and delivered are different facts. With SMTP down the invite
+        exists and its link works, but nobody was told."""
+        minted = await invite_service.create_email_invite(mock_session, email="tester@example.com")
+        assert minted.invite.sent_at is None
+
+    @pytest.mark.asyncio
+    async def test_rejects_a_blank_address(self, mock_session):
+        with pytest.raises(InviteError):
+            await invite_service.create_email_invite(mock_session, email="   ")
+
+
+class TestRedeemToken:
+    """Redemption accepts a token through the same field as a code."""
+
+    def _with_invite(self, mock_session, invite):
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = invite
+        mock_session.execute.return_value = result
+
+    @pytest.mark.asyncio
+    async def test_redeems_an_email_invite_by_token(self, mock_session):
+        token = generate_magic_link_token()
+        invite = make_invite(email="tester@example.com", token_hash=hash_magic_link_token(token))
+        self._with_invite(mock_session, invite)
+
+        redeemed = await invite_service.redeem_invite(mock_session, token)
+
+        assert redeemed.used_count == 1
+        assert redeemed.accepted_at is not None
+
+    @pytest.mark.asyncio
+    async def test_looks_the_token_up_by_hash_not_by_value(self, mock_session):
+        """The wiring assertion. A token compared against `code` would 'work'
+        for an unknown token (both miss) while storing a raw credential."""
+        token = generate_magic_link_token()
+        invite = make_invite(token_hash=hash_magic_link_token(token))
+        self._with_invite(mock_session, invite)
+
+        await invite_service.redeem_invite(mock_session, token)
+
+        # The WHERE clause, not the whole statement: every column appears in
+        # the SELECT list, so matching on the full text passes either way.
+        where = str(mock_session.execute.await_args.args[0]).split("WHERE", 1)[1]
+        assert "token_hash" in where
+        assert "invite_codes.code" not in where
+
+    @pytest.mark.asyncio
+    async def test_does_not_uppercase_a_token(self, mock_session):
+        """normalize_code() uppercases, which is right for a transcribed code
+        and destroys a base64url token. Branch order is what protects this."""
+        token = "aB-cD_eF" * 5  # mixed case, url-safe alphabet
+        invite = make_invite(token_hash=hash_magic_link_token(token))
+        self._with_invite(mock_session, invite)
+
+        await invite_service.redeem_invite(mock_session, token)
+
+        # The hash of the UPPERCASED token would not match the stored one.
+        assert hash_magic_link_token(token) != hash_magic_link_token(token.upper())
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_token_is_rejected_identically_to_an_unknown_code(self, mock_session):
+        """Distinct wording would tell a stranger which guesses landed."""
+        self._with_invite(mock_session, None)
+        with pytest.raises(InviteError) as token_err:
+            await invite_service.redeem_invite(mock_session, generate_magic_link_token())
+
+        self._with_invite(mock_session, None)
+        with pytest.raises(InviteError) as code_err:
+            await invite_service.redeem_invite(mock_session, "BETA-ZZZZ9999")
+
+        assert str(token_err.value) == str(code_err.value)
+
+    @pytest.mark.asyncio
+    async def test_a_spent_invite_is_rejected_identically_to_an_unknown_one(self, mock_session):
+        token = generate_magic_link_token()
+        self._with_invite(
+            mock_session,
+            make_invite(token_hash=hash_magic_link_token(token), used_count=1, max_uses=1),
+        )
+        with pytest.raises(InviteError) as spent:
+            await invite_service.redeem_invite(mock_session, token)
+
+        self._with_invite(mock_session, None)
+        with pytest.raises(InviteError) as unknown:
+            await invite_service.redeem_invite(mock_session, generate_magic_link_token())
+
+        assert str(spent.value) == str(unknown.value)
+
+    @pytest.mark.asyncio
+    async def test_accepted_at_is_set_once_not_on_every_redemption(self, mock_session):
+        """A shared code records when it was FIRST accepted. Overwriting would
+        retarget the funnel's conversion at the most recent registrant."""
+        first = datetime(2026, 1, 1, tzinfo=UTC)
+        invite = make_invite(max_uses=5, used_count=1, accepted_at=first)
+        self._with_invite(mock_session, invite)
+
+        await invite_service.redeem_invite(mock_session, "BETA-ABCD2345")
+
+        assert invite.accepted_at == first
+
+    @pytest.mark.asyncio
+    async def test_a_code_still_redeems_by_code(self, mock_session):
+        """The token branch must not have broken the original path."""
+        invite = make_invite()
+        self._with_invite(mock_session, invite)
+
+        await invite_service.redeem_invite(mock_session, "BETA-ABCD2345")
+
+        where = str(mock_session.execute.await_args.args[0]).split("WHERE", 1)[1]
+        assert "invite_codes.code" in where
+        assert "token_hash" not in where
