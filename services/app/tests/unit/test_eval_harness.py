@@ -262,9 +262,12 @@ class TestLoadCases:
 
 
 class TestReport:
-    def _score(self, case_id, coverage=1.0, fabricated=None, calls=1, tokens=(100, 50)):
+    def _aggregate(self, case_id, runs):
+        return runner.CaseAggregate(case_id=case_id, runs=runs)
+
+    def _score(self, coverage=1.0, fabricated=None, calls=1, tokens=(100, 50)):
         return scoring.CaseScore(
-            case_id=case_id,
+            case_id="x",
             coverage=coverage,
             fabricated=fabricated or [],
             calls=calls,
@@ -274,7 +277,10 @@ class TestReport:
 
     def test_aggregates_pass_count_and_coverage(self):
         report = runner.RunReport(backend="zai")
-        report.scores = [self._score("a"), self._score("b", coverage=0.5)]
+        report.cases = [
+            self._aggregate("a", [self._score()]),
+            self._aggregate("b", [self._score(coverage=0.5)]),
+        ]
 
         assert report.passed == 1
         assert report.coverage == 0.75
@@ -282,7 +288,7 @@ class TestReport:
     def test_totals_the_cost(self):
         """Now that metering exists, an eval run reports what it spent."""
         report = runner.RunReport(backend="zai")
-        report.scores = [self._score("a"), self._score("b")]
+        report.cases = [self._aggregate("a", [self._score(), self._score()])]
 
         assert report.total_calls == 2
         assert report.total_tokens == 300
@@ -290,20 +296,93 @@ class TestReport:
     def test_an_empty_report_does_not_divide_by_zero(self):
         assert runner.RunReport(backend="zai").coverage == 0.0
 
-    def test_the_formatted_report_names_fabrications_loudly(self):
+    def test_the_formatted_report_names_persistent_fabrications_loudly(self):
         report = runner.RunReport(backend="zai")
-        report.scores = [self._score("a", fabricated=["BCNF"])]
+        report.cases = [self._aggregate("a", [self._score(fabricated=["BCNF"])])]
 
         text = runner.format_report(report)
 
-        assert "FABRICATED" in text
+        assert "FABRICATED every run" in text
         assert "BCNF" in text
 
     def test_the_json_report_round_trips(self):
         report = runner.RunReport(backend="zai")
-        report.scores = [self._score("a")]
+        report.cases = [self._aggregate("a", [self._score()])]
 
         assert json.loads(json.dumps(report.to_dict()))["backend"] == "zai"
+
+
+class TestRepeatedRuns:
+    """`-n` exists because one run is a sample, not a verdict.
+
+    The first live run of this harness found four fabrications on
+    `normalisation`; a later run of the same case found one. Reporting either
+    number alone invites acting on noise.
+    """
+
+    def _agg(self, *fabrication_lists, coverage=1.0):
+        runs = [
+            scoring.CaseScore(case_id="a", coverage=coverage, fabricated=list(f))
+            for f in fabrication_lists
+        ]
+        return runner.CaseAggregate(case_id="a", runs=runs)
+
+    def test_a_fabrication_in_every_run_is_persistent(self):
+        """A property of the prompt, and worth fixing."""
+        agg = self._agg(["BCNF"], ["BCNF"], ["BCNF"])
+
+        assert agg.persistent_fabrications == ["BCNF"]
+        assert agg.occasional_fabrications == []
+
+    def test_a_fabrication_in_some_runs_is_occasional(self):
+        """Real, but not reliably reproducible — a different call to make."""
+        agg = self._agg(["BCNF"], [], ["BCNF"])
+
+        assert agg.persistent_fabrications == []
+        assert agg.occasional_fabrications == [("BCNF", 2)]
+
+    def test_frequency_is_reported_per_term(self):
+        agg = self._agg(["BCNF", "4NF"], ["BCNF"], ["BCNF", "5NF"])
+
+        assert agg.fabrication_frequency == {"BCNF": 3, "4NF": 1, "5NF": 1}
+
+    def test_a_case_passes_only_if_every_run_did(self):
+        """Passing sometimes is not passing."""
+        agg = self._agg([], ["BCNF"], [])
+
+        assert agg.passed_runs == 2
+        assert not agg.passed
+
+    def test_disagreeing_runs_are_flagged_unstable(self):
+        """An unstable case means the number is not repeatable, so comparing it
+        against a previous run tells you nothing — a different problem from
+        failing, and reported separately."""
+        agg = self._agg([], ["BCNF"])
+
+        assert not agg.stable
+
+    def test_runs_that_all_agree_are_stable_whether_passing_or_failing(self):
+        assert self._agg([], []).stable
+        assert self._agg(["BCNF"], ["BCNF"]).stable
+
+    def test_the_report_names_unstable_cases(self):
+        report = runner.RunReport(backend="zai", n=2)
+        report.cases = [self._agg([], ["BCNF"])]
+
+        text = runner.format_report(report)
+
+        assert "UNSTABLE" in text
+        assert "1/2 runs" in text
+
+    def test_faithfulness_is_averaged_across_runs(self):
+        agg = self._agg([], [])
+        agg.runs[0].faithfulness = 4
+        agg.runs[1].faithfulness = 2
+
+        assert agg.mean_faithfulness == 3.0
+
+    def test_faithfulness_is_none_when_the_judge_never_answered(self):
+        assert self._agg([], []).mean_faithfulness is None
 
 
 class _StubAgent:
@@ -362,7 +441,7 @@ class TestRunnerEndToEnd:
         )
 
         assert report.passed == 1
-        assert report.scores[0].faithfulness == 5
+        assert report.cases[0].runs[0].faithfulness == 5
         # Summary call plus judge call, with the tokens the metering reported.
         assert report.total_calls == 2
         assert report.total_tokens == 1740
@@ -376,7 +455,7 @@ class TestRunnerEndToEnd:
         )
 
         assert report.passed == 0
-        assert "BCNF" in report.scores[0].fabricated
+        assert "BCNF" in report.cases[0].persistent_fabrications
 
     async def test_a_judge_failure_does_not_lose_the_deterministic_result(self):
         """The free half of the eval is worth reporting even when the paid half
@@ -388,8 +467,8 @@ class TestRunnerEndToEnd:
         report, _ = await self._run(_summary(body=body), judge_reply=None)
 
         assert report.passed == 1
-        assert report.scores[0].faithfulness is None
-        assert "judge unavailable" in report.scores[0].judge_error
+        assert report.cases[0].runs[0].faithfulness is None
+        assert "judge unavailable" in report.cases[0].runs[0].judge_error
 
     async def test_no_judge_skips_the_second_call_entirely(self):
         """`--no-judge` is what makes this runnable with no credentials."""
