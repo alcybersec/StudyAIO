@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { analyticsApi, artifactsApi, assetsApi, chatApi, conceptsApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
 import { adminApi } from '../api/admin'
-import type { AdminUserUpdate, CreateSessionRequest, DashboardData, DeadlineUpdate, MergeConflictPolicy, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
+import { feedbackApi } from '../api/feedback'
+import type { AdminUserUpdate, CreateSessionRequest, FeedbackRequest, FeedbackStatus, DashboardData, DeadlineUpdate, MergeConflictPolicy, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -674,6 +675,30 @@ export function useSystemMetrics() {
   return useQuery({
     queryKey: ['admin', 'metrics'],
     queryFn: adminApi.getMetrics,
+  })
+}
+
+export function useSubmitFeedback() {
+  return useMutation({
+    mutationFn: (body: FeedbackRequest) => feedbackApi.submit(body),
+  })
+}
+
+export function useAdminFeedback(status?: FeedbackStatus) {
+  return useQuery({
+    queryKey: ['admin', 'feedback', status ?? 'all'],
+    queryFn: () => feedbackApi.list(status ? { status } : {}),
+  })
+}
+
+export function useSetFeedbackStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: FeedbackStatus }) =>
+      feedbackApi.setStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'feedback'] })
+    },
   })
 }
 

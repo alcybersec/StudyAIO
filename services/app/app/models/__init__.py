@@ -20,6 +20,7 @@ from app.models.daily_challenge import DailyChallenge
 from app.models.deadline import Deadline
 from app.models.exam import Exam
 from app.models.extraction import Extraction
+from app.models.feedback import Feedback
 from app.models.flashcard import Flashcard
 from app.models.flashcard_review import FlashcardReview
 from app.models.invite_code import InviteCode
@@ -60,6 +61,7 @@ __all__ = [
     "DailyChallenge",
     "Deadline",
     "Exam",
+    "Feedback",
     "Extraction",
     "Flashcard",
     "FlashcardReview",

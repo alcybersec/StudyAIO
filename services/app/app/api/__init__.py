@@ -14,6 +14,7 @@ from app.api.courses import router as courses_router
 from app.api.dashboard import router as dashboard_router
 from app.api.exams import router as exams_router
 from app.api.exports import router as exports_router
+from app.api.feedback import router as feedback_router
 from app.api.files import router as files_router
 from app.api.gamification import router as gamification_router
 from app.api.notifications import router as notifications_router
@@ -40,6 +41,7 @@ __all__ = [
     "courses_router",
     "dashboard_router",
     "exams_router",
+    "feedback_router",
     "exports_router",
     "gamification_router",
     "notifications_router",

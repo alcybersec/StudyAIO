@@ -106,6 +106,9 @@ class Settings(BaseSettings):
     # Rate limiting
     rate_limit_uploads: str = "10/minute"
     rate_limit_qa: str = "20/minute"
+    #: Generous enough that a tester reporting three things in a row is
+    #: never blocked, tight enough that the endpoint is not a spam vector.
+    rate_limit_feedback: str = "10/minute"
 
     # OpenAPI
     openapi_enabled: bool = True
