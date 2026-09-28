@@ -39,6 +39,16 @@ variables:
   # The torch CPU wheel alone is ~200MB; the CPU index keeps CI off the CUDA build.
   PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
   PIP_CACHE_DIR: $CI_PROJECT_DIR/.cache/pip
+  # Pin every resolved version, direct and transitive, for every pip install in
+  # this file. requirements.txt still decides WHAT is installed; the lock only
+  # fixes WHICH VERSION, so CI does not re-resolve against a moving index on
+  # each run. GL#7: e2e-tests failed with ResolutionImpossible on an unchanged
+  # requirements.txt and passed on a plain retry -- a resolve that consults the
+  # network for candidates can fail on a run where nothing changed.
+  #
+  # Absolute, because backend-tests and e2e both `cd services/app` first.
+  # Regenerate with ./scripts/lock-requirements.sh after editing requirements.txt.
+  PIP_CONSTRAINT: $CI_PROJECT_DIR/services/app/requirements.lock.txt
   npm_config_cache: $CI_PROJECT_DIR/.cache/npm
 
 # Redis has no client binary in these images, so reachability is checked in pure
@@ -59,7 +69,7 @@ variables:
 
 .pip-cache: &pip-cache
   key:
-    files: [services/app/requirements.txt]
+    files: [services/app/requirements.txt, services/app/requirements.lock.txt]
     prefix: pip
   paths: [.cache/pip]
 
