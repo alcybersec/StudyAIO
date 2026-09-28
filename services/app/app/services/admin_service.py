@@ -298,9 +298,13 @@ async def get_beta_funnel(session: AsyncSession, include_admins: bool = False) -
 
     The steps, and what each one actually means:
 
-    * **invites_issued / invites_redeemed** — capacity handed out versus used.
+    * **invites_issued / invites_redeemed** — *capacity* handed out versus used.
       Issued counts `max_uses` on codes that are neither revoked nor expired, so
       a revoked code stops flattering the number.
+    * **people_invited / invites_sent / invites_accepted** — *people*, from
+      email invites. These are the ones that make "invited → registered" a real
+      conversion: a gap between invited and sent is SMTP, a gap between sent and
+      accepted is the tester. Capacity alone cannot tell those apart.
     * **registered** — accounts that exist.
     * **verified** — `email_verified`. A gap here usually means SMTP, not
       disinterest.
@@ -398,10 +402,36 @@ async def get_beta_funnel(session: AsyncSession, include_admins: bool = False) -
     invites_redeemed = (
         await session.execute(select(func.coalesce(func.sum(InviteCode.used_count), 0)))
     ).scalar_one()
+    # People, not capacity. The two counts above are seats; these are named
+    # individuals, which is the only form in which "invited -> registered" is a
+    # conversion rather than a ratio of unrelated quantities.
+    people_invited = (
+        await session.execute(
+            select(func.count()).select_from(InviteCode).where(InviteCode.email.isnot(None))
+        )
+    ).scalar_one()
+    # Sent, not created: with SMTP down an invite exists and its link works, but
+    # nobody was told about it. A gap here is an infrastructure problem, and it
+    # looks exactly like disinterest if the two are collapsed.
+    invites_sent = (
+        await session.execute(
+            select(func.count()).select_from(InviteCode).where(InviteCode.sent_at.isnot(None))
+        )
+    ).scalar_one()
+    invites_accepted = (
+        await session.execute(
+            select(func.count())
+            .select_from(InviteCode)
+            .where(InviteCode.email.isnot(None), InviteCode.accepted_at.isnot(None))
+        )
+    ).scalar_one()
 
     return {
         "invites_issued": int(invites_issued),
         "invites_redeemed": int(invites_redeemed),
+        "people_invited": int(people_invited),
+        "invites_sent": int(invites_sent),
+        "invites_accepted": int(invites_accepted),
         "registered": registered,
         "verified": verified,
         "uploaded": uploaded,

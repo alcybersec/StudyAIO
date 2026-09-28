@@ -1281,6 +1281,12 @@ export interface InviteCode {
   id: string
   code: string
   note: string | null
+  /** Set only for email invites; null for shared codes. */
+  email: string | null
+  /** When the invite email actually went out. Null means it was never sent. */
+  sent_at: string | null
+  /** When it was first redeemed. */
+  accepted_at: string | null
   max_uses: number
   used_count: number
   uses_remaining: number
@@ -1288,6 +1294,22 @@ export interface InviteCode {
   expires_at: string | null
   revoked_at: string | null
   created_at: string
+}
+
+export interface InviteSendRequest {
+  email: string
+  expires_in_days?: number | null
+  note?: string | null
+}
+
+/**
+ * The link is returned whether or not the email was delivered, so a broken
+ * SMTP config never blocks onboarding — the admin can pass it on by hand.
+ */
+export interface InviteSendResult {
+  invite: InviteCode
+  invite_url: string
+  email_sent: boolean
 }
 
 export interface InviteCodeList {

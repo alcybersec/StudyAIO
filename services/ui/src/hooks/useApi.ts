@@ -661,6 +661,18 @@ export function useCreateInvite() {
   })
 }
 
+export function useSendInvite() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminApi.sendInvite,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'invites'] })
+      // The funnel's people counts move on every send, so it is stale too.
+      queryClient.invalidateQueries({ queryKey: ['admin', 'funnel'] })
+    },
+  })
+}
+
 export function useRevokeInvite() {
   const queryClient = useQueryClient()
   return useMutation({

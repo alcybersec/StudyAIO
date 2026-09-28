@@ -12,6 +12,10 @@ vi.mock('../hooks/useApi', () => ({
   // The invite panel is exercised in its own tests; here it just needs to render.
   useInvites: vi.fn(() => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })),
   useCreateInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  // Used by InvitePanel's SendInviteForm child. A factory mock replaces the
+  // whole module, so a hook missing here is undefined at call time and every
+  // test in this file fails on an unrelated render error.
+  useSendInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useRevokeInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   // User provisioning is exercised in its own tests; here it just needs to render.
   useCreateAdminUser: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),

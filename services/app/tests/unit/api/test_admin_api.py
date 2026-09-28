@@ -472,6 +472,9 @@ class TestBetaFunnelEndpoint:
     FUNNEL = {
         "invites_issued": 10,
         "invites_redeemed": 4,
+        "people_invited": 6,
+        "invites_sent": 5,
+        "invites_accepted": 3,
         "registered": 4,
         "verified": 3,
         "uploaded": 2,

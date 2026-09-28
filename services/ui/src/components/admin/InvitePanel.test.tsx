@@ -2,17 +2,21 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { InvitePanel } from './InvitePanel'
-import { useCreateInvite, useInvites, useRevokeInvite } from '../../hooks/useApi'
+import { useCreateInvite, useInvites, useRevokeInvite, useSendInvite } from '../../hooks/useApi'
 
 vi.mock('../../hooks/useApi', () => ({
   useInvites: vi.fn(),
   useCreateInvite: vi.fn(),
   useRevokeInvite: vi.fn(),
+  // Used by the SendInviteForm child. Omitting it renders undefined into a
+  // hook call and every test in this file fails on an unrelated error.
+  useSendInvite: vi.fn(),
 }))
 
 const mockInvites = vi.mocked(useInvites)
 const mockCreate = vi.mocked(useCreateInvite)
 const mockRevoke = vi.mocked(useRevokeInvite)
+const mockSend = vi.mocked(useSendInvite)
 
 const asResult = (q: object) => q as never
 
@@ -21,6 +25,9 @@ function invite(overrides: Record<string, unknown> = {}) {
     id: 'inv-1',
     code: 'BETA-7F3KQ2MN',
     note: 'Sam',
+    email: null,
+    sent_at: null,
+    accepted_at: null,
     max_uses: 1,
     used_count: 0,
     uses_remaining: 1,
@@ -45,11 +52,13 @@ function withInvites(invites: ReturnType<typeof invite>[]) {
 
 const createMutate = vi.fn()
 const revokeMutate = vi.fn()
+const sendMutate = vi.fn()
 
 beforeEach(() => {
   vi.clearAllMocks()
   mockCreate.mockReturnValue(asResult({ mutate: createMutate, isPending: false }))
   mockRevoke.mockReturnValue(asResult({ mutate: revokeMutate, isPending: false }))
+  mockSend.mockReturnValue(asResult({ mutate: sendMutate, isPending: false }))
   withInvites([])
 })
 
@@ -120,5 +129,31 @@ describe('InvitePanel', () => {
     render(<InvitePanel />)
 
     expect(screen.getByText(/invite codes couldn't load/i)).toBeInTheDocument()
+  })
+})
+
+describe('InvitePanel email invites', () => {
+  it('distinguishes a shared code from one addressed to a person', () => {
+    withInvites([invite(), invite({ id: 'inv-2', code: 'BETA-AAAA1111', email: 'sam@x.com' })])
+    render(<InvitePanel />)
+
+    expect(screen.getByText('shared code')).toBeInTheDocument()
+    expect(screen.getByText('sam@x.com')).toBeInTheDocument()
+  })
+
+  it('flags an invite that was created but never delivered', () => {
+    // SMTP failing looks exactly like a disinterested tester unless the two
+    // are told apart in the list.
+    withInvites([invite({ email: 'sam@x.com', sent_at: null })])
+    render(<InvitePanel />)
+
+    expect(screen.getByText(/not sent/i)).toBeInTheDocument()
+  })
+
+  it('does not flag one that was delivered', () => {
+    withInvites([invite({ email: 'sam@x.com', sent_at: '2026-09-02T00:00:00Z' })])
+    render(<InvitePanel />)
+
+    expect(screen.queryByText(/not sent/i)).not.toBeInTheDocument()
   })
 })
