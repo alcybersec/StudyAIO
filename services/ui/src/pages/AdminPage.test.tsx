@@ -22,6 +22,8 @@ vi.mock('../hooks/useApi', () => ({
   // The change-email dialog reads the linked providers to name what it will
   // unlink. `undefined` data is the unknown case, which keeps the generic wording.
   useAdminUserDetail: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
+  // The funnel has its own tests; here it just needs to render.
+  useBetaFunnel: vi.fn(() => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })),
 }))
 
 const toastSuccess = vi.fn()

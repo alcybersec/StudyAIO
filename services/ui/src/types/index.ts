@@ -889,6 +889,30 @@ export interface TestNotificationResponse {
 
 // ── Admin ──────────────────────────────────────────────────────
 
+/**
+ * Where invited testers stop, derived from data the app already records.
+ *
+ * Admins are excluded by default — on an instance with a handful of testers the
+ * operator's own account moves every percentage. `excluded_admins` and
+ * `excluded_demo` are returned so these steps reconcile against
+ * `SystemMetrics.total_users`, which counts everybody.
+ */
+export interface BetaFunnel {
+  invites_issued: number
+  invites_redeemed: number
+  registered: number
+  verified: number
+  uploaded: number
+  processed: number
+  returned: number
+  active_7d: number
+  /** Registered and never uploaded. The most actionable number here. */
+  stalled_after_registering: number
+  excluded_admins: number
+  excluded_demo: number
+  include_admins: boolean
+}
+
 export interface AdminUser {
   id: string
   email: string

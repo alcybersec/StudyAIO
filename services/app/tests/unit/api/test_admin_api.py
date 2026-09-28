@@ -463,3 +463,56 @@ class TestAdminUserDetails:
         assert data["subscription"] is None
         assert data["storage"] is None
         assert data["pipeline"] is None
+
+
+class TestBetaFunnelEndpoint:
+    """GET /api/admin/funnel — wiring only; the counts are covered by
+    `tests/integration/test_beta_funnel.py`, because they are SQL."""
+
+    FUNNEL = {
+        "invites_issued": 10,
+        "invites_redeemed": 4,
+        "registered": 4,
+        "verified": 3,
+        "uploaded": 2,
+        "processed": 1,
+        "returned": 1,
+        "active_7d": 1,
+        "stalled_after_registering": 2,
+        "excluded_admins": 1,
+        "excluded_demo": 0,
+        "include_admins": False,
+    }
+
+    async def test_returns_the_funnel(self, admin_client):
+        with patch(
+            "app.api.admin.admin_service.get_beta_funnel",
+            new_callable=AsyncMock,
+            return_value=self.FUNNEL,
+        ):
+            response = await admin_client.get("/api/admin/funnel")
+
+        assert response.status_code == 200
+        assert response.json()["stalled_after_registering"] == 2
+
+    async def test_excludes_admins_by_default(self, admin_client):
+        """The default is the load-bearing half: on a small instance the
+        operator's own account moves every percentage."""
+        mock = AsyncMock(return_value=self.FUNNEL)
+        with patch("app.api.admin.admin_service.get_beta_funnel", mock):
+            await admin_client.get("/api/admin/funnel")
+
+        assert mock.await_args.kwargs["include_admins"] is False
+
+    async def test_admins_can_be_opted_in(self, admin_client):
+        mock = AsyncMock(return_value={**self.FUNNEL, "include_admins": True})
+        with patch("app.api.admin.admin_service.get_beta_funnel", mock):
+            await admin_client.get("/api/admin/funnel?include_admins=true")
+
+        assert mock.await_args.kwargs["include_admins"] is True
+
+    async def test_requires_an_admin(self, async_client):
+        """It reports on every account on the instance."""
+        response = await async_client.get("/api/admin/funnel")
+
+        assert response.status_code in (401, 403)

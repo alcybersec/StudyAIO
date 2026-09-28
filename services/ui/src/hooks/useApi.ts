@@ -677,6 +677,13 @@ export function useSystemMetrics() {
   })
 }
 
+export function useBetaFunnel(includeAdmins = false) {
+  return useQuery({
+    queryKey: ['admin', 'funnel', includeAdmins],
+    queryFn: () => adminApi.getFunnel(includeAdmins),
+  })
+}
+
 export function useAdminUserDetail(userId: string | undefined) {
   return useQuery({
     queryKey: ['admin', 'users', userId, 'details'],
