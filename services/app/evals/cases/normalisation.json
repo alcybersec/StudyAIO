@@ -1,0 +1,38 @@
+{
+  "id": "normalisation",
+  "title": "Database Normalisation",
+  "course": "CSIT302",
+  "week": 3,
+  "notes": "Synthetic, per .claude/rules/tests.md: never real student data. The must_not_mention terms are the point of this case — BCNF and 4NF are the obvious next topics for anyone who knows the subject, and the lecture deliberately stops at 3NF. A summary that names them is importing knowledge the student's lecture did not contain, which is the failure mode that matters for a study tool.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 3 — Database Normalisation.\n\nNormalisation is the process of organising columns and tables to reduce redundancy. Redundancy causes update anomalies: the same fact stored twice can be changed in one place and not the other.\n\nA functional dependency A -> B means that for any given value of A there is exactly one value of B. In a student table, student_id -> student_name is a functional dependency: one id, one name."
+    },
+    {
+      "page": 2,
+      "text": "First normal form (1NF) requires that every column holds a single atomic value. A column containing 'maths, physics, chemistry' violates 1NF; those belong in three rows of a separate table.\n\nSecond normal form (2NF) requires 1NF plus no partial dependency: no non-key column may depend on only part of a composite primary key. If the key is (student_id, course_code) then course_title depends on course_code alone, which is a partial dependency and must move to a course table."
+    },
+    {
+      "page": 3,
+      "text": "Third normal form (3NF) requires 2NF plus no transitive dependency: no non-key column may depend on another non-key column. If student_id -> postcode and postcode -> city, then city depends on the key only through postcode. That is transitive, and city belongs in a postcode table.\n\nIn practice most operational schemas are normalised to 3NF and stop there. Going further can cost more in joins than it saves in storage."
+    }
+  ],
+  "must_mention": [
+    "1NF",
+    "2NF",
+    "3NF",
+    "functional dependency",
+    "partial dependency",
+    "transitive dependency",
+    "redundancy"
+  ],
+  "must_not_mention": [
+    "BCNF",
+    "Boyce-Codd",
+    "4NF",
+    "fourth normal form",
+    "5NF",
+    "denormalisation"
+  ]
+}
