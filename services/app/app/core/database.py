@@ -18,6 +18,13 @@ engine = create_async_engine(
     max_overflow=settings.db_max_overflow,
     pool_recycle=settings.db_pool_recycle,
     pool_pre_ping=True,
+    # asyncpg waits 60 seconds to connect by default. An unreachable database
+    # then hangs every request for a full minute before failing, which reads as
+    # a deadlock rather than an outage — and in the unit suite it was exactly
+    # that: `tests/unit/api/test_uploads.py` took 60s *per test* because two
+    # endpoints open their own session outside the overridable dependency
+    # (GL#6). Bounded here so a bad DSN or a down database fails fast.
+    connect_args={"timeout": settings.db_connect_timeout},
 )
 
 async_session_factory = async_sessionmaker(
