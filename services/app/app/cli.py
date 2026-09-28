@@ -214,7 +214,10 @@ async def _run_evals(only: str | None, no_judge: bool, out: str | None, n: int) 
         pathlib.Path(out).write_text(_json.dumps(report.to_dict(), indent=2) + "\n")
         print(f"\nJSON written to {out}")
 
-    return 0 if report.passed == len(report.scores) else 1
+    # report.cases, not report.scores: the aggregate rename that came with the
+    # -n flag missed this line, and because it runs AFTER the report prints, the
+    # output looked completely healthy above an AttributeError traceback.
+    return 0 if report.passed == len(report.cases) else 1
 
 
 def main(argv: list[str] | None = None) -> int:
