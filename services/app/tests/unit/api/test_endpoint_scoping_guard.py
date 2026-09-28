@@ -89,6 +89,11 @@ GUARDED_ELSEWHERE: dict[str, str] = {
     "admin:revoke_invite:invite_service.revoke_invite": (
         "admin-only route behind require_role('admin'); invites have no per-user owner"
     ),
+    "feedback:set_feedback_status:feedback_service.set_status": (
+        "admin-only route behind require_role('admin'); triaging is deliberately "
+        "cross-user — an admin acts on everyone's feedback, and scoping it to the "
+        "caller would mean only your own reports could be closed"
+    ),
 }
 
 # Real, currently-unfixed findings: a live IDOR that a PR is deliberately not

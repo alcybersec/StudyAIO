@@ -24,6 +24,9 @@ vi.mock('../hooks/useApi', () => ({
   useAdminUserDetail: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
   // The funnel has its own tests; here it just needs to render.
   useBetaFunnel: vi.fn(() => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })),
+  // The feedback inbox has its own tests; here it just needs to render.
+  useAdminFeedback: vi.fn(() => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })),
+  useSetFeedbackStatus: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }))
 
 const toastSuccess = vi.fn()

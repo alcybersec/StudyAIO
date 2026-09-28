@@ -12,6 +12,8 @@ const mockUseCourses = vi.fn()
 
 vi.mock('../hooks/useApi', () => ({
   useCourses: () => mockUseCourses(),
+  // The palette hosts the feedback modal; it only needs to render here.
+  useSubmitFeedback: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 vi.mock('../api/search', () => ({

@@ -2027,6 +2027,68 @@ destructive action breaks no links on no evidence.
 
 **Response** `200` `UserDetailResponse` | `404` user not found
 
+## Feedback
+
+### `POST /api/feedback`
+
+Report a bug, suggest something, or say what was confusing. Authenticated, rate
+limited by `RATE_LIMIT_FEEDBACK` (default `10/minute`).
+
+Sentry records what crashed and `GET /api/admin/funnel` records that a tester
+stopped after their first upload. Neither records *why* — that only comes from
+the person.
+
+**Body** `FeedbackRequest`
+| Field | Type | Description |
+|-------|------|-------------|
+| `kind` | string | `bug`, `idea` or `confusing` |
+| `message` | string | 1–4000 characters |
+| `route` | string? | The route the reporter was on. Supplied by the client — the request lands on `/api/feedback` whatever page they were looking at. |
+| `app_version` | string? | Commit SHA of their build, so a fixed bug reads differently to one still live. |
+
+The user agent is taken from the request header, and the feedback is always
+filed against the authenticated caller — never a client-supplied id.
+
+Linked admins are pinged on Telegram **after** the commit, best effort: a
+Telegram outage cannot roll back stored feedback, and the ping can never describe
+something that was not saved. A failure there still returns `201`.
+
+**Response** `201` `FeedbackResponse` | `400` invalid kind or message | `422` schema violation
+
+---
+
+### `GET /api/admin/feedback`
+
+Everything users have sent, newest first. Admin only.
+
+**Query Parameters**
+| Param | Type | Description |
+|-------|------|-------------|
+| `status` | string | `new`, `triaged` or `closed` |
+| `kind` | string | `bug`, `idea` or `confusing` |
+| `offset`, `limit` | int | Pagination; limit max 100 |
+
+Carries `counts` (per-status totals) so the admin UI can badge unread without a
+second request, and `user_email` on each item.
+
+**Response** `200` `FeedbackListResponse`
+
+---
+
+### `PATCH /api/admin/feedback/{feedback_id}`
+
+Move one item to `triaged` or `closed`. Admin only.
+
+Deliberately **not** scoped to the caller: an admin triages everyone's feedback,
+and scoping it would mean only your own reports could be closed. Recorded in
+`GUARDED_ELSEWHERE` in `tests/unit/api/test_endpoint_scoping_guard.py` with that
+reason, since the IDOR guard flags every id-addressed lookup by default.
+
+**Body** `FeedbackStatusRequest` — `{"status": "triaged"}`
+**Response** `200` `FeedbackResponse` | `400` unknown status | `404` not found
+
+---
+
 ### `GET /api/admin/funnel`
 
 Where invited testers stop: invited → registered → verified → uploaded →

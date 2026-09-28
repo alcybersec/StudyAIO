@@ -897,6 +897,42 @@ export interface TestNotificationResponse {
  * `excluded_demo` are returned so these steps reconcile against
  * `SystemMetrics.total_users`, which counts everybody.
  */
+/** What a reporter says a piece of feedback is. */
+export type FeedbackKind = 'bug' | 'idea' | 'confusing'
+
+/** Triage state; `new` until somebody looks at it. */
+export type FeedbackStatus = 'new' | 'triaged' | 'closed'
+
+export interface Feedback {
+  id: string
+  kind: FeedbackKind
+  message: string
+  /** The route the reporter was on, so a report can be reproduced. */
+  route: string | null
+  /** Commit SHA of their build, so a fixed bug reads differently to a live one. */
+  app_version: string | null
+  status: FeedbackStatus
+  created_at: string | null
+  /** Admin listings only; absent on the reporter's own acknowledgement. */
+  user_email?: string | null
+}
+
+export interface FeedbackRequest {
+  kind: FeedbackKind
+  message: string
+  route?: string | null
+  app_version?: string | null
+}
+
+export interface FeedbackList {
+  items: Feedback[]
+  total: number
+  offset: number
+  limit: number
+  /** Per-status totals, so the admin UI can badge unread without a second call. */
+  counts: Record<FeedbackStatus, number>
+}
+
 export interface BetaFunnel {
   invites_issued: number
   invites_redeemed: number
