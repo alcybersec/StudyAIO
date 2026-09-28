@@ -89,6 +89,11 @@ GUARDED_ELSEWHERE: dict[str, str] = {
     "admin:revoke_invite:invite_service.revoke_invite": (
         "admin-only route behind require_role('admin'); invites have no per-user owner"
     ),
+    "admin:resend_invite:invite_service.resend_email_invite": (
+        "admin-only route behind require_role('admin'); invites have no per-user owner. "
+        "The invite's `email` is a recipient, not an owner — nobody authenticates as it, "
+        "and the addressee has no account yet, so there is no caller to scope to"
+    ),
     "feedback:set_feedback_status:feedback_service.set_status": (
         "admin-only route behind require_role('admin'); triaging is deliberately "
         "cross-user — an admin acts on everyone's feedback, and scoping it to the "

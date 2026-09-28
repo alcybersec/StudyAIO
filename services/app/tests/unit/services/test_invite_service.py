@@ -372,3 +372,116 @@ class TestRedeemToken:
         where = str(mock_session.execute.await_args.args[0]).split("WHERE", 1)[1]
         assert "invite_codes.code" in where
         assert "token_hash" not in where
+
+
+class TestResendEmailInvite:
+    """Resending rotates the token: the original is unrecoverable by design."""
+
+    @pytest.mark.asyncio
+    async def test_issues_a_different_token(self, mock_session, monkeypatch):
+        original = make_invite(
+            email="tester@example.com", token_hash=hash_magic_link_token("old-token")
+        )
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = original
+        mock_session.execute.return_value = result
+
+        minted = await invite_service.resend_email_invite(mock_session, "inv-1")
+
+        assert minted is not None
+        assert minted.raw_token != "old-token"
+        assert minted.invite.token_hash == hash_magic_link_token(minted.raw_token)
+
+    @pytest.mark.asyncio
+    async def test_the_previous_link_stops_working(self, mock_session):
+        """The load-bearing one. A resend that left the old token live would mean
+        the first email stays a working credential wherever it now sits."""
+        old_token = generate_magic_link_token()
+        invite = make_invite(
+            email="tester@example.com", token_hash=hash_magic_link_token(old_token)
+        )
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = invite
+        mock_session.execute.return_value = result
+
+        await invite_service.resend_email_invite(mock_session, "inv-1")
+
+        assert invite.token_hash != hash_magic_link_token(old_token)
+
+    @pytest.mark.asyncio
+    async def test_clears_sent_at(self, mock_session):
+        """Until the new email goes out, the row must not claim a delivery."""
+        invite = make_invite(
+            email="t@x.com",
+            token_hash=hash_magic_link_token("t"),
+            sent_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = invite
+        mock_session.execute.return_value = result
+
+        await invite_service.resend_email_invite(mock_session, "inv-1")
+
+        assert invite.sent_at is None
+
+    @pytest.mark.asyncio
+    async def test_renews_an_expired_invite(self, mock_session):
+        """An expired link is the usual reason to resend, so a fresh token with
+        the old dead expiry would be useless."""
+        invite = make_invite(
+            email="t@x.com",
+            token_hash=hash_magic_link_token("t"),
+            expires_at=datetime(2020, 1, 1, tzinfo=UTC),
+        )
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = invite
+        mock_session.execute.return_value = result
+
+        await invite_service.resend_email_invite(mock_session, "inv-1", expires_in_days=14)
+
+        assert invite.expires_at > datetime.now(UTC)
+
+    @pytest.mark.asyncio
+    async def test_refuses_a_shared_code(self, mock_session):
+        """A shared code has no address to send to."""
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = make_invite()
+        mock_session.execute.return_value = result
+
+        with pytest.raises(InviteError):
+            await invite_service.resend_email_invite(mock_session, "inv-1")
+
+    @pytest.mark.asyncio
+    async def test_refuses_a_revoked_invite(self, mock_session):
+        """Revoking was a decision; re-inviting past it should be explicit."""
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = make_invite(
+            email="t@x.com",
+            token_hash=hash_magic_link_token("t"),
+            revoked_at=datetime.now(UTC),
+        )
+        mock_session.execute.return_value = result
+
+        with pytest.raises(InviteError):
+            await invite_service.resend_email_invite(mock_session, "inv-1")
+
+    @pytest.mark.asyncio
+    async def test_refuses_one_already_accepted(self, mock_session):
+        """The account exists — that person needs a password reset, not an
+        invitation."""
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = make_invite(
+            email="t@x.com", token_hash=hash_magic_link_token("t"), used_count=1, max_uses=1
+        )
+        mock_session.execute.return_value = result
+
+        with pytest.raises(InviteError):
+            await invite_service.resend_email_invite(mock_session, "inv-1")
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_an_unknown_invite(self, mock_session):
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = result
+
+        assert await invite_service.resend_email_invite(mock_session, "nope") is None
