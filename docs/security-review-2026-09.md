@@ -402,10 +402,19 @@ open MR rather than assumed. Nothing automated pushes either: no CI job or scrip
 `git push`, the deploy sends only a SHA over SSH and checks it out, and the GitHub mirror is
 outbound.
 
-One part of this finding remains open, and it is not StudyAIO's to close:
-`the_arbitrage_project` and `txn` still carry `only_allow_merge_if_pipeline_succeeds = false`.
-Deliberately untouched — those repositories' workflows (the arbitrage one deploys manually,
-and moves real money) are not this project's to assume.
+The fleet-wide half is closed too, on 2026-09-28: `the_arbitrage_project` and
+`transaction_intelligence_app` now carry the same two flags. Both were checked first for the
+failure mode that matters — a project with no working CI would have had *every* MR made
+unmergeable by this change — and both have a `.gitlab-ci.yml` with recent green runs. The two
+open MRs on `the_arbitrage_project` were confirmed still `mergeable` afterwards rather than
+assumed to be.
+
+That check found a real defect in `transaction_intelligence_app`: every non-`main` pipeline
+since 2026-09-27 is created with **zero jobs** and reported `skipped`, though the config at
+those commits has seven jobs with no branch rules. It is specific to that project — the same
+runner served `the_arbitrage_project` fine throughout — and the new gate turns it into a merge
+blocker there, failing safe but stranding the next MR. Filed on that repository as its issue
+#1, with the stopgap recorded.
 
 One more thing changed the risk picture here: StudyAIO's `main` auto-deploys again as of
 2026-09-27, and `/opt/studyaio`'s origin is now GitLab rather than GitHub, so a deploy no
