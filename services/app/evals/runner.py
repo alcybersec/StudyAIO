@@ -25,58 +25,165 @@ CASES_DIR = Path(__file__).resolve().parent / "cases"
 
 
 @dataclass
+class CaseAggregate:
+    """One case run several times.
+
+    A single run is a **sample**, not a verdict: generation is
+    non-deterministic, and the first live run of this harness produced four
+    fabrications on `normalisation` where a later run produced one. Reporting a
+    single draw as a finding invites acting on noise.
+
+    What repetition buys is the distinction between a fabrication that happens
+    *every* time — a property of the prompt, worth fixing — and one that happens
+    occasionally, which is the model's temperature and may not be worth chasing.
+    """
+
+    case_id: str
+    runs: list[CaseScore] = field(default_factory=list)
+
+    @property
+    def n(self) -> int:
+        return len(self.runs)
+
+    @property
+    def passed_runs(self) -> int:
+        return sum(1 for r in self.runs if r.passed)
+
+    @property
+    def passed(self) -> bool:
+        """Every run, not most. A case that fails sometimes is not passing."""
+        return self.n > 0 and self.passed_runs == self.n
+
+    @property
+    def stable(self) -> bool:
+        """Whether the runs agreed with each other at all.
+
+        Reported separately because an unstable case means something different
+        from a failing one: the number in front of you is not repeatable, and
+        comparing it against a previous run tells you nothing.
+        """
+        return self.passed_runs in (0, self.n)
+
+    @property
+    def mean_coverage(self) -> float:
+        return sum(r.coverage for r in self.runs) / self.n if self.n else 0.0
+
+    @property
+    def fabrication_frequency(self) -> dict[str, int]:
+        """Each fabricated term against the number of runs it appeared in."""
+        counts: dict[str, int] = {}
+        for run in self.runs:
+            for term in run.fabricated:
+                counts[term] = counts.get(term, 0) + 1
+        return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+    @property
+    def persistent_fabrications(self) -> list[str]:
+        """Present in every run — a property of the prompt, not the sampling."""
+        return [t for t, c in self.fabrication_frequency.items() if c == self.n]
+
+    @property
+    def occasional_fabrications(self) -> list[tuple[str, int]]:
+        """Present in some runs. Real, but not reliably reproducible."""
+        return [(t, c) for t, c in self.fabrication_frequency.items() if c < self.n]
+
+    @property
+    def faithfulness_scores(self) -> list[int]:
+        return [r.faithfulness for r in self.runs if r.faithfulness is not None]
+
+    @property
+    def mean_faithfulness(self) -> float | None:
+        scores = self.faithfulness_scores
+        return sum(scores) / len(scores) if scores else None
+
+    @property
+    def calls(self) -> int:
+        return sum(r.calls for r in self.runs)
+
+    @property
+    def tokens(self) -> int:
+        return sum(r.input_tokens + r.output_tokens for r in self.runs)
+
+    def to_dict(self) -> dict:
+        return {
+            "case": self.case_id,
+            "n": self.n,
+            "passed": self.passed,
+            "passed_runs": self.passed_runs,
+            "stable": self.stable,
+            "mean_coverage": round(self.mean_coverage, 3),
+            "persistent_fabrications": self.persistent_fabrications,
+            "occasional_fabrications": [
+                {"term": t, "runs": c} for t, c in self.occasional_fabrications
+            ],
+            "fabrication_frequency": self.fabrication_frequency,
+            "faithfulness": self.faithfulness_scores,
+            "mean_faithfulness": (
+                round(self.mean_faithfulness, 2) if self.mean_faithfulness else None
+            ),
+            "calls": self.calls,
+            "tokens": self.tokens,
+            "runs": [
+                {
+                    "passed": r.passed,
+                    "coverage": round(r.coverage, 3),
+                    "missing": r.missing,
+                    "fabricated": r.fabricated,
+                    "missing_sections": r.missing_sections,
+                    "faithfulness": r.faithfulness,
+                    "unsupported_claims": r.unsupported_claims,
+                    "judge_error": r.judge_error,
+                }
+                for r in self.runs
+            ],
+        }
+
+
+@dataclass
 class RunReport:
-    """Everything one run produced."""
+    """Everything one invocation produced."""
 
     backend: str
-    scores: list[CaseScore] = field(default_factory=list)
+    n: int = 1
+    cases: list[CaseAggregate] = field(default_factory=list)
 
     @property
     def passed(self) -> int:
-        return sum(1 for s in self.scores if s.passed)
+        return sum(1 for c in self.cases if c.passed)
+
+    @property
+    def unstable(self) -> list[str]:
+        """Cases whose runs disagreed. Their numbers are not comparable."""
+        return [c.case_id for c in self.cases if not c.stable]
 
     @property
     def coverage(self) -> float:
-        return sum(s.coverage for s in self.scores) / len(self.scores) if self.scores else 0.0
+        return sum(c.mean_coverage for c in self.cases) / len(self.cases) if self.cases else 0.0
 
     @property
-    def fabrications(self) -> int:
-        return sum(len(s.fabricated) for s in self.scores)
+    def persistent_fabrications(self) -> int:
+        return sum(len(c.persistent_fabrications) for c in self.cases)
 
     @property
     def total_tokens(self) -> int:
-        return sum(s.input_tokens + s.output_tokens for s in self.scores)
+        return sum(c.tokens for c in self.cases)
 
     @property
     def total_calls(self) -> int:
-        return sum(s.calls for s in self.scores)
+        return sum(c.calls for c in self.cases)
 
     def to_dict(self) -> dict:
         return {
             "backend": self.backend,
-            "cases": len(self.scores),
+            "n": self.n,
+            "cases": len(self.cases),
             "passed": self.passed,
+            "unstable": self.unstable,
             "mean_coverage": round(self.coverage, 3),
-            "fabrications": self.fabrications,
+            "persistent_fabrications": self.persistent_fabrications,
             "calls": self.total_calls,
             "tokens": self.total_tokens,
-            "scores": [
-                {
-                    "case": s.case_id,
-                    "passed": s.passed,
-                    "coverage": round(s.coverage, 3),
-                    "missing": s.missing,
-                    "fabricated": s.fabricated,
-                    "missing_sections": s.missing_sections,
-                    "faithfulness": s.faithfulness,
-                    "unsupported_claims": s.unsupported_claims,
-                    "judge_error": s.judge_error,
-                    "calls": s.calls,
-                    "input_tokens": s.input_tokens,
-                    "output_tokens": s.output_tokens,
-                }
-                for s in self.scores
-            ],
+            "scores": [c.to_dict() for c in self.cases],
         }
 
 
@@ -131,13 +238,16 @@ async def _judge(agent, case: dict, summary: str, score: CaseScore) -> None:
     )
 
 
-async def run(only: str | None = None, judge: bool = True) -> RunReport:
-    """Summarise every case and score the result.
+async def run(only: str | None = None, judge: bool = True, n: int = 1) -> RunReport:
+    """Summarise every case `n` times and score each result.
 
     Args:
         only: Run a single case id.
         judge: Also ask the model to grade faithfulness. Costs a second call per
-            case; the deterministic checks run either way.
+            run; the deterministic checks run either way.
+        n: Repetitions per case. Generation is non-deterministic, so one run is
+            a sample — `n > 1` is what separates a fabrication that happens
+            every time from one that happened once.
 
     Returns:
         The report.
@@ -146,69 +256,94 @@ async def run(only: str | None = None, judge: bool = True) -> RunReport:
     from app.config import settings
 
     cases = load_cases(only)
-    report = RunReport(backend=settings.agent_backend)
+    report = RunReport(backend=settings.agent_backend, n=n)
 
     for case in cases:
-        agent = get_agent()
-        agent.reset_usage()
+        aggregate = CaseAggregate(case_id=case["id"])
 
-        extraction = ExtractionData(
-            pages=case["pages"],
-            metadata={
-                "course_code": case.get("course", "EVAL"),
-                "week": case.get("week", 1),
-                "title": case.get("title", case["id"]),
-                "filename": f"{case['id']}.pdf",
-            },
-        )
-        result = await agent.generate_summary(extraction, None)
-        score = score_deterministic(case, result.content_md)
+        for attempt in range(n):
+            agent = get_agent()
+            agent.reset_usage()
 
-        if judge:
-            await _judge(agent, case, result.content_md, score)
+            extraction = ExtractionData(
+                pages=case["pages"],
+                metadata={
+                    "course_code": case.get("course", "EVAL"),
+                    "week": case.get("week", 1),
+                    "title": case.get("title", case["id"]),
+                    "filename": f"{case['id']}.pdf",
+                },
+            )
+            result = await agent.generate_summary(extraction, None)
+            score = score_deterministic(case, result.content_md)
 
-        usage = agent.usage
-        score.calls = usage.calls
-        score.input_tokens = usage.input_tokens
-        score.output_tokens = usage.output_tokens
-        report.scores.append(score)
+            if judge:
+                await _judge(agent, case, result.content_md, score)
 
-        logger.info(
-            "eval_case_scored",
-            case=score.case_id,
-            passed=score.passed,
-            coverage=round(score.coverage, 3),
-            fabricated=len(score.fabricated),
-        )
+            usage = agent.usage
+            score.calls = usage.calls
+            score.input_tokens = usage.input_tokens
+            score.output_tokens = usage.output_tokens
+            aggregate.runs.append(score)
+
+            logger.info(
+                "eval_run_scored",
+                case=case["id"],
+                attempt=attempt + 1,
+                of=n,
+                passed=score.passed,
+                coverage=round(score.coverage, 3),
+                fabricated=len(score.fabricated),
+            )
+
+        report.cases.append(aggregate)
 
     return report
 
 
 def format_report(report: RunReport) -> str:
     """A report meant to be read next to the previous one."""
+    suffix = f" (×{report.n})" if report.n > 1 else ""
     lines = [
-        f"Backend: {report.backend}",
-        f"{report.passed}/{len(report.scores)} cases passed"
+        f"Backend: {report.backend}{suffix}",
+        f"{report.passed}/{len(report.cases)} cases passed"
         f" · mean coverage {report.coverage:.0%}"
-        f" · {report.fabrications} fabrication(s)",
-        "",
+        f" · {report.persistent_fabrications} persistent fabrication(s)",
     ]
-    for s in report.scores:
-        mark = "PASS" if s.passed else "FAIL"
-        faith = f"faithfulness {s.faithfulness}/5" if s.faithfulness else "faithfulness n/a"
-        lines.append(f"  [{mark}] {s.case_id}  coverage {s.coverage:.0%}  {faith}")
-        if s.missing:
-            lines.append(f"         missing: {', '.join(s.missing)}")
-        if s.fabricated:
-            # The finding that matters most: the summary told a student their
-            # lecture covered something it never mentioned.
-            lines.append(f"         FABRICATED: {', '.join(s.fabricated)}")
-        if s.missing_sections:
-            lines.append(f"         missing sections: {', '.join(s.missing_sections)}")
-        for claim in s.unsupported_claims:
+    if report.unstable:
+        # Said loudly: an unstable case means the number is not repeatable, so
+        # comparing it against a previous run tells you nothing.
+        lines.append(f"UNSTABLE — these did not agree across runs: {', '.join(report.unstable)}")
+    lines.append("")
+
+    for c in report.cases:
+        mark = "PASS" if c.passed else "FAIL"
+        runs = f"{c.passed_runs}/{c.n} runs" if c.n > 1 else ""
+        faith = (
+            f"faithfulness {c.mean_faithfulness:.1f}/5"
+            if c.mean_faithfulness is not None
+            else "faithfulness n/a"
+        )
+        lines.append(
+            f"  [{mark}] {c.case_id}  coverage {c.mean_coverage:.0%}  {faith}  {runs}".rstrip()
+        )
+
+        missing = sorted({m for r in c.runs for m in r.missing})
+        if missing:
+            lines.append(f"         missing: {', '.join(missing)}")
+        if c.persistent_fabrications:
+            # Every run — a property of the prompt, not of sampling.
+            lines.append(f"         FABRICATED every run: {', '.join(c.persistent_fabrications)}")
+        for term, count in c.occasional_fabrications:
+            lines.append(f"         fabricated sometimes: {term} ({count}/{c.n} runs)")
+        sections = sorted({s for r in c.runs for s in r.missing_sections})
+        if sections:
+            lines.append(f"         missing sections: {', '.join(sections)}")
+        for claim in dict.fromkeys(cl for r in c.runs for cl in r.unsupported_claims):
             lines.append(f"         unsupported: {claim}")
-        if s.judge_error:
-            lines.append(f"         judge unavailable: {s.judge_error}")
+        errors = {r.judge_error for r in c.runs if r.judge_error}
+        for err in errors:
+            lines.append(f"         judge unavailable: {err}")
 
     lines += [
         "",

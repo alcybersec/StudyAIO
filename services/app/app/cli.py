@@ -177,7 +177,7 @@ async def _backfill_courseops_keys(dry_run: bool, keep_legacy: bool) -> int:
     return 0
 
 
-async def _run_evals(only: str | None, no_judge: bool, out: str | None) -> int:
+async def _run_evals(only: str | None, no_judge: bool, out: str | None, n: int) -> int:
     """Score generated summaries against the eval cases.
 
     `tests/golden/` checks that a summary has the right shape; nothing measured
@@ -193,6 +193,11 @@ async def _run_evals(only: str | None, no_judge: bool, out: str | None) -> int:
         no_judge: Skip the model-graded faithfulness check, leaving only the
             deterministic scores — which need no credentials and cost nothing.
         out: Write the full report as JSON here, for diffing against last time.
+        n: Repetitions per case. Generation is non-deterministic, so a single
+            run is a sample: the first live run of this harness found four
+            fabrications on one case where a later run found one. Repeating
+            separates a fabrication that happens every time — a property of the
+            prompt — from one that happened once.
 
     Returns:
         A process exit code: non-zero if any case failed, so it is usable in a
@@ -200,7 +205,7 @@ async def _run_evals(only: str | None, no_judge: bool, out: str | None) -> int:
     """
     from evals.runner import format_report, run
 
-    report = await run(only=only, judge=not no_judge)
+    report = await run(only=only, judge=not no_judge, n=n)
     print(format_report(report))
 
     if out:
@@ -267,6 +272,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Deterministic scores only — no model needed, no cost",
     )
     evals.add_argument("--out", default=None, help="Write the full report as JSON here")
+    evals.add_argument(
+        "-n",
+        type=int,
+        default=1,
+        metavar="N",
+        help=(
+            "Run each case N times. Generation is non-deterministic, so one run "
+            "is a sample — this separates persistent findings from occasional "
+            "ones. Multiplies the cost by N."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -308,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "evals":
         try:
-            return asyncio.run(_run_evals(args.case, args.no_judge, args.out))
+            return asyncio.run(_run_evals(args.case, args.no_judge, args.out, args.n))
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
