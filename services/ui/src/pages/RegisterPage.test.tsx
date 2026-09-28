@@ -27,9 +27,9 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => navigate }
 })
 
-function setup() {
+function setup(initialEntry = '/register') {
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <RegisterPage />
     </MemoryRouter>,
   )
@@ -110,5 +110,50 @@ describe('RegisterPage — invite-only registration', () => {
       password: 'TestPass1!',
       invite_code: 'BETA-7F3KQ2MN',
     })
+  })
+})
+
+describe('RegisterPage invite links', () => {
+  const TOKEN = 'aB-cD_eF12345xyzQRS'
+
+  beforeEach(() => {
+    inviteRequired = true
+  })
+
+  it('submits the token from the link without showing a code field', async () => {
+    const user = userEvent.setup()
+    setup(`/register?invite=${TOKEN}`)
+
+    // The field is deliberately hidden: the visible code input carries
+    // autoCapitalize="characters", which would destroy a base64url token.
+    expect(screen.queryByLabelText(/invite code/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/signing up with an invite link/i)).toBeInTheDocument()
+
+    await fillBaseFields()
+    await user.click(screen.getByRole('button', { name: /create account/i }))
+
+    expect(registerUser).toHaveBeenCalledWith(
+      expect.objectContaining({ invite_code: TOKEN }),
+    )
+  })
+
+  it('preserves the token case exactly', async () => {
+    const user = userEvent.setup()
+    setup(`/register?invite=${TOKEN}`)
+
+    await fillBaseFields()
+    await user.click(screen.getByRole('button', { name: /create account/i }))
+
+    const sent = registerUser.mock.calls[0][0] as { invite_code?: string }
+    // Load-bearing: uppercasing a token changes its SHA-256 and the server
+    // would reject a perfectly valid invite.
+    expect(sent.invite_code).toBe(TOKEN)
+    expect(sent.invite_code).not.toBe(TOKEN.toUpperCase())
+  })
+
+  it('still asks for a typed code when there is no link', () => {
+    setup('/register')
+    expect(screen.getByLabelText(/invite code/i)).toBeInTheDocument()
+    expect(screen.queryByText(/signing up with an invite link/i)).not.toBeInTheDocument()
   })
 })
