@@ -5,12 +5,14 @@ needs: hand out one code per tester, revoke the ones that leak.
 """
 
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import generate_magic_link_token, hash_magic_link_token
 from app.core.exceptions import InviteError
 from app.core.utils import generate_id
 from app.models.invite_code import InviteCode
@@ -24,6 +26,19 @@ CODE_LENGTH = 8
 CODE_PREFIX = "BETA-"
 
 MAX_CODE_GENERATION_ATTEMPTS = 5
+
+
+@dataclass(frozen=True)
+class MintedInvite:
+    """A freshly created email invite and its raw token.
+
+    The token is returned exactly once, here. Only its hash is persisted, so
+    there is no way to recover it afterwards — losing it means issuing a new
+    invite, which is the same trade `MagicLink` makes.
+    """
+
+    invite: InviteCode
+    raw_token: str
 
 
 def generate_code() -> str:
@@ -105,6 +120,75 @@ async def create_invite(
     return invite
 
 
+async def create_email_invite(
+    session: AsyncSession,
+    email: str,
+    created_by: str | None = None,
+    expires_in_days: int | None = 14,
+    note: str | None = None,
+) -> MintedInvite:
+    """Mint an invite addressed to one email address.
+
+    Single-use by construction. That is what makes `accepted_at` mean something:
+    a multi-use invite tied to one address could be forwarded and redeemed by
+    someone else, and the funnel would still record it as that person accepting.
+
+    A shorter default expiry than shared codes (14 days vs 30) because an
+    addressed invite is sent the moment it is made, so its clock starts
+    immediately.
+
+    Args:
+        session: Database session.
+        email: Where the invite is being sent.
+        created_by: ID of the admin issuing it.
+        expires_in_days: Days until expiry; None for no expiry.
+        note: Free-text label, e.g. the tester's name.
+
+    Returns:
+        The persisted invite and its raw token — the token is never recoverable
+        after this call returns.
+
+    Raises:
+        InviteError: If the email is blank or expires_in_days is negative.
+    """
+    email = (email or "").strip().lower()
+    if not email:
+        raise InviteError("An email address is required")
+    if expires_in_days is not None and expires_in_days < 1:
+        raise InviteError("expires_in_days must be at least 1")
+
+    invite = await create_invite(
+        session,
+        created_by=created_by,
+        max_uses=1,
+        expires_in_days=expires_in_days,
+        note=note,
+    )
+    raw_token = generate_magic_link_token()
+    invite.email = email
+    invite.token_hash = hash_magic_link_token(raw_token)
+    await session.flush()
+    # The address is logged, the token never is. An invite link in a log line is
+    # a working credential for anyone who can read logs.
+    logger.info("invite_email_created", invite_id=invite.id, email=email)
+    return MintedInvite(invite=invite, raw_token=raw_token)
+
+
+async def mark_invite_sent(session: AsyncSession, invite: InviteCode) -> None:
+    """Record that the invite email actually went out.
+
+    Kept separate from creation so a send failure leaves `sent_at` NULL rather
+    than claiming a delivery that did not happen — the admin list shows created
+    but unsent invites for exactly that reason.
+
+    Args:
+        session: Database session.
+        invite: The invite that was delivered.
+    """
+    invite.sent_at = datetime.now(UTC)
+    await session.flush()
+
+
 async def list_invites(session: AsyncSession) -> list[InviteCode]:
     """List every invite code, newest first.
 
@@ -155,14 +239,15 @@ async def revoke_invite(session: AsyncSession, invite_id: str) -> InviteCode | N
 
 
 async def redeem_invite(session: AsyncSession, code: str) -> InviteCode:
-    """Validate an invite code and consume one use.
+    """Validate an invite code *or* an email-invite token and consume one use.
 
     Takes a row lock so two simultaneous registrations cannot both spend the
     last use of a single-use code.
 
     Args:
         session: Database session.
-        code: The code as supplied by the registrant.
+        code: What the registrant supplied — a shared code like "BETA-7F3KQ2MN"
+            or the raw token from an emailed invite link.
 
     Returns:
         The redeemed invite code.
@@ -170,27 +255,44 @@ async def redeem_invite(session: AsyncSession, code: str) -> InviteCode:
     Raises:
         InviteError: If the code is unknown, revoked, expired, or used up.
     """
-    if not code or not code.strip():
+    presented = (code or "").strip()
+    if not presented:
         raise InviteError("An invite code is required to register")
 
-    result = await session.execute(
-        select(InviteCode).where(InviteCode.code == normalize_code(code)).with_for_update()
-    )
+    # One field accepts both flavours, so the registration form and the emailed
+    # link share a path. The prefix is decisive because code generation is ours:
+    # every shared code starts with it, and a 43-char url-safe token never can.
+    #
+    # Order matters. normalize_code() uppercases, which is right for a
+    # transcribed code and destroys a base64url token — so the branch is chosen
+    # from the raw value before any normalisation.
+    if presented.upper().startswith(CODE_PREFIX):
+        lookup = InviteCode.code == normalize_code(presented)
+    else:
+        lookup = InviteCode.token_hash == hash_magic_link_token(presented)
+
+    result = await session.execute(select(InviteCode).where(lookup).with_for_update())
     invite = result.scalar_one_or_none()
 
-    # Deliberately identical messages for unknown/spent/expired codes — a
-    # distinct "that code exists but is used up" tells a stranger they guessed
-    # a real code.
+    # Deliberately identical messages for unknown/spent/expired/revoked, and for
+    # codes and tokens alike — a distinct "that exists but is used up" tells a
+    # stranger they guessed something real.
     if invite is None or not invite.is_redeemable():
         logger.info("invite_code_rejected", found=invite is not None)
         raise InviteError("That invite code is not valid")
 
     invite.used_count += 1
+    # Set once. A shared code redeemed ten times records when it was FIRST
+    # accepted; overwriting would silently retarget the funnel's conversion at
+    # the most recent registrant.
+    if invite.accepted_at is None:
+        invite.accepted_at = datetime.now(UTC)
     await session.flush()
     logger.info(
         "invite_code_redeemed",
         invite_id=invite.id,
         used_count=invite.used_count,
         max_uses=invite.max_uses,
+        email_invite=invite.is_email_invite,
     )
     return invite

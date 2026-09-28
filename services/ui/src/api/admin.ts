@@ -13,6 +13,8 @@ import type {
   InviteCode,
   InviteCodeList,
   InviteCreateRequest,
+  InviteSendRequest,
+  InviteSendResult,
   SystemMetrics,
 } from '../types'
 
@@ -81,6 +83,10 @@ export const adminApi = {
 
   createInvite(data: InviteCreateRequest): Promise<InviteCode> {
     return api.post<InviteCode>('/admin/invites', data)
+  },
+
+  sendInvite(data: InviteSendRequest): Promise<InviteSendResult> {
+    return api.post<InviteSendResult>('/admin/invites/send', data)
   },
 
   revokeInvite(inviteId: string): Promise<InviteCode> {

@@ -200,6 +200,38 @@ async def send_email_verification(to_email: str, verify_url: str, expires_hours:
     )
 
 
+async def send_invite(
+    to_email: str,
+    invite_url: str,
+    expires_phrase: str,
+    note: str | None = None,
+) -> bool:
+    """Send a beta invitation link.
+
+    The URL carries a single-use token and is therefore a bearer credential —
+    treat it like the password-reset link above. It is passed in fully formed so
+    this layer never touches the token itself.
+
+    Args:
+        to_email: Recipient email.
+        invite_url: Fully-qualified registration link, token included.
+        expires_phrase: Human phrasing for the expiry, e.g. "in 14 days".
+        note: Optional message from the admin who issued the invite.
+
+    Returns:
+        True if sent successfully.
+    """
+    return await send_templated_email(
+        to_email=to_email,
+        subject="You're invited to StudyAIO",
+        template_name="invite.html",
+        invite_url=invite_url,
+        email=to_email,
+        expires_phrase=expires_phrase,
+        note=note,
+    )
+
+
 async def send_exam_reminder(
     to_email: str, exam_title: str, course_code: str, exam_date: str
 ) -> bool:

@@ -14,7 +14,7 @@ from app.core.cache import DASHBOARD_TTL_SECONDS, cache_get, cache_set
 from app.core.database import get_session
 from app.models.invite_code import InviteCode
 from app.models.user import User
-from app.services import admin_service, invite_service, user_service
+from app.services import admin_service, email_service, invite_service, user_service
 
 logger = structlog.get_logger()
 
@@ -105,6 +105,9 @@ class BetaFunnelResponse(BaseModel):
 
     invites_issued: int
     invites_redeemed: int
+    people_invited: int
+    invites_sent: int
+    invites_accepted: int
     registered: int
     verified: int
     uploaded: int
@@ -416,6 +419,9 @@ class InviteResponse(BaseModel):
     id: str
     code: str
     note: str | None
+    email: str | None
+    sent_at: datetime | None
+    accepted_at: datetime | None
     max_uses: int
     used_count: int
     uses_remaining: int
@@ -438,6 +444,9 @@ def _invite_to_response(invite: InviteCode) -> InviteResponse:
         id=invite.id,
         code=invite.code,
         note=invite.note,
+        email=invite.email,
+        sent_at=invite.sent_at,
+        accepted_at=invite.accepted_at,
         max_uses=invite.max_uses,
         used_count=invite.used_count,
         uses_remaining=invite.uses_remaining,
@@ -470,6 +479,90 @@ async def create_invite(
     )
     await session.commit()
     return _invite_to_response(invite)
+
+
+class InviteSendRequest(BaseModel):
+    """Request to email an invite to one person."""
+
+    email: EmailStr
+    expires_in_days: int | None = Field(default=14, ge=1, le=365)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class InviteSendResponse(BaseModel):
+    """A sent invite, plus the link that was sent.
+
+    `invite_url` is returned whether or not the email went out. An instance with
+    broken SMTP must not become an instance where nobody can be onboarded — the
+    admin can always copy the link and pass it on themselves. This mirrors the
+    setup link `POST /admin/users` already returns.
+
+    It is the only time the raw token is ever available: only its hash is
+    stored.
+    """
+
+    invite: InviteResponse
+    invite_url: str
+    email_sent: bool
+
+
+@router.post(
+    "/admin/invites/send",
+    response_model=InviteSendResponse,
+    status_code=201,
+    summary="Email an invite",
+    description=(
+        "Mint a single-use invite bound to one email address and send it. "
+        "Returns the link whether or not delivery succeeded. Admin only."
+    ),
+)
+async def send_invite(
+    body: InviteSendRequest,
+    admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> InviteSendResponse:
+    """Mint an addressed invite and email it (admin only)."""
+    minted = await invite_service.create_email_invite(
+        session,
+        email=body.email,
+        created_by=admin.id,
+        expires_in_days=body.expires_in_days,
+        note=body.note,
+    )
+    invite_url = (
+        f"{settings.app_base_url.rstrip('/')}/register?invite={quote_plus(minted.raw_token)}"
+    )
+
+    # Deliver before the commit would risk a link that works arriving for an
+    # invite that rolled back; deliver after, and a send failure cannot undo a
+    # perfectly good invite. The latter is the better failure, so: commit first.
+    await session.commit()
+
+    expires_phrase = (
+        f"in {body.expires_in_days} days" if body.expires_in_days is not None else "never"
+    )
+    try:
+        email_sent = await email_service.send_invite(
+            to_email=body.email,
+            invite_url=invite_url,
+            expires_phrase=expires_phrase,
+            note=body.note,
+        )
+    except Exception:
+        # Never fail the request over email. The link is in the response.
+        logger.warning("invite_email_delivery_failed", invite_id=minted.invite.id, exc_info=True)
+        email_sent = False
+
+    if email_sent:
+        await invite_service.mark_invite_sent(session, minted.invite)
+        await session.commit()
+
+    await session.refresh(minted.invite)
+    return InviteSendResponse(
+        invite=_invite_to_response(minted.invite),
+        invite_url=invite_url,
+        email_sent=email_sent,
+    )
 
 
 @router.get(
