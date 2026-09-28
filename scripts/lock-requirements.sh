@@ -3,7 +3,9 @@
 #
 # The lock is a CONSTRAINTS file, not an install list. requirements.txt still
 # decides *what* is installed; the lock only pins the version of everything that
-# gets pulled in, direct and transitive. CI passes it via PIP_CONSTRAINT.
+# gets pulled in, direct and transitive. CI passes it via PIP_CONSTRAINT, and
+# services/app/Dockerfile passes it with -c, so the image ships the versions CI
+# tested.
 #
 # Why this exists: GL#7. e2e-tests failed with ResolutionImpossible on an
 # unchanged requirements.txt and passed on a plain retry. Whatever the trigger,
@@ -65,9 +67,11 @@ header = f"""\
 # GENERATED FILE — do not edit by hand.
 # Regenerate with ./scripts/lock-requirements.sh
 #
-# Constraints for CI installs (PIP_CONSTRAINT in .gitlab-ci.yml). This pins the
-# version of every package the resolver reaches, direct and transitive, so a CI
-# install does not depend on what the index offers on the day. See GL#7.
+# Constraints for every pip install in this repo: CI via PIP_CONSTRAINT in
+# .gitlab-ci.yml, and the image via -c in services/app/Dockerfile. This pins the
+# version of every package the resolver reaches, direct and transitive, so an
+# install does not depend on what the index offers on the day, and so the image
+# ships the versions CI tested. See GL#7.
 #
 # requirements.txt remains the source of truth for WHAT is installed. Adding a
 # dependency there does not require regenerating this immediately — but if the
