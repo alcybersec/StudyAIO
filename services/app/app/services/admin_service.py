@@ -79,6 +79,7 @@ async def list_users(
             "role": u.role,
             "tier": u.tier,
             "is_active": u.is_active,
+            "mfa_enabled": u.mfa_enabled,
             "created_at": u.created_at.isoformat() if u.created_at else None,
             "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
         }
@@ -270,8 +271,14 @@ async def update_user(
         "role": user.role,
         "tier": user.tier,
         "is_active": user.is_active,
+        "mfa_enabled": user.mfa_enabled,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
+        # The same value the log line above records. It was computed here all
+        # along and thrown away, which left the admin UI describing the change
+        # it *requested* rather than the one the server made — accurate only
+        # while the row the UI held was fresh (GL#3).
+        "sessions_revoked": reactivated or role_changed or email_repointed,
     }
 
 
@@ -342,6 +349,26 @@ async def get_user_details(session: AsyncSession, user_id: str) -> dict | None:
     if not user:
         return None
 
+    # Which providers are linked, so the "Change email" dialog can name what it
+    # is about to unlink instead of warning generically — and can stop warning
+    # at all for the users who have none (GL#3). Provider names only; nothing
+    # from the token or the provider account is exposed.
+    #
+    # `None` and `[]` mean different things and the distinction is load-bearing:
+    # `[]` is "nothing to unlink", which lets the dialog drop the warning, while
+    # `None` is "could not find out". Best-effort like every other section here,
+    # but defaulting a failed lookup to `[]` would turn a query error into a
+    # confident "this unlinks nothing" on a destructive action. Unknown has to
+    # stay unknown, and the UI falls back to the generic warning.
+    oauth_providers: list[str] | None = None
+    try:
+        result = await session.execute(
+            select(OAuthAccount.provider).where(OAuthAccount.user_id == user_id)
+        )
+        oauth_providers = sorted(result.scalars().all())
+    except Exception:
+        logger.warning("admin_details_oauth_lookup_failed", user_id=user_id, exc_info=True)
+
     profile = {
         "id": user.id,
         "email": user.email,
@@ -351,6 +378,7 @@ async def get_user_details(session: AsyncSession, user_id: str) -> dict | None:
         "is_active": user.is_active,
         "email_verified": user.email_verified,
         "mfa_enabled": user.mfa_enabled,
+        "oauth_providers": oauth_providers,
         "avatar_url": user.avatar_url,
         "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
         "created_at": user.created_at.isoformat() if user.created_at else None,

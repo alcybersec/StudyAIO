@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Input, Modal } from '../ui'
-import { useResendVerification, useUpdateAdminUser } from '../../hooks/useApi'
+import { useAdminUserDetail, useResendVerification, useUpdateAdminUser } from '../../hooks/useApi'
 import { adminEmailSchema, normalizeEmail } from '../../lib/schemas'
 import type { AdminUser } from '../../types'
 
@@ -14,6 +14,23 @@ interface ChangeEmailDialogProps {
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback
+}
+
+/** Display names for the providers the backend records, which are lowercase. */
+const PROVIDER_LABELS: Record<string, string> = {
+  google: 'Google',
+  github: 'GitHub',
+}
+
+function providerLabel(provider: string): string {
+  return PROVIDER_LABELS[provider] ?? provider
+}
+
+/** "Google", "Google and GitHub", "Google, GitHub and X". */
+function listProviders(providers: string[]): string {
+  const names = providers.map(providerLabel)
+  if (names.length <= 1) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
 /**
@@ -51,6 +68,12 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
     reset()
     onOpenChange(false)
   }
+
+  // Only while the dialog is open: the list row cannot carry this, and the
+  // warning below is the only thing that needs it. `undefined` disables the
+  // query (see `useAdminUserDetail`).
+  const details = useAdminUserDetail(open ? user.id : undefined)
+  const linkedProviders = details.data?.profile.oauth_providers ?? null
 
   const normalized = normalizeEmail(email)
   const parsed = adminEmailSchema.safeParse(email.trim())
@@ -145,13 +168,31 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
             Signs {user.email} out on every device immediately — the access token and the 7-day
             refresh token both stop working, so they cannot silently resume.
           </li>
-          <li>
-            <span className="font-medium text-text">
-              Unlinks every connected sign-in provider
-            </span>{' '}
-            (Google, GitHub). All of them: the links are not recorded against an address, so there
-            is no way to unlink only the one tied to the old inbox.
-          </li>
+          {/*
+            Three states, and they are not interchangeable (GL#3). A known list
+            names what breaks; an empty list means nothing is linked, so the
+            warning is dropped rather than shown about a user it cannot apply
+            to; and `null` — the lookup failed, or is still in flight — falls
+            back to the generic wording, because the one thing we must not do is
+            state that a destructive action breaks no links when we do not know.
+          */}
+          {linkedProviders === null ? (
+            <li>
+              <span className="font-medium text-text">
+                Unlinks every connected sign-in provider
+              </span>{' '}
+              (Google, GitHub). All of them: the links are not recorded against an address, so
+              there is no way to unlink only the one tied to the old inbox.
+            </li>
+          ) : linkedProviders.length > 0 ? (
+            <li>
+              <span className="font-medium text-text">
+                Unlinks their {listProviders(linkedProviders)} sign-in
+              </span>
+              {linkedProviders.length > 1 ? ' — both of them' : ''}. The links are not recorded
+              against an address, so there is no way to unlink only the one tied to the old inbox.
+            </li>
+          ) : null}
           <li>
             <span className="font-medium text-text">
               If this account has a password, re-linking is not automatic.

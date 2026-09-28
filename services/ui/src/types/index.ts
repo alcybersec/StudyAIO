@@ -896,8 +896,22 @@ export interface AdminUser {
   role: string
   tier: string
   is_active: boolean
+  /** Whether TOTP is configured. Never the secret or the backup codes. */
+  mfa_enabled: boolean
   created_at: string | null
   last_login_at: string | null
+}
+
+/**
+ * A PATCH result, which knows something a list row cannot.
+ *
+ * `sessions_revoked` is the server's answer rather than our guess. The toast
+ * used to be derived from the change we *asked for*, which is accurate only
+ * while our copy of the row is fresh — a stale row made it overstate what
+ * happened.
+ */
+export interface AdminUserUpdated extends AdminUser {
+  sessions_revoked: boolean
 }
 
 export interface AdminUserList {
@@ -940,6 +954,15 @@ export interface AdminUserProfile {
   is_active: boolean
   email_verified: boolean
   mfa_enabled: boolean
+  /**
+   * Providers linked to this account, e.g. `['google']`.
+   *
+   * `[]` means nothing is linked — the change-email dialog can drop its unlink
+   * warning entirely. `null` means the lookup failed and the answer is unknown,
+   * which is deliberately distinct: treating that as `[]` would promise that a
+   * destructive action breaks no links, on no evidence.
+   */
+  oauth_providers: string[] | null
   avatar_url: string | null
   last_login_at: string | null
   created_at: string | null

@@ -19,6 +19,19 @@ vi.mock('../hooks/useApi', () => ({
   useSendPasswordReset: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useResendVerification: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useClearUserMfa: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  // The change-email dialog reads the linked providers to name what it will
+  // unlink. `undefined` data is the unknown case, which keeps the generic wording.
+  useAdminUserDetail: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
+}))
+
+const toastSuccess = vi.fn()
+const toastError = vi.fn()
+vi.mock('sonner', () => ({
+  toast: {
+    success: (...args: unknown[]) => toastSuccess(...args),
+    error: (...args: unknown[]) => toastError(...args),
+    message: (...args: unknown[]) => toastSuccess(...args),
+  },
 }))
 
 vi.mock('../hooks/useAuth', () => ({
@@ -40,6 +53,7 @@ const sampleUser = {
   is_active: true,
   created_at: '2026-01-01T00:00:00',
   last_login_at: null,
+  mfa_enabled: false,
 }
 
 const metricsData = {
@@ -241,5 +255,50 @@ describe('AdminPage destructive confirmations', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(mutate).toHaveBeenCalledWith({ userId: 'u1', data: { tier: 'pro' } }, expect.anything())
+  })
+})
+
+// ── The toast reports the server's answer ──────────────────────
+//
+// GL#3. `sessions_revoked` comes back on the PATCH, so the success line states
+// what happened rather than what was asked for. The distinction bites when the
+// row the page holds is stale: the user already had that role, the server
+// revokes nothing, and the old code still announced a sign-out.
+describe('AdminPage success toasts', () => {
+  function confirmRoleChangeWith(sessionsRevoked: boolean) {
+    const mutate = vi.fn((_vars, opts) =>
+      opts.onSuccess({ ...sampleUser, role: 'admin', sessions_revoked: sessionsRevoked }),
+    )
+    mockUpdate.mockReturnValue(asResult({ mutate, isPending: false }))
+    mockMetrics.mockReturnValue(
+      asResult({ data: metricsData, isLoading: false, isError: false, refetch: vi.fn() }),
+    )
+    mockUsers.mockReturnValue(
+      asResult({
+        data: { users: [sampleUser], total: 1, offset: 0, limit: 25 },
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+      }),
+    )
+    renderPage()
+    return userEvent.setup()
+  }
+
+  it('says the user was signed out when the server revoked their sessions', async () => {
+    const user = await confirmRoleChangeWith(true)
+    await pickRole(user, 'user', 'admin')
+    await user.click(screen.getByRole('button', { name: /change role to admin/i }))
+
+    expect(toastSuccess).toHaveBeenCalledWith(expect.stringContaining('signed out on every device'))
+  })
+
+  it('does not claim a sign-out the server did not perform', async () => {
+    const user = await confirmRoleChangeWith(false)
+    await pickRole(user, 'user', 'admin')
+    await user.click(screen.getByRole('button', { name: /change role to admin/i }))
+
+    expect(toastSuccess).toHaveBeenCalledWith(expect.stringContaining('No sessions needed revoking'))
+    expect(toastSuccess).not.toHaveBeenCalledWith(expect.stringContaining('signed out'))
   })
 })
