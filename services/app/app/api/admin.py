@@ -12,6 +12,7 @@ from app.api.deps import require_role
 from app.config import settings
 from app.core.cache import DASHBOARD_TTL_SECONDS, cache_get, cache_set
 from app.core.database import get_session
+from app.core.exceptions import InviteError
 from app.models.invite_code import InviteCode
 from app.models.user import User
 from app.services import admin_service, email_service, invite_service, user_service
@@ -551,6 +552,73 @@ async def send_invite(
     except Exception:
         # Never fail the request over email. The link is in the response.
         logger.warning("invite_email_delivery_failed", invite_id=minted.invite.id, exc_info=True)
+        email_sent = False
+
+    if email_sent:
+        await invite_service.mark_invite_sent(session, minted.invite)
+        await session.commit()
+
+    await session.refresh(minted.invite)
+    return InviteSendResponse(
+        invite=_invite_to_response(minted.invite),
+        invite_url=invite_url,
+        email_sent=email_sent,
+    )
+
+
+class InviteResendRequest(BaseModel):
+    """Request to reissue an existing email invite."""
+
+    expires_in_days: int | None = Field(default=14, ge=1, le=365)
+
+
+@router.post(
+    "/admin/invites/{invite_id}/resend",
+    response_model=InviteSendResponse,
+    summary="Resend an email invite",
+    description=(
+        "Issue a fresh link for an existing email invite and send it. The "
+        "previous link stops working. Admin only."
+    ),
+)
+async def resend_invite(
+    invite_id: str,
+    body: InviteResendRequest,
+    _admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),
+) -> InviteSendResponse:
+    """Reissue and resend an email invite (admin only)."""
+    try:
+        minted = await invite_service.resend_email_invite(
+            session, invite_id, expires_in_days=body.expires_in_days
+        )
+    except InviteError as exc:
+        # A shared code, a revoked invite, or one already accepted. 400 rather
+        # than 404: the invite exists, this operation does not apply to it.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if minted is None:
+        raise HTTPException(status_code=404, detail="Invite code not found")
+
+    invite_url = (
+        f"{settings.app_base_url.rstrip('/')}/register?invite={quote_plus(minted.raw_token)}"
+    )
+    # Commit the rotation before attempting delivery. A send failure must not
+    # roll back the new token, because the response carries the link and the
+    # admin can pass it on by hand.
+    await session.commit()
+
+    expires_phrase = (
+        f"in {body.expires_in_days} days" if body.expires_in_days is not None else "never"
+    )
+    try:
+        email_sent = await email_service.send_invite(
+            to_email=minted.invite.email or "",
+            invite_url=invite_url,
+            expires_phrase=expires_phrase,
+            note=minted.invite.note,
+        )
+    except Exception:
+        logger.warning("invite_resend_delivery_failed", invite_id=invite_id, exc_info=True)
         email_sent = False
 
     if email_sent:
