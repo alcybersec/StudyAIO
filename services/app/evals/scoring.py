@@ -99,56 +99,86 @@ def score_deterministic(case: dict, summary: str) -> CaseScore:
     )
 
 
-JUDGE_INSTRUCTION = """You are grading a lecture summary for FAITHFULNESS to its source.
+JUDGE_INSTRUCTION = """Grade the SUMMARY UNDER REVIEW for FAITHFULNESS to the SOURCE MATERIAL.
 
-Faithful means every claim in the summary is supported by the source material.
-It does NOT mean complete, well written, or correct in general — a summary can
-be accurate about the world and still unfaithful, if it adds something the
-lecture did not say.
+Faithful means every claim in the summary is supported by the source. It does
+NOT mean complete, well written, or correct in general — a summary can be
+accurate about the world and still unfaithful, if it adds something the lecture
+did not say.
 
-Mark as unsupported:
+Unsupported:
 - facts, names, dates or figures absent from the source
 - techniques or terms the source never introduces
-- a qualified claim restated without its qualification (for example, the source
-  says "average O(1), worst case O(n)" and the summary says only "O(1)")
+- a qualified claim restated without its qualification (the source says
+  "average O(1), worst case O(n)"; the summary says only "O(1)")
 
-Do NOT mark as unsupported:
-- rewording, condensing, or reordering
-- headings and structure the format requires
-- an explicit statement that the lecture contained nothing of some kind
+Not unsupported: rewording, condensing, reordering, or required headings.
 
-Reply with ONLY a JSON object, no prose and no code fence:
-{"faithfulness": <1-5>, "unsupported": ["<claim>", ...]}
+Reply in the JSON object the format above requires. Put your entire verdict in
+the "answer" field and leave "citations" empty. The answer must begin with:
+
+FAITHFULNESS: <1-5>
 
 5 = every claim supported. 3 = one or two additions that do not mislead.
 1 = substantially invented.
+
+Then one line per unsupported claim:
+
+UNSUPPORTED: <the claim>
+
+So the whole reply looks like:
+
+{"answer": "FAITHFULNESS: 3\\nUNSUPPORTED: claims BCNF\\nUNSUPPORTED: names OLTP", "citations": []}
+
+No other commentary.
 """
+
+#: `FAITHFULNESS: 4` on its own line.
+_SCORE_LINE = re.compile(r"^\s*FAITHFULNESS:\s*([1-5])\b", re.MULTILINE | re.IGNORECASE)
+#: `UNSUPPORTED: the claim`, one per line.
+_CLAIM_LINE = re.compile(r"^\s*UNSUPPORTED:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
 
 
 def parse_judge_reply(reply: str) -> tuple[int | None, list[str], str | None]:
     """Pull the verdict out of whatever the model actually returned.
 
-    Models wrap JSON in prose or fences however the mood takes them, so this
-    takes the first balanced object rather than trusting the whole reply to
-    parse. A judge that cannot be parsed is reported as an error rather than
-    silently scored zero — an unparseable reply says nothing about the summary.
+    Line-oriented rather than JSON, because the judge rides on
+    `answer_question`, whose adapters parse the model's reply as
+    `{"answer": ..., "citations": ...}` and return only the `answer` string. A
+    verdict asked for as a bare JSON object was therefore swallowed whole: the
+    adapter found no `answer` key and returned `""`, and the harness reported
+    "judge unavailable" on every case while still paying for the call.
+
+    A JSON object is still accepted as a fallback, for a backend that returns
+    text untouched.
+
+    An unreadable reply is an error, never a zero — a broken judge says nothing
+    about the summary, and scoring it 1 would read as a damning verdict.
 
     Returns:
         (faithfulness, unsupported_claims, error).
     """
-    match = re.search(r"\{.*\}", reply, re.DOTALL)
-    if not match:
-        return None, [], f"no JSON object in judge reply: {reply[:120]!r}"
-    try:
-        data = json.loads(match.group(0))
-    except json.JSONDecodeError as e:
-        return None, [], f"judge reply was not valid JSON: {e}"
+    if not reply or not reply.strip():
+        return None, [], "judge returned an empty reply"
 
-    score = data.get("faithfulness")
-    if not isinstance(score, int) or not 1 <= score <= 5:
+    match = _SCORE_LINE.search(reply)
+    if match:
+        claims = [c for c in _CLAIM_LINE.findall(reply) if c.lower() not in {"none", "n/a", "-"}]
+        return int(match.group(1)), claims, None
+
+    # Fallback: a raw JSON object, if the backend passed the text through.
+    blob = re.search(r"\{.*\}", reply, re.DOTALL)
+    if blob:
+        try:
+            data = json.loads(blob.group(0))
+        except json.JSONDecodeError as e:
+            return None, [], f"judge reply was not valid JSON: {e}"
+        score = data.get("faithfulness")
+        if isinstance(score, int) and 1 <= score <= 5:
+            unsupported = data.get("unsupported") or []
+            if not isinstance(unsupported, list):
+                unsupported = [str(unsupported)]
+            return score, [str(u) for u in unsupported], None
         return None, [], f"judge returned an out-of-range score: {score!r}"
 
-    unsupported = data.get("unsupported") or []
-    if not isinstance(unsupported, list):
-        unsupported = [str(unsupported)]
-    return score, [str(u) for u in unsupported], None
+    return None, [], f"no verdict in judge reply: {reply[:120]!r}"
