@@ -140,8 +140,43 @@ GitLab CI (`.gitlab-ci.yml`) runs five stages — `lint`, `test`, `e2e`, `build`
    - Sends **only the commit SHA** over SSH. The deploy key on the server is
      command-restricted to `/opt/studyaio/deploy.sh`, which reads it from
      `SSH_ORIGINAL_COMMAND` — CI cannot run an arbitrary command on the host.
-   - `deploy.sh` pins the host `.env` to that tag, pulls, runs
+   - `deploy.sh` checks free disk, pins the host `.env` to that tag, pulls, runs
      `alembic upgrade head`, and restarts the stack.
+
+### Updating `deploy.sh`
+
+The canonical copy is **`infra/deploy/deploy.sh`** in this repo. The live file is
+`/opt/studyaio/deploy.sh` on the host and is deliberately **untracked** there, so
+a deploy's `git checkout --force` cannot rewrite the script that is currently
+executing — bash reads a script incrementally, so replacing it mid-run would
+execute the tail of the new file against the state of the old one.
+
+That means changes are applied by hand. From a workstation with host access:
+
+```bash
+scp infra/deploy/deploy.sh alex@192.168.1.169:/tmp/deploy.sh
+ssh alex@192.168.1.169 'cd /opt/studyaio   && cp -a deploy.sh "deploy.sh.bak-$(date -u +%Y%m%dT%H%M%SZ)"   && bash -n /tmp/deploy.sh   && install -m 755 /tmp/deploy.sh deploy.sh'
+```
+
+Never apply it while a deploy is running (`resource_group: studyaio-prod` means
+at most one is). Keep the repo copy and the host copy in step — a divergence is
+invisible until a deploy behaves unexpectedly.
+
+### Disk
+
+The deploy refuses to start unless the Docker root has **8 GB free**, because the
+api image carries torch, LibreOffice and the baked embedding model, and a pull
+needs the compressed layer and its extracted form on disk at once. Below that it
+exits 66 with the reclaim commands, rather than dying part-way through
+extraction with a containerd error naming a blob digest — which is what a full
+disk actually looks like, and it reads like a registry fault (pipeline 368).
+
+Post-deploy cleanup uses `docker image prune -af --filter "until=168h"`. The
+`-a` matters: a bare `docker image prune -f` removes only *dangling* images, so
+every deploy leaves its predecessor's tagged image on disk forever. That is how
+this host reached 99% full with 33 images totalling 24 GB. The `until` filter
+keeps about a week of tags as local rollback targets; older ones are re-pullable
+from GHCR, and images used by a running container are never pruned.
    - Holds `resource_group: studyaio-prod`, so two deploys never interleave, and
      is `interruptible: false` so a newer push cannot cancel one midway.
    - Re-checks the ref as a **shell assertion**, not only via `rules:`. A
