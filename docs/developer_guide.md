@@ -108,10 +108,27 @@ you ever genuinely need it.
 ### Branch and merge
 
 Branch off `main`, push to `origin`, open an MR, let the pipeline run, merge.
-Note that `main` has **no protection yet** and
-`only_allow_merge_if_pipeline_succeeds` is `false` (GL#2), so nothing enforces a
-green pipeline — checking it is still a convention, and `main` auto-deploys on
-success, so a red merge is a real risk.
+`main` is protected, and since 2026-09-28 a **green pipeline is enforced, not
+merely conventional** (GL#2):
+
+| Setting | Value |
+|---|---|
+| `allow_force_push` | `false` |
+| `only_allow_merge_if_pipeline_succeeds` | `true` |
+| `allow_merge_on_skipped_pipeline` | `false` |
+| push access | Maintainers |
+| merge access | Maintainers |
+
+The second and third go together. Requiring pipeline success while still allowing
+a merge on a *skipped* pipeline reproduces the hole at the merge gate that the
+deploy job's shell ref-guard exists to close: a skipped job reports the run
+green, so "succeeded" and "never ran" would be indistinguishable.
+
+**Direct push to `main` is still permitted for Maintainers**, so the MR is a
+convention even though the pipeline is not. That matters more here than on most
+projects because `main` auto-deploys on success — a direct push reaches
+production without a pipeline gating it. Setting push access to *No one* would
+close it; that is a live decision, not an oversight.
 
 Commit messages and MR descriptions must not mention the tooling used to write
 them.

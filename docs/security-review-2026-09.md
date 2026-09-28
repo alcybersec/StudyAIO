@@ -366,14 +366,14 @@ change.
 
 | # | |
 |---|---|
-| **#90** | `main` has no branch protection, no rulesets: no required checks, no required PR, force-push permitted. The highest-value item here, and not code |
 | **#101** | three fields the admin UI infers because the API does not surface them |
 | **#108** | 12 fixtures across 8 files patch `data_dir` without `reset_storage()`, so they no-op against the memoised singleton; `tests/unit` and `tests/golden` add no isolation of their own |
 
 Since written: **#89** and **#63** are closed, and #89's subject is gone outright — CI moved to
 GitLab CI on 2026-09-27 and `.github/workflows/` was deleted, so there is no `ci.yml` left to
-name a dead branch. **All four now live on GitLab and are read there** — the three
-still open above plus #107, which is fixed: #90→GL#2, #101→GL#3, #107→GL#4, #108→GL#5. The GitHub originals are closed with a link to each successor,
+name a dead branch. **All four now live on GitLab and are read there**:
+#90→GL#2, #101→GL#3, #107→GL#4, #108→GL#5 — the mapping holds regardless of which are
+still open, so the numbers in the table above resolve in both places. The GitHub originals are closed with a link to each successor,
 so the numbers in this document resolve in both places.
 
 **#107 (GL#4) is fixed.** Keys are `courseops/<user_id>/<sha256[:16]>_<name>`, so the purge
@@ -387,13 +387,20 @@ and the purge deliberately does not guess at it, so
 `scripts/backfill_courseops_files.py` must run on any instance that accepted a course document
 before this release. An integration test pins that residue so it is not mistaken for a bug.
 
-**#90 (GL#2) is half-satisfied, and wider than this repo.** `allow_force_push = false` is
-already set on `main` across all three projects — that half is done. But
-`only_allow_merge_if_pipeline_succeeds` is **`false`** on StudyAIO,
-`the_arbitrage_project` and `txn` alike, so an MR can still merge with a red pipeline or with
-none at all. The gap this document described is therefore real and fleet-wide, not
-StudyAIO-specific. It is deliberately not flipped: changing merge policy across three
-repositories is a decision GL#2 exists to hold, not a side effect of a CI migration.
+**#90 (GL#2) is now enforced on StudyAIO.** As of 2026-09-28
+`only_allow_merge_if_pipeline_succeeds = true` and `allow_merge_on_skipped_pipeline = false`,
+alongside the `allow_force_push = false` that was already set. The second flag is not
+decoration: requiring success while permitting a merge on a *skipped* pipeline would
+reproduce, at the merge gate, exactly the hole the deploy job's shell ref-guard exists to
+close — a skipped job reports the run green, making "succeeded" and "never ran"
+indistinguishable.
+
+Two parts of this finding remain open. **Direct push to `main` is still permitted for
+Maintainers**, so the "no required PR" half stands: the pipeline gate binds merges, not
+pushes, and `main` auto-deploys on success. And `the_arbitrage_project` and `txn` still carry
+`only_allow_merge_if_pipeline_succeeds = false` — the fleet-wide half, deliberately untouched,
+because those repositories' workflows (the arbitrage one deploys manually, and moves real
+money) are not StudyAIO's to assume.
 
 One more thing changed the risk picture here: StudyAIO's `main` auto-deploys again as of
 2026-09-27, and `/opt/studyaio`'s origin is now GitLab rather than GitHub, so a deploy no
