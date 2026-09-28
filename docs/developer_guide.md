@@ -459,8 +459,19 @@ docker compose exec api python -m app.cli evals --no-judge
 docker compose exec api python -m app.cli evals
 
 docker compose exec api python -m app.cli evals --case normalisation
-docker compose exec api python -m app.cli evals --out /app/data/evals-$(date +%F).json
+
+# Three runs of each case: generation is non-deterministic, so one run is a
+# sample. This separates a fabrication that happens every time from one that
+# happened once. Multiplies the cost by N.
+docker compose exec api python -m app.cli evals -n 3 --out /app/data/evals-$(date +%F).json
 ```
+
+**Read `-n` output for stability first.** A case marked `UNSTABLE` did not agree
+with itself across runs, which means its numbers are not repeatable and
+comparing them against a previous run tells you nothing — a different problem
+from failing. `FABRICATED every run` is a property of the prompt and worth
+fixing; `fabricated sometimes (1/3 runs)` is the model's temperature and may not
+be.
 
 **Not part of CI, on purpose.** It costs money and is not deterministic, and a
 non-deterministic gate is worse than no gate — it would fail randomly and get
