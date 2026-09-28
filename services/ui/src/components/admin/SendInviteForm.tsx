@@ -1,41 +1,10 @@
 import { useState } from 'react'
-import { Check, Copy, Mail, TriangleAlert } from 'lucide-react'
+import { Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Input } from '../ui'
 import { useSendInvite } from '../../hooks/useApi'
+import { InviteLinkNotice } from './InviteLinkNotice'
 import type { InviteSendResult } from '../../types'
-
-interface CopyLinkProps {
-  url: string
-}
-
-function CopyLink({ url }: CopyLinkProps) {
-  const [copied, setCopied] = useState(false)
-
-  return (
-    <button
-      type="button"
-      className="inline-flex max-w-full items-center gap-1.5 font-mono text-[11px] text-text hover:text-sage-fg transition-colors"
-      onClick={() => {
-        void navigator.clipboard
-          .writeText(url)
-          .then(() => {
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1500)
-          })
-          .catch(() => toast.error('Could not copy to clipboard'))
-      }}
-      aria-label="Copy invite link"
-    >
-      <span className="truncate">{url}</span>
-      {copied ? (
-        <Check size={12} className="shrink-0" aria-hidden />
-      ) : (
-        <Copy size={12} className="shrink-0" aria-hidden />
-      )}
-    </button>
-  )
-}
 
 /**
  * Email a single-use invite to one person.
@@ -112,17 +81,8 @@ export function SendInviteForm() {
       </div>
 
       {result && (
-        <div className="mt-3 rounded-lg border border-border bg-surface-2 p-3">
-          {!result.email_sent && (
-            <p className="mb-1.5 flex items-center gap-1.5 text-[11px] text-amber-fg">
-              <TriangleAlert size={12} aria-hidden />
-              The email could not be sent. Pass this link on yourself.
-            </p>
-          )}
-          <p className="mb-1 text-[11px] text-text-faint">
-            Invite link for {result.invite.email} — shown once, single use.
-          </p>
-          <CopyLink url={result.invite_url} />
+        <div className="mt-3">
+          <InviteLinkNotice result={result} />
         </div>
       )}
     </div>

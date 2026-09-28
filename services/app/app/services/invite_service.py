@@ -189,6 +189,61 @@ async def mark_invite_sent(session: AsyncSession, invite: InviteCode) -> None:
     await session.flush()
 
 
+async def resend_email_invite(
+    session: AsyncSession,
+    invite_id: str,
+    expires_in_days: int | None = 14,
+) -> MintedInvite | None:
+    """Issue a fresh link for an existing email invite.
+
+    **Rotates the token**, because the original is unrecoverable — only its hash
+    was ever stored. That is not a limitation to work around: a resend that
+    reissued the same credential would mean the old email, wherever it now sits,
+    stays live forever. After this the previous link stops working.
+
+    The expiry is renewed too. The common reason to resend is that the first
+    link expired, and handing someone a fresh token that is already dead would
+    be a strange thing to do.
+
+    Expired invites are deliberately resendable; revoked and already-accepted
+    ones are not. Revoking is a decision someone made, and re-inviting past it
+    should be explicit rather than a side effect of a Resend button. An accepted
+    invite has nothing left to give: the account exists, and the person needs a
+    password reset, not an invitation.
+
+    Args:
+        session: Database session.
+        invite_id: The invite to reissue.
+        expires_in_days: Fresh expiry window; None for no expiry.
+
+    Returns:
+        The invite and its new raw token, or None if no such invite.
+
+    Raises:
+        InviteError: If it is a shared code, revoked, or already accepted.
+    """
+    invite = await get_invite(session, invite_id)
+    if invite is None:
+        return None
+    if not invite.is_email_invite:
+        raise InviteError("Only email invites can be resent")
+    if invite.revoked_at is not None:
+        raise InviteError("That invite was revoked")
+    if invite.used_count >= invite.max_uses:
+        raise InviteError("That invite has already been accepted")
+
+    raw_token = generate_magic_link_token()
+    invite.token_hash = hash_magic_link_token(raw_token)
+    # Back to unsent: the row must not claim a delivery that has not happened
+    # yet, and the admin list reads sent_at to show exactly that.
+    invite.sent_at = None
+    if expires_in_days is not None:
+        invite.expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
+    await session.flush()
+    logger.info("invite_email_resent", invite_id=invite.id, email=invite.email)
+    return MintedInvite(invite=invite, raw_token=raw_token)
+
+
 async def list_invites(session: AsyncSession) -> list[InviteCode]:
     """List every invite code, newest first.
 

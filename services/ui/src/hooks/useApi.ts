@@ -673,6 +673,16 @@ export function useSendInvite() {
   })
 }
 
+export function useResendInvite() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminApi.resendInvite,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'invites'] })
+    },
+  })
+}
+
 export function useRevokeInvite() {
   const queryClient = useQueryClient()
   return useMutation({
