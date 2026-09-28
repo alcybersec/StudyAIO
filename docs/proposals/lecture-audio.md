@@ -1,11 +1,14 @@
 # Lecture audio and transcription
 
 **Status:** exploration, nothing built. Written 2026-09-28.
-**Open question for the operator:** hosted API vs local model — answered below, but
-it is a privacy decision, not a technical one.
+**Settled 2026-09-28:** summarisation is three passes (slides → audio → reconcile),
+slides authoritative. See "Summarising: three passes, not one".
+**Still open for the operator:** hosted API vs local model — answered below, but
+it is a privacy decision rather than a technical one.
 
-Upload a lecture recording (or record it in the app), transcribe it, and fold the
-transcript into that week's summary alongside the slides.
+Upload a lecture recording (or record it in the app), transcribe it, summarise it
+separately from the slides, and reconcile the two into the week's summary — with
+the slides authoritative and the audio adding clarification.
 
 ## The decisive finding: local transcription does not fit this box
 
@@ -73,13 +76,154 @@ One `ffmpeg` call means **no chunking code at all** — no splitting on silence,
 overlap handling, no reassembly of segment timestamps. This is the single highest
 -leverage decision in the design.
 
+## Summarising: three passes, not one
+
+**Decided 2026-09-28.** The first draft of this proposal concatenated the
+transcript extraction into the week alongside the slides and ran the existing
+single `summarize` call over both. That was wrong, and the reason is worth
+stating because it drives the rest of the design.
+
+A 50-minute transcript is roughly **10× the word count of a slide deck at a
+fraction of the information density** — asides, repetition, tangents, filler.
+Concatenated, it swamps the deck by sheer volume, and `prompts/summarize.txt` is
+tuned for slides. The likely result is that adding audio makes the summary
+*worse*, which is the opposite of the point and a regression to a feature that
+works today.
+
+Instead, three separate passes:
+
+| Pass | Prompt | Input | Output |
+|---|---|---|---|
+| 1. Slides | `summarize.txt` — **unchanged** | Slide extractions for the week | `source='slides'` |
+| 2. Transcript | `summarize_transcript.txt` — new | Transcript extractions for the week | `source='audio'` |
+| 3. Reconcile | `reconcile_summaries.txt` — new | The two summaries above | `source='final'` |
+
+Three properties fall out of this, and they are the whole argument:
+
+- **The existing product cannot regress.** `summarize.txt` is untouched and pass 1
+  is exactly what runs today. A user who never uploads audio sees no change of any
+  kind — not a reworded summary, not a different section order.
+- **Each prompt faces one kind of input.** The transcript prompt can be written
+  for speech (discard filler, keep worked examples and asides) without
+  compromising the slide prompt.
+- **The reconcile pass reasons over two short structured documents**, not one
+  giant blob of mixed-density text. That is a far easier task than the one-pass
+  version, and a far cheaper one in context.
+
+### The 80/20 split, expressed so a model can follow it
+
+A ratio is not instructable — you cannot tell a model "80/20" and get 80/20. What
+*is* instructable is an asymmetry of **roles**, and that is how the reconcile
+prompt should encode it:
+
+**The slide summary is the spine.** The final summary keeps its structure,
+its section order, its definitions, its formulas and its terminology. Reconcile
+starts from the slide summary and extends it — it does not re-derive a summary
+from two equal inputs.
+
+**The transcript may contribute** — clarification of a slide that is terse or
+cryptic; worked examples the lecturer did aloud that never reached a slide;
+emphasis, explicitly flagged ("this is examinable", "this trips people up");
+questions asked and answered in the room; motivation and context for why a topic
+matters.
+
+**The transcript may not** — introduce a new top-level section; restate a
+definition in its own words when the slide has one; contribute anything that
+merely rephrases what a slide already says; or pad a section to look thorough.
+
+A soft budget can accompany the role rules as a hint ("expect roughly one in five
+substantive points to originate in the lecture"), but the **rules are what carry
+the behaviour** and the number is a nudge. Do not mistake the number for the
+mechanism.
+
+### When the two sources disagree
+
+Slides win by default. The one exception is worth building for explicitly,
+because it is common and it is exactly the value audio adds: **the lecturer
+correcting their own slide.** "Ignore that figure, it should be n log n."
+
+So the rule is: keep the slide content, and note the correction next to it rather
+than silently choosing a side. A student needs to know both what the deck says —
+because that is what they will see again in the exam paper — and that it was
+corrected aloud.
+
+### Provenance
+
+Content originating in the transcript should be visibly marked — a light inline
+tag, not a separate section.
+
+**Marking it inline rather than segregating it keeps the 10-section format
+intact**, so `tests/golden/test_summary_structure.py::TestPromptContract` — which
+re-derives its section list from `summarize.txt` — is unaffected. A new
+"From the Lecture" section would be easier to evaluate but changes the contract
+and fragments the reading experience, splitting a concept from its own
+clarification.
+
+The marks also make the 80/20 *auditable*: you can read a final summary and see
+at a glance whether the audio contributed insight or noise. Without them there is
+no way to tell whether the reconcile prompt is working.
+
+### Schema
+
+`summaries` is currently unique on `(course_id, week)` — `uq_summaries_course_week`
+— so three summaries per week needs a migration:
+
+- add `source: slides | audio | final`, defaulting to `slides`
+- replace the constraint with `(course_id, week, source)`
+- backfill every existing row to `slides`
+
+**Existing behaviour is preserved exactly** by one reader rule: the published
+summary for a week is `final` if it exists, otherwise `slides`. Today no `final`
+rows exist, so every read resolves to the row it resolves to now. That rule must
+live in a single accessor in `summary_service` — if it is inlined at each call
+site, the UI, exports, and assets will drift apart.
+
+`version` and `source_artifacts` already exist and work per-row, so each source
+versions independently for free.
+
+### Re-runs
+
+This makes the incremental story clean, which is the case that actually matters:
+a student uploads slides during the week and the recording afterwards.
+
+- Slides re-uploaded → `slides` bumps → `final` is stale and re-reconciles
+- Audio added later → `audio` created → `final` reconciles for the first time
+- Reconcile alone can be re-run after a prompt change **without re-transcribing**,
+  which matters because transcription is the part that costs money
+
+Reconcile is week-scoped rather than artifact-scoped, so it belongs outside the
+per-artifact chain: a task that fires after `summarize` and no-ops unless both a
+`slides` and an `audio` summary exist for that week. It reads two rows and writes
+one, so it is idempotent by construction.
+
+### Cost
+
+A week with audio costs **three summarisation calls instead of one**, plus the
+transcription itself. The up-front quota check on an audio upload has to budget
+for that, and the global daily ceiling should see all three.
+
+### Testing it
+
+The eval harness in `services/app/evals/` already has the right shape for this,
+and the reconcile pass is more testable than either summariser:
+
+- A case whose transcript **contradicts** the slides on a specific fact, with the
+  slide version in `must_mention` and the transcript's version in
+  `must_not_mention`. That tests slide precedence directly, and it is the single
+  most valuable eval in the feature.
+- A case where the transcript adds a genuinely new worked example — assert it
+  survives into the final summary. The failure mode here is a reconcile prompt so
+  conservative it discards everything, which would make the whole feature
+  pointless while every precedence test still passed.
+- The existing fabrication check already catches the reconcile pass inventing
+  material present in *neither* input.
+
+Note that `n > 1` matters more here than for the existing cases: reconcile is a
+judgement task, so a single run is a weak sample.
+
 ## Five things the "just add a fourth extractor" framing hides
 
-The merge path genuinely is easy: `get_week_extractions` filters only on
-`course_id` and `week` with no file-type condition, `merge_extractions`
-concatenates, and `generate_summary(extraction_data, existing_md)` already takes
-an existing summary to update. A transcript extraction folds into the week with
-**zero changes to `summarize.py`**. But:
+Beyond the summarisation restructure above:
 
 1. **`BaseExtractor.extract()` is synchronous**, called inside a `run_async` loop.
    A hosted transcriber is async HTTP and cannot be awaited there. Needs an
@@ -88,9 +232,11 @@ an existing summary to update. A transcript extraction folds into the week with
    stage raises before transcription ever happens. The fix is to take course and
    week at upload time — and **`POST /api/uploads` has no course/week parameter
    today**. This is the largest structural change in the feature.
-3. **Page-number collision.** Slides emit `--- Page 7 ---`; transcript segments
-   would too, colliding in the merged text and in `chunks.page_ref`. Transcript
-   segments need timestamp labels instead.
+3. **Page refs are wrong for audio.** Slides emit `--- Page 7 ---` and
+   `chunks.page_ref` records it, which is what makes a Q&A citation clickable.
+   A transcript has no pages. Segments need timestamps instead, and a citation
+   pointing at 34:20 of a recording is a different UI affordance from one
+   pointing at a slide.
 4. **`index` and `assets` cost more** — roughly 25 extra chunks per lecture,
    embedded locally on an already memory-starved box.
 5. **No Celery `time_limit` is set.** A hung transcription request holds one of
@@ -121,15 +267,6 @@ This needs an explicit acknowledgement at upload ("you have permission to record
 and upload this") and a clear deletion path for the source audio. It is a bigger
 obstacle to shipping than any of the engineering above.
 
-## Expect summaries to get worse before they get better
-
-A transcript is roughly **10× the word count of a slide deck at much lower
-information density**, full of asides, repetition and filler.
-`prompts/summarize.txt` is tuned for slides. Expect to add transcript-aware
-guidance — and note that `tests/golden/test_summary_structure.py::TestPromptContract`
-re-derives its section list from that prompt file, so a prompt change fails the
-suite until the fixture is updated too.
-
 ## Suggested first slice
 
 Upload only. No in-browser recording, one provider, no chunking:
@@ -137,7 +274,16 @@ Upload only. No in-browser recording, one provider, no chunking:
 1. Audio upload endpoint with **required** course and week
 2. `ffprobe` for duration → quota check → reject over a configured cap
 3. Transcode to 16 kHz mono Opus
-4. `TranscriptionAdapter` (Groq) → `AudioExtractor` → the existing merge path
+4. `TranscriptionAdapter` (Groq) → `AudioExtractor`
+5. `summarize_transcript.txt` producing a `source='audio'` summary
+6. `reconcile_summaries.txt` producing `source='final'`
+
+Steps 1–4 are shippable and useful on their own: with the `source` column in
+place but no reconcile stage, an audio upload produces a searchable transcript
+and its own summary without touching the slide summary at all. That is a safe
+place to stop and look at real output before building the reconcile pass — and
+reading a few real transcript summaries is the only honest way to write the
+reconcile prompt.
 
 **Deferred:** in-browser recording — the largest piece of work and the least of
 the value, since a phone already records lectures well; per-user transcription
