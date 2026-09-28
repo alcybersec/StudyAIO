@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     db_pool_size: int = 5
     db_max_overflow: int = 10
     db_pool_recycle: int = 1800  # 30 minutes
+    #: Seconds asyncpg waits to establish a connection. Its own default is 60,
+    #: which means an unreachable database hangs every request for a full minute
+    #: before failing — long enough to look like a deadlock rather than an
+    #: outage. Same reasoning as `redis_socket_timeout` below.
+    db_connect_timeout: float = 10.0
 
     # Redis
     redis_url: str = "redis://redis:6379/0"
