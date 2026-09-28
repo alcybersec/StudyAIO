@@ -116,7 +116,7 @@ merely conventional** (GL#2):
 | `allow_force_push` | `false` |
 | `only_allow_merge_if_pipeline_succeeds` | `true` |
 | `allow_merge_on_skipped_pipeline` | `false` |
-| push access | Maintainers |
+| push access | **No one** |
 | merge access | Maintainers |
 
 The second and third go together. Requiring pipeline success while still allowing
@@ -124,11 +124,22 @@ a merge on a *skipped* pipeline reproduces the hole at the merge gate that the
 deploy job's shell ref-guard exists to close: a skipped job reports the run
 green, so "succeeded" and "never ran" would be indistinguishable.
 
-**Direct push to `main` is still permitted for Maintainers**, so the MR is a
-convention even though the pipeline is not. That matters more here than on most
-projects because `main` auto-deploys on success — a direct push reaches
-production without a pipeline gating it. Setting push access to *No one* would
-close it; that is a live decision, not an oversight.
+**`git push origin main` is refused for everybody**, so a merge request is the
+only way in. Push access and merge access are separate levels: "No one" governs
+pushes, while merges are performed server-side under `merge_access_level`, so
+MRs are unaffected.
+
+That closes the last gap in GL#2. It matters here more than on most projects
+because `main` auto-deploys on success — a direct push would otherwise reach
+production with no pipeline in front of it.
+
+Nothing automated is affected: no CI job or script runs `git push`, `git commit`
+or `git tag`; `deploy-selfhosted` sends only a commit SHA over SSH and the host
+checks it out; and the GitHub mirror is *outbound* (GitLab → GitHub), which
+protected-branch push rules do not govern.
+
+Work on a branch and open an MR — including for a one-line fix, and including
+when you are the only person on the repository.
 
 Commit messages and MR descriptions must not mention the tooling used to write
 them.

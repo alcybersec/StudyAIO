@@ -395,12 +395,17 @@ reproduce, at the merge gate, exactly the hole the deploy job's shell ref-guard 
 close — a skipped job reports the run green, making "succeeded" and "never ran"
 indistinguishable.
 
-Two parts of this finding remain open. **Direct push to `main` is still permitted for
-Maintainers**, so the "no required PR" half stands: the pipeline gate binds merges, not
-pushes, and `main` auto-deploys on success. And `the_arbitrage_project` and `txn` still carry
-`only_allow_merge_if_pipeline_succeeds = false` — the fleet-wide half, deliberately untouched,
-because those repositories' workflows (the arbitrage one deploys manually, and moves real
-money) are not StudyAIO's to assume.
+Push access to `main` is now **No one**, so the "no required PR" half is closed too: a merge
+request is the only way in, for everybody. Push and merge are separate access levels — merges
+run server-side under `merge_access_level` — so MRs are unaffected, which was confirmed on the
+open MR rather than assumed. Nothing automated pushes either: no CI job or script runs
+`git push`, the deploy sends only a SHA over SSH and checks it out, and the GitHub mirror is
+outbound.
+
+One part of this finding remains open, and it is not StudyAIO's to close:
+`the_arbitrage_project` and `txn` still carry `only_allow_merge_if_pipeline_succeeds = false`.
+Deliberately untouched — those repositories' workflows (the arbitrage one deploys manually,
+and moves real money) are not this project's to assume.
 
 One more thing changed the risk picture here: StudyAIO's `main` auto-deploys again as of
 2026-09-27, and `/opt/studyaio`'s origin is now GitLab rather than GitHub, so a deploy no
