@@ -27,6 +27,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.core.security import generate_backup_codes, hash_backup_codes
+from tests.conftest import isolated_storage
 from tests.unit.api.test_auth import _make_db_user
 
 TEST_SECRET = "<test-placeholder>"
@@ -361,7 +362,6 @@ class TestReEnrollmentIsRefused:
 
     @pytest.mark.asyncio
     async def test_enrolling_over_live_mfa_is_a_400_not_a_500(self, mock_session):
-        import tempfile
 
         import httpx
 
@@ -386,8 +386,7 @@ class TestReEnrollmentIsRefused:
         limiter.reset()
         try:
             with (
-                tempfile.TemporaryDirectory() as tmpdir,
-                patch("app.config.settings.data_dir", tmpdir),
+                isolated_storage(),
                 patch("app.services.user_service.verify_totp", return_value=True),
             ):
                 async with httpx.AsyncClient(

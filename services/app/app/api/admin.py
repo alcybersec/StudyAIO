@@ -33,8 +33,30 @@ class UserResponse(BaseModel):
     role: str
     tier: str
     is_active: bool
+    #: Whether the account has TOTP configured. A boolean about the account's
+    #: own setup — never the secret or the backup codes, which
+    #: `UserProfileResponse` deliberately excludes and which must stay excluded.
+    #: Lets the admin UI disable "Reset MFA" for users who have none, instead of
+    #: discovering it from the response after the click.
+    mfa_enabled: bool = False
     created_at: str | None
     last_login_at: str | None
+
+
+class UserUpdateResponse(UserResponse):
+    """A PATCH result, which knows something a list row cannot.
+
+    `sessions_revoked` lives here rather than on `UserResponse` because on a
+    list row it would be a fact-shaped non-fact: listing a user revokes nothing,
+    so the field could only ever be a meaningless `False`. A PATCH is the one
+    place the server actually knows the answer.
+
+    The admin UI used to state this consequence from its own model of the
+    transition, which is right only while its copy of the row is fresh. Now it
+    can report what happened.
+    """
+
+    sessions_revoked: bool
 
 
 class UserListResponse(BaseModel):
@@ -85,6 +107,15 @@ class UserProfileSection(BaseModel):
     is_active: bool
     email_verified: bool
     mfa_enabled: bool
+    #: Providers linked to this account, e.g. ``["google"]``. Names only — the
+    #: "Change email" dialog needs to say *which* links it will break, not to
+    #: see anything from the provider account itself.
+    #:
+    #: ``[]`` means nothing is linked, so the dialog can drop the unlink warning
+    #: entirely. ``None`` means the lookup failed and the answer is unknown —
+    #: distinct on purpose, because defaulting that to ``[]`` would state
+    #: "this unlinks nothing" about a destructive action on no evidence.
+    oauth_providers: list[str] | None = None
     avatar_url: str | None
     last_login_at: str | None
     created_at: str | None
@@ -238,7 +269,7 @@ async def list_users(
 
 @router.patch(
     "/admin/users/{user_id}",
-    response_model=UserResponse,
+    response_model=UserUpdateResponse,
     summary="Update user",
     description=(
         "Update a user's role, tier, active status, or email. Admin only. "
@@ -251,7 +282,7 @@ async def update_user(
     body: UserUpdateRequest,
     admin: User = Depends(require_role("admin")),
     session: AsyncSession = Depends(get_session),
-) -> UserResponse:
+) -> UserUpdateResponse:
     """Update user role, tier, active status, or email (admin only)."""
     if body.role is None and body.tier is None and body.is_active is None and body.email is None:
         raise HTTPException(status_code=400, detail="No fields provided to update")
@@ -272,7 +303,7 @@ async def update_user(
     if result is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return UserResponse(**result)
+    return UserUpdateResponse(**result)
 
 
 @router.get(
@@ -493,6 +524,7 @@ def _user_to_response(user: User) -> UserResponse:
         role=user.role,
         tier=user.tier,
         is_active=user.is_active,
+        mfa_enabled=user.mfa_enabled,
         created_at=user.created_at.isoformat() if user.created_at else None,
         last_login_at=user.last_login_at.isoformat() if user.last_login_at else None,
     )

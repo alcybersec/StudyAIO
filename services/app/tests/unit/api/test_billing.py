@@ -1,12 +1,12 @@
 """Tests for billing API endpoints."""
 
-import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from app.core.exceptions import QuotaExceededError
+from tests.conftest import isolated_storage
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ async def billing_client(mock_session, free_user):
 
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+    with isolated_storage():
         with patch("app.config.settings.self_hosted", False):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
@@ -84,7 +84,7 @@ async def billing_client_pro(mock_session, pro_user):
 
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+    with isolated_storage():
         with patch("app.config.settings.self_hosted", False):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
@@ -115,7 +115,7 @@ async def billing_client_selfhosted(mock_session, free_user):
 
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+    with isolated_storage():
         with patch("app.config.settings.self_hosted", True):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),

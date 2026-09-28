@@ -62,19 +62,52 @@ class TestAdminMetricsResponseStructure:
 class TestUserResponseStructure:
     """Verify admin user response schema."""
 
+    #: The shape a list row and an update result share.
+    BASE_FIELDS = {
+        "id",
+        "email",
+        "username",
+        "role",
+        "tier",
+        "is_active",
+        # Whether TOTP is configured, so the admin UI can disable "Reset MFA"
+        # for accounts with none instead of learning it from the response after
+        # the click (GL#3). A boolean about setup — see the exclusion test below
+        # for what must never join it.
+        "mfa_enabled",
+        "created_at",
+        "last_login_at",
+    }
+
     def test_user_response_has_expected_fields(self):
         """UserResponse schema includes all user fields."""
         from app.api.admin import UserResponse
 
-        fields = set(UserResponse.model_fields.keys())
-        expected = {
-            "id",
-            "email",
-            "username",
-            "role",
-            "tier",
-            "is_active",
-            "created_at",
-            "last_login_at",
+        assert set(UserResponse.model_fields.keys()) == self.BASE_FIELDS
+
+    def test_update_response_adds_only_sessions_revoked(self):
+        """The PATCH result knows one thing a list row cannot (GL#3).
+
+        `sessions_revoked` is deliberately *not* on `UserResponse`: listing users
+        revokes nothing, so there the field could only ever be a meaningless
+        `false` — a fact-shaped non-fact, which is worse than an absent one.
+        """
+        from app.api.admin import UserUpdateResponse
+
+        assert set(UserUpdateResponse.model_fields.keys()) == self.BASE_FIELDS | {
+            "sessions_revoked"
         }
-        assert expected == fields
+
+    def test_no_admin_user_schema_carries_mfa_material(self):
+        """`mfa_enabled` is a boolean about setup; the secret must not follow it.
+
+        The scope line from GL#3, pinned: adding a convenient `mfa_secret` or
+        `backup_codes` here would erode the exclusion `UserProfileResponse`
+        already makes deliberately.
+        """
+        from app.api.admin import UserProfileSection, UserResponse, UserUpdateResponse
+
+        forbidden = {"mfa_secret", "backup_codes", "hashed_password", "totp_secret"}
+        for schema in (UserResponse, UserUpdateResponse, UserProfileSection):
+            leaked = forbidden & set(schema.model_fields.keys())
+            assert not leaked, f"{schema.__name__} exposes {leaked}"

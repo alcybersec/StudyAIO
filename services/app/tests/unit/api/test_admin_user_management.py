@@ -3,13 +3,13 @@
 The fixtures mirror `test_admin_api.py` so both files authenticate the same way.
 """
 
-import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from app.models.user import User
+from tests.conftest import isolated_storage
 
 
 def _make_user(**overrides) -> MagicMock:
@@ -46,7 +46,7 @@ async def admin_client(mock_session):
     app.dependency_overrides[get_current_user] = override_user
     limiter.reset()
 
-    with tempfile.TemporaryDirectory() as tmpdir, patch("app.config.settings.data_dir", tmpdir):
+    with isolated_storage():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -294,6 +294,9 @@ class TestTierChangeStillWorks:
             "is_active": True,
             "created_at": None,
             "last_login_at": None,
+            "mfa_enabled": False,
+            # A tier change moves a quota, not a privilege — no sign-out.
+            "sessions_revoked": False,
         }
         with patch("app.api.admin.admin_service.update_user", AsyncMock(return_value=updated)):
             resp = await admin_client.patch("/api/admin/users/u-1", json={"tier": "pro"})
