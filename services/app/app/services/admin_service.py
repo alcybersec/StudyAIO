@@ -3,7 +3,7 @@
 from datetime import UTC, date, datetime, timedelta
 
 import structlog
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -14,6 +14,7 @@ from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.course import Course
 from app.models.exam import Exam
+from app.models.invite_code import InviteCode
 from app.models.magic_link import MagicLink
 from app.models.oauth_account import OAuthAccount
 from app.models.pipeline_run import PipelineRun
@@ -279,6 +280,139 @@ async def update_user(
         # it *requested* rather than the one the server made — accurate only
         # while the row the UI held was fresh (GL#3).
         "sessions_revoked": reactivated or role_changed or email_repointed,
+    }
+
+
+#: Roles that are never beta testers. Demo accounts are a product feature, not
+#: people trying the app, so counting them would inflate every step.
+_NON_TESTER_ROLES = ("demo",)
+
+
+async def get_beta_funnel(session: AsyncSession, include_admins: bool = False) -> dict:
+    """Where invited testers stop, derived from data already recorded.
+
+    Every step below comes from tables the app already writes — `invite_codes`,
+    `users`, `lecture_artifacts`, `usage_records` — so this answers questions
+    about testers who signed up *before* anyone thought to measure them. No new
+    events, no migration, nothing to backfill.
+
+    The steps, and what each one actually means:
+
+    * **invites_issued / invites_redeemed** — capacity handed out versus used.
+      Issued counts `max_uses` on codes that are neither revoked nor expired, so
+      a revoked code stops flattering the number.
+    * **registered** — accounts that exist.
+    * **verified** — `email_verified`. A gap here usually means SMTP, not
+      disinterest.
+    * **uploaded** — distinct users with at least one `lecture_artifacts` row.
+      The first step that requires actually trying the product.
+    * **processed** — users whose upload reached `processed`. The gap between
+      this and `uploaded` is the pipeline failing people, which is very
+      different from them losing interest.
+    * **returned** — users active on **two or more distinct days**, from
+      `usage_records.record_date`. The cheapest honest retention signal
+      available without new instrumentation.
+    * **active_7d** — distinct users with usage in the last seven days.
+
+    Admins are excluded by default. On an instance with a handful of testers the
+    operator's own account moves every percentage, and a funnel that counts you
+    measures the wrong thing. The counts of who was left out are returned so the
+    numbers can be reconciled against `get_system_metrics`.
+
+    Args:
+        session: Database session.
+        include_admins: Count admin accounts as testers.
+
+    Returns:
+        Dict of step counts plus `excluded_admins`, `excluded_demo` and
+        `stalled_after_registering`.
+    """
+    excluded_roles = list(_NON_TESTER_ROLES)
+    if not include_admins:
+        excluded_roles.append("admin")
+
+    tester = ~User.role.in_(excluded_roles)
+
+    async def _count(*where) -> int:
+        return (await session.execute(select(func.count(User.id)).where(*where))).scalar_one()
+
+    registered = await _count(tester)
+    verified = await _count(tester, User.email_verified.is_(True))
+    excluded_admins = (
+        await session.execute(select(func.count(User.id)).where(User.role == "admin"))
+    ).scalar_one()
+    excluded_demo = (
+        await session.execute(select(func.count(User.id)).where(User.role == "demo"))
+    ).scalar_one()
+
+    tester_ids = select(User.id).where(tester).scalar_subquery()
+
+    uploaded = (
+        await session.execute(
+            select(func.count(func.distinct(LectureArtifact.user_id))).where(
+                LectureArtifact.user_id.in_(tester_ids)
+            )
+        )
+    ).scalar_one()
+
+    processed = (
+        await session.execute(
+            select(func.count(func.distinct(LectureArtifact.user_id))).where(
+                LectureArtifact.user_id.in_(tester_ids),
+                LectureArtifact.status == "processed",
+            )
+        )
+    ).scalar_one()
+
+    # Two or more distinct active days. `usage_records` carries one row per user
+    # per day, so counting rows is counting days.
+    active_days = (
+        select(UsageRecord.user_id)
+        .where(UsageRecord.user_id.in_(tester_ids))
+        .group_by(UsageRecord.user_id)
+        .having(func.count(func.distinct(UsageRecord.record_date)) >= 2)
+        .subquery()
+    )
+    returned = (await session.execute(select(func.count()).select_from(active_days))).scalar_one()
+
+    week_ago = date.today() - timedelta(days=7)
+    active_7d = (
+        await session.execute(
+            select(func.count(func.distinct(UsageRecord.user_id))).where(
+                UsageRecord.user_id.in_(tester_ids),
+                UsageRecord.record_date >= week_ago,
+            )
+        )
+    ).scalar_one()
+
+    now = datetime.now(UTC)
+    live_code = and_(
+        InviteCode.revoked_at.is_(None),
+        or_(InviteCode.expires_at.is_(None), InviteCode.expires_at > now),
+    )
+    invites_issued = (
+        await session.execute(
+            select(func.coalesce(func.sum(InviteCode.max_uses), 0)).where(live_code)
+        )
+    ).scalar_one()
+    invites_redeemed = (
+        await session.execute(select(func.coalesce(func.sum(InviteCode.used_count), 0)))
+    ).scalar_one()
+
+    return {
+        "invites_issued": int(invites_issued),
+        "invites_redeemed": int(invites_redeemed),
+        "registered": registered,
+        "verified": verified,
+        "uploaded": uploaded,
+        "processed": processed,
+        "returned": returned,
+        "active_7d": active_7d,
+        # The single most actionable number here: signed up, never tried it.
+        "stalled_after_registering": registered - uploaded,
+        "excluded_admins": excluded_admins,
+        "excluded_demo": excluded_demo,
+        "include_admins": include_admins,
     }
 
 

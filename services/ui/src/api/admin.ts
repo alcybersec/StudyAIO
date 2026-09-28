@@ -2,6 +2,7 @@ import { api } from './client'
 import type {
   AdminMfaCleared,
   AdminUserUpdated,
+  BetaFunnel,
   AdminUserCreated,
   AdminUserCreateRequest,
   AdminUserDeleted,
@@ -39,6 +40,11 @@ export const adminApi = {
 
   getMetrics(): Promise<SystemMetrics> {
     return api.get<SystemMetrics>('/admin/metrics')
+  },
+
+  getFunnel(includeAdmins = false): Promise<BetaFunnel> {
+    const qs = includeAdmins ? '?include_admins=true' : ''
+    return api.get<BetaFunnel>(`/admin/funnel${qs}`)
   },
 
   getUserDetails(userId: string): Promise<AdminUserDetail> {
