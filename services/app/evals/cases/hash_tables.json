@@ -1,0 +1,38 @@
+{
+  "id": "hash_tables",
+  "title": "Hash Tables and Collision Resolution",
+  "course": "CSIT302",
+  "week": 5,
+  "notes": "This case carries a deliberate trap in the source: the lecture states average O(1) and worst case O(n), and explicitly says the worst case is what you get with a bad hash function. A summary that reports only O(1) has dropped the qualification that makes the claim true, which is a faithfulness failure the judge should catch even though every must_mention term is present.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 5 — Hash Tables.\n\nA hash table maps a key to an index using a hash function, giving average case O(1) lookup. The worst case is O(n): with a bad hash function every key lands in the same bucket and the table degrades to a linear scan. The average case is a claim about the hash function, not about the data structure.\n\nThe load factor is the ratio of stored entries to buckets. Performance degrades as it approaches 1."
+    },
+    {
+      "page": 2,
+      "text": "Separate chaining stores a linked list at each bucket. Collisions append to the list. Lookup cost is proportional to the length of the chain, so it stays acceptable while the load factor is low.\n\nOpen addressing stores everything in the table itself. On a collision, linear probing checks the next bucket, and the next, until a free one is found. This suffers from primary clustering: occupied runs grow and make further collisions more likely."
+    },
+    {
+      "page": 3,
+      "text": "Quadratic probing checks buckets at increasing square offsets instead, which spreads entries out and avoids primary clustering.\n\nWhen the load factor crosses a threshold the table is resized, usually doubled, and every key is rehashed into the new table. Rehashing is O(n), but amortised across the insertions that caused it the cost per insertion stays constant."
+    }
+  ],
+  "must_mention": [
+    "hash function",
+    "load factor",
+    "separate chaining",
+    "open addressing",
+    "linear probing",
+    "quadratic probing",
+    "clustering",
+    "rehash"
+  ],
+  "must_not_mention": [
+    "cuckoo hashing",
+    "robin hood",
+    "bloom filter",
+    "consistent hashing",
+    "perfect hash"
+  ]
+}
