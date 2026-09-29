@@ -33,13 +33,39 @@ def required_sections() -> list[str]:
 def _mentions(haystack: str, needle: str) -> bool:
     """Whether a concept is named, allowing for ordinary prose variation.
 
-    Case-insensitive, and tolerant of the hyphen/space/none spellings that the
-    same term attracts (`Boyce-Codd`, `Boyce Codd`). Deliberately *not* fuzzy
-    beyond that: a looser match would start reporting coverage that is not
-    there, and a coverage number that flatters is worse than none.
+    Case-insensitive, and tolerant of the hyphen/space/none spellings the same
+    term attracts (`Boyce-Codd`, `Boyce Codd`, `BoyceCodd`). Deliberately *not*
+    fuzzy beyond that: a looser match reports coverage that is not there, and a
+    coverage number that flatters is worse than none.
+
+    **Matches on word boundaries.** The first implementation stripped whitespace
+    from both sides and did a plain substring test, which meant a short term
+    matched inside longer words: `QUIC` fired on "quickly", and every
+    `tcp_congestion` eval run was reported as fabricating QUIC by a summary that
+    had merely said slow start "grows the window quickly". Stripping whitespace
+    from the *haystack* also let a term match across a word gap, so "the EC
+    November deadline" would count as naming `ECN`.
+
+    That cut both ways. A false positive against `must_not_mention` invents a
+    fabrication; the same false positive against `must_mention` credits coverage
+    the summary never earned, which is the more dangerous direction because it
+    flatters silently.
     """
-    normalise = lambda s: re.sub(r"[\s\-_]+", "", s.casefold())  # noqa: E731
-    return normalise(needle) in normalise(haystack)
+    parts = [re.escape(part) for part in re.split(r"[\s\-_]+", needle.strip()) if part]
+    if not parts:
+        return False
+    # Internal separators stay flexible so "Boyce-Codd" still finds "Boyce Codd".
+    # (?<!\w)/(?!\w) rather than \b so terms that start or end with a digit or
+    # symbol ("1NF", "O(n)") still anchor correctly.
+    pattern = r"[\s\-_]*".join(parts)
+    # A trailing English inflection is still the same concept: a lecture that
+    # says "rehashing" has named `rehash`. Enumerated rather than "any
+    # continuation", because "any" is what let QUIC match "quickly" -- `quic`
+    # plus `kly` and `rehash` plus `ing` are structurally identical, and only
+    # the suffix list tells them apart.
+    return (
+        re.search(rf"(?<!\w){pattern}(?:e?s|e?d|ing)?(?!\w)", haystack, re.IGNORECASE) is not None
+    )
 
 
 @dataclass

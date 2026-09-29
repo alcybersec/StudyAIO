@@ -504,3 +504,73 @@ class TestRunnerEndToEnd:
         # The source has to be the lecture, not the summary echoed back.
         assert case["pages"][0]["text"][:40] in chunks[0]["text"]
         assert summary[:40] in chunks[1]["text"]
+
+
+class TestMentionsWordBoundaries:
+    """`_mentions` must not fire inside longer words.
+
+    The matcher originally stripped whitespace from both sides and did a plain
+    substring test. Every `tcp_congestion` eval run was therefore reported as
+    fabricating QUIC — by a summary that had only said slow start grows the
+    window "quickly".
+    """
+
+    def test_a_short_term_does_not_match_inside_a_longer_word(self):
+        # The regression. "quickly" is unavoidable prose in a congestion-control
+        # summary, and it must not read as the QUIC protocol.
+        assert not scoring._mentions("slow start grows the window quickly", "QUIC")
+
+    def test_the_real_term_still_matches(self):
+        assert scoring._mentions("compares TCP with QUIC at the transport layer", "QUIC")
+
+    def test_a_term_does_not_match_across_a_word_gap(self):
+        """Stripping whitespace from the haystack let unrelated words join up."""
+        assert not scoring._mentions("the EC November deadline", "ECN")
+
+    def test_hyphen_and_space_spellings_still_match(self):
+        for spelling in ("Boyce-Codd normal form", "Boyce Codd normal form", "BoyceCodd"):
+            assert scoring._mentions(spelling, "Boyce-Codd"), spelling
+
+    def test_terms_starting_with_a_digit_anchor_correctly(self):
+        assert scoring._mentions("satisfies 3NF but not BCNF", "3NF")
+        assert not scoring._mentions("satisfies 13NF", "3NF")
+
+    def test_trailing_punctuation_does_not_block_a_match(self):
+        assert scoring._mentions("the window shrinks (AIMD).", "AIMD")
+
+    def test_case_is_still_ignored(self):
+        assert scoring._mentions("uses aimd behaviour", "AIMD")
+
+    def test_a_hyphenated_compound_still_counts_as_a_mention(self):
+        assert scoring._mentions("a Reno-style recovery", "Reno")
+
+    def test_coverage_is_not_credited_by_a_substring_accident(self):
+        """The dangerous direction: a false positive here flatters coverage."""
+        case = {"id": "probe", "must_mention": ["ECN"], "must_not_mention": []}
+        score = scoring.score_deterministic(case, "## Overview\nthe EC November deadline")
+        assert score.missing == ["ECN"]
+        assert score.coverage == 0.0
+
+
+class TestMentionsInflections:
+    """A trailing English inflection is still the same concept.
+
+    The suffix list is enumerated rather than "any continuation", because "any"
+    is exactly what let `QUIC` match "quickly". `rehash`+`ing` and `quic`+`kly`
+    are structurally identical; only the suffix list distinguishes them.
+    """
+
+    def test_a_past_tense_still_counts(self):
+        # hash_tables lists `rehash`; its source says "rehashed".
+        assert scoring._mentions("the table is rehashed on resize", "rehash")
+
+    def test_a_gerund_still_counts(self):
+        assert scoring._mentions("rehashing every key costs O(n)", "rehash")
+
+    def test_a_plural_still_counts(self):
+        assert scoring._mentions("two collisions occurred", "collision")
+
+    def test_an_arbitrary_continuation_still_does_not(self):
+        """The distinction the suffix list exists to make."""
+        assert not scoring._mentions("grows the window quickly", "QUIC")
+        assert not scoring._mentions("a quicksort refresher", "QUIC")
