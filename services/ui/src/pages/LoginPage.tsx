@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm, type UseFormRegisterReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -112,13 +113,15 @@ function SecondFactorFields({
   totpError,
   backupError,
 }: SecondFactorFieldsProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="space-y-2">
       {useBackupCode ? (
         <Input
           id="backup_code"
           type="text"
-          label="Backup code"
+          label={t('Backup code')}
           placeholder="XXXX-XXXX-XXXX-XXXX"
           // Deliberately not `inputMode="numeric"` / `maxLength={6}`: a backup
           // code is 16 Crockford-base32 symbols shown in four dashed groups,
@@ -139,8 +142,8 @@ function SecondFactorFields({
         <Input
           id="totp_code"
           type="text"
-          label="MFA code"
-          placeholder="6-digit code"
+          label={t('MFA code')}
+          placeholder={t('6-digit code')}
           inputMode="numeric"
           maxLength={6}
           autoComplete="one-time-code"
@@ -154,12 +157,11 @@ function SecondFactorFields({
         onClick={onToggle}
         className="text-xs text-text-muted hover:text-text underline-offset-2 hover:underline"
       >
-        {useBackupCode ? 'Use your authenticator app instead' : 'Use a backup code instead'}
+        {useBackupCode ? t('Use your authenticator app instead') : t('Use a backup code instead')}
       </button>
       {useBackupCode && (
         <p className="text-xs text-text-faint">
-          One of the recovery codes you saved when you turned on two-factor
-          authentication. Each code works only once.
+          {t('One of the recovery codes you saved when you turned on two-factor authentication. Each code works only once.')}
         </p>
       )}
     </div>
@@ -167,6 +169,7 @@ function SecondFactorFields({
 }
 
 export function LoginPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { login, authConfig } = useAuth()
@@ -234,15 +237,17 @@ export function LoginPage() {
           // whether we had already asked.
           if (showMFA) {
             setError(useBackupCode ? 'backup_code' : 'totp_code', {
-              message: SECOND_FACTOR_REJECTED,
+              message: t(SECOND_FACTOR_REJECTED),
             })
           } else {
             setShowMFA(true)
-            setError('totp_code', { message: 'Enter your 6-digit authenticator code to continue' })
+            setError('totp_code', {
+              message: t('Enter your 6-digit authenticator code to continue'),
+            })
           }
           break
         case 'credentials':
-          setError('password', { message: 'Wrong email or password' })
+          setError('password', { message: t('Wrong email or password') })
           break
         case 'fields':
           for (const [field, message] of Object.entries(outcome.fields)) {
@@ -281,7 +286,7 @@ export function LoginPage() {
         case 'mfa_required':
           // Always a rejection here: the challenge is already on screen.
           setOAuthError(useBackupCode ? 'backup_code' : 'totp_code', {
-            message: SECOND_FACTOR_REJECTED,
+            message: t(SECOND_FACTOR_REJECTED),
           })
           break
         case 'credentials':
@@ -289,7 +294,7 @@ export function LoginPage() {
           // a password change or an admin MFA reset. There is nothing to
           // retype — the provider leg has to be walked again.
           setOAuthError('root', {
-            message: 'This sign-in expired. Start again with your provider.',
+            message: t('This sign-in expired. Start again with your provider.'),
           })
           break
         case 'rate_limited':
@@ -307,9 +312,9 @@ export function LoginPage() {
   if (oauthMfaPending) {
     return (
       <div>
-        <h2 className="text-lg font-semibold text-text mb-2">Two-factor authentication</h2>
+        <h2 className="text-lg font-semibold text-text mb-2">{t('Two-factor authentication')}</h2>
         <p className="text-xs text-text-muted mb-5">
-          Your provider signed you in. Enter your second factor to finish.
+          {t('Your provider signed you in. Enter your second factor to finish.')}
         </p>
         <form onSubmit={onOAuthMfaSubmit} className="space-y-4" noValidate>
           <SecondFactorFields
@@ -333,7 +338,11 @@ export function LoginPage() {
             />
           )}
           {networkFailed && (
-            <ErrorState compact title="Couldn't reach the server" onRetry={() => void onOAuthMfaSubmit()} />
+            <ErrorState
+              compact
+              title={t("Couldn't reach the server")}
+              onRetry={() => void onOAuthMfaSubmit()}
+            />
           )}
           <Button
             type="submit"
@@ -342,12 +351,12 @@ export function LoginPage() {
             loading={oauthSubmitting}
             disabled={cooldown !== null}
           >
-            {oauthSubmitting ? 'Verifying…' : 'Verify'}
+            {oauthSubmitting ? t('Verifying…') : t('Verify')}
           </Button>
         </form>
         <p className="text-xs text-text-muted text-center mt-6">
           <Link to="/login" className="hover:text-text underline-offset-2 hover:underline">
-            Back to sign in
+            {t('Back to sign in')}
           </Link>
         </p>
       </div>
@@ -356,13 +365,13 @@ export function LoginPage() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-text mb-5">Sign in</h2>
+      <h2 className="text-lg font-semibold text-text mb-5">{t('Sign in')}</h2>
       {sessionNotice && (
         <p
           role="status"
           className="mb-4 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-text-muted"
         >
-          {sessionNotice}
+          {t(sessionNotice)}
         </p>
       )}
       {/* Rendered here, not inside OAuthButtons: that component returns null
@@ -374,14 +383,14 @@ export function LoginPage() {
           role="alert"
           className="mb-4 rounded-lg border border-red bg-surface-2 px-3 py-2 text-xs text-red-fg"
         >
-          {oauthError}
+          {t(oauthError)}
         </p>
       )}
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <Input
           id="email"
           type="email"
-          label="Email"
+          label={t('Email')}
           placeholder="you@example.com"
           autoComplete="email"
           error={errors.email?.message}
@@ -390,7 +399,7 @@ export function LoginPage() {
         <Input
           id="password"
           type="password"
-          label="Password"
+          label={t('Password')}
           autoComplete="current-password"
           error={errors.password?.message}
           {...register('password')}
@@ -420,7 +429,7 @@ export function LoginPage() {
         {networkFailed && (
           <ErrorState
             compact
-            title="Couldn't reach the server"
+            title={t("Couldn't reach the server")}
             onRetry={() => void onSubmit()}
           />
         )}
@@ -431,7 +440,7 @@ export function LoginPage() {
           loading={isSubmitting}
           disabled={cooldown !== null}
         >
-          {isSubmitting ? 'Signing in…' : 'Sign in'}
+          {isSubmitting ? t('Signing in…') : t('Sign in')}
         </Button>
       </form>
       <OAuthButtons providers={authConfig?.oauth_providers ?? []} />
@@ -442,20 +451,20 @@ export function LoginPage() {
           className="w-full mt-3"
           onClick={() => window.location.assign('/api/auth/demo-login')}
         >
-          <Sparkles size={14} aria-hidden /> Try the demo
+          <Sparkles size={14} aria-hidden /> {t('Try the demo')}
         </Button>
       )}
       <p className="text-xs text-text-muted text-center mt-6">
         {authConfig?.registration_enabled && (
           <>
             <Link to="/register" className="hover:text-text underline-offset-2 hover:underline">
-              Create account
+              {t('Create account')}
             </Link>
             <span className="text-text-faint mx-1.5">·</span>
           </>
         )}
         <Link to="/forgot-password" className="hover:text-text underline-offset-2 hover:underline">
-          Forgot password?
+          {t('Forgot password?')}
         </Link>
       </p>
     </div>

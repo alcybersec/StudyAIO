@@ -1,5 +1,9 @@
 import '@testing-library/jest-dom'
 
+// i18n, so components calling `t()` render text rather than warning about a
+// missing instance. English is the key set, so tests read as English.
+import '../i18n'
+
 // Node's experimental localStorage global (undefined without --localstorage-file)
 // shadows jsdom's; provide a real in-memory Storage for tests.
 if (typeof window.localStorage === 'undefined' || window.localStorage == null) {

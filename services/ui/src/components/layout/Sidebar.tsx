@@ -1,4 +1,5 @@
 import { useState, type ComponentType, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import {
   BarChart3,
@@ -92,6 +93,7 @@ function GroupLabel({ children, collapsed }: { children: ReactNode; collapsed: b
 }
 
 export function Sidebar() {
+  const { t } = useTranslation()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(getStoredCollapsed)
   const [coursesExpanded, setCoursesExpanded] = useState(true)
@@ -130,7 +132,7 @@ export function Sidebar() {
       {/* Header: logo + bell + collapse */}
       <div className={`flex items-center h-14 border-b border-border shrink-0 ${collapsed ? 'flex-col justify-center gap-1 h-auto py-2 px-2' : 'justify-between px-3.5'}`}>
         {!collapsed && (
-          <Link to="/" className="flex items-center gap-2" aria-label="StudyAIO home">
+          <Link to="/" className="flex items-center gap-2" aria-label={t('StudyAIO home')}>
             <span className="w-6 h-6 rounded-md bg-sage flex items-center justify-center text-on-accent text-xs font-bold">
               S
             </span>
@@ -138,12 +140,14 @@ export function Sidebar() {
           </Link>
         )}
         <div className={`flex items-center ${collapsed ? 'flex-col gap-1' : 'gap-0.5'}`}>
-          <Tooltip content="Notifications" side={collapsed ? 'right' : 'bottom'}>
+          <Tooltip content={t('Notifications')} side={collapsed ? 'right' : 'bottom'}>
             <button
               type="button"
               onClick={() => setNotificationsOpen(true)}
               aria-label={
-                unreadCount > 0 ? `Notifications — ${unreadCount} unread` : 'Notifications'
+                unreadCount > 0
+                  ? t('Notifications — {{count}} unread', { count: unreadCount })
+                  : t('Notifications')
               }
               className="relative p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
             >
@@ -164,7 +168,7 @@ export function Sidebar() {
           <button
             type="button"
             onClick={toggleCollapsed}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={collapsed ? t('Expand sidebar') : t('Collapse sidebar')}
             className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
           >
             {collapsed ? <PanelLeftOpen size={15} aria-hidden /> : <PanelLeftClose size={15} aria-hidden />}
@@ -177,7 +181,7 @@ export function Sidebar() {
         <button
           type="button"
           onClick={openCommandPalette}
-          aria-label="Search or jump to"
+          aria-label={t('Search or jump to')}
           className={`w-full flex items-center gap-2 rounded-lg border border-border text-[12px] text-text-faint hover:border-border-strong hover:text-text-muted transition-colors cursor-pointer ${
             collapsed ? 'justify-center px-0 py-1.5' : 'px-2.5 py-1.5'
           }`}
@@ -185,7 +189,7 @@ export function Sidebar() {
           <Search size={13} aria-hidden />
           {!collapsed && (
             <>
-              Search or jump to…
+              {t('Search or jump to…')}
               <Kbd className="ml-auto">⌘K</Kbd>
             </>
           )}
@@ -195,28 +199,28 @@ export function Sidebar() {
       {/* Nav groups */}
       <nav className={`flex-1 overflow-y-auto py-3 space-y-4 ${collapsed ? 'px-2' : 'px-3'}`}>
         <div>
-          {item({ to: '/', icon: Home, label: 'Home', tour: 'dashboard' })}
+          {item({ to: '/', icon: Home, label: t('Home'), tour: 'dashboard' })}
         </div>
 
         <div>
-          <GroupLabel collapsed={collapsed}>Learn</GroupLabel>
-          {item({ to: '/study', icon: GraduationCap, label: 'Study', tour: 'study' })}
-          {item({ to: '/ask', icon: MessageSquare, label: 'Ask', tour: 'ask' })}
-          {item({ to: '/knowledge', icon: Network, label: 'Knowledge', tour: 'knowledge' })}
+          <GroupLabel collapsed={collapsed}>{t('Learn')}</GroupLabel>
+          {item({ to: '/study', icon: GraduationCap, label: t('Study'), tour: 'study' })}
+          {item({ to: '/ask', icon: MessageSquare, label: t('Ask'), tour: 'ask' })}
+          {item({ to: '/knowledge', icon: Network, label: t('Knowledge'), tour: 'knowledge' })}
         </div>
 
         <div>
-          <GroupLabel collapsed={collapsed}>Library</GroupLabel>
+          <GroupLabel collapsed={collapsed}>{t('Library')}</GroupLabel>
           {!collapsed && (
             <button
               type="button"
               onClick={() => setCoursesExpanded(!coursesExpanded)}
               aria-expanded={coursesExpanded}
-              aria-label={`Courses — ${coursesExpanded ? 'collapse' : 'expand'} list`}
+              aria-label={coursesExpanded ? t('Courses — collapse list') : t('Courses — expand list')}
               className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-text-muted hover:text-text hover:bg-surface-2/60 transition-colors cursor-pointer"
             >
               <Library size={15} strokeWidth={1.8} className="shrink-0 text-text-faint" aria-hidden />
-              <span>Courses</span>
+              <span>{t('Courses')}</span>
               <ChevronRight
                 size={12}
                 aria-hidden
@@ -239,28 +243,28 @@ export function Sidebar() {
               ))}
             </div>
           )}
-          {item({ to: '/upload', icon: Upload, label: 'Upload', tour: 'upload' })}
-          {item({ to: '/review', icon: Inbox, label: 'Review inbox', badge: pendingCount })}
+          {item({ to: '/upload', icon: Upload, label: t('Upload'), tour: 'upload' })}
+          {item({ to: '/review', icon: Inbox, label: t('Review inbox'), badge: pendingCount })}
         </div>
 
         <div>
-          <GroupLabel collapsed={collapsed}>Insights</GroupLabel>
-          {item({ to: '/analytics', icon: BarChart3, label: 'Analytics', tour: 'analytics' })}
-          {item({ to: '/achievements', icon: Trophy, label: 'Achievements' })}
+          <GroupLabel collapsed={collapsed}>{t('Insights')}</GroupLabel>
+          {item({ to: '/analytics', icon: BarChart3, label: t('Analytics'), tour: 'analytics' })}
+          {item({ to: '/achievements', icon: Trophy, label: t('Achievements') })}
         </div>
       </nav>
 
       {/* Footer */}
       <div className={`border-t border-border py-2.5 space-y-0.5 ${collapsed ? 'px-2' : 'px-3'}`}>
-        {item({ to: '/settings', icon: Settings, label: 'Settings', tour: 'settings' })}
-        {user?.role === 'admin' && item({ to: '/admin', icon: ShieldCheck, label: 'Admin' })}
+        {item({ to: '/settings', icon: Settings, label: t('Settings'), tour: 'settings' })}
+        {user?.role === 'admin' && item({ to: '/admin', icon: ShieldCheck, label: t('Admin') })}
         <div className={`flex ${collapsed ? 'justify-center' : ''}`}>
           <ThemeToggle showLabel={!collapsed} />
         </div>
 
         {/* User card */}
         <div className={`flex items-center gap-2.5 pt-2 ${collapsed ? 'justify-center' : 'px-2.5'}`}>
-          <Link to="/profile" aria-label="Profile" className="shrink-0">
+          <Link to="/profile" aria-label={t('Profile')} className="shrink-0">
             {user?.avatar_url ? (
               <img src={user.avatar_url} alt={user.username} className="w-6 h-6 rounded-full object-cover" />
             ) : (
@@ -274,14 +278,14 @@ export function Sidebar() {
               <Link to="/profile" className="text-xs text-text-muted hover:text-text truncate transition-colors">
                 {user?.username ?? 'guest'}
               </Link>
-              {isDemo && <Badge variant="warning">Demo</Badge>}
+              {isDemo && <Badge variant="warning">{t('Demo')}</Badge>}
               {isSelfHosted ? (
-                <span className="ml-auto text-[10px] font-mono text-text-faint">self-hosted</span>
+                <span className="ml-auto text-[10px] font-mono text-text-faint">{t('self-hosted')}</span>
               ) : (
                 <button
                   type="button"
                   onClick={() => logout()}
-                  aria-label="Sign out"
+                  aria-label={t('Sign out')}
                   className="ml-auto p-1 rounded-md text-text-faint hover:text-red-fg transition-colors cursor-pointer"
                 >
                   <LogOut size={13} aria-hidden />
@@ -297,7 +301,7 @@ export function Sidebar() {
         open={notificationsOpen}
         onOpenChange={setNotificationsOpen}
         side="right"
-        title="Notifications"
+        title={t('Notifications')}
         titleVisible={false}
       >
         <NotificationCenter onNavigate={() => setNotificationsOpen(false)} />

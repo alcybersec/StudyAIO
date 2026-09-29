@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
 import { Download, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
@@ -13,6 +14,7 @@ import { useAuth } from '../../../hooks/useAuth'
  * an explicit reveal, then re-authentication, before the button appears.
  */
 export function DataPrivacySection() {
+  const { t } = useTranslation()
   const { user, isSelfHosted } = useAuth()
   const [confirming, setConfirming] = useState(false)
   const [password, setPassword] = useState('')
@@ -34,9 +36,9 @@ export function DataPrivacySection() {
       link.click()
       link.remove()
       URL.revokeObjectURL(url)
-      toast.success('Your data has been downloaded')
+      toast.success(t('Your data has been downloaded'))
     },
-    onError: () => toast.error("Couldn't export your data. Please try again."),
+    onError: () => toast.error(t("Couldn't export your data. Please try again.")),
   })
 
   const deleteMutation = useMutation({
@@ -50,7 +52,7 @@ export function DataPrivacySection() {
       setError(
         err instanceof Error && err.message
           ? err.message
-          : 'Could not delete your account. Please try again.',
+          : t('Could not delete your account. Please try again.'),
       )
     },
   })
@@ -58,10 +60,10 @@ export function DataPrivacySection() {
   if (isSelfHosted || !user) {
     return (
       <Card>
-        <h2 className="text-[13px] font-semibold text-text mb-2">Data &amp; Privacy</h2>
+        <h2 className="text-[13px] font-semibold text-text mb-2">{t('Data & Privacy')}</h2>
         <p className="text-xs text-text-muted max-w-md">
-          This instance runs in self-hosted mode — your data already lives entirely on your own
-          machine, under the <code className="text-text-faint">data/</code> directory.
+          {t('This instance runs in self-hosted mode — your data already lives entirely on your own machine, under the')}{' '}
+          <code className="text-text-faint">data/</code> {t('directory.')}
         </p>
       </Card>
     )
@@ -71,14 +73,13 @@ export function DataPrivacySection() {
 
   return (
     <Card>
-      <h2 className="text-[13px] font-semibold text-text mb-4">Data &amp; Privacy</h2>
+      <h2 className="text-[13px] font-semibold text-text mb-4">{t('Data & Privacy')}</h2>
 
       <div className="space-y-6 max-w-md">
         <div>
-          <p className="text-sm font-medium text-text mb-1">Export your data</p>
+          <p className="text-sm font-medium text-text mb-1">{t('Export your data')}</p>
           <p className="text-xs text-text-muted mb-3">
-            Download every course, lecture, summary, flashcard and study record on this account as
-            a single JSON file.
+            {t('Download every course, lecture, summary, flashcard and study record on this account as a single JSON file.')}
           </p>
           <Button
             variant="secondary"
@@ -87,28 +88,26 @@ export function DataPrivacySection() {
             disabled={exportMutation.isPending}
           >
             <Download size={12} aria-hidden />
-            {exportMutation.isPending ? 'Preparing…' : 'Download my data'}
+            {exportMutation.isPending ? t('Preparing…') : t('Download my data')}
           </Button>
         </div>
 
         <div className="pt-5 border-t border-border">
-          <p className="text-sm font-medium text-text mb-1">Delete your account</p>
+          <p className="text-sm font-medium text-text mb-1">{t('Delete your account')}</p>
           <p className="text-xs text-text-muted mb-3">
-            Permanently deletes your account, every file you have uploaded, and everything
-            generated from them. This happens immediately and cannot be undone.
+            {t('Permanently deletes your account, every file you have uploaded, and everything generated from them. This happens immediately and cannot be undone.')}
           </p>
 
           {!confirming ? (
             <Button variant="danger" size="sm" onClick={() => setConfirming(true)}>
-              Delete my account
+              {t('Delete my account')}
             </Button>
           ) : (
             <div className="space-y-3 p-3 rounded-lg bg-red-soft border border-red/30">
               <p className="flex items-start gap-2 text-xs text-red-fg">
                 <TriangleAlert size={14} className="mt-px shrink-0" aria-hidden />
                 <span>
-                  This is permanent. Consider downloading your data first — it cannot be recovered
-                  afterwards.
+                  {t('This is permanent. Consider downloading your data first — it cannot be recovered afterwards.')}
                 </span>
               </p>
 
@@ -116,7 +115,7 @@ export function DataPrivacySection() {
                 <Input
                   id="delete-password"
                   type="password"
-                  label="Confirm your password"
+                  label={t('Confirm your password')}
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -126,7 +125,7 @@ export function DataPrivacySection() {
                 <Input
                   id="delete-confirm-username"
                   type="text"
-                  label={`Type "${user.username}" to confirm`}
+                  label={t('Type "{{username}}" to confirm', { username: user.username })}
                   autoComplete="off"
                   value={confirmUsername}
                   onChange={(e) => setConfirmUsername(e.target.value)}
@@ -146,7 +145,7 @@ export function DataPrivacySection() {
                     )
                   }}
                 >
-                  {deleteMutation.isPending ? 'Deleting…' : 'Permanently delete'}
+                  {deleteMutation.isPending ? t('Deleting…') : t('Permanently delete')}
                 </Button>
                 <Button
                   variant="ghost"
@@ -158,7 +157,7 @@ export function DataPrivacySection() {
                     setError(null)
                   }}
                 >
-                  Cancel
+                  {t('Cancel')}
                 </Button>
               </div>
             </div>

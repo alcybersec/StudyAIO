@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import i18n from '../i18n'
 import { Link } from 'react-router-dom'
 import { captureError } from '../lib/monitoring'
 
@@ -40,10 +41,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <div className="w-full max-w-md text-center">
           <div className="text-5xl mb-4">&#x26A0;</div>
           <h1 className="text-xl font-semibold text-text mb-2">
-            Something went wrong
+            {i18n.t('Something went wrong')}
           </h1>
           <p className="text-text-muted mb-6">
-            An unexpected error occurred while rendering this page.
+            {i18n.t('An unexpected error occurred while rendering this page.')}
           </p>
 
           {import.meta.env.DEV && this.state.error && (
@@ -58,13 +59,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               onClick={this.handleReset}
               className="min-h-[44px] px-6 py-2.5 bg-sage text-on-accent font-medium rounded-lg hover:bg-sage-hover transition-colors"
             >
-              Try again
+              {i18n.t('Try again')}
             </button>
             <Link
               to="/"
               className="min-h-[44px] px-6 py-2.5 bg-surface-0 text-text font-medium rounded-lg hover:opacity-80 transition-colors inline-flex items-center justify-center"
             >
-              Go to Dashboard
+              {i18n.t('Go to Dashboard')}
             </Link>
           </div>
         </div>

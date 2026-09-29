@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -10,6 +11,7 @@ import { authApi } from '../api/auth'
 import { forgotPasswordSchema, type ForgotPasswordFormData } from '../lib/schemas'
 
 export function ForgotPasswordPage() {
+  const { t } = useTranslation()
   const [submitted, setSubmitted] = useState(false)
   const [cooldown, setCooldown] = useState<{ key: number; seconds: number } | null>(null)
   const [networkFailed, setNetworkFailed] = useState(false)
@@ -44,15 +46,15 @@ export function ForgotPasswordPage() {
         <span className="mx-auto w-10 h-10 rounded-xl bg-sage-soft text-sage-fg flex items-center justify-center">
           <MailCheck size={18} aria-hidden />
         </span>
-        <h2 className="text-lg font-semibold text-text">Check your email</h2>
+        <h2 className="text-lg font-semibold text-text">{t('Check your email')}</h2>
         <p className="text-sm text-text-muted">
-          If an account exists with that email, we&apos;ve sent a password reset link.
+          {t('If an account exists with that email, we’ve sent a password reset link.')}
         </p>
         <Link
           to="/login"
           className="inline-block text-xs text-text-muted hover:text-text underline-offset-2 hover:underline"
         >
-          Back to sign in
+          {t('Back to sign in')}
         </Link>
       </div>
     )
@@ -60,7 +62,7 @@ export function ForgotPasswordPage() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-text mb-1.5">Reset password</h2>
+      <h2 className="text-lg font-semibold text-text mb-1.5">{t('Reset password')}</h2>
       <p className="text-xs text-text-muted mb-5">
         Enter your email and we&apos;ll send you a reset link.
       </p>
@@ -68,7 +70,7 @@ export function ForgotPasswordPage() {
         <Input
           id="email"
           type="email"
-          label="Email"
+          label={t('Email')}
           placeholder="you@example.com"
           autoComplete="email"
           error={errors.email?.message}
@@ -84,7 +86,7 @@ export function ForgotPasswordPage() {
         {networkFailed && (
           <ErrorState
             compact
-            title="Couldn't reach the server"
+            title={t("Couldn't reach the server")}
             onRetry={() => void onSubmit()}
           />
         )}
@@ -95,7 +97,7 @@ export function ForgotPasswordPage() {
           loading={isSubmitting}
           disabled={cooldown !== null}
         >
-          {isSubmitting ? 'Sending…' : 'Send reset link'}
+          {isSubmitting ? t('Sending…') : t('Send reset link')}
         </Button>
       </form>
       <p className="text-xs text-text-muted text-center mt-6">

@@ -1,4 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
+import { useTranslation } from 'react-i18next'
 import { widgets } from './WidgetRegistry'
 
 interface DashboardCustomizerProps {
@@ -16,13 +17,15 @@ export function DashboardCustomizer({
   onToggle,
   onReset,
 }: DashboardCustomizerProps) {
+  const { t } = useTranslation()
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/40 z-50" />
         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-surface-1 border border-border rounded-xl shadow-lg w-full max-w-sm p-6">
           <Dialog.Title className="text-lg font-semibold text-text mb-4">
-            Customize Dashboard
+            {t('Customize Dashboard')}
           </Dialog.Title>
 
           <div className="space-y-2 mb-6">
@@ -37,7 +40,7 @@ export function DashboardCustomizer({
                   onChange={() => onToggle(w.key)}
                   className="rounded border-border text-sage focus:ring-sage"
                 />
-                <span className="text-sm text-text">{w.label}</span>
+                <span className="text-sm text-text">{t(w.label)}</span>
               </label>
             ))}
           </div>
@@ -47,10 +50,10 @@ export function DashboardCustomizer({
               onClick={onReset}
               className="text-sm text-text-muted hover:text-text transition-colors"
             >
-              Reset to default
+              {t('Reset to default')}
             </button>
             <Dialog.Close className="px-4 py-2 text-sm font-medium rounded-lg bg-sage text-on-accent hover:bg-sage-hover transition-colors">
-              Done
+              {t('Done')}
             </Dialog.Close>
           </div>
         </Dialog.Content>

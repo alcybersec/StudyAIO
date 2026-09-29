@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { MailCheck, MailX } from 'lucide-react'
@@ -14,6 +15,7 @@ import { useAuth } from '../hooks/useAuth'
  * often clicked from a mail client while already logged in.
  */
 export function VerifyEmailPage() {
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
   const { user } = useAuth()
@@ -48,8 +50,8 @@ export function VerifyEmailPage() {
   if (verify.isPending) {
     return (
       <div className="text-center space-y-4 py-6" role="status">
-        <LoadingSpinner size="lg" label="Verifying your email..." />
-        <p className="text-sm text-text-muted">Checking your verification link…</p>
+        <LoadingSpinner size="lg" label={t('Verifying your email…')} />
+        <p className="text-sm text-text-muted">{t('Checking your verification link…')}</p>
       </div>
     )
   }
@@ -60,13 +62,13 @@ export function VerifyEmailPage() {
         <span className="mx-auto w-10 h-10 rounded-xl bg-sage-soft text-sage-fg flex items-center justify-center">
           <MailCheck size={18} aria-hidden />
         </span>
-        <h2 className="text-lg font-semibold text-text">Email verified!</h2>
-        <p className="text-sm text-text-muted">Thanks — your email address is confirmed.</p>
+        <h2 className="text-lg font-semibold text-text">{t('Email verified!')}</h2>
+        <p className="text-sm text-text-muted">{t('Thanks — your email address is confirmed.')}</p>
         <Link
           to="/"
           className="inline-flex items-center justify-center min-h-[44px] px-6 bg-sage text-on-accent rounded-lg text-sm font-semibold hover:bg-sage-hover transition-colors"
         >
-          Go to dashboard
+          {t('Go to dashboard')}
         </Link>
       </div>
     )
@@ -79,14 +81,14 @@ export function VerifyEmailPage() {
       <span className="mx-auto w-10 h-10 rounded-xl bg-red-soft text-red-fg flex items-center justify-center">
         <MailX size={18} aria-hidden />
       </span>
-      <h2 className="text-lg font-semibold text-text">Couldn't verify your email</h2>
+      <h2 className="text-lg font-semibold text-text">{t("Couldn't verify your email")}</h2>
       <p className="text-sm text-text-muted" role="alert">
-        This verification link is invalid or has expired.
+        {t('This verification link is invalid or has expired.')}
       </p>
       {networkFailed && (
         <ErrorState
           compact
-          title="Couldn't reach the server"
+          title={t("Couldn't reach the server")}
           onRetry={() => verify.mutate(token)}
         />
       )}
@@ -96,12 +98,12 @@ export function VerifyEmailPage() {
           loading={resend.isPending}
           className="min-h-[44px]"
         >
-          {resend.isPending ? 'Sending…' : 'Resend verification email'}
+          {resend.isPending ? t('Sending…') : t('Resend verification email')}
         </Button>
       )}
       {resent && (
         <p className="text-sm text-text-muted" role="status">
-          Verification email sent — check your inbox.
+          {t('Verification email sent — check your inbox.')}
         </p>
       )}
       <p className="text-xs text-text-muted">
