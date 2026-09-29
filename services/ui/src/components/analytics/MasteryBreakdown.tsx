@@ -122,9 +122,9 @@ export function MasteryBreakdown() {
             ]) as never}
           />
           <Legend wrapperStyle={{ fontSize: 12, color: 'var(--t-text-muted)' }} />
-          <Bar dataKey="mastered" stackId="a" fill="var(--t-sage)" name="Mastered" />
-          <Bar dataKey="learning" stackId="a" fill="var(--t-amber)" name="Learning" />
-          <Bar dataKey="new" stackId="a" fill="var(--t-border-strong)" name="New" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="mastered" stackId="a" fill="var(--t-sage)" name={t('Mastered')} />
+          <Bar dataKey="learning" stackId="a" fill="var(--t-amber)" name={t('Learning')} />
+          <Bar dataKey="new" stackId="a" fill="var(--t-border-strong)" name={t('New')} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
 

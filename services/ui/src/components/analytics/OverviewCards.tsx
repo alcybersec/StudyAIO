@@ -110,7 +110,7 @@ export function OverviewCards() {
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {stats.map((s) => (
         <Card key={s.label} padding>
-          <SectionLabel>{s.label}</SectionLabel>
+          <SectionLabel>{t(s.label)}</SectionLabel>
           <div className="flex items-end justify-between gap-2">
             <span className="text-2xl font-bold tracking-tight text-text">{s.value}</span>
             {s.trend.length > 1 && <Sparkline trend={s.trend} tone={s.tone} />}

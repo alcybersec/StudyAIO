@@ -203,7 +203,7 @@ export function InvitePanel() {
                       </span>
                     </TCell>
                     <TCell>
-                      <Badge variant={status.variant}>{status.label}</Badge>
+                      <Badge variant={status.variant}>{t(status.label)}</Badge>
                     </TCell>
                     <TCell>
                       <span className="text-xs text-text-faint">

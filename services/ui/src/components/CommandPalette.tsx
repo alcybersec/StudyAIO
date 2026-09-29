@@ -248,7 +248,7 @@ export function CommandPalette() {
                   <div key={item.id}>
                     {showSection && (
                       <div className="px-4 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.12em] text-text-faint">
-                        {item.section}
+                        {t(item.section)}
                       </div>
                     )}
                     <button
@@ -263,7 +263,7 @@ export function CommandPalette() {
                       }`}
                     >
                       <item.icon size={14} className="text-text-faint shrink-0" aria-hidden />
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate">{t(item.label)}</span>
                       {item.sub && (
                         <span className="ml-auto text-[11px] text-text-faint shrink-0">{item.sub}</span>
                       )}
