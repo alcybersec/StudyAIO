@@ -24,6 +24,13 @@ services:
       - ./services/app/app:/app/app
       - ./services/app/alembic:/app/alembic
       - ./services/app/prompts:/app/prompts
+      # evals/ sits BESIDE app/, not inside it, so the mount above does not
+      # cover it and the container runs the copy baked into the image.
+      # Editing evals/scoring.py and re-running `cli evals` then silently
+      # measures the OLD scorer — that happened, and produced a run labelled
+      # as testing a fix it had never loaded. Nothing surfaces the mismatch;
+      # you only notice if the numbers refuse to move.
+      - ./services/app/evals:/app/evals
       - ./services/app/tests:/app/tests
       - ./services/app/pytest.ini:/app/pytest.ini
       - ./data:/app/data
@@ -50,6 +57,13 @@ services:
     volumes:
       - ./services/app/app:/app/app
       - ./services/app/prompts:/app/prompts
+      # evals/ sits BESIDE app/, not inside it, so the mount above does not
+      # cover it and the container runs the copy baked into the image.
+      # Editing evals/scoring.py and re-running `cli evals` then silently
+      # measures the OLD scorer — that happened, and produced a run labelled
+      # as testing a fix it had never loaded. Nothing surfaces the mismatch;
+      # you only notice if the numbers refuse to move.
+      - ./services/app/evals:/app/evals
       - ./data:/app/data
       # The Claude CLI is installed in the image (see services/app/Dockerfile) —
       # do NOT bind-mount a host binary over /usr/local/bin/claude. That path is
