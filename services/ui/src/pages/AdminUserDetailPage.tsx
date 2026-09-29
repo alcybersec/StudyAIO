@@ -121,7 +121,7 @@ export function AdminUserDetailPage() {
           <div className="flex gap-2 mb-3">
             <Badge variant={profile.role === 'admin' ? 'info' : 'default'}>{profile.role}</Badge>
             <Badge variant={profile.tier === 'pro' ? 'success' : 'default'}>{profile.tier}</Badge>
-            <Badge variant={profile.is_active ? 'success' : 'danger'}>{profile.is_active ? 'active' : 'inactive'}</Badge>
+            <Badge variant={profile.is_active ? 'success' : 'danger'}>{profile.is_active ? t('active') : t('inactive')}</Badge>
           </div>
           <StatRow label={t('Email verified')} value={profile.email_verified} />
           <StatRow label={t('MFA enabled')} value={profile.mfa_enabled} />
@@ -312,7 +312,7 @@ export function AdminUserDetailPage() {
                           {f.started_at ? new Date(f.started_at).toLocaleString() : '—'}
                         </span>
                       </div>
-                      <div className="text-text-muted truncate">{f.error_message || 'No error message'}</div>
+                      <div className="text-text-muted truncate">{f.error_message || t('No error message')}</div>
                     </div>
                   ))}
                 </div>

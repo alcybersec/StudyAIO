@@ -43,7 +43,7 @@ export function InviteLinkNotice({ result }: InviteLinkNoticeProps) {
               setCopied(true)
               setTimeout(() => setCopied(false), 1500)
             })
-            .catch(() => toast.error(i18n.t(i18n.t('Could not copy to clipboard'))))
+            .catch(() => toast.error(i18n.t('Could not copy to clipboard')))
         }}
         aria-label={t('Copy invite link')}
       >

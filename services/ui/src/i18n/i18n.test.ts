@@ -74,3 +74,41 @@ describe('plurals', () => {
     expect(i18n.t('{{count}} course', { count: 8 })).toBe('8 курсов')
   })
 })
+
+describe('form validation messages', () => {
+  /**
+   * Zod messages are the errors under every form field, and they are built
+   * once when the module loads — so they have to resolve the language at
+   * *validation* time, not at import time.
+   *
+   * There is a trap here worth pinning down: zod accepts a function for the
+   * object form (`{ error: () => … }`) but silently ignores a positional one
+   * (`.min(1, () => …)`), falling back to its own English default. A codemod
+   * that chose the positional form would replace every custom message with
+   * zod's wording and nothing would fail — which is exactly why this asserts
+   * on the text rather than on "some message came back".
+   */
+  it('resolves in the language active when the form is submitted', async () => {
+    const { loginSchema } = await import('../lib/schemas')
+
+    await i18n.changeLanguage('en')
+    const english = loginSchema.safeParse({ email: '', password: '' })
+    expect(english.success).toBe(false)
+    expect(english.error!.issues.map((i) => i.message)).toContain('Email is required')
+
+    await i18n.changeLanguage('ru')
+    const russian = loginSchema.safeParse({ email: '', password: '' })
+    expect(russian.success).toBe(false)
+    expect(russian.error!.issues.map((i) => i.message)).toContain('Укажите адрес почты')
+  })
+
+  it('translates a message defined on a refine, not just on a field', async () => {
+    const { resetPasswordSchema } = await import('../lib/schemas')
+
+    await i18n.changeLanguage('ru')
+    const result = resetPasswordSchema.safeParse({ password: 'abcdefgh', confirm: 'different' })
+
+    expect(result.success).toBe(false)
+    expect(result.error!.issues.map((i) => i.message)).toContain('Пароли не совпадают')
+  })
+})

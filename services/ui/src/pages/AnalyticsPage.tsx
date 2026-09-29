@@ -25,7 +25,7 @@ export function AnalyticsPage() {
       <PageHeader
         title={t('Analytics')}
         subtitle={t("What you've studied, how well it stuck, and where the exam risk lives.")}
-        breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Analytics' }]}
+        breadcrumbs={[{ label: t('Dashboard'), to: '/' }, { label: t('Analytics') }]}
       />
 
       <div className="space-y-4">

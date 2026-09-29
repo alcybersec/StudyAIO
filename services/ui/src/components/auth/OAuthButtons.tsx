@@ -77,8 +77,8 @@ export function OAuthButtons({ providers }: OAuthButtonsProps) {
             providerIcons[provider]
           )}
           {loadingProvider === provider
-            ? `Connecting to ${providerLabels[provider] ?? provider}...`
-            : `Continue with ${providerLabels[provider] ?? provider}`}
+            ? t('Connecting to {{provider}}…', { provider: providerLabels[provider] ?? provider })
+            : t('Continue with {{provider}}', { provider: providerLabels[provider] ?? provider })}
         </button>
       ))}
     </div>

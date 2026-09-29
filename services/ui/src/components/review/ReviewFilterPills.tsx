@@ -31,7 +31,7 @@ export function ReviewFilterPills({ filter, pendingCount, onChange }: ReviewFilt
               : 'border-transparent text-text-muted hover:text-text hover:bg-surface-2'
           }`}
         >
-          {f.label}
+          {t(f.label)}
           {f.id === 'pending' && pendingCount > 0 && (
             <span className="font-mono text-[10px] ml-1.5 text-amber-fg">{pendingCount}</span>
           )}

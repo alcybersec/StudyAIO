@@ -37,7 +37,7 @@ export function ConnectionStatus() {
       hadQueuedRef.current = true
     } else if (hadQueuedRef.current && isOnline) {
       hadQueuedRef.current = false
-      toast.success(i18n.t(i18n.t('All changes synced')))
+      toast.success(i18n.t('All changes synced'))
     }
   }, [queued, isOnline])
 

@@ -17,6 +17,8 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { collect, sourceFiles } from '../../scripts/i18n/scan.mjs'
+import { collectTs, tsFiles } from '../../scripts/i18n/scan-ts.mjs'
+import { generate as generateDynamicKeys } from '../../scripts/i18n/dynamic-keys.mjs'
 import ru from '../locales/ru/common.json'
 
 const PLURAL_SUFFIXES = ['_one', '_few', '_many', '_other']
@@ -24,7 +26,12 @@ const PLURAL_SUFFIXES = ['_one', '_few', '_many', '_other']
 function keysInUse(): string[] {
   const KEY = /\b(?:i18n\.)?t\(\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/g
   const keys = new Set<string>()
-  for (const file of sourceFiles('src')) {
+  // i18n/index.ts documents the convention with example t() calls; they are
+  // prose about the key set, not members of it.
+  const files = [...sourceFiles('src'), ...tsFiles('src')].filter(
+    (f) => !f.endsWith('src/i18n/index.ts'),
+  )
+  for (const file of files) {
     const src = readFileSync(file, 'utf8')
     for (const m of src.matchAll(KEY)) {
       keys.add((m[1] ?? m[2]).replace(/\\'/g, "'").replace(/\\"/g, '"'))
@@ -47,6 +54,35 @@ describe('i18n coverage', () => {
     }
 
     expect(offenders).toEqual([])
+  })
+
+  it('leaves no user-visible string in a plain .ts module either', () => {
+    // The JSX scanner walks .tsx only, which once exempted every zod
+    // validation message — the error under each form field — plus the shared
+    // toast helpers. A string does not stop being user-visible for living in
+    // a module with no JSX in it.
+    const dynamic: string[] = JSON.parse(readFileSync('scripts/i18n/dynamic-keys.json', 'utf8'))
+    const offenders: string[] = []
+    for (const file of tsFiles('src')) {
+      for (const hit of collectTs(file).hits) {
+        // Copy that reaches t() through a variable is translated at the render
+        // site, so it is declared rather than wrapped where it is defined.
+        if (dynamic.includes(hit.text)) continue
+        offenders.push(`${file}: [${hit.kind}] ${hit.text.slice(0, 70)}`)
+      }
+    }
+
+    expect(offenders).toEqual([])
+  })
+
+  it('keeps the generated dynamic-key list current', () => {
+    // Keys that reach t() through a variable are derived from the tables they
+    // live in, not listed by hand. Hand-listing is what let the theme labels,
+    // the tour copy and the notification event names sit untranslated behind
+    // a green guard: the list was the thing that was incomplete.
+    const onDisk: string[] = JSON.parse(readFileSync('scripts/i18n/dynamic-keys.json', 'utf8'))
+
+    expect(generateDynamicKeys()).toEqual(onDisk)
   })
 
   it('has a Russian entry for every key in use', () => {

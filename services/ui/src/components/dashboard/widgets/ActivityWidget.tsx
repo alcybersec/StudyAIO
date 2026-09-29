@@ -43,7 +43,7 @@ export const ActivityWidget = memo(function ActivityWidget() {
         {data?.slice(0, 6).map((item) => (
           <li key={item.pipeline_run_id} className="flex items-center gap-3 py-1.5">
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-text truncate">{item.filename ?? 'Unknown file'}</p>
+              <p className="text-xs font-medium text-text truncate">{item.filename ?? t('Unknown file')}</p>
               <p className="text-[10px] font-mono text-text-faint mt-0.5">{item.stage}</p>
             </div>
             <StatusBadge status={item.status} />

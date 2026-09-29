@@ -46,7 +46,7 @@ export function EmailVerificationBanner() {
             disabled={resend.isPending || rateLimited}
             className="inline-flex items-center px-3 py-1 rounded-md bg-on-accent text-amber text-xs font-semibold hover:opacity-90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {resend.isPending ? 'Sending…' : 'Resend verification email'}
+            {resend.isPending ? t('Sending…') : t('Resend verification email')}
           </button>
           {rateLimited && (
             <span role="alert" className="text-xs">

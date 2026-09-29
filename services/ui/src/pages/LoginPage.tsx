@@ -43,6 +43,11 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
  * loud in development, so the next one is noticed while it is being written
  * rather than months later.
  */
+//: Fallback for an `?error=` code this build does not know about. A named
+//: constant rather than an inline literal so it is collected as a translation
+//: key like the rest of the table above.
+const GENERIC_AUTH_FAILURE = 'Authentication failed. Please try again.'
+
 function oauthErrorMessage(errKey: string): string {
   const known = OAUTH_ERROR_MESSAGES[errKey]
   if (known) return known
@@ -50,9 +55,9 @@ function oauthErrorMessage(errKey: string): string {
     console.warn(
       `[LoginPage] unhandled OAuth error code "${errKey}" — add it to OAUTH_ERROR_MESSAGES.`,
     )
-    return `Authentication failed. Please try again. (unhandled code: ${errKey})`
+    return `${GENERIC_AUTH_FAILURE} (unhandled code: ${errKey})`
   }
-  return 'Authentication failed. Please try again.'
+  return GENERIC_AUTH_FAILURE
 }
 
 // Set by useSessionHandoff when the server ended the session on purpose, so

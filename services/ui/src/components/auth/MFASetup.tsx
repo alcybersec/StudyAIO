@@ -92,7 +92,7 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
             disabled={disableCode.length !== 6 || disableMutation.isPending}
             className="px-4 min-h-[44px] bg-red text-on-accent rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
           >
-            {disableMutation.isPending ? 'Disabling...' : 'Disable MFA'}
+            {disableMutation.isPending ? t('Disabling...') : t('Disable MFA')}
           </button>
           <button
             onClick={() => { setStep('idle'); setError('') }}
@@ -162,7 +162,7 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
           disabled={code.length !== 6 || verifyMutation.isPending}
           className="w-full min-h-[44px] bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover disabled:opacity-50"
         >
-          {verifyMutation.isPending ? 'Verifying...' : 'Verify & Enable'}
+          {verifyMutation.isPending ? t('Verifying...') : t('Verify & Enable')}
         </button>
       </div>
     )
@@ -179,7 +179,7 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
         disabled={setupMutation.isPending}
         className="px-4 min-h-[44px] bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover disabled:opacity-50"
       >
-        {setupMutation.isPending ? 'Setting up...' : 'Enable MFA'}
+        {setupMutation.isPending ? t('Setting up...') : t('Enable MFA')}
       </button>
     </div>
   )

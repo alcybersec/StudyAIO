@@ -53,7 +53,7 @@ export function UpgradePrompt({ resource, limit, period, onDismiss }: UpgradePro
               disabled={checkout.isPending}
               className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-sage text-on-accent hover:bg-sage-hover disabled:opacity-50 transition-colors"
             >
-              {checkout.isPending ? 'Loading...' : 'Upgrade'}
+              {checkout.isPending ? t('Loading...') : t('Upgrade')}
             </button>
           </div>
         </div>

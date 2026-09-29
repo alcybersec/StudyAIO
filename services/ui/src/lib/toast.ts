@@ -1,4 +1,5 @@
 import { toast } from 'sonner'
+import i18n from '../i18n'
 import {
   AppApiError,
   NetworkError,
@@ -23,36 +24,36 @@ export function mutationErrorContent(err: unknown): ToastContent {
     const fieldMessages = Object.values(err.fields)
     return {
       message: fieldMessages[0] ?? err.message,
-      description: fieldMessages.length > 1 ? 'Check the highlighted fields.' : undefined,
+      description: fieldMessages.length > 1 ? i18n.t('Check the highlighted fields.') : undefined,
     }
   }
   if (err instanceof NotFoundError) {
     return {
       message: err.message,
-      description: 'It may have been removed — this item no longer exists.',
+      description: i18n.t('It may have been removed — this item no longer exists.'),
     }
   }
   if (err instanceof RateLimitError) {
     return {
-      message: `Rate limited — try again in ${err.retryAfterSeconds}s`,
+      message: i18n.t('Rate limited — try again in {{seconds}}s', { seconds: err.retryAfterSeconds }),
     }
   }
   if (err instanceof NetworkError) {
     return {
-      message: "Couldn't reach the server",
-      description: 'Check your connection — your work is kept locally where possible.',
+      message: i18n.t("Couldn't reach the server"),
+      description: i18n.t('Check your connection — your work is kept locally where possible.'),
     }
   }
   if (err instanceof ServerError) {
     return {
-      message: 'The server hit a problem',
-      description: 'Nothing you did — a retry usually fixes it.',
+      message: i18n.t('The server hit a problem'),
+      description: i18n.t('Nothing you did — a retry usually fixes it.'),
     }
   }
   if (err instanceof AppApiError) {
     return { message: err.message }
   }
-  return { message: 'Something went wrong', description: 'Please try again.' }
+  return { message: i18n.t('Something went wrong'), description: i18n.t('Please try again.') }
 }
 
 /**
@@ -62,21 +63,21 @@ export function mutationErrorContent(err: unknown): ToastContent {
 export function toastMutationError(err: unknown, retryFn?: () => void): void {
   if (err instanceof RateLimitError) {
     let remaining = err.retryAfterSeconds
-    const id = toast.error(`Rate limited — try again in ${remaining}s`, {
+    const id = toast.error(i18n.t('Rate limited — try again in {{seconds}}s', { seconds: remaining }), {
       duration: remaining * 1_000,
     })
     const interval = setInterval(() => {
       remaining -= 1
       if (remaining <= 0) {
         clearInterval(interval)
-        toast.error('You can retry now', {
+        toast.error(i18n.t('You can retry now'), {
           id,
           duration: 5_000,
-          action: retryFn ? { label: 'Retry', onClick: retryFn } : undefined,
+          action: retryFn ? { label: i18n.t('Retry'), onClick: retryFn } : undefined,
         })
         return
       }
-      toast.error(`Rate limited — try again in ${remaining}s`, { id })
+      toast.error(i18n.t('Rate limited — try again in {{seconds}}s', { seconds: remaining }), { id })
     }, 1_000)
     return
   }
@@ -84,6 +85,6 @@ export function toastMutationError(err: unknown, retryFn?: () => void): void {
   const { message, description } = mutationErrorContent(err)
   toast.error(message, {
     description,
-    action: retryFn ? { label: 'Retry', onClick: retryFn } : undefined,
+    action: retryFn ? { label: i18n.t('Retry'), onClick: retryFn } : undefined,
   })
 }

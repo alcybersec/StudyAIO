@@ -62,7 +62,7 @@ export function PipelineFileCard({
             <button
               onClick={onRemove}
               className="text-text-faint hover:text-red-fg transition-colors p-1"
-              aria-label={`Remove ${name}`}
+              aria-label={i18n.t('Remove {{name}}', { name })}
             >
               <X size={13} aria-hidden />
             </button>
@@ -84,7 +84,7 @@ export function PipelineFileCard({
 
       {failedStage && (
         <div className="flex items-center justify-between gap-3 bg-red-soft border border-red/25 rounded-lg px-3 py-2 mt-2">
-          <span className="text-xs text-red-fg">{failedStage.error ?? 'Stage failed'}</span>
+          <span className="text-xs text-red-fg">{failedStage.error ?? t('Stage failed')}</span>
           {onRetryStage && (
             <Button variant="secondary" size="sm" onClick={onRetryStage} loading={retrying}>
               <RotateCcw size={12} aria-hidden /> {t('Retry stage')}

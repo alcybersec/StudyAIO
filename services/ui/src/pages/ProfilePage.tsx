@@ -131,7 +131,7 @@ export function ProfilePage() {
             disabled={updateProfile.isPending}
             className="min-h-[44px] px-4 bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover disabled:opacity-50 transition-colors"
           >
-            {updateProfile.isPending ? 'Saving...' : 'Save'}
+            {updateProfile.isPending ? t('Saving...') : t('Save')}
           </button>
         </form>
       </div>
@@ -188,7 +188,7 @@ export function ProfilePage() {
             disabled={changePassword.isPending}
             className="min-h-[44px] px-4 bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover disabled:opacity-50 transition-colors"
           >
-            {changePassword.isPending ? 'Changing...' : 'Change password'}
+            {changePassword.isPending ? t('Changing...') : t('Change password')}
           </button>
         </form>
       </div>

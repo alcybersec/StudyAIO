@@ -31,7 +31,7 @@ export function PWAUpdateNotify() {
 
   useEffect(() => {
     if (offlineReady) {
-      toast.success(i18n.t(i18n.t('Ready to work offline')), {
+      toast.success(i18n.t('Ready to work offline'), {
         duration: 4000,
         onAutoClose: () => setOfflineReady(false),
         onDismiss: () => setOfflineReady(false),

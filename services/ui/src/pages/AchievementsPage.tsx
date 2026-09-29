@@ -214,21 +214,28 @@ export function AchievementsPage() {
     <div>
       <PageHeader
         title={t('Achievements')}
-        subtitle={achievements ? `${achievements.earned} / ${achievements.total} unlocked` : undefined}
+        subtitle={
+          achievements
+            ? t('{{earned}} / {{total}} unlocked', {
+                earned: achievements.earned,
+                total: achievements.total,
+              })
+            : undefined
+        }
       />
 
       <XPSection />
 
       <div className="mb-6 flex gap-1 rounded-lg bg-surface-2 p-1">
-        {TABS.map((t) => (
+        {TABS.map((tabId) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tabId}
+            onClick={() => setTab(tabId)}
             className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-              tab === t ? 'bg-surface-1 text-text shadow-sm' : 'text-text-muted hover:text-text'
+              tab === tabId ? 'bg-surface-1 text-text shadow-sm' : 'text-text-muted hover:text-text'
             }`}
           >
-            {t === 'achievements' ? 'Achievements' : 'Leaderboard'}
+            {tabId === 'achievements' ? t('Achievements') : t('Leaderboard')}
           </button>
         ))}
       </div>

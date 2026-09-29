@@ -1,15 +1,16 @@
 import { z } from 'zod'
+import i18n from '../i18n'
 
 export const examCreateSchema = z.object({
-  courseCode: z.string().min(1, 'Select a course'),
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
-  examDate: z.string().min(1, 'Exam date is required'),
-  weeksInput: z.string().min(1, 'Enter at least one week').refine(
+  courseCode: z.string().min(1, { error: () => i18n.t('Select a course') }),
+  title: z.string().min(1, { error: () => i18n.t('Title is required') }).max(200, { error: () => i18n.t('Title too long') }),
+  examDate: z.string().min(1, { error: () => i18n.t('Exam date is required') }),
+  weeksInput: z.string().min(1, { error: () => i18n.t('Enter at least one week') }).refine(
     (val) => {
       const weeks = val.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
       return weeks.length > 0
     },
-    { message: 'Enter valid week numbers (e.g. 1, 2, 3)' }
+    { error: () => i18n.t('Enter valid week numbers (e.g. 1, 2, 3)') }
   ),
   targetMastery: z.number().min(50).max(100),
 })
@@ -17,8 +18,8 @@ export const examCreateSchema = z.object({
 export type ExamCreateFormData = z.infer<typeof examCreateSchema>
 
 export const deadlineEditSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  dueDate: z.string().min(1, 'Due date is required'),
+  title: z.string().min(1, { error: () => i18n.t('Title is required') }),
+  dueDate: z.string().min(1, { error: () => i18n.t('Due date is required') }),
   deadlineType: z.string().min(1),
   description: z.string().optional(),
 })
@@ -26,8 +27,8 @@ export const deadlineEditSchema = z.object({
 export type DeadlineEditFormData = z.infer<typeof deadlineEditSchema>
 
 export const deadlineCreateSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  dueDate: z.string().min(1, 'Due date is required'),
+  title: z.string().min(1, { error: () => i18n.t('Title is required') }),
+  dueDate: z.string().min(1, { error: () => i18n.t('Due date is required') }),
   deadlineType: z.string().min(1),
   description: z.string().optional(),
 })
@@ -35,7 +36,7 @@ export const deadlineCreateSchema = z.object({
 export type DeadlineCreateFormData = z.infer<typeof deadlineCreateSchema>
 
 export const assessmentCreateSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
+  title: z.string().min(1, { error: () => i18n.t('Title is required') }),
   assessmentType: z.string().min(1),
   weightPct: z
     .string()
@@ -67,54 +68,54 @@ export const AGENT_BACKENDS = [
 
 export const aiProviderSettingsSchema = z.object({
   agent_backend: z.enum(AGENT_BACKENDS),
-  claude_code_path: z.string().min(1, 'Path is required'),
-  claude_model: z.string().min(1, 'Pick a model'),
+  claude_code_path: z.string().min(1, { error: () => i18n.t('Path is required') }),
+  claude_model: z.string().min(1, { error: () => i18n.t('Pick a model') }),
   claude_cli_credentials: z.string(),
   anthropic_api_key: z
     .string()
-    .refine((v) => v === '' || v.startsWith('sk-ant-'), { message: 'Key must start with sk-ant-' }),
+    .refine((v) => v === '' || v.startsWith('sk-ant-'), { error: () => i18n.t('Key must start with sk-ant-') }),
   openai_api_key: z
     .string()
-    .refine((v) => v === '' || v.startsWith('sk-'), { message: 'Key must start with sk-' }),
+    .refine((v) => v === '' || v.startsWith('sk-'), { error: () => i18n.t('Key must start with sk-') }),
   openai_model: z.string(),
   zai_api_key: z.string(),
   zai_model: z.string(),
   zai_base_url: z
     .string()
-    .refine((v) => v === '' || /^https?:\/\/\S+$/.test(v), { message: 'Must be an http(s) URL' }),
+    .refine((v) => v === '' || /^https?:\/\/\S+$/.test(v), { error: () => i18n.t('Must be an http(s) URL') }),
   ollama_base_url: z
     .string()
-    .refine((v) => v === '' || /^https?:\/\/\S+$/.test(v), { message: 'Must be an http(s) URL' }),
+    .refine((v) => v === '' || /^https?:\/\/\S+$/.test(v), { error: () => i18n.t('Must be an http(s) URL') }),
   ollama_model: z.string(),
   classification_confidence_threshold: z
-    .number({ message: 'Enter a number between 0 and 1' })
-    .min(0, 'Must be at least 0')
-    .max(1, 'Must be at most 1'),
+    .number({ error: () => i18n.t('Enter a number between 0 and 1') })
+    .min(0, { error: () => i18n.t('Must be at least 0') })
+    .max(1, { error: () => i18n.t('Must be at most 1') }),
 })
 
 export type AiProviderSettingsFormData = z.infer<typeof aiProviderSettingsSchema>
 
 export const pipelineSettingsSchema = z.object({
   flashcard_count_per_week: z
-    .number({ message: 'Enter a number' })
+    .number({ error: () => i18n.t('Enter a number') })
     .int('Whole numbers only')
-    .min(1, 'At least 1')
-    .max(100, 'At most 100'),
+    .min(1, { error: () => i18n.t('At least 1') })
+    .max(100, { error: () => i18n.t('At most 100') }),
   quiz_question_count_per_week: z
-    .number({ message: 'Enter a number' })
+    .number({ error: () => i18n.t('Enter a number') })
     .int('Whole numbers only')
-    .min(1, 'At least 1')
-    .max(100, 'At most 100'),
+    .min(1, { error: () => i18n.t('At least 1') })
+    .max(100, { error: () => i18n.t('At most 100') }),
   chunk_size_tokens: z
-    .number({ message: 'Enter a number' })
+    .number({ error: () => i18n.t('Enter a number') })
     .int('Whole numbers only')
-    .min(50, 'At least 50')
-    .max(5000, 'At most 5000'),
+    .min(50, { error: () => i18n.t('At least 50') })
+    .max(5000, { error: () => i18n.t('At most 5000') }),
   chunk_overlap_tokens: z
-    .number({ message: 'Enter a number' })
+    .number({ error: () => i18n.t('Enter a number') })
     .int('Whole numbers only')
-    .min(0, 'At least 0')
-    .max(500, 'At most 500'),
+    .min(0, { error: () => i18n.t('At least 0') })
+    .max(500, { error: () => i18n.t('At most 500') }),
 })
 
 export type PipelineSettingsFormData = z.infer<typeof pipelineSettingsSchema>
@@ -130,8 +131,8 @@ export type PipelineSettingsFormData = z.infer<typeof pipelineSettingsSchema>
 export const BACKUP_CODE_MAX_LENGTH = 64
 
 export const loginSchema = z.object({
-  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
-  password: z.string().min(1, 'Password is required'),
+  email: z.string().min(1, { error: () => i18n.t('Email is required') }).email({ error: () => i18n.t('Enter a valid email address') }),
+  password: z.string().min(1, { error: () => i18n.t('Password is required') }),
   totp_code: z.string().optional(),
   /**
    * Deliberately unvalidated beyond a length cap. The server owns backup-code
@@ -157,32 +158,32 @@ export type OAuthMFAFormData = z.infer<typeof oauthMfaSchema>
 
 export const registerSchema = z
   .object({
-    email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
-    username: z.string().min(3, 'Username must be at least 3 characters'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
+    email: z.string().min(1, { error: () => i18n.t('Email is required') }).email({ error: () => i18n.t('Enter a valid email address') }),
+    username: z.string().min(3, { error: () => i18n.t('Username must be at least 3 characters') }),
+    password: z.string().min(8, { error: () => i18n.t('Password must be at least 8 characters') }),
     confirm: z.string(),
     invite_code: z.string().optional(),
   })
   .refine((data) => data.password === data.confirm, {
-    message: 'Passwords do not match',
+    error: () => i18n.t('Passwords do not match'),
     path: ['confirm'],
   })
 
 export type RegisterFormData = z.infer<typeof registerSchema>
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
+  email: z.string().min(1, { error: () => i18n.t('Email is required') }).email({ error: () => i18n.t('Enter a valid email address') }),
 })
 
 export type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>
 
 export const resetPasswordSchema = z
   .object({
-    password: z.string().min(8, 'Password must be at least 8 characters'),
+    password: z.string().min(8, { error: () => i18n.t('Password must be at least 8 characters') }),
     confirm: z.string(),
   })
   .refine((data) => data.password === data.confirm, {
-    message: 'Passwords do not match',
+    error: () => i18n.t('Passwords do not match'),
     path: ['confirm'],
   })
 
@@ -192,7 +193,7 @@ export const captureSchema = z
   .object({
     text: z.string().trim().optional(),
     url: z.string().trim().optional(),
-    title: z.string().trim().max(200, 'Title too long').optional(),
+    title: z.string().trim().max(200, { error: () => i18n.t('Title too long') }).optional(),
   })
   .superRefine((data, ctx) => {
     const hasText = !!data.text
@@ -200,21 +201,21 @@ export const captureSchema = z
     if (hasText && hasUrl) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Provide either text or a URL, not both',
+        message: i18n.t('Provide either text or a URL, not both'),
         path: ['text'],
       })
     }
     if (!hasText && !hasUrl) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Paste some text or enter a URL',
+        message: i18n.t('Paste some text or enter a URL'),
         path: ['text'],
       })
     }
     if (hasUrl && !/^https?:\/\/\S+$/i.test(data.url ?? '')) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Enter a valid http(s) URL',
+        message: i18n.t('Enter a valid http(s) URL'),
         path: ['url'],
       })
     }
@@ -243,5 +244,5 @@ export function normalizeEmail(value: string): string {
 /** The same address rule the auth forms use, reused on the admin surface. */
 export const adminEmailSchema = z
   .string()
-  .min(1, 'Email is required')
-  .email('Enter a valid email address')
+  .min(1, { error: () => i18n.t('Email is required') })
+  .email({ error: () => i18n.t('Enter a valid email address') })

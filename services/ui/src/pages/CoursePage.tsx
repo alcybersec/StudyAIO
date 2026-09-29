@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import i18n from '../i18n'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useArchiveCourse, useCourseDetail } from '../hooks/useApi'
@@ -75,7 +76,7 @@ export function CoursePage() {
   const handleArchive = () => {
     archiveMutation.mutate(course.code, {
       onSuccess: () => {
-        toast.success(`${course.code} archived — recoverable anytime`)
+        toast.success(i18n.t('{{code}} archived — recoverable anytime', { code: course.code }))
         navigate('/')
       },
       onError: (err) => toastMutationError(err, handleArchive),
@@ -87,7 +88,10 @@ export function CoursePage() {
       <PageHeader
         title={course.name ? `${course.code} — ${course.name}` : course.code}
         breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: course.code }]}
-        subtitle={`${weeks.length} week${weeks.length !== 1 ? 's' : ''} · ${totalCards} card${totalCards !== 1 ? 's' : ''}`}
+        subtitle={t('{{weeks}} weeks · {{cards}} cards', {
+          weeks: weeks.length,
+          cards: totalCards,
+        })}
         actions={
           <>
             <Button

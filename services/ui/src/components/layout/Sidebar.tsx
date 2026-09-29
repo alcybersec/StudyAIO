@@ -276,7 +276,7 @@ export function Sidebar() {
           {!collapsed && (
             <>
               <Link to="/profile" className="text-xs text-text-muted hover:text-text truncate transition-colors">
-                {user?.username ?? 'guest'}
+                {user?.username ?? t('guest')}
               </Link>
               {isDemo && <Badge variant="warning">{t('Demo')}</Badge>}
               {isSelfHosted ? (

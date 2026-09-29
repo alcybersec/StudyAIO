@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import i18n from '../../i18n'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Button, Input, Modal, toast } from '../ui'
@@ -49,7 +50,7 @@ export function RenameCourseModal({ open, onOpenChange, course }: RenameCourseMo
       },
       {
         onSuccess: (updated) => {
-          toast.success(`Course renamed to ${updated.code}`)
+          toast.success(i18n.t('Course renamed to {{code}}', { code: updated.code }))
           onOpenChange(false)
           if (updated.code !== course.code) {
             navigate(`/courses/${updated.code}`, { replace: true })

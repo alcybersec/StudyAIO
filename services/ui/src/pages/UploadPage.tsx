@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import i18n from '../i18n'
 import { useTranslation } from 'react-i18next'
 import { Lock, WifiOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
@@ -137,7 +138,7 @@ export function UploadPage() {
 
   const handleRetryStage = useCallback((artifactId: string) => {
     retryPipeline.mutate(artifactId, {
-      onSuccess: (res) => toast.success(`Retrying from ${res.retrying_from_stage}`),
+      onSuccess: (res) => toast.success(i18n.t('Retrying from {{stage}}', { stage: res.retrying_from_stage })),
       onError: (err) => toastMutationError(err, () => handleRetryStage(artifactId)),
     })
   }, [retryPipeline])

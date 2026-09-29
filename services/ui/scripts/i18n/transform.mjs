@@ -37,6 +37,7 @@ function hookPlan(owner, sf) {
 let changedFiles = 0
 let changedStrings = 0
 const fragmented = []
+const needsInterpolation = []
 
 for (const file of (only.length ? only : sourceFiles())) {
   const { sf, src, hits } = collect(file)
@@ -46,6 +47,13 @@ for (const file of (only.length ? only : sourceFiles())) {
   const owners = new Map()
 
   for (const h of hits) {
+    // A template *expression* cannot be auto-wrapped: its key would contain a
+    // literal `${…}`, which renders as that text. Wrapping one produced ~30
+    // visible regressions before this guard existed. Report and leave it.
+    if (/\$\{/.test(h.text)) {
+      needsInterpolation.push(`${file}: ${h.text.slice(0, 80)}`)
+      continue
+    }
     const key = jsString(h.text)
     // A toast is fired imperatively, at a moment, and never re-renders — so it
     // reads the language directly rather than through the hook. That also keeps
@@ -66,7 +74,9 @@ for (const file of (only.length ? only : sourceFiles())) {
         (c) => ts.isJsxText(c) && /[A-Za-z]{2,}/.test(c.text),
       )
       if (siblings.length > 1) fragmented.push(`${file}: ${h.text}`)
-    } else if (h.kind === 'toast') {
+    } else if (h.kind === 'toast' || h.kind === 'child') {
+      // Already inside an expression — the literal is replaced in place, with
+      // no braces of its own.
       edits.push({ start: h.node.getStart(sf), end: h.node.getEnd(), text: call })
     } else {
       // attribute string literal -> {t('...')}, replacing the whole initializer
@@ -124,6 +134,11 @@ for (const file of (only.length ? only : sourceFiles())) {
 }
 
 console.log(`files=${changedFiles} strings=${changedStrings}`)
+if (needsInterpolation.length) {
+  console.log(`\nNEEDS INTERPOLATION BY HAND (${needsInterpolation.length}) — a template`)
+  console.log(`expression must become one key with {{placeholders}}:`)
+  for (const n of needsInterpolation) console.log('  ' + n)
+}
 if (fragmented.length) {
   console.log(`\nFRAGMENTED (${fragmented.length}) — sentences split across expressions:`)
   for (const f of fragmented.slice(0, 40)) console.log('  ' + f)

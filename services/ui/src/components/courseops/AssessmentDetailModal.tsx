@@ -137,7 +137,7 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
 
           {uploadDoc.isError && (
             <p className="text-xs text-red-fg mb-2" role="alert">
-              {uploadDoc.error instanceof Error ? uploadDoc.error.message : 'Upload failed'}
+              {uploadDoc.error instanceof Error ? uploadDoc.error.message : t('Upload failed')}
             </p>
           )}
 
@@ -168,7 +168,7 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
                     href={courseopsApi.documentDownloadUrl(d.id)}
                     className="rounded-md p-1.5 text-text-muted hover:text-text hover:bg-surface-2"
                     title={t('Download')}
-                    aria-label={`Download ${d.original_filename}`}
+                    aria-label={t('Download {{file}}', { file: d.original_filename })}
                   >
                     <Download size={14} />
                   </a>
@@ -177,7 +177,7 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
                     disabled={deleteDoc.isPending}
                     className="rounded-md p-1.5 text-red-fg hover:bg-red-soft disabled:opacity-50"
                     title={t('Remove')}
-                    aria-label={`Remove ${d.original_filename}`}
+                    aria-label={t('Remove {{file}}', { file: d.original_filename })}
                   >
                     {deleteDoc.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                   </button>

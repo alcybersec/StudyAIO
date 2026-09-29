@@ -55,7 +55,7 @@ export function DropZone({ onFiles, disabled }: DropZoneProps) {
         }`}
       >
         <Upload size={20} strokeWidth={1.5} aria-hidden />
-        {dragOver ? 'Drop to upload' : 'Drop lecture files here — PDF, DOCX, PPTX · up to 20 at once'}
+        {dragOver ? t('Drop to upload') : t('Drop lecture files here — PDF, DOCX, PPTX · up to 20 at once')}
         <span className="text-[11px] text-text-faint">{t('duplicates are detected and skipped automatically')}</span>
       </button>
       <input

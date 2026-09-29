@@ -89,7 +89,7 @@ export function KnowledgeGraphPage() {
   const handleSelect = (conceptId: string) => setSelectedConceptId(conceptId)
 
   const courseOptions = [
-    { value: '', label: 'All courses' },
+    { value: '', label: t('All courses') },
     ...(courses?.map((c) => ({ value: c.code, label: c.code })) ?? []),
   ]
 
@@ -199,8 +199,8 @@ export function KnowledgeGraphPage() {
 
               <p className="font-mono text-[11px] text-text-faint mt-3">
                 {view === 'graph'
-                  ? 'list view is the keyboard/screen-reader twin — arrows navigate, enter opens'
-                  : '↑↓ navigate · enter opens · same actions as the graph'}
+                  ? t('list view is the keyboard/screen-reader twin — arrows navigate, enter opens')
+                  : t('↑↓ navigate · enter opens · same actions as the graph')}
                 {graph && graph.nodes.length > 0 && (
                   <> · {graph.nodes.length} {t('concepts ·')} {graph.edges.length} {t('links')}</>
                 )}

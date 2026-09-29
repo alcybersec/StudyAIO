@@ -37,7 +37,7 @@ export function QuickCaptureModal({ open, onOpenChange }: QuickCaptureModalProps
     mutationFn: (body: CaptureRequest) => uploadApi.capture(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      toast.success(i18n.t(i18n.t('Capturing — processing started')), {
+      toast.success(i18n.t('Capturing — processing started'), {
         action: { label: i18n.t('View pipeline'), onClick: () => navigate('/upload') },
       })
       setText('')
@@ -48,7 +48,7 @@ export function QuickCaptureModal({ open, onOpenChange }: QuickCaptureModalProps
     },
     onError: (err) => {
       if (err instanceof AppApiError && err.status === 413) {
-        toast.error(i18n.t(i18n.t('That capture is too large')), {
+        toast.error(i18n.t('That capture is too large'), {
           description: i18n.t('Pasted text must stay under 1 MB — trim it down and retry.'),
         })
         return
@@ -106,7 +106,7 @@ export function QuickCaptureModal({ open, onOpenChange }: QuickCaptureModalProps
                 mode === m ? 'bg-surface-1 text-text shadow-sm' : 'text-text-muted hover:text-text'
               }`}
             >
-              {m === 'text' ? 'Paste text' : 'From URL'}
+              {m === 'text' ? t('Paste text') : t('From URL')}
             </button>
           ))}
         </div>

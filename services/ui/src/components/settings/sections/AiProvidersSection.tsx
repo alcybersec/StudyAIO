@@ -26,6 +26,7 @@ interface ProviderMeta {
   status: (s: Settings) => { text: string; ok: boolean }
 }
 
+//: Status text is a key; the render site translates it.
 const NOT_SET = { text: 'your key is not set', ok: false }
 
 const PROVIDERS: ProviderMeta[] = [
@@ -284,7 +285,10 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
       // The instance reports itself as `studyaio` — it does not name which
       // provider the operator pays for, and neither do we.
       const label = result.backend === 'studyaio' ? 'StudyAIO' : result.backend
-      setTest({ state: 'ok', message: `✓ ${label} responded in ${secs}s` })
+      setTest({
+      state: 'ok',
+      message: t('✓ {{provider}} responded in {{seconds}}s', { provider: label, seconds: secs }),
+    })
     } catch (err) {
       setTest({
         state: 'error',
@@ -331,7 +335,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               <span
                 className={`block text-[11px] font-mono mt-2 ${status.ok ? 'text-sage-fg' : 'text-text-faint'}`}
               >
-                {status.text}
+                {t(status.text)}
               </span>
             </button>
           )

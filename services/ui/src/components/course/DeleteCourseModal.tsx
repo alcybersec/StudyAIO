@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import i18n from '../../i18n'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Archive } from 'lucide-react'
@@ -45,7 +46,7 @@ export function DeleteCourseModal({ open, onOpenChange, course, weeks }: DeleteC
   const handleDelete = () => {
     deleteMutation.mutate(course.code, {
       onSuccess: () => {
-        toast.success(`${course.code} deleted`)
+        toast.success(i18n.t('{{code}} deleted', { code: course.code }))
         navigate('/')
       },
       onError: (err) => toastMutationError(err, handleDelete),
@@ -55,7 +56,7 @@ export function DeleteCourseModal({ open, onOpenChange, course, weeks }: DeleteC
   const handleArchive = () => {
     archiveMutation.mutate(course.code, {
       onSuccess: () => {
-        toast.success(`${course.code} archived — recoverable anytime`)
+        toast.success(i18n.t('{{code}} archived — recoverable anytime', { code: course.code }))
         navigate('/')
       },
       onError: (err) => toastMutationError(err, handleArchive),
@@ -86,7 +87,7 @@ export function DeleteCourseModal({ open, onOpenChange, course, weeks }: DeleteC
       </ul>
       <Input
         id="delete-course-confirm"
-        label={`Type "${course.code}" to confirm`}
+        label={t('Type "{{code}}" to confirm', { code: course.code })}
         placeholder={course.code}
         value={typed}
         autoComplete="off"

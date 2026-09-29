@@ -65,7 +65,7 @@ export function ConfirmAction({
 
         <div className="flex gap-2 pt-1">
           <Button variant="danger" size="sm" disabled={pending} onClick={onConfirm}>
-            {pending ? 'Working…' : confirmLabel}
+            {pending ? t('Working…') : confirmLabel}
           </Button>
           <Button variant="ghost" size="sm" disabled={pending} onClick={() => onOpenChange(false)}>
             {t('Cancel')}

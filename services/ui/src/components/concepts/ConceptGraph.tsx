@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import * as d3 from 'd3'
 import type { ConceptEdge, ConceptNode } from '../../types'
 import { courseToneMap, createSimulation, nodeRadius, type SimLink, type SimNode } from './simulation'
@@ -28,6 +29,7 @@ function applySelection(sel: NodeSelection, selectedId: string | null) {
 }
 
 export function ConceptGraph({ nodes, edges, onNodeClick, selectedNodeId = null }: ConceptGraphProps) {
+  const { t } = useTranslation()
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 })
@@ -185,7 +187,7 @@ export function ConceptGraph({ nodes, edges, onNodeClick, selectedNodeId = null 
         width={dimensions.width}
         height={dimensions.height}
         role="img"
-        aria-label={`Concept graph — ${nodes.length} concepts`}
+        aria-label={t('Concept graph — {{count}} concepts', { count: nodes.length })}
         className="block"
       />
     </div>

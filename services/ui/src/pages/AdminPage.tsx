@@ -195,6 +195,8 @@ function UserRow({
   ) => void
   currentUserId: string | undefined
 }) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
   const [pending, setPending] = useState<PendingChange | null>(null)
 
@@ -233,14 +235,14 @@ function UserRow({
           className="cursor-pointer"
           aria-label={user.is_active ? 'Deactivate user' : 'Activate user'}
         >
-          <Badge variant={user.is_active ? 'success' : 'danger'}>{user.is_active ? 'active' : 'inactive'}</Badge>
+          <Badge variant={user.is_active ? 'success' : 'danger'}>{user.is_active ? t('active') : t('inactive')}</Badge>
         </button>
       </TCell>
       <TCell className="font-mono text-[11px] text-text-faint">
         {user.created_at ? new Date(user.created_at).toLocaleDateString() : '—'}
       </TCell>
       <TCell className="font-mono text-[11px] text-text-faint">
-        {user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'never'}
+        {user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : t('never')}
       </TCell>
       <TCell>
         <UserRowActions user={user} currentUserId={currentUserId} />
@@ -362,7 +364,7 @@ export function AdminPage() {
           <div className="flex-1" />
           <Select
             className="w-32"
-            options={[{ value: 'all', label: 'All roles' }, ...ROLE_OPTIONS]}
+            options={[{ value: 'all', label: t('All roles') }, ...ROLE_OPTIONS]}
             value={roleFilter}
             onValueChange={(v) => {
               setRoleFilter(v)
@@ -371,7 +373,7 @@ export function AdminPage() {
           />
           <Select
             className="w-32"
-            options={[{ value: 'all', label: 'All tiers' }, ...TIER_OPTIONS]}
+            options={[{ value: 'all', label: t('All tiers') }, ...TIER_OPTIONS]}
             value={tierFilter}
             onValueChange={(v) => {
               setTierFilter(v)

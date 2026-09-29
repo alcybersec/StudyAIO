@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Toaster as SonnerToaster } from 'sonner'
 
 // Sonner's built-in rich colors fail WCAG AA contrast (e.g. success green
@@ -20,8 +21,13 @@ const tokenPalette = {
 } as CSSProperties
 
 export function Toaster() {
+  const { t } = useTranslation()
+
   return (
     <SonnerToaster
+      // Sonner labels its live region in English by default, which screen
+      // readers announce regardless of the app's language.
+      containerAriaLabel={t('Notifications')}
       position="bottom-right"
       toastOptions={{
         className: 'bg-surface-1 text-text border-border',

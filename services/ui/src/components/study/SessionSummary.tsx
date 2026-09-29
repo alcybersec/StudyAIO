@@ -62,7 +62,7 @@ export function SessionSummary({ totalReviewed, ratings, onRestart, examId }: Se
             to={examId ? `/study?tab=exams&exam=${examId}` : '/'}
             className="w-full py-3 px-4 rounded-lg text-sm font-medium text-text bg-surface-2 border border-border hover:border-border-strong transition-colors text-center min-h-[48px] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
           >
-            {examId ? 'Back to Exam' : 'Back to Dashboard'}
+            {examId ? t('Back to Exam') : t('Back to Dashboard')}
           </Link>
         </div>
       </Card>

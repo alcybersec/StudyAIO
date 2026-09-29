@@ -85,7 +85,7 @@ function MCQOptions({
             isCorrect ? 'bg-sage-soft text-sage-fg' : 'bg-red-soft text-red-fg'
           }`}
         >
-          <span className="font-medium">{isCorrect ? 'Correct!' : 'Incorrect.'}</span>{' '}
+          <span className="font-medium">{isCorrect ? t('Correct!') : t('Incorrect.')}</span>{' '}
           <span className="text-text-muted">{question.explanation}</span>
         </div>
       )}
@@ -281,10 +281,10 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
           className={`text-sm font-medium ${pct >= 70 ? 'text-sage-fg' : 'text-amber-fg'}`}
         >
           {pct >= 90
-            ? 'Excellent!'
+            ? t('Excellent!')
             : pct >= 70
-              ? 'Good job!'
-              : 'Keep studying!'}
+              ? t('Good job!')
+              : t('Keep studying!')}
         </div>
         <button
           onClick={restart}
@@ -346,7 +346,7 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
             onClick={goToNext}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-2 text-text border border-border hover:border-border-strong transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
           >
-            {currentIndex === total - 1 ? 'Finish' : 'Next'}
+            {currentIndex === total - 1 ? t('Finish') : t('Next')}
           </button>
         </div>
       )}

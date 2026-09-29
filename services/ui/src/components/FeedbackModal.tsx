@@ -76,7 +76,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       },
       {
         onSuccess: () => {
-          toast.success(i18n.t(i18n.t('Thank you — that went straight to the maintainer.')))
+          toast.success(i18n.t('Thank you — that went straight to the maintainer.'))
           close()
         },
         onError: (err: unknown) => {
@@ -147,7 +147,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
             {t('Cancel')}
           </Button>
           <Button size="sm" disabled={!canSubmit} onClick={send}>
-            {submit.isPending ? 'Sending…' : 'Send'}
+            {submit.isPending ? t('Sending…') : t('Send')}
           </Button>
         </div>
       </div>

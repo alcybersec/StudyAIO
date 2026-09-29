@@ -26,6 +26,13 @@ const EVENT_DESCRIPTIONS: Record<string, string> = {
 }
 
 const CHANNELS = ['email', 'telegram', 'push'] as const
+
+//: Column headings. Keys, translated at the render site.
+const CHANNEL_LABELS: Record<string, string> = {
+  email: 'Email',
+  telegram: 'Telegram',
+  push: 'Push',
+}
 const EVENT_TYPES = ['pipeline_complete', 'review_created', 'cards_due', 'exam_reminder', 'weekly_digest'] as const
 
 export function NotificationsSection() {
@@ -104,7 +111,7 @@ export function NotificationsSection() {
                 <th className="text-left py-2 pr-4 font-medium text-text-muted">{t('Event')}</th>
                 {CHANNELS.map((ch) => (
                   <th key={ch} className="text-center py-2 px-3 font-medium text-text-muted capitalize">
-                    {ch}
+                    {t(CHANNEL_LABELS[ch])}
                   </th>
                 ))}
               </tr>
@@ -113,8 +120,8 @@ export function NotificationsSection() {
               {EVENT_TYPES.map((event) => (
                 <tr key={event} className="border-b border-border/50">
                   <td className="py-3 pr-4">
-                    <div className="font-medium text-text">{EVENT_LABELS[event]}</div>
-                    <div className="text-xs text-text-muted">{EVENT_DESCRIPTIONS[event]}</div>
+                    <div className="font-medium text-text">{t(EVENT_LABELS[event])}</div>
+                    <div className="text-xs text-text-muted">{t(EVENT_DESCRIPTIONS[event])}</div>
                   </td>
                   {CHANNELS.map((ch) => (
                     <td key={ch} className="text-center py-3 px-3">
@@ -128,7 +135,7 @@ export function NotificationsSection() {
                         }`}
                         role="switch"
                         aria-checked={isEnabled(ch, event)}
-                        aria-label={`${EVENT_LABELS[event]} via ${ch}`}
+                        aria-label={t('{{event}} via {{channel}}', { event: t(EVENT_LABELS[event]), channel: ch })}
                       >
                         <span
                           className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
@@ -164,7 +171,7 @@ export function NotificationsSection() {
           )}
           {testMutation.isError && (
             <span className="text-xs text-red-fg">
-              {testMutation.error instanceof Error ? testMutation.error.message : 'Failed'}
+              {testMutation.error instanceof Error ? testMutation.error.message : t('Failed')}
             </span>
           )}
         </div>

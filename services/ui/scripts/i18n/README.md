@@ -10,8 +10,11 @@ a claim that decays the week after it is made.
 | `transform.mjs` | Wraps what `scan.mjs` finds, and gives each owning component `const { t } = useTranslation()`. Every edit is a precise AST span replacement. Pass file paths to limit it, `--dry` to count without writing. |
 | `fragments.mjs` | Lists sentences split across expressions — `{t('Week')} {week}`. These render correctly in English and badly in a language that orders words differently, so they need converting to one interpolated key: `t('Week {{week}}', { week })`. |
 
-`keys.mjs` prints every key in use, including the ones reaching `t()` through a
-variable (listed in `dynamic-keys.json`, since no scanner can follow those).
+`dynamic-keys.mjs` regenerates `dynamic-keys.json`: the keys that reach `t()`
+through a variable (`t(label)`, `t(EVENT_LABELS[e])`). They are derived from the
+tables they live in, never hand-listed — a hand-written list is what let the
+theme labels, the tour copy and the notification event names sit untranslated
+behind a green guard. `keys.mjs` prints every key in use.
 
 ## The guard
 
@@ -21,6 +24,24 @@ bundle carries an entry nobody uses. That is what keeps coverage full: a new
 untranslated string fails in the author's own test run, when it costs one line
 to fix, rather than surfacing months later as a Russian user meeting an English
 screen.
+
+## The static guard is necessary, not sufficient
+
+Run the app and look at it. A static scan cannot see:
+
+- **a table rendered without `t()`** — the keys are declared and translated, and
+  the component still prints English (`tabLabels[tab]`, `f.label`);
+- **dates** — `toLocaleDateString(undefined, …)` follows the browser, not the
+  app's language;
+- **third-party defaults** — Sonner labelled its live region "Notifications" in
+  English whatever the app was set to.
+
+All three shipped green and were caught by loading the app in Russian and
+walking the routes. The sweep that found them: set the language, visit each
+route, and collect any text node or `aria-label`/`title`/`placeholder` still
+matching `[A-Za-z]{4,}`. Do the same pass in English afterwards, looking for
+raw `{{placeholders}}` and stray `${…}` — that is what catches a key that was
+wrapped wrongly.
 
 ## Conventions
 
