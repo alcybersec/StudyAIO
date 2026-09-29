@@ -183,6 +183,8 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
             from app.services.settings_service import get_user_agent_config
 
             user_agent_config = await get_user_agent_config(session, user_id or artifact.user_id)
+            # No output_language: this stage's output is parsed, not read.
+            # See AgentAdapter.with_language.
             agent = get_agent(user_settings=user_agent_config)
             classification = await agent.classify_lecture(
                 text_preview=text_preview,

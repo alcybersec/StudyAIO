@@ -59,6 +59,15 @@ ALLOWED_KEYS = {
 
 VALID_MODELS = {"opus", "sonnet", "haiku"}
 
+#: Interface languages the app ships translations for, as BCP-47 short tags.
+#: An unknown tag is rejected rather than stored: a typo would otherwise
+#: reach a prompt as "Write in xx".
+SUPPORTED_LANGUAGES = {"en", "ru"}
+
+#: What the app is authored in. Content is generated in this language unless
+#: a user asks for another *and* opts their study material in.
+DEFAULT_LANGUAGE = "en"
+
 #: "StudyAIO provided" — use the instance's configured backend and credentials.
 STUDYAIO_BACKEND = "studyaio"
 
@@ -330,6 +339,8 @@ async def get_user_settings(session: AsyncSession, user_id: str) -> dict[str, An
     merged = _public_view(user_settings.settings_json or {})
     # Include theme and dashboard_layout
     merged["theme"] = user_settings.theme
+    merged["language"] = user_settings.language
+    merged["content_language"] = user_settings.content_language
     merged["dashboard_layout"] = user_settings.dashboard_layout
     return merged
 
@@ -354,6 +365,8 @@ async def update_user_settings(
 
     # Handle special non-settings-json keys
     theme = updates.pop("theme", None)
+    language = updates.pop("language", None)
+    content_language = updates.pop("content_language", None)
     dashboard_layout = updates.pop("dashboard_layout", None)
     clear_secrets = updates.pop("clear_secrets", None) or []
 
@@ -389,6 +402,19 @@ async def update_user_settings(
         if theme not in ("light", "dark", "system"):
             raise ValueError("theme must be one of: light, dark, system")
         user_settings.theme = theme
+
+    # Update language
+    if language is not None:
+        if language not in SUPPORTED_LANGUAGES:
+            raise ValueError(
+                f"language must be one of {sorted(SUPPORTED_LANGUAGES)}, got '{language}'"
+            )
+        user_settings.language = language
+
+    if content_language is not None:
+        if not isinstance(content_language, bool):
+            raise ValueError("content_language must be a boolean")
+        user_settings.content_language = content_language
 
     # Update dashboard layout
     if dashboard_layout is not None:
@@ -444,6 +470,20 @@ _AGENT_CONFIG_KEYS = {
 }
 
 
+async def _get_row(session: AsyncSession, user_id: str) -> UserSettings | None:
+    """Read a user's settings row without creating one.
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
+
+    Returns:
+        The row, or None if the user has never saved a setting.
+    """
+    result = await session.execute(select(UserSettings).where(UserSettings.user_id == user_id))
+    return result.scalar_one_or_none()
+
+
 async def _get_overrides(session: AsyncSession, user_id: str) -> dict[str, Any]:
     """Read a user's stored settings without creating a row.
 
@@ -454,11 +494,10 @@ async def _get_overrides(session: AsyncSession, user_id: str) -> dict[str, Any]:
     Returns:
         The stored `settings_json`, or an empty dict.
     """
-    result = await session.execute(select(UserSettings).where(UserSettings.user_id == user_id))
-    user_settings = result.scalar_one_or_none()
-    if not user_settings:
+    row = await _get_row(session, user_id)
+    if not row:
         return {}
-    return user_settings.settings_json or {}
+    return row.settings_json or {}
 
 
 def resolve_backend(overrides: dict[str, Any]) -> str:
@@ -495,6 +534,68 @@ async def uses_instance_provider(session: AsyncSession, user_id: str) -> bool:
     return resolve_backend(overrides) == STUDYAIO_BACKEND
 
 
+def _output_language_from_row(row: UserSettings | None) -> str | None:
+    """Resolve the content language from a settings row.
+
+    Args:
+        row: The user's settings row, or None.
+
+    Returns:
+        A supported language tag, or None for English / content translation off.
+    """
+    if not row or not row.content_language:
+        return None
+
+    language = row.language or DEFAULT_LANGUAGE
+    if language == DEFAULT_LANGUAGE or language not in SUPPORTED_LANGUAGES:
+        return None
+    return language
+
+
+async def get_user_output_language(session: AsyncSession, user_id: str) -> str | None:
+    """Get the language AI-generated content should be written in, if not English.
+
+    Returns a tag only when the user both chose a non-default language *and*
+    opted their study material in, so call sites never have to know the toggle
+    exists: `None` means "write it the way you always have".
+
+    This is deliberately not part of `get_user_agent_config`, which returns
+    `None` for every user on instance credentials (issue #30). A language
+    preference is not a credential, and riding inside that dict would have
+    delivered it only to the minority running their own API keys.
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
+
+    Returns:
+        A supported language tag, or None for English / content translation off.
+    """
+    return _output_language_from_row(await _get_row(session, user_id))
+
+
+async def get_user_ai_context(
+    session: AsyncSession, user_id: str
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Get a user's provider config and content language in one query.
+
+    Both live on the same `user_settings` row, and every AI call site needs
+    both, so reading them separately would double the queries on the hot path
+    for no gain.
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
+
+    Returns:
+        `(agent config or None, language tag or None)` — as
+        `get_user_agent_config` and `get_user_output_language` respectively.
+    """
+    row = await _get_row(session, user_id)
+    overrides = (row.settings_json or {}) if row else {}
+    return _agent_config_from_overrides(overrides), _output_language_from_row(row)
+
+
 async def get_user_agent_config(session: AsyncSession, user_id: str) -> dict[str, Any] | None:
     """Get the AI config for a user, or None to mean "use the instance".
 
@@ -514,7 +615,19 @@ async def get_user_agent_config(session: AsyncSession, user_id: str) -> dict[str
         Dict of AI settings when the user runs their own provider; None when
         they are on "StudyAIO provided".
     """
-    overrides = await _get_overrides(session, user_id)
+    return _agent_config_from_overrides(await _get_overrides(session, user_id))
+
+
+def _agent_config_from_overrides(overrides: dict[str, Any]) -> dict[str, Any] | None:
+    """Build the agent config for a set of stored overrides.
+
+    Args:
+        overrides: The user's stored `settings_json`.
+
+    Returns:
+        Dict of AI settings when the user runs their own provider; None when
+        they are on "StudyAIO provided".
+    """
     backend = resolve_backend(overrides)
     if backend == STUDYAIO_BACKEND:
         return None

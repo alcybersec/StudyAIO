@@ -95,10 +95,11 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
             existing_md = existing.content_md if existing else None
 
             # Call AI agent with per-user settings
-            from app.services.settings_service import get_user_agent_config
+            from app.services.settings_service import get_user_ai_context
 
-            user_agent_config = await get_user_agent_config(session, user_id or artifact.user_id)
-            agent = get_agent(user_settings=user_agent_config)
+            owner_id = user_id or artifact.user_id
+            user_agent_config, output_language = await get_user_ai_context(session, owner_id)
+            agent = get_agent(user_settings=user_agent_config, output_language=output_language)
             summary_result = await agent.generate_summary(extraction_data, existing_md)
 
             # Meter the AI spend. Usage accumulates on the adapter, so one call
