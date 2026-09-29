@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.agents import claude_code
 from app.agents.base import ExtractionData, SummaryResult
 from app.agents.claude_code import ClaudeCodeAdapter
 from app.agents.parsing import (
@@ -313,3 +314,52 @@ class TestCollectImageReferences:
         result = collect_image_references(extraction)
 
         assert result == []
+
+
+class TestFailureDescription:
+    """What the adapter reports when the CLI exits non-zero (GL#8)."""
+
+    def test_reports_stdout_even_when_stderr_is_noisy(self):
+        """The regression this exists for. stderr held only a harmless sandbox
+        warning while the real cause sat in stdout, and stdout was discarded
+        *because* stderr was non-empty — so the message blamed a missing
+        sandbox dependency for a revoked token."""
+        stdout = b"Failed to authenticate. API Error: 401 OAuth access token has been revoked."
+        stderr = b"Sandbox disabled: bubblewrap (bwrap) not installed"
+
+        described = claude_code._describe_failure(stdout, stderr)
+
+        assert "401 OAuth access token has been revoked" in described
+        # The warning is kept, not suppressed — it is occasionally the answer.
+        assert "bubblewrap" in described
+
+    def test_stdout_comes_first(self):
+        """`claude -p` writes its answer, and its refusal to produce one, to
+        stdout. stderr is where warnings go, so stdout leads."""
+        described = claude_code._describe_failure(b"the cause", b"a warning")
+        assert described.index("the cause") < described.index("a warning")
+
+    def test_stderr_alone_still_reported(self):
+        assert "only on stderr" in claude_code._describe_failure(b"", b"only on stderr")
+
+    def test_stdout_alone_still_reported(self):
+        assert "only on stdout" in claude_code._describe_failure(b"only on stdout", b"")
+
+    def test_silence_is_named_rather_than_empty(self):
+        """An empty message reads like the error was lost."""
+        assert claude_code._describe_failure(b"", b"") == "Unknown error"
+
+    def test_each_stream_is_truncated_independently(self):
+        """A wall of retries on one stream must not push the other out."""
+        flood = b"x" * (claude_code._MAX_STREAM_CHARS * 3)
+        described = claude_code._describe_failure(flood, b"the short real cause")
+
+        assert "the short real cause" in described
+        assert "chars)" in described
+        assert len(described) < claude_code._MAX_STREAM_CHARS * 2
+
+    def test_undecodable_bytes_do_not_mask_the_failure(self):
+        """A killed process can leave a partial UTF-8 sequence; that must not
+        turn a diagnosable failure into a UnicodeDecodeError."""
+        described = claude_code._describe_failure(b"\xff\xfe broken", b"")
+        assert "broken" in described

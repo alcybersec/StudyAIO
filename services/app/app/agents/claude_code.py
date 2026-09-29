@@ -31,6 +31,41 @@ _DEFAULT_TIMEOUT = 120
 _SUMMARY_TIMEOUT = 600
 
 
+# A failing CLI can emit a lot: a stack trace, a wall of retries, an update
+# notice. The cap keeps an exception message readable and keeps Sentry from
+# storing kilobytes per failure, while leaving room for a real error to be
+# recognisable.
+_MAX_STREAM_CHARS = 1500
+
+
+def _describe_failure(stdout: bytes, stderr: bytes) -> str:
+    """Build an error message from whichever streams the CLI actually used.
+
+    Args:
+        stdout: The process's standard output.
+        stderr: The process's standard error.
+
+    Returns:
+        A labelled summary of both streams, truncated per stream, or
+        "Unknown error" when the process said nothing at all.
+    """
+
+    def clean(raw: bytes) -> str:
+        # errors="replace": a partially-written UTF-8 sequence from a killed
+        # process must not turn a diagnosable failure into a UnicodeDecodeError.
+        text = raw.decode(errors="replace").strip() if raw else ""
+        if len(text) > _MAX_STREAM_CHARS:
+            text = text[:_MAX_STREAM_CHARS] + f"… (+{len(text) - _MAX_STREAM_CHARS} chars)"
+        return text
+
+    parts = [
+        f"{label}: {text}"
+        for label, text in (("stdout", clean(stdout)), ("stderr", clean(stderr)))
+        if text
+    ]
+    return " | ".join(parts) or "Unknown error"
+
+
 class ClaudeCodeAdapter(AgentAdapter):
     """Calls Claude Code CLI via subprocess.
 
@@ -143,9 +178,22 @@ class ClaudeCodeAdapter(AgentAdapter):
                     pass
 
         if process.returncode != 0:
-            error_text = (
-                stderr.decode().strip() if stderr else (stdout.decode().strip() or "Unknown error")
-            )
+            # BOTH streams, because the useful half is not always the same one.
+            # This previously read stderr and fell back to stdout only when
+            # stderr was empty, which inverted the diagnosis in GL#8: a failed
+            # run reported
+            #
+            #   Sandbox disabled: bubblewrap (bwrap) not installed
+            #
+            # -- a harmless warning on stderr -- while the actual cause,
+            # "401 OAuth access token has been revoked", sat in stdout and was
+            # thrown away *because* stderr happened to be non-empty. The
+            # message sent the investigation after a missing sandbox
+            # dependency that had nothing to do with it.
+            #
+            # stdout first: `claude -p` writes its answer, and its refusal to
+            # produce one, there. stderr is where warnings go.
+            error_text = _describe_failure(stdout, stderr)
             raise AgentError(f"Claude Code failed (exit {process.returncode}): {error_text}")
 
         result = stdout.decode().strip()
