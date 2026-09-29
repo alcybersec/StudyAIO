@@ -293,7 +293,7 @@ async def revoke_invite(session: AsyncSession, invite_id: str) -> InviteCode | N
     return invite
 
 
-async def redeem_invite(session: AsyncSession, code: str) -> InviteCode:
+async def redeem_invite(session: AsyncSession, code: str, email: str | None = None) -> InviteCode:
     """Validate an invite code *or* an email-invite token and consume one use.
 
     Takes a row lock so two simultaneous registrations cannot both spend the
@@ -303,6 +303,8 @@ async def redeem_invite(session: AsyncSession, code: str) -> InviteCode:
         session: Database session.
         code: What the registrant supplied — a shared code like "BETA-7F3KQ2MN"
             or the raw token from an emailed invite link.
+        email: The address being registered. An email invite is only redeemable
+            by the address it was sent to; shared codes ignore this.
 
     Returns:
         The redeemed invite code.
@@ -335,6 +337,25 @@ async def redeem_invite(session: AsyncSession, code: str) -> InviteCode:
     if invite is None or not invite.is_redeemable():
         logger.info("invite_code_rejected", found=invite is not None)
         raise InviteError("That invite code is not valid")
+
+    # An email invite names its recipient, so being sent the link is not the same
+    # as being entitled to it. Without this, a forwarded link registers anyone,
+    # and accepted_at still credits the person it was addressed to -- the funnel
+    # would quietly attribute the signup to the wrong human.
+    #
+    # Checked AFTER the redeemable test so the generic rejection above stays
+    # identical for unknown, spent, expired and revoked. Reaching this branch
+    # requires already holding a valid token, so naming the reason tells the
+    # holder nothing they could not establish anyway, and saves a real invitee
+    # from silently failing when they signed up with the wrong address.
+    #
+    # Raised BEFORE the use is consumed: a forward used by the wrong person must
+    # not burn the invitation the right person is still waiting to accept.
+    if invite.email is not None:
+        presented_email = (email or "").strip().lower()
+        if presented_email != invite.email:
+            logger.info("invite_email_mismatch", invite_id=invite.id)
+            raise InviteError("That invite was sent to a different email address")
 
     invite.used_count += 1
     # Set once. A shared code redeemed ten times records when it was FIRST

@@ -201,7 +201,9 @@ async def register(
         # Redeem before creating the user so an invalid code costs nothing, and
         # so a failed registration below rolls the use back with the same
         # transaction.
-        invite = await invite_service.redeem_invite(session, body.invite_code or "")
+        invite = await invite_service.redeem_invite(
+            session, body.invite_code or "", email=body.email
+        )
 
     user = await user_service.register_user(session, body.email, body.username, body.password)
 
