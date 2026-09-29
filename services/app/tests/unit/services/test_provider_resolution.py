@@ -132,6 +132,8 @@ class TestSecretUpdateSemantics:
         row = MagicMock()
         row.settings_json = dict(stored)
         row.theme = "system"
+        row.language = "en"
+        row.content_language = False
         row.dashboard_layout = None
         return row
 

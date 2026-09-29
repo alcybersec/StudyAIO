@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,11 @@ class UserSettings(Base):
     settings_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     dashboard_layout: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     theme: Mapped[str] = mapped_column(String(20), nullable=False, default="system")
+    #: BCP-47 short tag for the interface language ("en", "ru").
+    language: Mapped[str] = mapped_column(String(5), nullable=False, default="en")
+    #: Whether `language` also applies to AI-generated study material.
+    #: False by default so shipping this changes nobody's existing output.
+    content_language: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

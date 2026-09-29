@@ -121,9 +121,9 @@ class TestStreamMessage:
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
             patch(
-                "app.services.settings_service.get_user_agent_config",
+                "app.services.settings_service.get_user_ai_context",
                 new_callable=AsyncMock,
-                return_value=None,
+                return_value=(None, None),
             ),
         ):
             events = await _collect_events(
@@ -177,9 +177,9 @@ class TestStreamMessage:
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
             patch(
-                "app.services.settings_service.get_user_agent_config",
+                "app.services.settings_service.get_user_ai_context",
                 new_callable=AsyncMock,
-                return_value=None,
+                return_value=(None, None),
             ),
         ):
             await _collect_events(
@@ -262,9 +262,9 @@ class TestStreamMessage:
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
             patch(
-                "app.services.settings_service.get_user_agent_config",
+                "app.services.settings_service.get_user_ai_context",
                 new_callable=AsyncMock,
-                return_value=None,
+                return_value=(None, None),
             ),
         ):
             events = await _collect_events(

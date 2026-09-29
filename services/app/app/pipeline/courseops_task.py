@@ -86,6 +86,8 @@ async def _process_document(document_id: str) -> dict:
             user_agent_config = (
                 await get_user_agent_config(session, owner_user_id) if owner_user_id else None
             )
+            # No output_language: this stage's output is parsed, not read.
+            # See AgentAdapter.with_language.
             agent = get_agent(user_settings=user_agent_config)
             ai_result = await agent.extract_course_ops(
                 document_text=extracted_text,

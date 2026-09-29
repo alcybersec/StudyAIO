@@ -79,10 +79,10 @@ async def ask_question(
         )
 
     # Call agent with per-user settings
-    from app.services.settings_service import get_user_agent_config
+    from app.services.settings_service import get_user_ai_context
 
-    user_agent_config = await get_user_agent_config(session, user.id)
-    agent = get_agent(user_settings=user_agent_config)
+    user_agent_config, output_language = await get_user_ai_context(session, user.id)
+    agent = get_agent(user_settings=user_agent_config, output_language=output_language)
     try:
         answer_result = await agent.answer_question(body.question, chunks)
     except NotImplementedError:

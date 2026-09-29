@@ -352,6 +352,11 @@ class SettingsResponse(BaseModel):
     chunk_overlap_tokens: int
     max_upload_size_mb: int = 50
     theme: str = "system"
+    #: Interface language as a BCP-47 short tag; see
+    #: settings_service.SUPPORTED_LANGUAGES.
+    language: str = "en"
+    #: Whether `language` also applies to AI-generated study material.
+    content_language: bool = False
     dashboard_layout: dict | None = None
 
 
@@ -377,6 +382,8 @@ class SettingsUpdateRequest(BaseModel):
     chunk_overlap_tokens: int | None = None
     max_upload_size_mb: int | None = None
     theme: str | None = None
+    language: str | None = None
+    content_language: bool | None = None
     dashboard_layout: dict | None = None
     #: Credentials to remove. An empty or omitted secret above means "leave
     #: unchanged" — the UI cannot echo back a value it is never sent — so
