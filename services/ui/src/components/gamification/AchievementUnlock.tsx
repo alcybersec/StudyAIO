@@ -1,9 +1,12 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import { Trophy, X } from 'lucide-react'
 import { useUnnotifiedAchievements, useMarkAchievementsNotified } from '../../hooks/useApi'
 
 export function AchievementUnlock() {
+  const { t } = useTranslation()
+
   const { data: unnotified } = useUnnotifiedAchievements()
   const markNotified = useMarkAchievementsNotified()
 
@@ -37,17 +40,17 @@ export function AchievementUnlock() {
         </div>
         <div>
           <p className="text-[10px] font-mono font-medium uppercase tracking-[0.12em] text-peri-fg">
-            Achievement unlocked
+            {t('Achievement unlocked')}
           </p>
           <p className="text-sm font-medium text-text">{achievement.title}</p>
           {achievement.xp_reward > 0 && (
-            <p className="text-xs font-mono text-text-faint">+{achievement.xp_reward} XP</p>
+            <p className="text-xs font-mono text-text-faint">{t('+{{xp}} XP', { xp: achievement.xp_reward })}</p>
           )}
         </div>
         <button
           onClick={() => markNotified.mutate([achievement.user_achievement_id])}
           className="ml-2 text-text-muted hover:text-text transition-colors"
-          aria-label="Dismiss"
+          aria-label={t('Dismiss')}
         >
           <X size={14} aria-hidden />
         </button>

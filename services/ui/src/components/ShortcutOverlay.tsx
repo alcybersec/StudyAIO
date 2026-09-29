@@ -1,4 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
+import { useTranslation } from 'react-i18next'
 import { Keyboard } from 'lucide-react'
 import { Kbd } from './ui/Kbd'
 
@@ -21,6 +22,8 @@ const shortcuts: Array<[string, string]> = [
 ]
 
 export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
+  const { t } = useTranslation()
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -31,8 +34,8 @@ export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
         >
           <div className="flex items-center gap-2 mb-4">
             <Keyboard size={15} className="text-text-faint" aria-hidden />
-            <Dialog.Title className="text-sm font-semibold text-text">Keyboard shortcuts</Dialog.Title>
-            <Kbd className="ml-auto">esc</Kbd>
+            <Dialog.Title className="text-sm font-semibold text-text">{t('Keyboard shortcuts')}</Dialog.Title>
+            <Kbd className="ml-auto">{t('esc')}</Kbd>
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-2">
             {shortcuts.map(([key, label]) => (

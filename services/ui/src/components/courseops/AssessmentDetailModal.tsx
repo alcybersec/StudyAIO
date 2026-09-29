@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Download, FileText, Loader2, Trash2, Upload } from 'lucide-react'
 import { Modal, Button, Badge, SkeletonText, ErrorState, EmptyState } from '../ui'
 import {
@@ -22,6 +23,8 @@ interface AssessmentDetailModalProps {
 }
 
 export function AssessmentDetailModal({ assessment, courseCode, onClose }: AssessmentDetailModalProps) {
+  const { t } = useTranslation()
+
   const [title, setTitle] = useState(assessment.title)
   const [type, setType] = useState(assessment.assessment_type)
   const [weight, setWeight] = useState(assessment.weight_pct != null ? String(assessment.weight_pct) : '')
@@ -55,17 +58,17 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
   const docs = docsQuery.data
 
   return (
-    <Modal open onOpenChange={(o) => !o && onClose()} title="Assessment" className="max-w-lg">
+    <Modal open onOpenChange={(o) => !o && onClose()} title={t('Assessment')} className="max-w-lg">
       <div className="space-y-5">
         {/* Info */}
         <section className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3">
             <label className="block">
-              <span className="text-xs font-medium text-text-muted">Title</span>
+              <span className="text-xs font-medium text-text-muted">{t('Title')}</span>
               <input value={title} onChange={(e) => setTitle(e.target.value)} className={`mt-1 ${FIELD}`} />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-text-muted">Weight %</span>
+              <span className="text-xs font-medium text-text-muted">{t('Weight %')}</span>
               <input
                 type="number"
                 min={0}
@@ -78,7 +81,7 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
             </label>
           </div>
           <label className="block">
-            <span className="text-xs font-medium text-text-muted">Type</span>
+            <span className="text-xs font-medium text-text-muted">{t('Type')}</span>
             <select value={type} onChange={(e) => setType(e.target.value)} className={`mt-1 ${FIELD}`}>
               {TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -88,21 +91,21 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
             </select>
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-text-muted">Notes / info</span>
+            <span className="text-xs font-medium text-text-muted">{t('Notes / info')}</span>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              placeholder="Grading criteria, submission details, guidelines…"
+              placeholder={t('Grading criteria, submission details, guidelines…')}
               className={`mt-1 ${FIELD}`}
             />
           </label>
           <div className="flex items-center justify-end gap-2">
             {updateAssessment.isSuccess && !updateAssessment.isPending && (
-              <span className="text-xs text-sage-fg">Saved</span>
+              <span className="text-xs text-sage-fg">{t('Saved')}</span>
             )}
             <Button size="sm" onClick={saveInfo} loading={updateAssessment.isPending}>
-              Save info
+              {t('Save info')}
             </Button>
           </div>
         </section>
@@ -110,7 +113,7 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
         {/* Documents */}
         <section className="border-t border-border pt-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text">Documents</h3>
+            <h3 className="text-sm font-semibold text-text">{t('Documents')}</h3>
             <div className="flex items-center gap-2">
               <select value={docType} onChange={(e) => setDocType(e.target.value)} className="rounded-md border border-border bg-surface-1 text-text px-2 py-1 text-xs focus:border-sage focus:outline-none">
                 {DOC_TYPES.map((t) => (
@@ -120,7 +123,7 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
                 ))}
               </select>
               <Button size="sm" variant="secondary" onClick={() => fileRef.current?.click()} loading={uploadDoc.isPending}>
-                <Upload size={13} /> Attach
+                <Upload size={13} /> {t('Attach')}
               </Button>
               <input
                 ref={fileRef}
@@ -140,14 +143,14 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
 
           {docsQuery.isLoading && <SkeletonText lines={2} />}
           {docsQuery.isError && !docs && (
-            <ErrorState compact title="Documents couldn't load" onRetry={() => docsQuery.refetch()} />
+            <ErrorState compact title={t("Documents couldn't load")} onRetry={() => docsQuery.refetch()} />
           )}
           {docs && docs.length === 0 && (
             <EmptyState
               compact
               icon="📄"
-              title="No documents attached"
-              description="Attach a brief, rubric, or guideline for this assessment."
+              title={t('No documents attached')}
+              description={t('Attach a brief, rubric, or guideline for this assessment.')}
             />
           )}
           {docs && docs.length > 0 && (
@@ -164,7 +167,7 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
                   <a
                     href={courseopsApi.documentDownloadUrl(d.id)}
                     className="rounded-md p-1.5 text-text-muted hover:text-text hover:bg-surface-2"
-                    title="Download"
+                    title={t('Download')}
                     aria-label={`Download ${d.original_filename}`}
                   >
                     <Download size={14} />
@@ -173,7 +176,7 @@ export function AssessmentDetailModal({ assessment, courseCode, onClose }: Asses
                     onClick={() => deleteDoc.mutate(d.id)}
                     disabled={deleteDoc.isPending}
                     className="rounded-md p-1.5 text-red-fg hover:bg-red-soft disabled:opacity-50"
-                    title="Remove"
+                    title={t('Remove')}
                     aria-label={`Remove ${d.original_filename}`}
                   >
                     {deleteDoc.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}

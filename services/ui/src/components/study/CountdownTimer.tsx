@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface CountdownTimerProps {
   totalSeconds: number
@@ -7,6 +8,8 @@ interface CountdownTimerProps {
 }
 
 export function CountdownTimer({ totalSeconds, onTimeUp, paused = false }: CountdownTimerProps) {
+  const { t } = useTranslation()
+
   const [remaining, setRemaining] = useState(totalSeconds)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -58,7 +61,7 @@ export function CountdownTimer({ totalSeconds, onTimeUp, paused = false }: Count
         />
       </div>
       {paused && (
-        <span className="text-xs text-text-muted font-medium">PAUSED</span>
+        <span className="text-xs text-text-muted font-medium">{t('PAUSED')}</span>
       )}
     </div>
   )

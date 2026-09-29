@@ -1,4 +1,5 @@
 import { useCallback, useRef, type KeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { SendHorizonal, X } from 'lucide-react'
 import { useCourses } from '../../hooks/useApi'
 import { Badge } from '../ui/Badge'
@@ -27,6 +28,8 @@ export function AskComposer({
   disabled = false,
   initialValue,
 }: AskComposerProps) {
+  const { t } = useTranslation()
+
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { data: courses } = useCourses()
 
@@ -69,7 +72,7 @@ export function AskComposer({
             {scope.courseCode}
             <button
               type="button"
-              aria-label="Remove course scope"
+              aria-label={t('Remove course scope')}
               onClick={() => onScopeChange({ courseCode: null, week: null })}
               className="ml-1 -mr-0.5 rounded-sm hover:opacity-70 cursor-pointer"
             >
@@ -79,10 +82,10 @@ export function AskComposer({
         )}
         {scope.courseCode && scope.week != null && (
           <Badge variant="success">
-            Week {scope.week}
+            {t('Week {{week}}', { week: scope.week })}
             <button
               type="button"
-              aria-label="Remove week scope"
+              aria-label={t('Remove week scope')}
               onClick={() => onScopeChange({ ...scope, week: null })}
               className="ml-1 -mr-0.5 rounded-sm hover:opacity-70 cursor-pointer"
             >
@@ -98,7 +101,7 @@ export function AskComposer({
                 type="button"
                 className="text-[11px] text-text-faint hover:text-text-muted transition-colors cursor-pointer"
               >
-                + scope
+                {t('+ scope')}
               </button>
             }
           >
@@ -110,7 +113,7 @@ export function AskComposer({
                 {course.code}
               </DropdownItem>
             ))}
-            {(courses ?? []).length === 0 && <DropdownItem disabled>No courses yet</DropdownItem>}
+            {(courses ?? []).length === 0 && <DropdownItem disabled>{t('No courses yet')}</DropdownItem>}
           </Dropdown>
         )}
         {scope.courseCode && scope.week == null && weekOptions.length > 0 && (
@@ -121,13 +124,13 @@ export function AskComposer({
                 type="button"
                 className="text-[11px] text-text-faint hover:text-text-muted transition-colors cursor-pointer"
               >
-                + week
+                {t('+ week')}
               </button>
             }
           >
             {weekOptions.map((week) => (
               <DropdownItem key={week} onSelect={() => onScopeChange({ ...scope, week })}>
-                Week {week}
+                {t('Week {{week}}', { week })}
               </DropdownItem>
             ))}
           </Dropdown>
@@ -138,7 +141,7 @@ export function AskComposer({
       <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}
-          aria-label="Ask anything about your lectures"
+          aria-label={t('Ask anything about your lectures')}
           defaultValue={initialValue}
           onChange={adjustHeight}
           onKeyDown={handleKeyDown}
@@ -148,12 +151,12 @@ export function AskComposer({
           className="flex-1 resize-none rounded-xl border border-border bg-surface-0 px-4 py-2.5 text-sm text-text placeholder:text-text-faint focus:outline-none focus-visible:outline-2 focus-visible:outline-peri disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           style={{ minHeight: '42px', maxHeight: '96px' }}
         />
-        <Button size="md" aria-label="Send" onClick={handleSend} disabled={disabled}>
+        <Button size="md" aria-label={t('Send')} onClick={handleSend} disabled={disabled}>
           <SendHorizonal size={14} aria-hidden />
         </Button>
       </div>
       <p className="text-[10px] text-text-faint font-mono mt-2">
-        answers cite their source weeks · scope chips narrow retrieval
+        {t('answers cite their source weeks · scope chips narrow retrieval')}
       </p>
     </div>
   )

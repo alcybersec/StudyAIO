@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useExams } from '../../hooks/useApi'
 import { useCalendarStatus, useSyncCalendar } from '../../hooks/useCalendar'
 import { LoadingSpinner, ErrorBanner, EmptyState } from '../ui'
@@ -11,6 +12,8 @@ interface ExamsTabProps {
 }
 
 export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
+  const { t } = useTranslation()
+
   const { data: exams, isLoading, error, refetch } = useExams(undefined, 'active')
   const [showCreate, setShowCreate] = useState(false)
   const now = useMemo(() => Date.now(), []) // eslint-disable-line react-hooks/purity
@@ -28,14 +31,14 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
     )
   }
 
-  if (isLoading) return <LoadingSpinner label="Loading exams..." />
-  if (error) return <ErrorBanner message="Failed to load exams." onRetry={refetch} />
+  if (isLoading) return <LoadingSpinner label={t('Loading exams...')} />
+  if (error) return <ErrorBanner message={t('Failed to load exams.')} onRetry={refetch} />
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-text-muted">
-          {exams?.length ?? 0} active exam{(exams?.length ?? 0) !== 1 ? 's' : ''}
+          {t('{{count}} active exam', { count: exams?.length ?? 0 })}
         </p>
         <div className="flex items-center gap-2">
           {hasCalendar && (
@@ -43,7 +46,7 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
               onClick={() => syncCalendar.mutate()}
               disabled={syncCalendar.isPending}
               className="inline-flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium border border-border text-text hover:bg-surface-2 disabled:opacity-50 transition-colors"
-              title="Sync exams to Google Calendar"
+              title={t('Sync exams to Google Calendar')}
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -55,7 +58,7 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
             onClick={() => setShowCreate(true)}
             className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-sage text-on-accent hover:bg-sage-hover transition-colors"
           >
-            + Create Exam
+            {t('+ Create Exam')}
           </button>
         </div>
       </div>
@@ -71,9 +74,9 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
 
       {!exams || exams.length === 0 ? (
         <EmptyState
-          title="No active exams"
-          description="Create an exam to start tracking your study progress."
-          actionLabel="Create Exam"
+          title={t('No active exams')}
+          description={t('Create an exam to start tracking your study progress.')}
+          actionLabel={t('Create Exam')}
           onAction={() => setShowCreate(true)}
         />
       ) : (
@@ -121,7 +124,7 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
 
                 <div className="mt-3">
                   <div className="flex items-center justify-between text-xs text-text-muted mb-1">
-                    <span>Target: {exam.target_mastery_pct}%</span>
+                    <span>{t('Target: {{percent}}%', { percent: exam.target_mastery_pct })}</span>
                   </div>
                   <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
                     <div className="h-full bg-peri rounded-full" style={{ width: '0%' }} />

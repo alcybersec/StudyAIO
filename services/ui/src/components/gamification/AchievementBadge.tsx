@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   Book,
   Brain,
@@ -38,6 +39,8 @@ const iconMap: Record<string, LucideIcon> = {
 }
 
 export function AchievementBadge({ achievement }: AchievementBadgeProps) {
+  const { t } = useTranslation()
+
   const Icon = iconMap[achievement.icon] ?? Star
 
   return (
@@ -50,7 +53,7 @@ export function AchievementBadge({ achievement }: AchievementBadgeProps) {
         <Icon size={20} aria-hidden className={achievement.earned ? 'text-peri-fg' : 'text-text-faint'} />
         <span className="text-xs font-medium text-text leading-tight">{achievement.title}</span>
         {achievement.xp_reward > 0 && (
-          <span className="text-[10px] font-mono text-text-faint">+{achievement.xp_reward} XP</span>
+          <span className="text-[10px] font-mono text-text-faint">{t('+{{xp}} XP', { xp: achievement.xp_reward })}</span>
         )}
       </div>
     </Tooltip>

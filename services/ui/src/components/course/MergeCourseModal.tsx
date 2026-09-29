@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Button, Modal, Select, toast } from '../ui'
 import { toastMutationError } from '../../lib/toast'
@@ -16,6 +17,8 @@ interface MergeCourseModalProps {
  * the backend instead of silent overwrites, and the source course is archived.
  */
 export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModalProps) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
   const [target, setTarget] = useState('')
   const [targetError, setTargetError] = useState<string | undefined>(undefined)
@@ -61,12 +64,12 @@ export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModa
       open={open}
       onOpenChange={handleOpenChange}
       title={`Merge ${course.code} into another course`}
-      description="All weeks, summaries and study assets move to the target. Colliding weeks create review items — nothing is overwritten. The source course is archived afterwards."
+      description={t('All weeks, summaries and study assets move to the target. Colliding weeks create review items — nothing is overwritten. The source course is archived afterwards.')}
     >
       <div className="space-y-4">
         <Select
           id="merge-course-target"
-          label="Merge into"
+          label={t('Merge into')}
           options={options}
           value={target}
           onValueChange={setTarget}
@@ -76,7 +79,7 @@ export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModa
         />
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="secondary" size="sm" onClick={() => handleOpenChange(false)}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button
             size="sm"
@@ -84,7 +87,7 @@ export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModa
             loading={mergeMutation.isPending}
             onClick={handleMerge}
           >
-            Merge course
+            {t('Merge course')}
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useCheckout } from '../../hooks/useBilling'
+import { useTranslation } from 'react-i18next'
 
 interface UpgradePromptProps {
   resource: string
@@ -8,6 +9,8 @@ interface UpgradePromptProps {
 }
 
 export function UpgradePrompt({ resource, limit, period, onDismiss }: UpgradePromptProps) {
+  const { t } = useTranslation()
+
   const checkout = useCheckout()
 
   const resourceLabels: Record<string, string> = {
@@ -29,12 +32,11 @@ export function UpgradePrompt({ resource, limit, period, onDismiss }: UpgradePro
           </div>
 
           <h3 className="text-lg font-semibold text-text mb-2">
-            Upgrade to Pro
+            {t('Upgrade to Pro')}
           </h3>
 
           <p className="text-sm text-text-muted mb-6">
-            You've reached the free plan limit of {limit} {label} per {period}.
-            Upgrade to Pro for unlimited access.
+            {t("You've reached the free plan limit of {{limit}} {{label}} per {{period}}. Upgrade to Pro for unlimited access.", { limit, label, period })}
           </p>
 
           <div className="flex gap-3">
@@ -43,7 +45,7 @@ export function UpgradePrompt({ resource, limit, period, onDismiss }: UpgradePro
               onClick={onDismiss}
               className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg border border-border text-text hover:bg-surface-2 transition-colors"
             >
-              Maybe later
+              {t('Maybe later')}
             </button>
             <button
               type="button"

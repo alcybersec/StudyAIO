@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Input, Modal } from '../ui'
@@ -49,6 +51,8 @@ function listProviders(providers: string[]): string {
  * One door, accurately labelled.
  */
 export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialogProps) {
+  const { t } = useTranslation()
+
   const [email, setEmail] = useState('')
   const [confirmEmail, setConfirmEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -104,17 +108,14 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
       <Modal
         open={open}
         onOpenChange={(next) => (next ? onOpenChange(true) : close())}
-        title="Email changed"
+        title={t('Email changed')}
       >
         <div className="space-y-3">
           <p className="text-xs text-text-muted">
-            This account now signs in as <span className="font-medium text-text">{changedTo}</span>.
-            It is unverified, and the user is signed out everywhere with their sign-in providers
-            unlinked.
+            {t('This account now signs in as')} <span className="font-medium text-text">{changedTo}</span>{t('. It is unverified, and the user is signed out everywhere with their sign-in providers unlinked.')}
           </p>
           <p className="text-xs text-text-muted">
-            Send them a verification link now — they have not been told any of this, and nothing
-            was sent to the old address.
+            {t('Send them a verification link now — they have not been told any of this, and nothing was sent to the old address.')}
           </p>
           <div className="flex gap-2 pt-1">
             <Button
@@ -129,18 +130,18 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
                     }
                     void navigator.clipboard
                       .writeText(r.url)
-                      .then(() => toast.success('No email configured — link copied to clipboard'))
-                      .catch(() => toast.message('No email configured. Link:', { description: r.url }))
+                      .then(() => toast.success(i18n.t(i18n.t('No email configured — link copied to clipboard'))))
+                      .catch(() => toast.message(i18n.t(i18n.t('No email configured. Link:')), { description: r.url }))
                   },
                   onError: (e) =>
-                    toast.error(errorMessage(e, "Couldn't create a verification link")),
+                    toast.error(errorMessage(e, i18n.t("Couldn't create a verification link"))),
                 })
               }
             >
               {resendVerification.isPending ? 'Sending…' : 'Send verification link'}
             </Button>
             <Button variant="ghost" size="sm" onClick={close}>
-              Done
+              {t('Done')}
             </Button>
           </div>
         </div>
@@ -158,15 +159,13 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
         <p className="flex items-start gap-2 text-xs text-red-fg">
           <TriangleAlert size={14} className="mt-px shrink-0" aria-hidden />
           <span>
-            This is a remediation, not a correction. It cuts every standing route back into the
-            account:
+            {t('This is a remediation, not a correction. It cuts every standing route back into the account:')}
           </span>
         </p>
 
         <ul className="space-y-1.5 text-xs text-text-muted list-disc pl-4">
           <li>
-            Signs {user.email} out on every device immediately — the access token and the 7-day
-            refresh token both stop working, so they cannot silently resume.
+            {t('Signs {{email}} out on every device immediately — the access token and the 7-day refresh token both stop working, so they cannot silently resume.', { email: user.email })}
           </li>
           {/*
             Three states, and they are not interchangeable (GL#3). A known list
@@ -179,50 +178,43 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
           {linkedProviders === null ? (
             <li>
               <span className="font-medium text-text">
-                Unlinks every connected sign-in provider
+                {t('Unlinks every connected sign-in provider')}
               </span>{' '}
-              (Google, GitHub). All of them: the links are not recorded against an address, so
-              there is no way to unlink only the one tied to the old inbox.
+              {t('(Google, GitHub). All of them: the links are not recorded against an address, so there is no way to unlink only the one tied to the old inbox.')}
             </li>
           ) : linkedProviders.length > 0 ? (
             <li>
               <span className="font-medium text-text">
-                Unlinks their {listProviders(linkedProviders)} sign-in
+                {t('Unlinks their {{providers}} sign-in', { providers: listProviders(linkedProviders) })}
               </span>
-              {linkedProviders.length > 1 ? ' — both of them' : ''}. The links are not recorded
-              against an address, so there is no way to unlink only the one tied to the old inbox.
+              {linkedProviders.length > 1 ? t(' — both of them') : ''}
+              {t('. The links are not recorded against an address, so there is no way to unlink only the one tied to the old inbox.')}
             </li>
           ) : null}
           <li>
             <span className="font-medium text-text">
-              If this account has a password, re-linking is not automatic.
+              {t('If this account has a password, re-linking is not automatic.')}
             </span>{' '}
-            Signing in with the provider again will be refused; they have to use their password.
-            This is the one part your cleanup cannot fix for them.
+            {t('Signing in with the provider again will be refused; they have to use their password. This is the one part your cleanup cannot fix for them.')}
           </li>
           <li>
-            Voids every unused link already sent to the old address — including a pending
-            set-password link. An account that was created but never claimed then has no way in
-            until you issue a new one.
+            {t('Voids every unused link already sent to the old address — including a pending set-password link. An account that was created but never claimed then has no way in until you issue a new one.')}
           </li>
           <li>
-            Marks the new address unverified. Send a verification link straight after; this dialog
-            offers one.
+            {t('Marks the new address unverified. Send a verification link straight after; this dialog offers one.')}
           </li>
           <li>
-            Mail goes only to the new address from now on. The old inbox is told nothing, so if the
-            address was simply wrong rather than compromised, tell the user some other way.
+            {t('Mail goes only to the new address from now on. The old inbox is told nothing, so if the address was simply wrong rather than compromised, tell the user some other way.')}
           </li>
           <li>
-            If the new address already belongs to another account, the change is refused outright —
-            nothing is merged and nothing is half-applied.
+            {t('If the new address already belongs to another account, the change is refused outright — nothing is merged and nothing is half-applied.')}
           </li>
         </ul>
 
         <Input
           id={`change-email-${user.id}`}
           type="email"
-          label="New email address"
+          label={t('New email address')}
           autoComplete="off"
           placeholder="tester@example.com"
           value={email}
@@ -239,7 +231,7 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
         <Input
           id={`change-email-confirm-${user.id}`}
           type="email"
-          label="Type the new address again"
+          label={t('Type the new address again')}
           autoComplete="off"
           value={confirmEmail}
           onChange={(e) => setConfirmEmail(e.target.value)}
@@ -257,7 +249,7 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
             {updateUser.isPending ? 'Changing…' : 'Change email and sign them out'}
           </Button>
           <Button variant="ghost" size="sm" disabled={updateUser.isPending} onClick={close}>
-            Cancel
+            {t('Cancel')}
           </Button>
         </div>
       </div>

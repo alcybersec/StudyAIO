@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   LineChart,
   Line,
@@ -12,6 +13,8 @@ import { Card, EmptyState, ErrorState, SectionLabel, Select, Skeleton } from '..
 import { useAnalyticsRetention, useCourses } from '../../hooks/useApi'
 
 export function RetentionCurve() {
+  const { t } = useTranslation()
+
   const [courseCode, setCourseCode] = useState('')
   const { data: courses } = useCourses()
   const { data, isLoading, error, refetch } = useAnalyticsRetention(courseCode || undefined)
@@ -42,7 +45,7 @@ export function RetentionCurve() {
   if (error) {
     return (
       <ErrorState
-        title="Retention curve couldn't load"
+        title={t("Retention curve couldn't load")}
         detail={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
@@ -54,8 +57,8 @@ export function RetentionCurve() {
       <Card>
         <EmptyState
           icon="📈"
-          title="Not enough review data"
-          description="The retention curve appears once cards have been reviewed across a few intervals."
+          title={t('Not enough review data')}
+          description={t('The retention curve appears once cards have been reviewed across a few intervals.')}
         />
       </Card>
     )
@@ -64,7 +67,7 @@ export function RetentionCurve() {
   return (
     <Card padding>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
-        <SectionLabel className="mb-0">Retention curve</SectionLabel>
+        <SectionLabel className="mb-0">{t('Retention curve')}</SectionLabel>
         {courses && courses.length > 1 && (
           <Select
             className="w-36"
@@ -122,7 +125,7 @@ export function RetentionCurve() {
         </LineChart>
       </ResponsiveContainer>
       <p className="font-mono text-[11px] text-text-faint text-center mt-2">
-        based on {totalReviews} card reviews
+        {t('based on {{count}} card review', { count: totalReviews })}
       </p>
     </Card>
   )

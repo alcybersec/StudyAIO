@@ -61,7 +61,7 @@ export function AppLayout() {
           {/* Mobile top header — logo only */}
           <header className="lg:hidden flex items-center h-14 px-4 bg-surface-1 border-b border-border shrink-0">
             <Link to="/" className="text-lg font-bold text-sage-fg">
-              StudyAIO
+              {t('StudyAIO')}
             </Link>
           </header>
 

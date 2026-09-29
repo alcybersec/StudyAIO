@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Plus, Trash2 } from 'lucide-react'
 import { useDeleteChatSession } from '../../hooks/useApi'
 import { Button } from '../ui/Button'
@@ -32,6 +33,8 @@ function SessionItem({
   onSelect: () => void
   onDeleted: () => void
 }) {
+  const { t } = useTranslation()
+
   const [confirmDelete, setConfirmDelete] = useState(false)
   const deleteSession = useDeleteChatSession()
 
@@ -63,7 +66,7 @@ function SessionItem({
           {session.title || 'New question'}
         </span>
         <span className="block text-[10px] text-text-faint font-mono mt-0.5">
-          {formatSessionDate(session.updated_at)} · {session.message_count} msgs
+          {t('{{date}} · {{count}} msgs', { date: formatSessionDate(session.updated_at), count: session.message_count })}
         </span>
       </button>
       <button
@@ -85,6 +88,8 @@ function SessionItem({
 }
 
 export function SessionRail({ sessions, selectedId, onSelect, onNewQuestion, isCreating }: SessionRailProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex flex-col h-full bg-surface-1">
       <div className="p-3">
@@ -95,15 +100,15 @@ export function SessionRail({ sessions, selectedId, onSelect, onNewQuestion, isC
           onClick={onNewQuestion}
           loading={isCreating}
         >
-          {!isCreating && <Plus size={13} aria-hidden />} New question
+          {!isCreating && <Plus size={13} aria-hidden />} {t('New question')}
         </Button>
       </div>
       <div className="px-3 pb-2 text-[10px] font-mono uppercase tracking-[0.12em] text-text-faint">
-        Sessions
+        {t('Sessions')}
       </div>
       <div className="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
         {sessions.length === 0 ? (
-          <p className="text-sm text-text-muted text-center py-8">No conversations yet</p>
+          <p className="text-sm text-text-muted text-center py-8">{t('No conversations yet')}</p>
         ) : (
           sessions.map((session) => (
             <SessionItem

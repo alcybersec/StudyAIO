@@ -143,7 +143,7 @@ export function ResetPasswordPage() {
       </form>
       <p className="text-xs text-text-muted text-center mt-6">
         <Link to="/login" className="hover:text-text underline-offset-2 hover:underline">
-          Back to sign in
+          {t('Back to sign in')}
         </Link>
       </p>
     </div>

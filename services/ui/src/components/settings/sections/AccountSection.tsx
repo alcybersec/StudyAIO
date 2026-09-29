@@ -37,7 +37,7 @@ export function AccountSection() {
           </div>
           <span className="ml-auto flex items-center gap-1.5">
             <Badge variant={user.tier === 'pro' ? 'success' : 'default'}>{user.tier}</Badge>
-            {user.role === 'admin' && <Badge variant="info">admin</Badge>}
+            {user.role === 'admin' && <Badge variant="info">{t('admin')}</Badge>}
           </span>
         </div>
 

@@ -1,4 +1,5 @@
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCourses, useCreateExam } from '../../hooks/useApi'
 import { examCreateSchema, type ExamCreateFormData } from '../../lib/schemas'
@@ -9,6 +10,8 @@ interface ExamCreateFormProps {
 }
 
 export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
+  const { t } = useTranslation()
+
   const { data: courses } = useCourses()
   const createExam = useCreateExam()
 
@@ -52,7 +55,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
   return (
     <div className="bg-surface-1 border border-border rounded-xl p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-text">Create Exam</h3>
+        <h3 className="text-lg font-semibold text-text">{t('Create Exam')}</h3>
         <button
           onClick={onClose}
           className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-2 transition-colors"
@@ -63,12 +66,12 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-text mb-1">Course</label>
+          <label className="block text-sm font-medium text-text mb-1">{t('Course')}</label>
           <select
             {...register('courseCode')}
             className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface-1 text-text text-sm focus:outline-none focus:ring-2 focus:ring-sage/30"
           >
-            <option value="">Select a course</option>
+            <option value="">{t('Select a course')}</option>
             {courses?.map((c) => (
               <option key={c.id} value={c.code}>
                 {c.code} {c.name ? `- ${c.name}` : ''}
@@ -79,18 +82,18 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-text mb-1">Exam Title</label>
+          <label className="block text-sm font-medium text-text mb-1">{t('Exam Title')}</label>
           <input
             type="text"
             {...register('title')}
-            placeholder="e.g., Midterm Exam"
+            placeholder={t('e.g., Midterm Exam')}
             className="w-full p-2.5 min-h-[44px] rounded-lg border border-border bg-surface-1 text-text text-sm focus:outline-none focus:ring-2 focus:ring-sage/30"
           />
           {errors.title && <p className="mt-1 text-xs text-red-fg">{errors.title.message}</p>}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-text mb-1">Exam Date</label>
+          <label className="block text-sm font-medium text-text mb-1">{t('Exam Date')}</label>
           <input
             type="datetime-local"
             {...register('examDate')}
@@ -101,7 +104,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
 
         <div>
           <label className="block text-sm font-medium text-text mb-1">
-            Weeks Covered <span className="text-text-muted font-normal">(comma-separated)</span>
+            {t('Weeks Covered')} <span className="text-text-muted font-normal">{t('(comma-separated)')}</span>
           </label>
           <input
             type="text"
@@ -123,7 +126,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
 
         <div>
           <label className="block text-sm font-medium text-text mb-1">
-            Target Mastery: {targetMastery}%
+            {t('Target Mastery: {{percent}}%', { percent: targetMastery })}
           </label>
           <input
             type="range"
@@ -148,7 +151,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
             onClick={onClose}
             className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-surface-0 text-text hover:bg-border transition-colors"
           >
-            Cancel
+            {t('Cancel')}
           </button>
         </div>
 

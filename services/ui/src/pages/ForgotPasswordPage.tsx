@@ -64,7 +64,7 @@ export function ForgotPasswordPage() {
     <div>
       <h2 className="text-lg font-semibold text-text mb-1.5">{t('Reset password')}</h2>
       <p className="text-xs text-text-muted mb-5">
-        Enter your email and we&apos;ll send you a reset link.
+        {t("Enter your email and we'll send you a reset link.")}
       </p>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <Input
@@ -102,7 +102,7 @@ export function ForgotPasswordPage() {
       </form>
       <p className="text-xs text-text-muted text-center mt-6">
         <Link to="/login" className="hover:text-text underline-offset-2 hover:underline">
-          Back to sign in
+          {t('Back to sign in')}
         </Link>
       </p>
     </div>

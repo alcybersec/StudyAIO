@@ -1,9 +1,12 @@
+import { useTranslation } from 'react-i18next'
 interface ErrorBannerProps {
   message?: string
   onRetry?: () => void
 }
 
 export function ErrorBanner({ message = 'Something went wrong', onRetry }: ErrorBannerProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="rounded-xl border border-red/30 bg-red-soft p-4 flex items-center justify-between gap-4">
       <div className="flex items-center gap-3 min-w-0">
@@ -17,7 +20,7 @@ export function ErrorBanner({ message = 'Something went wrong', onRetry }: Error
           onClick={onRetry}
           className="flex-shrink-0 px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-red text-on-accent hover:opacity-90 transition-colors"
         >
-          Retry
+          {t('Retry')}
         </button>
       )}
     </div>

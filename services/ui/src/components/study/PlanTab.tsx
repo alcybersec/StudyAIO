@@ -1,4 +1,5 @@
 import { CalendarDays, Check } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStudyPlan } from '../../hooks/useApi'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { Button, Card, EmptyState, ErrorState, Skeleton } from '../ui'
@@ -40,20 +41,22 @@ function PlanSkeleton() {
 }
 
 export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
+  const { t } = useTranslation()
+
   const { data, isLoading, error, refetch } = useStudyPlan()
   const online = useOnlineStatus()
 
   if (error) {
     return online ? (
       <ErrorState
-        title="The weekly plan couldn't load"
+        title={t("The weekly plan couldn't load")}
         detail={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
     ) : (
       <ErrorState
-        title="You're offline"
-        detail="The weekly plan needs a connection. It will load again once you're back online."
+        title={t("You're offline")}
+        detail={t("The weekly plan needs a connection. It will load again once you're back online.")}
         onRetry={() => refetch()}
       />
     )
@@ -62,8 +65,8 @@ export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
   if (!data && !online) {
     return (
       <ErrorState
-        title="You're offline"
-        detail="The weekly plan needs a connection. It will load again once you're back online."
+        title={t("You're offline")}
+        detail={t("The weekly plan needs a connection. It will load again once you're back online.")}
         onRetry={() => refetch()}
       />
     )
@@ -74,9 +77,9 @@ export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
   if (!planHasItems(data.days)) {
     return (
       <EmptyState
-        title="Nothing scheduled this week"
-        description="Add an exam with a date and the planner builds a daily card schedule from your readiness."
-        actionLabel="Create an exam"
+        title={t('Nothing scheduled this week')}
+        description={t('Add an exam with a date and the planner builds a daily card schedule from your readiness.')}
+        actionLabel={t('Create an exam')}
         onAction={onCreateExam}
       />
     )
@@ -87,7 +90,7 @@ export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
   return (
     <div className="max-w-3xl">
       <p className="text-[10px] font-mono font-medium uppercase tracking-[0.1em] text-text-faint mb-2">
-        This week — built from {courses.join(' & ')}
+        {t('This week — built from {{courses}}', { courses: courses.join(' & ') })}
       </p>
       <Card padding={false} className="p-4">
         <ul className="divide-y divide-border">
@@ -109,7 +112,7 @@ export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
                 </span>
                 <div className="flex flex-wrap items-center gap-2 flex-1 min-h-[28px]">
                   {day.items.length === 0 && (
-                    <span className="text-xs text-text-faint">rest day</span>
+                    <span className="text-xs text-text-faint">{t('rest day')}</span>
                   )}
                   {day.items.map((item, i) => {
                     const done = isPlanItemDone(item)
@@ -131,7 +134,7 @@ export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
                 </div>
                 {today && (
                   <Button size="sm" onClick={onStartToday}>
-                    Start
+                    {t('Start')}
                   </Button>
                 )}
               </li>
@@ -140,13 +143,13 @@ export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
         </ul>
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-border text-[11px] text-text-faint">
           <span className="flex items-center gap-1.5">
-            <CalendarDays size={11} aria-hidden /> targets scale with exam urgency
+            <CalendarDays size={11} aria-hidden /> {t('targets scale with exam urgency')}
           </span>
           <button
             onClick={() => refetch()}
             className="hover:text-text-muted cursor-pointer underline underline-offset-2"
           >
-            rebuild plan
+            {t('rebuild plan')}
           </button>
         </div>
       </Card>

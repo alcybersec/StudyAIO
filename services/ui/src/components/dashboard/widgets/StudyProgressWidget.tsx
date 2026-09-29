@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useDashboardStudyStats } from '../../../hooks/useApi'
 import { Skeleton } from '../../ui'
@@ -22,6 +23,8 @@ function StudySkeleton() {
 }
 
 export const StudyProgressWidget = memo(function StudyProgressWidget() {
+  const { t } = useTranslation()
+
   const { data, isLoading, isError, refetch } = useDashboardStudyStats()
   const state = selectWidgetState({
     isLoading,
@@ -34,12 +37,12 @@ export const StudyProgressWidget = memo(function StudyProgressWidget() {
 
   return (
     <WidgetShell
-      title="Study progress"
+      title={t('Study progress')}
       state={state}
       onRetry={() => refetch()}
-      emptyTitle="No flashcards yet"
-      emptyHint="Cards are generated automatically when a lecture finishes processing."
-      emptyActionLabel="Upload a lecture"
+      emptyTitle={t('No flashcards yet')}
+      emptyHint={t('Cards are generated automatically when a lecture finishes processing.')}
+      emptyActionLabel={t('Upload a lecture')}
       emptyActionTo="/upload"
       skeleton={<StudySkeleton />}
     >
@@ -48,19 +51,19 @@ export const StudyProgressWidget = memo(function StudyProgressWidget() {
           <div className="flex items-center justify-between">
             <div>
               <span className="text-2xl font-bold text-text">{data.due_today}</span>
-              <span className="text-xs text-text-muted ml-1.5">cards due today</span>
+              <span className="text-xs text-text-muted ml-1.5">{t('cards due today')}</span>
             </div>
             <Link
               to="/study"
               className="text-xs font-medium px-2.5 py-1.5 rounded-md bg-sage text-on-accent hover:bg-sage-hover transition-colors"
             >
-              Study now
+              {t('Study now')}
             </Link>
           </div>
 
           <div className="mt-3">
             <div className="flex items-center justify-between text-[11px] text-text-faint font-mono mb-1">
-              <span>mastery</span>
+              <span>{t('mastery')}</span>
               <span>{masteryPct}%</span>
             </div>
             <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
@@ -93,7 +96,7 @@ export const StudyProgressWidget = memo(function StudyProgressWidget() {
                   >
                     {pc.course_code}
                   </Link>
-                  <span className="text-text-faint">{pc.due_count} due</span>
+                  <span className="text-text-faint">{t('{{count}} due', { count: pc.due_count })}</span>
                 </li>
               ))}
             </ul>

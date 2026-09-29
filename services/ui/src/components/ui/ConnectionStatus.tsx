@@ -1,4 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
 import i18n from '../../i18n'
 import { RefreshCw, WifiOff } from 'lucide-react'
 import { toast } from 'sonner'
@@ -12,6 +13,8 @@ import { writeQueue } from '../../lib/writeQueue'
  * a success toast once the queue flushes.
  */
 export function ConnectionStatus() {
+  const { t } = useTranslation()
+
   const isOnline = useOnlineStatus()
   const { pendingCount: swPending } = usePendingSync()
   const queueSize = useSyncExternalStore(writeQueue.subscribe, () => writeQueue.size())
@@ -34,7 +37,7 @@ export function ConnectionStatus() {
       hadQueuedRef.current = true
     } else if (hadQueuedRef.current && isOnline) {
       hadQueuedRef.current = false
-      toast.success(i18n.t('All changes synced'))
+      toast.success(i18n.t(i18n.t('All changes synced')))
     }
   }, [queued, isOnline])
 
@@ -48,11 +51,11 @@ export function ConnectionStatus() {
         className="flex items-center gap-2.5 bg-amber-soft border-b border-amber/25 text-amber-fg px-3.5 py-2.5 text-xs font-medium"
       >
         <WifiOff size={14} aria-hidden />
-        You're offline — showing cached data. Study progress is being saved locally.
+        {t("You're offline — showing cached data. Study progress is being saved locally.")}
         {queued > 0 && (
           <span className="ml-auto flex items-center gap-1.5 font-mono text-[11px]">
             <RefreshCw size={11} className="animate-spin" style={{ animationDuration: '3s' }} aria-hidden />
-            {queued} queued
+            {queued} {t('queued')}
           </span>
         )}
       </div>
@@ -66,7 +69,7 @@ export function ConnectionStatus() {
       className="flex items-center gap-2.5 bg-peri-soft border-b border-peri/25 text-peri-fg px-3.5 py-2.5 text-xs font-medium"
     >
       <RefreshCw size={14} className="animate-spin" style={{ animationDuration: '2s' }} aria-hidden />
-      Back online — syncing {queued} queued change{queued !== 1 ? 's' : ''}…
+      {t('Back online — syncing')} {queued} {t('queued change')}{queued !== 1 ? 's' : ''}…
     </div>
   )
 }

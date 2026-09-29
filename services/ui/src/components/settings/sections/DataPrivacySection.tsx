@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import i18n from '../../../i18n'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
 import { Download, TriangleAlert } from 'lucide-react'
@@ -36,9 +37,9 @@ export function DataPrivacySection() {
       link.click()
       link.remove()
       URL.revokeObjectURL(url)
-      toast.success(t('Your data has been downloaded'))
+      toast.success(i18n.t(i18n.t('Your data has been downloaded')))
     },
-    onError: () => toast.error(t("Couldn't export your data. Please try again.")),
+    onError: () => toast.error(i18n.t(i18n.t("Couldn't export your data. Please try again."))),
   })
 
   const deleteMutation = useMutation({
@@ -63,7 +64,7 @@ export function DataPrivacySection() {
         <h2 className="text-[13px] font-semibold text-text mb-2">{t('Data & Privacy')}</h2>
         <p className="text-xs text-text-muted max-w-md">
           {t('This instance runs in self-hosted mode — your data already lives entirely on your own machine, under the')}{' '}
-          <code className="text-text-faint">data/</code> {t('directory.')}
+          <code className="text-text-faint">{t('data/')}</code> {t('directory.')}
         </p>
       </Card>
     )

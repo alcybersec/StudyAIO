@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Input } from '../ui'
@@ -15,6 +17,8 @@ import type { InviteSendResult } from '../../types'
  * token is ever visible: the server stores only its hash.
  */
 export function SendInviteForm() {
+  const { t } = useTranslation()
+
   const [email, setEmail] = useState('')
   const [note, setNote] = useState('')
   const [expiryDays, setExpiryDays] = useState('14')
@@ -28,7 +32,7 @@ export function SendInviteForm() {
       <div className="flex flex-wrap items-end gap-3">
         <Input
           id="invite-email"
-          label="Invite by email"
+          label={t('Invite by email')}
           type="email"
           placeholder="tester@example.com"
           className="w-56"
@@ -37,15 +41,15 @@ export function SendInviteForm() {
         />
         <Input
           id="invite-email-note"
-          label="Message (optional)"
-          placeholder="Added to the email"
+          label={t('Message (optional)')}
+          placeholder={t('Added to the email')}
           className="w-48"
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
         <Input
           id="invite-email-expiry"
-          label="Expires in (days)"
+          label={t('Expires in (days)')}
           type="number"
           min={1}
           className="w-32"
@@ -68,9 +72,9 @@ export function SendInviteForm() {
                   setEmail('')
                   setNote('')
                   if (sent.email_sent) toast.success(`Invite sent to ${sent.invite.email}`)
-                  else toast.warning('Invite created, but the email could not be sent')
+                  else toast.warning(i18n.t(i18n.t('Invite created, but the email could not be sent')))
                 },
-                onError: () => toast.error("Couldn't create the invite"),
+                onError: () => toast.error(i18n.t(i18n.t("Couldn't create the invite"))),
               },
             )
           }

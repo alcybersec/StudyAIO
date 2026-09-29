@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button, Input, Select } from '../ui'
 import { itemGuess } from './reviewUtils'
 import type { CourseListItem, ReviewItem } from '../../types'
@@ -19,6 +20,8 @@ function parseWeek(raw: string): number | null {
 
 /** Inline course/week correction shown under a focused review row. */
 export function ReviewEditRow({ item, courses, busy, onConfirm, onCancel }: ReviewEditRowProps) {
+  const { t } = useTranslation()
+
   const guess = itemGuess(item)
   const [courseCode, setCourseCode] = useState(
     guess.courseCode && guess.courseCode !== 'UNKNOWN' ? guess.courseCode : '',
@@ -58,16 +61,16 @@ export function ReviewEditRow({ item, courses, busy, onConfirm, onCancel }: Revi
       onKeyDown={handleKeyDown}
     >
       <Select
-        label="Course"
+        label={t('Course')}
         options={options}
         value={courseCode || undefined}
         onValueChange={setCourseCode}
-        placeholder="Pick a course…"
+        placeholder={t('Pick a course…')}
         disabled={busy}
         className="w-52"
       />
       <Input
-        label="Week"
+        label={t('Week')}
         id={`week-${item.id}`}
         value={week}
         onChange={(event) => setWeek(event.target.value)}
@@ -78,10 +81,10 @@ export function ReviewEditRow({ item, courses, busy, onConfirm, onCancel }: Revi
       />
       <div className="flex items-center gap-1.5 pb-0.5">
         <Button size="sm" kbd="↵" onClick={confirm} disabled={!canConfirm} loading={busy}>
-          Confirm
+          {t('Confirm')}
         </Button>
         <Button variant="ghost" size="sm" kbd="esc" onClick={onCancel} disabled={busy}>
-          Cancel
+          {t('Cancel')}
         </Button>
       </div>
     </div>

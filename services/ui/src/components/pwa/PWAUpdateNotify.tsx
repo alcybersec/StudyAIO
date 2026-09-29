@@ -1,10 +1,12 @@
 import { useRegisterSW } from 'virtual:pwa-register/react'
+import i18n from '../../i18n'
 import { toast } from 'sonner'
 import { useEffect, useRef } from 'react'
 
 const UPDATE_CHECK_INTERVAL = 60 * 60 * 1000 // 60 minutes
 
 export function PWAUpdateNotify() {
+
   const updateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const {
@@ -29,7 +31,7 @@ export function PWAUpdateNotify() {
 
   useEffect(() => {
     if (offlineReady) {
-      toast.success('Ready to work offline', {
+      toast.success(i18n.t(i18n.t('Ready to work offline')), {
         duration: 4000,
         onAutoClose: () => setOfflineReady(false),
         onDismiss: () => setOfflineReady(false),

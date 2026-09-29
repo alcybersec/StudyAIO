@@ -108,7 +108,7 @@ export function VerifyEmailPage() {
       )}
       <p className="text-xs text-text-muted">
         <Link to="/login" className="hover:text-text underline-offset-2 hover:underline">
-          Back to sign in
+          {t('Back to sign in')}
         </Link>
       </p>
     </div>

@@ -1,4 +1,5 @@
 import { memo, useCallback, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Upload } from 'lucide-react'
 import { useUpload } from '../../../hooks/useApi'
 import { SectionLabel } from '../../ui'
@@ -10,6 +11,7 @@ const ACCEPTED_EXT = ['.pdf', '.docx', '.pptx']
  * query states. Upload progress and failures render inline.
  */
 export const QuickUploadWidget = memo(function QuickUploadWidget() {
+  const { t } = useTranslation()
   const upload = useUpload()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -49,7 +51,7 @@ export const QuickUploadWidget = memo(function QuickUploadWidget() {
 
   return (
     <section className="h-full overflow-auto bg-surface-1 border border-border rounded-xl p-3">
-      <SectionLabel>Quick upload</SectionLabel>
+      <SectionLabel>{t('Quick upload')}</SectionLabel>
       <button
         type="button"
         onDragOver={(e) => {

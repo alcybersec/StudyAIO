@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Button, Input, Modal, toast } from '../ui'
 import { toastMutationError } from '../../lib/toast'
@@ -13,6 +14,8 @@ interface RenameCourseModalProps {
 
 /** Inline rename modal: course code + display name, wired to PATCH /api/courses/{code}. */
 export function RenameCourseModal({ open, onOpenChange, course }: RenameCourseModalProps) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
   const [code, setCode] = useState(course.code)
   const [name, setName] = useState(course.name ?? '')
@@ -61,13 +64,13 @@ export function RenameCourseModal({ open, onOpenChange, course }: RenameCourseMo
     <Modal
       open={open}
       onOpenChange={handleOpenChange}
-      title="Rename course"
-      description="Weeks, summaries and study assets follow the course automatically."
+      title={t('Rename course')}
+      description={t('Weeks, summaries and study assets follow the course automatically.')}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           id="rename-course-code"
-          label="Course code"
+          label={t('Course code')}
           value={code}
           error={codeError}
           maxLength={20}
@@ -76,18 +79,18 @@ export function RenameCourseModal({ open, onOpenChange, course }: RenameCourseMo
         />
         <Input
           id="rename-course-name"
-          label="Course name"
+          label={t('Course name')}
           value={name}
           maxLength={255}
-          placeholder="e.g. Cybersecurity"
+          placeholder={t('e.g. Cybersecurity')}
           onChange={(e) => setName(e.target.value)}
         />
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="secondary" size="sm" onClick={() => handleOpenChange(false)}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button type="submit" size="sm" loading={renameMutation.isPending}>
-            Save
+            {t('Save')}
           </Button>
         </div>
       </form>

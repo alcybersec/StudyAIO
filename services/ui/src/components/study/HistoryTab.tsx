@@ -1,4 +1,5 @@
 import { Flame, Snowflake } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useAnalyticsHeatmap, useStreak, useStudyStats } from '../../hooks/useApi'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { Card, EmptyState, ErrorState, Skeleton, Table, TBody, TCell, THead, TRow } from '../ui'
@@ -38,6 +39,8 @@ function HistorySkeleton() {
 }
 
 export function HistoryTab() {
+  const { t } = useTranslation()
+
   const streakQuery = useStreak()
   const statsQuery = useStudyStats()
   const heatmapQuery = useAnalyticsHeatmap(30)
@@ -64,8 +67,8 @@ export function HistoryTab() {
   if (!online && (!streakQuery.data || !statsQuery.data || !heatmapQuery.data)) {
     return (
       <ErrorState
-        title="You're offline"
-        detail="Study history hasn't been cached. It will load once you're back online."
+        title={t("You're offline")}
+        detail={t("Study history hasn't been cached. It will load once you're back online.")}
         onRetry={retryAll}
       />
     )
@@ -103,10 +106,10 @@ export function HistoryTab() {
           </div>
           <div>
             <div className="text-2xl font-bold text-text">
-              {streak.current_streak} day streak
+              {t('{{count}} day streak', { count: streak.current_streak })}
             </div>
             <div className="text-sm text-text-muted">
-              Longest streak: {streak.longest_streak} days
+              {t('Longest streak: {{count}} days', { count: streak.longest_streak })}
             </div>
           </div>
         </div>
@@ -127,21 +130,21 @@ export function HistoryTab() {
       {/* Recent sessions */}
       <div>
         <p className="text-[10px] font-mono font-medium uppercase tracking-[0.1em] text-text-faint mb-2">
-          Last 30 days
+          {t('Last 30 days')}
         </p>
         {activity.length === 0 ? (
           <EmptyState
-            title="No study activity yet"
-            description="Sessions you complete will show up here. Start with today's plan."
+            title={t('No study activity yet')}
+            description={t("Sessions you complete will show up here. Start with today's plan.")}
           />
         ) : (
           <Card padding={false} className="px-4 py-2">
             <Table>
               <THead>
-                <TCell header>Date</TCell>
-                <TCell header align="right">Sessions</TCell>
-                <TCell header align="right">Cards</TCell>
-                <TCell header align="right">Minutes</TCell>
+                <TCell header>{t('Date')}</TCell>
+                <TCell header align="right">{t('Sessions')}</TCell>
+                <TCell header align="right">{t('Cards')}</TCell>
+                <TCell header align="right">{t('Minutes')}</TCell>
               </THead>
               <TBody>
                 {activity.map((day) => (

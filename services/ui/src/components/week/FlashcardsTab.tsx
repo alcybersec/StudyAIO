@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useFlashcards, useStudyStats } from '../../hooks/useApi'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
@@ -21,6 +22,8 @@ function FlashcardsSkeleton() {
 }
 
 export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
+  const { t } = useTranslation()
+
   const { data: flashcards, isLoading, error, refetch } = useFlashcards(courseCode, week)
   const { data: studyStats } = useStudyStats(courseCode, week)
   const online = useOnlineStatus()
@@ -84,8 +87,8 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
   if (!flashcards && !online) {
     return (
       <ErrorState
-        title="You're offline"
-        detail="Flashcards for this week haven't been cached. They'll load once you're back online."
+        title={t("You're offline")}
+        detail={t("Flashcards for this week haven't been cached. They'll load once you're back online.")}
         onRetry={() => refetch()}
       />
     )
@@ -94,8 +97,8 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
   if (!cards.length) {
     return (
       <EmptyState
-        title="No flashcards yet"
-        description="Flashcards will be generated when the pipeline processes lecture files."
+        title={t('No flashcards yet')}
+        description={t('Flashcards will be generated when the pipeline processes lecture files.')}
       />
     )
   }
@@ -107,11 +110,11 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
         <div className="w-full max-w-xl flex items-center justify-between bg-surface-2 rounded-lg px-4 py-3">
           <div className="flex items-center gap-4 text-sm">
             <span className="text-text-muted">
-              <span className="font-semibold text-text">{studyStats.mastered}</span> mastered
+              <span className="font-semibold text-text">{studyStats.mastered}</span> {t('mastered')}
               {' · '}
-              <span className="font-semibold text-text">{studyStats.learning}</span> learning
+              <span className="font-semibold text-text">{studyStats.learning}</span> {t('learning')}
               {' · '}
-              <span className="font-semibold text-text">{studyStats.new}</span> new
+              <span className="font-semibold text-text">{studyStats.new}</span> {t('new')}
             </span>
           </div>
           <Link
@@ -123,7 +126,7 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
                 {studyStats.due_today}
               </span>
             )}
-            Study Now
+            {t('Study Now')}
           </Link>
         </div>
       )}
@@ -141,7 +144,7 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
               : 'bg-surface-2 text-text-muted hover:text-text'
           }`}
         >
-          Shuffle {shuffledCards ? 'On' : 'Off'}
+          {t('Shuffle')} {shuffledCards ? 'On' : 'Off'}
         </button>
       </div>
 
@@ -176,25 +179,25 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
           disabled={currentIndex === 0}
           className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-2 text-text border border-border hover:border-border-strong disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
         >
-          Previous
+          {t('Previous')}
         </button>
         <button
           onClick={toggleFlip}
           className="px-4 py-2 rounded-lg text-sm font-medium bg-sage text-on-accent hover:bg-sage-hover transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
         >
-          Flip
+          {t('Flip')}
         </button>
         <button
           onClick={goNext}
           disabled={currentIndex === cards.length - 1}
           className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-2 text-text border border-border hover:border-border-strong disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
         >
-          Next
+          {t('Next')}
         </button>
       </div>
 
       <p className="text-[11px] font-mono text-text-faint">
-        <Kbd>space</Kbd> flip · <Kbd>←</Kbd> <Kbd>→</Kbd> navigate
+        <Kbd>{t('space')}</Kbd> {t('flip ·')} <Kbd>←</Kbd> <Kbd>→</Kbd> {t('navigate')}
       </p>
     </div>
   )

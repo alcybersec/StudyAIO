@@ -1,4 +1,5 @@
 import { EmptyState, ErrorState, Skeleton, StatusBadge } from '../ui'
+import { useTranslation } from 'react-i18next'
 import type { CourseDocument } from '../../types'
 
 interface DocumentListProps {
@@ -15,8 +16,10 @@ function formatBytes(bytes: number): string {
 }
 
 function DocumentListSkeleton() {
+  const { t } = useTranslation()
+
   return (
-    <div className="mt-4 divide-y divide-border rounded-xl border border-border" role="status" aria-label="Loading documents">
+    <div className="mt-4 divide-y divide-border rounded-xl border border-border" role="status" aria-label={t('Loading documents')}>
       {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="flex items-center justify-between px-4 py-3">
           <div className="flex-1 space-y-2">
@@ -31,12 +34,14 @@ function DocumentListSkeleton() {
 }
 
 export function DocumentList({ documents, isLoading, isError, onRetry }: DocumentListProps) {
+  const { t } = useTranslation()
+
   if (isLoading && !documents) return <DocumentListSkeleton />
 
   if (isError && !documents) {
     return (
       <div className="mt-4">
-        <ErrorState compact title="Documents couldn't load" onRetry={onRetry} />
+        <ErrorState compact title={t("Documents couldn't load")} onRetry={onRetry} />
       </div>
     )
   }
@@ -46,8 +51,8 @@ export function DocumentList({ documents, isLoading, isError, onRetry }: Documen
       <div className="mt-4 rounded-xl border border-border">
         <EmptyState
           compact
-          title="No documents uploaded yet"
-          description="Upload a course outline above to extract assessments and deadlines."
+          title={t('No documents uploaded yet')}
+          description={t('Upload a course outline above to extract assessments and deadlines.')}
         />
       </div>
     )

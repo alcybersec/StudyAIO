@@ -1,4 +1,5 @@
 import { Card } from '../ui'
+import { useTranslation } from 'react-i18next'
 import {
   useNotificationPreferences,
   useUpdatePreferences,
@@ -28,6 +29,8 @@ const CHANNELS = ['email', 'telegram', 'push'] as const
 const EVENT_TYPES = ['pipeline_complete', 'review_created', 'cards_due', 'exam_reminder', 'weekly_digest'] as const
 
 export function NotificationsSection() {
+  const { t } = useTranslation()
+
   const { data, isLoading } = useNotificationPreferences()
   const updateMutation = useUpdatePreferences()
   const testMutation = useTestNotification()
@@ -76,7 +79,7 @@ export function NotificationsSection() {
   if (isLoading) {
     return (
       <Card>
-        <h2 className="text-lg font-semibold text-text mb-4">Notifications</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('Notifications')}</h2>
         <div className="animate-pulse space-y-3">
           <div className="h-4 bg-surface-0 rounded w-3/4" />
           <div className="h-4 bg-surface-0 rounded w-1/2" />
@@ -88,9 +91,9 @@ export function NotificationsSection() {
   return (
     <div className="space-y-4">
       <Card>
-        <h2 className="text-lg font-semibold text-text mb-1">Notifications</h2>
+        <h2 className="text-lg font-semibold text-text mb-1">{t('Notifications')}</h2>
         <p className="text-sm text-text-muted mb-4">
-          Choose which events you want to be notified about and how.
+          {t('Choose which events you want to be notified about and how.')}
         </p>
 
         {/* Preference grid */}
@@ -98,7 +101,7 @@ export function NotificationsSection() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left py-2 pr-4 font-medium text-text-muted">Event</th>
+                <th className="text-left py-2 pr-4 font-medium text-text-muted">{t('Event')}</th>
                 {CHANNELS.map((ch) => (
                   <th key={ch} className="text-center py-2 px-3 font-medium text-text-muted capitalize">
                     {ch}
@@ -143,7 +146,7 @@ export function NotificationsSection() {
 
         {/* Test buttons */}
         <div className="mt-4 flex items-center gap-3">
-          <span className="text-sm text-text-muted">Send test:</span>
+          <span className="text-sm text-text-muted">{t('Send test:')}</span>
           {CHANNELS.map((ch) => (
             <button
               key={ch}

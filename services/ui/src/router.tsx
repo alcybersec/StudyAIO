@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Navigate, Outlet, createBrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { QuotaProvider } from './contexts/QuotaContext'
@@ -40,8 +41,10 @@ export interface AppRouteHandle {
 
 // eslint-disable-next-line react-refresh/only-export-components
 function SuspenseOutlet() {
+  const { t } = useTranslation()
+
   return (
-    <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." />}>
+    <Suspense fallback={<LoadingSpinner size="lg" label={t('Loading...')} />}>
       <Outlet />
     </Suspense>
   )

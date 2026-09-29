@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { Eye, FolderInput, PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { useWeekDetail } from '../hooks/useApi'
@@ -44,6 +45,8 @@ function WeekViewSkeleton() {
 }
 
 export function WeekViewPage() {
+  const { t } = useTranslation()
+
   const { courseCode, weekNumber } = useParams<{ courseCode: string; weekNumber: string }>()
   const week = Number(weekNumber)
   const { data, isLoading, error, refetch } = useWeekDetail(courseCode ?? '', week)
@@ -87,13 +90,13 @@ export function WeekViewPage() {
   if (error) {
     return (
       <ErrorState
-        title="This week couldn't load"
+        title={t("This week couldn't load")}
         detail={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
     )
   }
-  if (!data) return <EmptyState icon="?" title="Week not found" />
+  if (!data) return <EmptyState icon="?" title={t('Week not found')} />
 
   const hasArtifacts = data.artifacts.length > 0
   const viewerOpen = viewer?.open ?? false
@@ -120,7 +123,7 @@ export function WeekViewPage() {
                 onClick={() => setReclassifyOpen((v) => !v)}
                 aria-pressed={reclassifyOpen}
               >
-                <FolderInput size={13} aria-hidden /> Reclassify
+                <FolderInput size={13} aria-hidden /> {t('Reclassify')}
               </Button>
               <Button
                 variant="ghost"
@@ -142,7 +145,7 @@ export function WeekViewPage() {
                 className="lg:hidden"
                 onClick={() => viewerRef.current?.openMobile()}
               >
-                <Eye size={13} aria-hidden /> View original
+                <Eye size={13} aria-hidden /> {t('View original')}
               </Button>
             </>
           ) : undefined

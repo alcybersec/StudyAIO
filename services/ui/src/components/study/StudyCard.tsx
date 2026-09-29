@@ -1,4 +1,5 @@
 import type { Flashcard } from '../../types'
+import { useTranslation } from 'react-i18next'
 import { Badge, Kbd } from '../ui'
 
 interface StudyCardProps {
@@ -8,6 +9,8 @@ interface StudyCardProps {
 }
 
 export function StudyCard({ card, onFlip, flipped }: StudyCardProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="w-full max-w-xl mx-auto perspective-1000">
       <button
@@ -26,7 +29,7 @@ export function StudyCard({ card, onFlip, flipped }: StudyCardProps) {
             className="absolute inset-0 rounded-xl border border-border bg-surface-1 shadow-sm p-8 flex flex-col items-center justify-center text-center"
             style={{ backfaceVisibility: 'hidden' }}
           >
-            <div className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-faint mb-4">Question</div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-faint mb-4">{t('Question')}</div>
             <div className="text-lg leading-relaxed text-text whitespace-pre-wrap">
               {card.front}
             </div>
@@ -37,7 +40,7 @@ export function StudyCard({ card, onFlip, flipped }: StudyCardProps) {
             className="absolute inset-0 rounded-xl border border-border bg-gradient-to-br from-surface-1 to-surface-2 shadow-sm p-8 flex flex-col items-center justify-center text-center"
             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
           >
-            <div className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-faint mb-4">Answer</div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-faint mb-4">{t('Answer')}</div>
             <div className="text-lg leading-relaxed text-text whitespace-pre-wrap">
               {card.back}
             </div>
@@ -54,7 +57,7 @@ export function StudyCard({ card, onFlip, flipped }: StudyCardProps) {
 
       {!flipped && (
         <p className="text-center text-[11px] font-mono text-text-faint mt-3">
-          <Kbd>space</Kbd> reveal answer
+          <Kbd>{t('space')}</Kbd> {t('reveal answer')}
         </p>
       )}
     </div>

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { AtSign, KeyRound, MailCheck, ShieldOff, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../ui'
@@ -36,6 +38,8 @@ function errorMessage(err: unknown, fallback: string): string {
  *   paginated and its rows are one click apart.
  */
 export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
+  const { t } = useTranslation()
+
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [changingEmail, setChangingEmail] = useState(false)
   const [confirmingMfaReset, setConfirmingMfaReset] = useState(false)
@@ -55,8 +59,8 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
     // No SMTP — the admin has to relay it, so put it on the clipboard.
     void navigator.clipboard
       .writeText(url)
-      .then(() => toast.success('No email configured — link copied to clipboard'))
-      .catch(() => toast.message('No email configured. Link:', { description: url }))
+      .then(() => toast.success(i18n.t(i18n.t('No email configured — link copied to clipboard'))))
+      .catch(() => toast.message(i18n.t(i18n.t('No email configured. Link:')), { description: url }))
   }
 
   return (
@@ -65,42 +69,42 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
         variant="ghost"
         size="sm"
         disabled={sendReset.isPending}
-        title="Send a password reset link"
+        title={t('Send a password reset link')}
         onClick={() =>
           sendReset.mutate(user.id, {
             onSuccess: (r) => showLink(r.url, r.email_sent, 'Password reset emailed'),
-            onError: (e) => toast.error(errorMessage(e, "Couldn't create a reset link")),
+            onError: (e) => toast.error(errorMessage(e, i18n.t("Couldn't create a reset link"))),
           })
         }
       >
         <KeyRound size={12} aria-hidden />
-        <span className="sr-only">Send password reset to {user.email}</span>
+        <span className="sr-only">{t('Send password reset to {{email}}', { email: user.email })}</span>
       </Button>
 
       <Button
         variant="ghost"
         size="sm"
         disabled={resendVerification.isPending}
-        title="Resend the verification email"
+        title={t('Resend the verification email')}
         onClick={() =>
           resendVerification.mutate(user.id, {
             onSuccess: (r) => showLink(r.url, r.email_sent, 'Verification email sent'),
-            onError: (e) => toast.error(errorMessage(e, "Couldn't create a verification link")),
+            onError: (e) => toast.error(errorMessage(e, i18n.t("Couldn't create a verification link"))),
           })
         }
       >
         <MailCheck size={12} aria-hidden />
-        <span className="sr-only">Resend verification to {user.email}</span>
+        <span className="sr-only">{t('Resend verification to {{email}}', { email: user.email })}</span>
       </Button>
 
       <Button
         variant="ghost"
         size="sm"
-        title="Change the login email address"
+        title={t('Change the login email address')}
         onClick={() => setChangingEmail(true)}
       >
         <AtSign size={12} aria-hidden />
-        <span className="sr-only">Change email for {user.email}</span>
+        <span className="sr-only">{t('Change email for {{email}}', { email: user.email })}</span>
       </Button>
 
       {/*
@@ -136,7 +140,7 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
         open={confirmingMfaReset}
         onOpenChange={setConfirmingMfaReset}
         title={`Clear MFA for ${user.email}?`}
-        confirmLabel="Clear MFA"
+        confirmLabel={t('Clear MFA')}
         pending={clearMfa.isPending}
         consequences={[
           'Turns two-factor authentication off. Only do this once you have confirmed out of band that the person asking really is the account holder — that check is the only one there is.',
@@ -155,7 +159,7 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
                 toast.message(`MFA was already off for ${user.email} — nothing changed`)
               }
             },
-            onError: (e) => toast.error(errorMessage(e, "Couldn't clear MFA for this account")),
+            onError: (e) => toast.error(errorMessage(e, i18n.t("Couldn't clear MFA for this account"))),
             onSettled: () => setConfirmingMfaReset(false),
           })
         }
@@ -171,7 +175,7 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
               deleteUser.mutate(user.id, {
                 onSuccess: (r) =>
                   toast.success(`${user.email} deleted (${r.rows_deleted} rows)`),
-                onError: (e) => toast.error(errorMessage(e, "Couldn't delete the account")),
+                onError: (e) => toast.error(errorMessage(e, i18n.t("Couldn't delete the account"))),
                 onSettled: () => setConfirmingDelete(false),
               })
             }
@@ -179,7 +183,7 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
             {deleteUser.isPending ? 'Deleting…' : 'Confirm'}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
-            Cancel
+            {t('Cancel')}
           </Button>
         </>
       ) : (
@@ -195,7 +199,7 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
           onClick={() => setConfirmingDelete(true)}
         >
           <Trash2 size={12} aria-hidden />
-          <span className="sr-only">Delete {user.email}</span>
+          <span className="sr-only">{t('Delete {{email}}', { email: user.email })}</span>
         </Button>
       )}
     </div>
