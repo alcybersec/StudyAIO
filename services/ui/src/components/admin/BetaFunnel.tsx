@@ -109,8 +109,8 @@ export function BetaFunnel() {
 
       <ol className="space-y-1.5">
         {rows.map((step) => (
-          <li key={step.label} className="flex items-center gap-3" title={step.hint}>
-            <span className="w-20 shrink-0 text-[11px] text-text-muted">{step.label}</span>
+          <li key={step.label} className="flex items-center gap-3" title={t(step.hint)}>
+            <span className="w-20 shrink-0 text-[11px] text-text-muted">{t(step.label)}</span>
             <div className="flex-1 h-5 bg-surface-2 rounded overflow-hidden">
               <div
                 className="h-full bg-sage/40"

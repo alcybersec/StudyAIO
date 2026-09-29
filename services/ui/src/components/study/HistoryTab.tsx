@@ -121,7 +121,7 @@ export function HistoryTab() {
           <Card key={tile.label}>
             <div className="text-center">
               <div className="text-2xl font-bold font-mono text-text">{tile.value}</div>
-              <div className="text-xs text-text-muted mt-1">{tile.label}</div>
+              <div className="text-xs text-text-muted mt-1">{t(tile.label)}</div>
             </div>
           </Card>
         ))}

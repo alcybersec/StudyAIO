@@ -45,8 +45,21 @@ export function generate() {
     // Filtering on the call site dropped 32 real keys and is why the first
     // version of this list was wrong.
 
-    // Top-level `const` tables only: those are the lookup tables a component
-    // indexes into, as opposed to strings built inside a function.
+    // Any prose-carrying property, at any depth. The palette builds its command
+    // list inside a useMemo, so a top-level-only walk missed every one of its
+    // labels — and a label is no less user-facing for being built in a hook.
+    const collectProse = (n) => {
+      if (ts.isPropertyAssignment(n) && ts.isStringLiteral(n.initializer)) {
+        const name = n.name.getText(sf).replace(/['"]/g, '')
+        if (['label', 'title', 'description', 'desc', 'hint', 'section', 'text', 'name'].includes(name) &&
+            prose(n.initializer.text)) {
+          keys.add(n.initializer.text)
+        }
+      }
+      ts.forEachChild(n, collectProse)
+    }
+    collectProse(sf)
+
     for (const stmt of sf.statements) {
       if (!ts.isVariableStatement(stmt)) continue
       const collect = (n) => {
