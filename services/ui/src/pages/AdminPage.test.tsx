@@ -5,34 +5,48 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AdminPage } from './AdminPage'
 import { useAdminUsers, useSystemMetrics, useUpdateAdminUser } from '../hooks/useApi'
 
-vi.mock('../hooks/useApi', () => ({
-  useAdminUsers: vi.fn(),
-  useSystemMetrics: vi.fn(),
-  useUpdateAdminUser: vi.fn(),
-  // The invite panel is exercised in its own tests; here it just needs to render.
-  useInvites: vi.fn(() => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })),
-  useCreateInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  // Used by InvitePanel's SendInviteForm child. A factory mock replaces the
-  // whole module, so a hook missing here is undefined at call time and every
-  // test in this file fails on an unrelated render error.
-  useSendInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  useResendInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  useRevokeInvite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  // User provisioning is exercised in its own tests; here it just needs to render.
-  useCreateAdminUser: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  useDeleteAdminUser: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  useSendPasswordReset: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  useResendVerification: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  useClearUserMfa: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  // The change-email dialog reads the linked providers to name what it will
-  // unlink. `undefined` data is the unknown case, which keeps the generic wording.
-  useAdminUserDetail: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
-  // The funnel has its own tests; here it just needs to render.
-  useBetaFunnel: vi.fn(() => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })),
-  // The feedback inbox has its own tests; here it just needs to render.
-  useAdminFeedback: vi.fn(() => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })),
-  useSetFeedbackStatus: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-}))
+vi.mock('../hooks/useApi', async (importOriginal) => {
+  // Stubs are DERIVED from the real module's exports rather than listed by
+  // hand. A hand-written factory replaces the whole module, so any hook a child
+  // component starts calling is `undefined` at call time and every test in this
+  // file fails on a React render error that points at the mock instead of the
+  // cause. That happened three times while building email invites alone
+  // (useSendInvite, useResendInvite, and once before that) — each time costing
+  // a debugging round-trip on 14 unrelated failures.
+  //
+  // Only exports named `use*` are stubbed; anything else (query-key helpers,
+  // constants) keeps its real value.
+  const actual = await importOriginal<typeof import('../hooks/useApi')>()
+
+  // One shape serving both hook kinds: queries read data/isLoading/isError/
+  // refetch, mutations read mutate/isPending. A hook this file does not drive
+  // only has to render without throwing.
+  const inert = () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })
+
+  const stubs = Object.fromEntries(
+    Object.keys(actual)
+      .filter((name) => name.startsWith('use'))
+      .map((name) => [name, vi.fn(inert)]),
+  )
+
+  return {
+    ...actual,
+    ...stubs,
+    // The three this file actually drives. Left bare so beforeEach must set
+    // them — a test that forgets fails loudly rather than reading an inert stub.
+    useAdminUsers: vi.fn(),
+    useSystemMetrics: vi.fn(),
+    useUpdateAdminUser: vi.fn(),
+  }
+})
 
 const toastSuccess = vi.fn()
 const toastError = vi.fn()
@@ -87,6 +101,31 @@ function renderPage() {
     </MemoryRouter>,
   )
 }
+
+describe('useApi mock coverage', () => {
+  it('stubs every hook the real module exports', async () => {
+    // The guard for the failure this mock was rewritten to end. A hand-listed
+    // factory silently omits any hook added later, and the omission surfaces as
+    // 14 unrelated render errors pointing at the mock rather than the cause.
+    //
+    // Deriving the stubs makes that structurally impossible; this asserts it
+    // stays that way, including if someone reverts to listing them by hand.
+    const actual = await vi.importActual<typeof import('../hooks/useApi')>('../hooks/useApi')
+    const mocked = (await import('../hooks/useApi')) as unknown as Record<string, unknown>
+
+    // vi.isMockFunction, NOT typeof === 'function'. The factory spreads the
+    // real module first, so an un-stubbed hook falls through to the genuine
+    // implementation — still a function, and it would call useQuery with no
+    // provider and throw at render. A typeof check passes in exactly the case
+    // this test exists to catch; it was written that way first and verified
+    // useless by reverting the factory and watching it stay green.
+    const notStubbed = Object.keys(actual)
+      .filter((name) => name.startsWith('use'))
+      .filter((name) => !vi.isMockFunction(mocked[name]))
+
+    expect(notStubbed).toEqual([])
+  })
+})
 
 describe('AdminPage section isolation', () => {
   it('shows metrics ErrorState while the user table still renders data', () => {
