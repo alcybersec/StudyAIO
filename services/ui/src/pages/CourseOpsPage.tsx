@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
 import { CalendarDays, FileText, Plus } from 'lucide-react'
 import { AssessmentTable } from '../components/courseops/AssessmentTable'
@@ -24,6 +25,8 @@ const TAB_LABELS: Record<(typeof TABS)[number], string> = {
 }
 
 export function CourseOpsPage() {
+  const { t } = useTranslation()
+
   const { courseCode } = useParams<{ courseCode: string }>()
   const [activeTab, setActiveTab] = useTabRouting(TABS, 'documents')
   const [addAssessmentOpen, setAddAssessmentOpen] = useState(false)
@@ -35,13 +38,13 @@ export function CourseOpsPage() {
   const deadlinesQuery = useDeadlines(courseCode ?? '')
 
   if (!courseCode) {
-    return <EmptyState title="Missing course code" description="This page needs a course in the URL." actionLabel="Back to Dashboard" actionTo="/" />
+    return <EmptyState title={t('Missing course code')} description={t('This page needs a course in the URL.')} actionLabel={t('Back to Dashboard')} actionTo="/" />
   }
 
   return (
     <div>
       <PageHeader
-        title={`${courseCode} — Course Documents`}
+        title={t('{{course}} — Course Documents', { course: courseCode })}
         breadcrumbs={[
           { label: 'Dashboard', to: '/' },
           { label: courseCode, to: `/courses/${courseCode}` },
@@ -85,7 +88,7 @@ export function CourseOpsPage() {
         <div className="space-y-4">
           <div className="flex justify-end">
             <Button size="sm" onClick={() => setAddAssessmentOpen(true)}>
-              <Plus size={14} /> Add assessment
+              <Plus size={14} /> {t('Add assessment')}
             </Button>
           </div>
           <AssessmentTable
@@ -102,7 +105,7 @@ export function CourseOpsPage() {
         <div className="space-y-4">
           <div className="flex justify-end">
             <Button size="sm" onClick={() => setAddDeadlineOpen(true)}>
-              <Plus size={14} /> Add deadline
+              <Plus size={14} /> {t('Add deadline')}
             </Button>
           </div>
           <DeadlineTimeline
@@ -130,7 +133,7 @@ export function CourseOpsPage() {
 
       {activeTab === 'exports' && (
         <div className="space-y-4">
-          <p className="text-sm text-text-muted">Export deadlines and assessments for {courseCode}.</p>
+          <p className="text-sm text-text-muted">{t('Export deadlines and assessments for {{course}}.', { course: courseCode })}</p>
           <div className="flex flex-wrap gap-3">
             <a
               href={courseopsApi.calendarUrl(courseCode)}
@@ -138,7 +141,7 @@ export function CourseOpsPage() {
               className="inline-flex items-center gap-2 rounded-md bg-sage px-4 py-2 text-sm font-medium text-on-accent hover:bg-sage-hover transition-colors"
             >
               <CalendarDays size={14} aria-hidden />
-              Download .ics Calendar
+              {t('Download .ics Calendar')}
             </a>
             <a
               href={courseopsApi.taskPlanUrl(courseCode)}
@@ -146,7 +149,7 @@ export function CourseOpsPage() {
               className="inline-flex items-center gap-2 rounded-md bg-surface-2 px-4 py-2 text-sm font-medium text-text border border-border hover:bg-surface-2/70 transition-colors"
             >
               <FileText size={14} aria-hidden />
-              Download Task Plan (.md)
+              {t('Download Task Plan (.md)')}
             </a>
           </div>
         </div>

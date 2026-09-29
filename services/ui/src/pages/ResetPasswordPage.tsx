@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -17,6 +18,7 @@ function isResetField(key: string): key is ResetField {
 }
 
 export function ResetPasswordPage() {
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
   const [success, setSuccess] = useState(false)
@@ -33,7 +35,7 @@ export function ResetPasswordPage() {
   const onSubmit = handleSubmit(async (data) => {
     setNetworkFailed(false)
     if (!token) {
-      setError('root', { message: 'This reset link is invalid or has expired' })
+      setError('root', { message: t('This reset link is invalid or has expired') })
       return
     }
     try {
@@ -55,7 +57,7 @@ export function ResetPasswordPage() {
           break
         }
         case 'credentials':
-          setError('root', { message: 'This reset link is invalid or has expired' })
+          setError('root', { message: t('This reset link is invalid or has expired') })
           break
         case 'rate_limited':
           setCooldown((prev) => ({ key: (prev?.key ?? 0) + 1, seconds: outcome.retryAfterSeconds }))
@@ -65,7 +67,7 @@ export function ResetPasswordPage() {
           break
         default:
           setError('root', {
-            message: 'message' in outcome ? outcome.message : 'Reset failed',
+            message: 'message' in outcome ? outcome.message : t('Reset failed'),
           })
       }
     }
@@ -77,13 +79,13 @@ export function ResetPasswordPage() {
         <span className="mx-auto w-10 h-10 rounded-xl bg-sage-soft text-sage-fg flex items-center justify-center">
           <KeyRound size={18} aria-hidden />
         </span>
-        <h2 className="text-lg font-semibold text-text">Password reset!</h2>
-        <p className="text-sm text-text-muted">Your password has been updated.</p>
+        <h2 className="text-lg font-semibold text-text">{t('Password reset!')}</h2>
+        <p className="text-sm text-text-muted">{t('Your password has been updated.')}</p>
         <Link
           to="/login"
           className="inline-flex items-center justify-center min-h-[44px] px-6 bg-sage text-on-accent rounded-lg text-sm font-semibold hover:bg-sage-hover transition-colors"
         >
-          Sign in
+          {t('Sign in')}
         </Link>
       </div>
     )
@@ -91,13 +93,13 @@ export function ResetPasswordPage() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-text mb-5">Set new password</h2>
+      <h2 className="text-lg font-semibold text-text mb-5">{t('Set new password')}</h2>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <Input
           id="password"
           type="password"
-          label="New password"
-          placeholder="At least 8 characters"
+          label={t('New password')}
+          placeholder={t('At least 8 characters')}
           autoComplete="new-password"
           error={errors.password?.message}
           {...register('password')}
@@ -105,7 +107,7 @@ export function ResetPasswordPage() {
         <Input
           id="confirm"
           type="password"
-          label="Confirm new password"
+          label={t('Confirm new password')}
           autoComplete="new-password"
           error={errors.confirm?.message}
           {...register('confirm')}
@@ -125,7 +127,7 @@ export function ResetPasswordPage() {
         {networkFailed && (
           <ErrorState
             compact
-            title="Couldn't reach the server"
+            title={t("Couldn't reach the server")}
             onRetry={() => void onSubmit()}
           />
         )}
@@ -136,12 +138,12 @@ export function ResetPasswordPage() {
           loading={isSubmitting}
           disabled={cooldown !== null}
         >
-          {isSubmitting ? 'Resetting…' : 'Reset password'}
+          {isSubmitting ? t('Resetting…') : t('Reset password')}
         </Button>
       </form>
       <p className="text-xs text-text-muted text-center mt-6">
         <Link to="/login" className="hover:text-text underline-offset-2 hover:underline">
-          Back to sign in
+          {t('Back to sign in')}
         </Link>
       </p>
     </div>

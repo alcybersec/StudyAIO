@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Clock } from 'lucide-react'
 import { formatCountdown } from './formatCountdown'
 
@@ -15,6 +16,8 @@ interface RateLimitCardProps {
  * to wait instead of hammering the button.
  */
 export function RateLimitCard({ seconds, onExpire }: RateLimitCardProps) {
+  const { t } = useTranslation()
+
   const [remaining, setRemaining] = useState(() => Math.max(Math.floor(seconds), 0))
   const onExpireRef = useRef(onExpire)
 
@@ -43,7 +46,7 @@ export function RateLimitCard({ seconds, onExpire }: RateLimitCardProps) {
       className="rounded-xl border border-amber/25 bg-amber-soft px-4 py-3 flex items-center gap-2.5 text-xs text-amber-fg font-medium"
     >
       <Clock size={14} aria-hidden />
-      <span>Too many attempts — try again in</span>
+      <span>{t('Too many attempts — try again in')}</span>
       <span className="ml-auto font-mono text-[13px] font-semibold tabular-nums">
         {formatCountdown(remaining)}
       </span>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronRight, Download, FileText, Presentation } from 'lucide-react'
 import { Badge, StatusBadge } from '../ui'
 import type { Artifact } from '../../types'
@@ -22,10 +23,12 @@ interface ArtifactListProps {
 }
 
 export function ArtifactList({ artifacts, selectedArtifactId, onSelectArtifact }: ArtifactListProps) {
+  const { t } = useTranslation()
+
   const [expanded, setExpanded] = useState(true)
 
   if (artifacts.length === 0) {
-    return <p className="text-sm text-text-muted py-4">No source artifacts for this week.</p>
+    return <p className="text-sm text-text-muted py-4">{t('No source artifacts for this week.')}</p>
   }
 
   return (
@@ -36,7 +39,7 @@ export function ArtifactList({ artifacts, selectedArtifactId, onSelectArtifact }
         aria-expanded={expanded}
       >
         {expanded ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
-        Source files ({artifacts.length})
+        {t('Source files (')}{artifacts.length})
       </button>
       {expanded && (
         <ul className="divide-y divide-border bg-surface-1 rounded-xl border border-border">
@@ -68,7 +71,7 @@ export function ArtifactList({ artifacts, selectedArtifactId, onSelectArtifact }
                   className="inline-flex items-center gap-1 text-xs text-peri-fg hover:underline transition-colors"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <Download size={12} aria-hidden /> Download
+                  <Download size={12} aria-hidden /> {t('Download')}
                 </a>
               </li>
             )

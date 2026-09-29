@@ -1,4 +1,5 @@
 import { FileQuestion } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Badge, Button } from '../ui'
 import { ReviewEditRow } from './ReviewEditRow'
 import {
@@ -39,6 +40,8 @@ export function ReviewRow({
   onConfirmEdit,
   onCancelEdit,
 }: ReviewRowProps) {
+  const { t } = useTranslation()
+
   const guess = itemGuess(item)
   const confidence = itemConfidencePct(item)
   const filename = itemFilename(item)
@@ -66,11 +69,11 @@ export function ReviewRow({
             {guess.courseCode && (
               <span className="text-[13px] text-text-muted">
                 → <span className="text-text font-medium">{guess.courseCode}</span>
-                {guess.week !== null && <> · wk {guess.week}</>}
+                {guess.week !== null && <> {t('· wk')} {guess.week}</>}
               </span>
             )}
             {confidence !== null && (
-              <Badge variant={confidenceTone(confidence)}>{confidence}% confident</Badge>
+              <Badge variant={confidenceTone(confidence)}>{t('{{confidence}}% confident', { confidence })}</Badge>
             )}
             {!pending && (
               <Badge variant={item.status === 'resolved' ? 'success' : 'default'}>
@@ -84,14 +87,14 @@ export function ReviewRow({
           <div className="flex items-center gap-1.5 shrink-0">
             {approvable && (
               <Button size="sm" kbd="A" onClick={onApprove} disabled={busy}>
-                Approve
+                {t('Approve')}
               </Button>
             )}
             <Button variant="secondary" size="sm" kbd="E" onClick={onEdit} disabled={busy}>
-              Edit
+              {t('Edit')}
             </Button>
             <Button variant="ghost" size="sm" kbd="D" onClick={onDismiss} disabled={busy}>
-              Dismiss
+              {t('Dismiss')}
             </Button>
           </div>
         )}

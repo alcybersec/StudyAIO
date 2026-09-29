@@ -35,6 +35,11 @@ export function usePendingSync() {
   const count = useSyncExternalStore(subscribe, getSnapshot)
 
   const requestReplay = useCallback(() => {
+    // `?.` guards a null controller, not a missing `serviceWorker`. The API is
+    // absent outside a secure context — any plain-HTTP deployment, which the
+    // self-host compose file permits — and the throw happens in an effect, so
+    // it takes the whole page into the error boundary rather than degrading.
+    if (!('serviceWorker' in navigator)) return
     navigator.serviceWorker.controller?.postMessage({
       type: 'REPLAY_MUTATIONS',
     })
@@ -49,6 +54,7 @@ export function usePendingSync() {
 
   // On mount, ask SW for current count
   useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
     navigator.serviceWorker.controller?.postMessage({
       type: 'GET_PENDING_COUNT',
     })

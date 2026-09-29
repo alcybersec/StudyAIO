@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { Check, Copy, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Input, Select } from '../ui'
@@ -22,15 +24,17 @@ const TIER_OPTIONS = [
  * and an admin who cannot deliver the link cannot onboard anyone.
  */
 function SetupLink({ result, onDismiss }: { result: AdminUserCreated; onDismiss: () => void }) {
+  const { t } = useTranslation()
+
   const [copied, setCopied] = useState(false)
 
   return (
     <div className="p-3 rounded-lg bg-sage-soft border border-sage/30 space-y-2">
       <p className="text-xs text-text">
-        <span className="font-medium">{result.user.email}</span> created.{' '}
+        <span className="font-medium">{result.user.email}</span> {t('created.')}{' '}
         {result.email_sent
-          ? 'The set-password link was emailed to them.'
-          : 'No email was sent — send them this link yourself:'}
+          ? t('The set-password link was emailed to them.')
+          : t('No email was sent — send them this link yourself:')}
       </p>
       <div className="flex items-center gap-2">
         <code className="flex-1 min-w-0 truncate text-[11px] font-mono text-text-muted bg-surface-2 rounded px-2 py-1.5">
@@ -46,18 +50,18 @@ function SetupLink({ result, onDismiss }: { result: AdminUserCreated; onDismiss:
                 setCopied(true)
                 setTimeout(() => setCopied(false), 1500)
               })
-              .catch(() => toast.error('Could not copy to clipboard'))
+              .catch(() => toast.error(i18n.t('Could not copy to clipboard')))
           }}
         >
           {copied ? <Check size={12} aria-hidden /> : <Copy size={12} aria-hidden />}
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t('Copied') : t('Copy')}
         </Button>
       </div>
       <p className="text-[11px] text-text-faint">
-        Single use, expires in 24 hours. It is not shown again once dismissed.
+        {t('Single use, expires in 24 hours. It is not shown again once dismissed.')}
       </p>
       <Button variant="ghost" size="sm" onClick={onDismiss}>
-        Dismiss
+        {t('Dismiss')}
       </Button>
     </div>
   )
@@ -65,6 +69,8 @@ function SetupLink({ result, onDismiss }: { result: AdminUserCreated; onDismiss:
 
 /** Create an account and surface its one-time setup link. Admin only. */
 export function AddUserForm() {
+  const { t } = useTranslation()
+
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
@@ -87,7 +93,7 @@ export function AddUserForm() {
     return (
       <div className="p-4 border-b border-border">
         <Button size="sm" onClick={() => setOpen(true)}>
-          <UserPlus size={12} aria-hidden /> Add user
+          <UserPlus size={12} aria-hidden /> {t('Add user')}
         </Button>
         {result && (
           <div className="mt-3">
@@ -103,7 +109,7 @@ export function AddUserForm() {
       <div className="flex flex-wrap items-end gap-3">
         <Input
           id="new-user-email"
-          label="Email"
+          label={t('Email')}
           type="email"
           placeholder="tester@example.com"
           className="w-56"
@@ -112,21 +118,21 @@ export function AddUserForm() {
         />
         <Input
           id="new-user-username"
-          label="Username"
-          placeholder="tester"
+          label={t('Username')}
+          placeholder={t('tester')}
           className="w-40"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
         />
         <div className="w-28">
           <label htmlFor="new-user-role" className="block text-xs text-text-muted mb-1.5">
-            Role
+            {t('Role')}
           </label>
           <Select options={ROLE_OPTIONS} value={role} onValueChange={setRole} />
         </div>
         <div className="w-28">
           <label htmlFor="new-user-tier" className="block text-xs text-text-muted mb-1.5">
-            Tier
+            {t('Tier')}
           </label>
           <Select options={TIER_OPTIONS} value={tier} onValueChange={setTier} />
         </div>
@@ -154,7 +160,7 @@ export function AddUserForm() {
             )
           }}
         >
-          {createUser.isPending ? 'Creating…' : 'Create'}
+          {createUser.isPending ? t('Creating…') : t('Create')}
         </Button>
         <Button
           variant="ghost"
@@ -164,12 +170,12 @@ export function AddUserForm() {
             reset()
           }}
         >
-          Cancel
+          {t('Cancel')}
         </Button>
       </div>
 
       <p className="text-[11px] text-text-faint">
-        No password is set. The new user gets a single-use link to choose their own.
+        {t('No password is set. The new user gets a single-use link to choose their own.')}
       </p>
 
       {error && (

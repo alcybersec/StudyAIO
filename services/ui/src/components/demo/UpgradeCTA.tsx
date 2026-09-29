@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import * as Dialog from '@radix-ui/react-dialog'
 
 interface UpgradeCTAProps {
@@ -7,6 +8,8 @@ interface UpgradeCTAProps {
 }
 
 export function UpgradeCTA({ open, onDismiss }: UpgradeCTAProps) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
 
   return (
@@ -22,11 +25,11 @@ export function UpgradeCTA({ open, onDismiss }: UpgradeCTAProps) {
             </div>
 
             <Dialog.Title className="text-lg font-semibold text-text mb-2">
-              Demo Account
+              {t('Demo Account')}
             </Dialog.Title>
 
             <Dialog.Description className="text-sm text-text-muted mb-6">
-              This action isn't available in demo mode. Create a free account to upload files, take quizzes, and save your progress.
+              {t("This action isn't available in demo mode. Create a free account to upload files, take quizzes, and save your progress.")}
             </Dialog.Description>
 
             <div className="flex gap-3">
@@ -35,14 +38,14 @@ export function UpgradeCTA({ open, onDismiss }: UpgradeCTAProps) {
                 onClick={onDismiss}
                 className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg border border-border text-text hover:bg-surface-2 transition-colors"
               >
-                Continue Browsing
+                {t('Continue Browsing')}
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/register')}
                 className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-sage text-on-accent hover:bg-sage-hover transition-colors"
               >
-                Register
+                {t('Register')}
               </button>
             </div>
           </div>

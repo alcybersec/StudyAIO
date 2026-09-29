@@ -1,4 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
+import { useTranslation } from 'react-i18next'
 import { Keyboard } from 'lucide-react'
 import { Kbd } from './ui/Kbd'
 
@@ -7,20 +8,25 @@ interface ShortcutOverlayProps {
   onOpenChange: (open: boolean) => void
 }
 
-const shortcuts: Array<[string, string]> = [
-  ['⌘K', 'command palette'],
-  ['S', 'start session'],
-  ['U', 'upload'],
-  ['?', 'this overlay'],
-  ['g h', 'go home'],
-  ['g s', 'go study'],
-  ['j / k', 'next / prev row'],
-  ['a e d', 'triage inbox'],
-  ['space', 'reveal card'],
-  ['1–4', 'rate recall'],
+//: Objects rather than tuples so the descriptions are collected as
+//: translation keys — a tuple's second element looks like nothing in
+//: particular to the key generator, and these sat untranslated because of it.
+const shortcuts: Array<{ keys: string; label: string }> = [
+  { keys: '⌘K', label: 'command palette' },
+  { keys: 'S', label: 'start session' },
+  { keys: 'U', label: 'upload' },
+  { keys: '?', label: 'this overlay' },
+  { keys: 'g h', label: 'go home' },
+  { keys: 'g s', label: 'go study' },
+  { keys: 'j / k', label: 'next / prev row' },
+  { keys: 'a e d', label: 'triage inbox' },
+  { keys: 'space', label: 'reveal card' },
+  { keys: '1–4', label: 'rate recall' },
 ]
 
 export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
+  const { t } = useTranslation()
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -31,14 +37,14 @@ export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
         >
           <div className="flex items-center gap-2 mb-4">
             <Keyboard size={15} className="text-text-faint" aria-hidden />
-            <Dialog.Title className="text-sm font-semibold text-text">Keyboard shortcuts</Dialog.Title>
-            <Kbd className="ml-auto">esc</Kbd>
+            <Dialog.Title className="text-sm font-semibold text-text">{t('Keyboard shortcuts')}</Dialog.Title>
+            <Kbd className="ml-auto">{t('esc')}</Kbd>
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-2">
-            {shortcuts.map(([key, label]) => (
-              <div key={key} className="flex items-center justify-between text-[13px]">
-                <span className="text-text-muted">{label}</span>
-                <Kbd>{key}</Kbd>
+            {shortcuts.map(({ keys, label }) => (
+              <div key={keys} className="flex items-center justify-between text-[13px]">
+                <span className="text-text-muted">{t(label)}</span>
+                <Kbd>{keys}</Kbd>
               </div>
             ))}
           </div>

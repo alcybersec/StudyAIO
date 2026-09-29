@@ -133,3 +133,47 @@ class TestGetAgentWithUserSettings:
             agent = get_agent(user_settings=user_settings)
             assert isinstance(agent, AnthropicAPIAdapter)
             assert agent._api_key == "instance-key"
+
+
+class TestOutputLanguage:
+    """`output_language` is a parameter of its own, not a key in user_settings.
+
+    `get_user_agent_config()` returns None for every user on instance
+    credentials (issue #30). A language riding inside that dict would have
+    reached only the minority running their own API keys — the opposite of an
+    app-wide setting.
+    """
+
+    def test_applied_on_the_instance_credential_path(self):
+        """user_settings=None is what most accounts pass."""
+        with patch("app.agents.factory.get_effective_setting", return_value="claude_code"):
+            agent = get_agent(user_settings=None, output_language="ru")
+
+        assert agent.output_language == "ru"
+        assert "Russian" in agent.language_directive()
+
+    def test_applied_on_the_own_provider_path(self):
+        agent = get_agent(
+            user_settings={
+                "agent_backend": "openai",
+                "openai_api_key": "sk-test",
+                "openai_model": "gpt-4o",
+            },
+            output_language="ru",
+        )
+
+        assert agent.output_language == "ru"
+
+    def test_absent_by_default(self):
+        """Omitting it leaves every existing caller behaving exactly as before."""
+        with patch("app.agents.factory.get_effective_setting", return_value="claude_code"):
+            agent = get_agent()
+
+        assert agent.output_language is None
+        assert agent.language_directive() == ""
+
+    def test_unsupported_tag_does_not_reach_the_prompt(self):
+        with patch("app.agents.factory.get_effective_setting", return_value="claude_code"):
+            agent = get_agent(user_settings=None, output_language="xx")
+
+        assert agent.output_language is None

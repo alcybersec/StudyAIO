@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useDashboardActivity } from '../../../hooks/useApi'
 import { Skeleton, StatusBadge } from '../../ui'
 import { WidgetShell } from './WidgetShell'
@@ -19,6 +20,8 @@ function ActivitySkeleton() {
 }
 
 export const ActivityWidget = memo(function ActivityWidget() {
+  const { t } = useTranslation()
+
   const { data, isLoading, isError, refetch } = useDashboardActivity()
   const state = selectWidgetState({
     isLoading,
@@ -29,18 +32,18 @@ export const ActivityWidget = memo(function ActivityWidget() {
 
   return (
     <WidgetShell
-      title="Recent activity"
+      title={t('Recent activity')}
       state={state}
       onRetry={() => refetch()}
-      emptyTitle="No activity yet"
-      emptyHint="Pipeline runs show up here as your files are processed."
+      emptyTitle={t('No activity yet')}
+      emptyHint={t('Pipeline runs show up here as your files are processed.')}
       skeleton={<ActivitySkeleton />}
     >
       <ul className="divide-y divide-border">
         {data?.slice(0, 6).map((item) => (
           <li key={item.pipeline_run_id} className="flex items-center gap-3 py-1.5">
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-text truncate">{item.filename ?? 'Unknown file'}</p>
+              <p className="text-xs font-medium text-text truncate">{item.filename ?? t('Unknown file')}</p>
               <p className="text-[10px] font-mono text-text-faint mt-0.5">{item.stage}</p>
             </div>
             <StatusBadge status={item.status} />

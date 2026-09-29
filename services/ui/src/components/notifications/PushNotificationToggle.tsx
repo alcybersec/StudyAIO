@@ -1,12 +1,15 @@
 import { usePushNotifications } from '../../hooks/usePushNotifications'
+import { useTranslation } from 'react-i18next'
 
 export function PushNotificationToggle() {
+  const { t } = useTranslation()
+
   const { permission, subscribed, loading, subscribe, unsubscribe } = usePushNotifications()
 
   if (permission === 'unsupported') {
     return (
       <div className="text-sm text-text-muted">
-        Push notifications are not supported in this browser.
+        {t('Push notifications are not supported in this browser.')}
       </div>
     )
   }
@@ -14,7 +17,7 @@ export function PushNotificationToggle() {
   if (permission === 'denied') {
     return (
       <div className="text-sm text-text-muted">
-        Push notifications are blocked. Enable them in your browser settings to receive alerts.
+        {t('Push notifications are blocked. Enable them in your browser settings to receive alerts.')}
       </div>
     )
   }
@@ -22,9 +25,9 @@ export function PushNotificationToggle() {
   return (
     <div className="flex items-center justify-between">
       <div>
-        <div className="text-sm font-medium text-text">Push Notifications</div>
+        <div className="text-sm font-medium text-text">{t('Push Notifications')}</div>
         <div className="text-xs text-text-muted">
-          {subscribed ? 'Receiving browser push notifications' : 'Get notified in your browser'}
+          {subscribed ? t('Receiving browser push notifications') : t('Get notified in your browser')}
         </div>
       </div>
       <button
@@ -36,7 +39,7 @@ export function PushNotificationToggle() {
             : 'bg-sage text-on-accent hover:bg-sage-hover'
         }`}
       >
-        {loading ? 'Working...' : subscribed ? 'Disable' : 'Enable'}
+        {loading ? t('Working...') : subscribed ? t('Disable') : t('Enable')}
       </button>
     </div>
   )

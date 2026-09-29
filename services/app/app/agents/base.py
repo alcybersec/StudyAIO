@@ -25,6 +25,38 @@ UNTRUSTED_INPUT_SYSTEM_PROMPT = (
 )
 
 
+#: Human-readable names for the language tags the app supports, for use in
+#: prompts. Models respond better to "Russian" than to "ru".
+LANGUAGE_NAMES: dict[str, str] = {
+    "en": "English",
+    "ru": "Russian",
+}
+
+#: Appended to the *content* prompts — summary, flashcards, quiz, answer — when
+#: a user has opted their study material into another language.
+#:
+#: It is explicit about what must not be translated, because the app parses
+#: what the model returns. Markdown section headings are how `summary_service`
+#: splits a week's summaries and how `TestPromptContract` verifies the format;
+#: JSON field names are how every adapter reads flashcards and quiz questions
+#: back. Translating either silently breaks ingestion, so the instruction names
+#: them rather than trusting the model to infer it.
+LANGUAGE_DIRECTIVE_TEMPLATE = """
+
+## Output language
+
+Write your response in {language}.
+
+Translate the prose only. These stay exactly as specified, in English:
+
+- Markdown section headings (`## Overview`, `## Key Concepts`, and the rest)
+- JSON field names and any fixed values the format defines
+- Code, identifiers, file names and citation markers
+
+Technical terms with no established {language} equivalent may stay in English.
+"""
+
+
 @dataclass
 class ClassificationResult:
     """Result of classifying a lecture artifact."""
@@ -185,6 +217,55 @@ class AgentAdapter(ABC):
     def reset_usage(self) -> None:
         """Clear the accumulated usage."""
         self._usage = TokenUsage()
+
+    #: Language for generated study material, set by the agent factory.
+    #: None means English — the app's default voice — so an adapter built
+    #: without one behaves exactly as it did before this existed.
+    _output_language: str | None = None
+
+    @property
+    def output_language(self) -> str | None:
+        """The language content methods should write in, or None for English."""
+        return self._output_language
+
+    def set_output_language(self, language: str | None) -> None:
+        """Set the language for generated study material.
+
+        Args:
+            language: A supported language tag, or None for English.
+        """
+        if language and language not in LANGUAGE_NAMES:
+            language = None
+        self._output_language = language
+
+    def language_directive(self) -> str:
+        """The instruction appended to content prompts.
+
+        Returns:
+            The directive, or an empty string when output is English — so an
+            English prompt is byte-for-byte what it was before this feature.
+        """
+        if not self._output_language or self._output_language == "en":
+            return ""
+        name = LANGUAGE_NAMES[self._output_language]
+        return LANGUAGE_DIRECTIVE_TEMPLATE.format(language=name)
+
+    def with_language(self, prompt: str) -> str:
+        """Append the language directive to a content prompt.
+
+        Called by the content methods — summary, flashcards, quiz, answer —
+        and deliberately not by the metadata ones. `classify`,
+        `extract_course_ops` and `extract_concepts` emit records the app
+        parses, so a translated course code or category enum is a parse
+        failure, not a feature.
+
+        Args:
+            prompt: The assembled prompt.
+
+        Returns:
+            The prompt, unchanged when output is English.
+        """
+        return prompt + self.language_directive()
 
     @abstractmethod
     async def classify_lecture(

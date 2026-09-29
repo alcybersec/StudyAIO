@@ -1,4 +1,5 @@
 import { Card } from '../ui'
+import { useTranslation } from 'react-i18next'
 import {
   useNotificationPreferences,
   useUpdatePreferences,
@@ -25,9 +26,18 @@ const EVENT_DESCRIPTIONS: Record<string, string> = {
 }
 
 const CHANNELS = ['email', 'telegram', 'push'] as const
+
+//: Column headings. Keys, translated at the render site.
+const CHANNEL_LABELS: Record<string, string> = {
+  email: 'Email',
+  telegram: 'Telegram',
+  push: 'Push',
+}
 const EVENT_TYPES = ['pipeline_complete', 'review_created', 'cards_due', 'exam_reminder', 'weekly_digest'] as const
 
 export function NotificationsSection() {
+  const { t } = useTranslation()
+
   const { data, isLoading } = useNotificationPreferences()
   const updateMutation = useUpdatePreferences()
   const testMutation = useTestNotification()
@@ -76,7 +86,7 @@ export function NotificationsSection() {
   if (isLoading) {
     return (
       <Card>
-        <h2 className="text-lg font-semibold text-text mb-4">Notifications</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('Notifications')}</h2>
         <div className="animate-pulse space-y-3">
           <div className="h-4 bg-surface-0 rounded w-3/4" />
           <div className="h-4 bg-surface-0 rounded w-1/2" />
@@ -88,9 +98,9 @@ export function NotificationsSection() {
   return (
     <div className="space-y-4">
       <Card>
-        <h2 className="text-lg font-semibold text-text mb-1">Notifications</h2>
+        <h2 className="text-lg font-semibold text-text mb-1">{t('Notifications')}</h2>
         <p className="text-sm text-text-muted mb-4">
-          Choose which events you want to be notified about and how.
+          {t('Choose which events you want to be notified about and how.')}
         </p>
 
         {/* Preference grid */}
@@ -98,10 +108,10 @@ export function NotificationsSection() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left py-2 pr-4 font-medium text-text-muted">Event</th>
+                <th className="text-left py-2 pr-4 font-medium text-text-muted">{t('Event')}</th>
                 {CHANNELS.map((ch) => (
                   <th key={ch} className="text-center py-2 px-3 font-medium text-text-muted capitalize">
-                    {ch}
+                    {t(CHANNEL_LABELS[ch])}
                   </th>
                 ))}
               </tr>
@@ -110,8 +120,8 @@ export function NotificationsSection() {
               {EVENT_TYPES.map((event) => (
                 <tr key={event} className="border-b border-border/50">
                   <td className="py-3 pr-4">
-                    <div className="font-medium text-text">{EVENT_LABELS[event]}</div>
-                    <div className="text-xs text-text-muted">{EVENT_DESCRIPTIONS[event]}</div>
+                    <div className="font-medium text-text">{t(EVENT_LABELS[event])}</div>
+                    <div className="text-xs text-text-muted">{t(EVENT_DESCRIPTIONS[event])}</div>
                   </td>
                   {CHANNELS.map((ch) => (
                     <td key={ch} className="text-center py-3 px-3">
@@ -125,7 +135,7 @@ export function NotificationsSection() {
                         }`}
                         role="switch"
                         aria-checked={isEnabled(ch, event)}
-                        aria-label={`${EVENT_LABELS[event]} via ${ch}`}
+                        aria-label={t('{{event}} via {{channel}}', { event: t(EVENT_LABELS[event]), channel: ch })}
                       >
                         <span
                           className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
@@ -143,7 +153,7 @@ export function NotificationsSection() {
 
         {/* Test buttons */}
         <div className="mt-4 flex items-center gap-3">
-          <span className="text-sm text-text-muted">Send test:</span>
+          <span className="text-sm text-text-muted">{t('Send test:')}</span>
           {CHANNELS.map((ch) => (
             <button
               key={ch}
@@ -161,7 +171,7 @@ export function NotificationsSection() {
           )}
           {testMutation.isError && (
             <span className="text-xs text-red-fg">
-              {testMutation.error instanceof Error ? testMutation.error.message : 'Failed'}
+              {testMutation.error instanceof Error ? testMutation.error.message : t('Failed')}
             </span>
           )}
         </div>

@@ -1,4 +1,6 @@
 import { memo, useCallback, useRef, useState } from 'react'
+import i18n from '../../../i18n'
+import { useTranslation } from 'react-i18next'
 import { Upload } from 'lucide-react'
 import { useUpload } from '../../../hooks/useApi'
 import { SectionLabel } from '../../ui'
@@ -10,6 +12,7 @@ const ACCEPTED_EXT = ['.pdf', '.docx', '.pptx']
  * query states. Upload progress and failures render inline.
  */
 export const QuickUploadWidget = memo(function QuickUploadWidget() {
+  const { t } = useTranslation()
   const upload = useUpload()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -20,9 +23,12 @@ export const QuickUploadWidget = memo(function QuickUploadWidget() {
       setLastResult(null)
       try {
         const result = await upload.mutateAsync(file)
-        setLastResult({ ok: true, message: `${result.filename} uploaded` })
+        setLastResult({
+          ok: true,
+          message: i18n.t('{{file}} uploaded', { file: result.filename }),
+        })
       } catch (err) {
-        setLastResult({ ok: false, message: err instanceof Error ? err.message : 'Upload failed' })
+        setLastResult({ ok: false, message: err instanceof Error ? err.message : i18n.t('Upload failed') })
       }
     },
     [upload],
@@ -49,7 +55,7 @@ export const QuickUploadWidget = memo(function QuickUploadWidget() {
 
   return (
     <section className="h-full overflow-auto bg-surface-1 border border-border rounded-xl p-3">
-      <SectionLabel>Quick upload</SectionLabel>
+      <SectionLabel>{t('Quick upload')}</SectionLabel>
       <button
         type="button"
         onDragOver={(e) => {
@@ -66,7 +72,7 @@ export const QuickUploadWidget = memo(function QuickUploadWidget() {
         }`}
       >
         <Upload size={14} aria-hidden />
-        {upload.isPending ? 'Uploading…' : 'Drop lecture files or click — PDF, DOCX, PPTX'}
+        {upload.isPending ? t('Uploading…') : t('Drop lecture files or click — PDF, DOCX, PPTX')}
       </button>
       <input ref={inputRef} type="file" accept={ACCEPTED_EXT.join(',')} onChange={handleChange} className="hidden" />
       {lastResult && (

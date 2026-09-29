@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useDashboardCourses } from '../../../hooks/useApi'
 import { Skeleton } from '../../ui'
@@ -20,6 +21,8 @@ function CoursesSkeleton() {
 }
 
 export const CoursesWidget = memo(function CoursesWidget() {
+  const { t } = useTranslation()
+
   const { data, isLoading, isError, refetch } = useDashboardCourses()
   const state = selectWidgetState({
     isLoading,
@@ -30,12 +33,12 @@ export const CoursesWidget = memo(function CoursesWidget() {
 
   return (
     <WidgetShell
-      title="Courses"
+      title={t('Courses')}
       state={state}
       onRetry={() => refetch()}
-      emptyTitle="No courses yet"
-      emptyHint="Upload your first lecture and a course is created automatically."
-      emptyActionLabel="Upload"
+      emptyTitle={t('No courses yet')}
+      emptyHint={t('Upload your first lecture and a course is created automatically.')}
+      emptyActionLabel={t('Upload')}
       emptyActionTo="/upload"
       skeleton={<CoursesSkeleton />}
     >
@@ -49,8 +52,10 @@ export const CoursesWidget = memo(function CoursesWidget() {
             <div className="text-[13px] font-semibold text-text">{course.code}</div>
             <div className="text-[11px] text-text-muted truncate">{course.name ?? '—'}</div>
             <div className="text-[10px] text-text-faint font-mono mt-1.5">
-              {course.weeks_covered} wk{course.weeks_covered !== 1 ? 's' : ''} · {course.total_artifacts} file
-              {course.total_artifacts !== 1 ? 's' : ''}
+              {t('{{weeks}} wks · {{files}} files', {
+                weeks: course.weeks_covered,
+                files: course.total_artifacts,
+              })}
             </div>
           </Link>
         ))}

@@ -99,6 +99,8 @@ async def extract_and_save_concepts(
     from app.services.settings_service import get_user_agent_config
 
     user_agent_config = await get_user_agent_config(session, user_id)
+    # No output_language: this stage's output is parsed, not read.
+    # See AgentAdapter.with_language.
     agent = get_agent(user_settings=user_agent_config)
     ai_result: ConceptExtractionResult = await agent.extract_concepts(
         text=extraction_text,

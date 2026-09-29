@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '../ui/Badge'
 import type { ConceptNode } from '../../types'
 
@@ -28,13 +29,15 @@ interface ConceptListProps {
  * move focus between rows, Enter opens the focused concept's detail panel.
  */
 export function ConceptList({ concepts, onSelect, selectedId }: ConceptListProps) {
+  const { t } = useTranslation()
+
   const [activeIndex, setActiveIndex] = useState(0)
   const rowRefs = useRef<(HTMLDivElement | null)[]>([])
 
   if (concepts.length === 0) {
     return (
       <div className="text-center py-8 text-sm text-text-muted">
-        <p>No concepts found</p>
+        <p>{t('No concepts found')}</p>
       </div>
     )
   }
@@ -74,7 +77,7 @@ export function ConceptList({ concepts, onSelect, selectedId }: ConceptListProps
   }
 
   return (
-    <div role="listbox" aria-label="Concepts" className="divide-y divide-border">
+    <div role="listbox" aria-label={t('Concepts')} className="divide-y divide-border">
       {concepts.map((concept, i) => {
         const selected = selectedId === concept.id
         return (
@@ -105,7 +108,9 @@ export function ConceptList({ concepts, onSelect, selectedId }: ConceptListProps
             </span>
             <span className="font-mono text-[10px] text-text-faint w-20 text-right shrink-0 truncate">
               {concept.source_weeks.length > 0
-                ? `wk ${[...concept.source_weeks].sort((a, b) => a - b).join(', ')}`
+                ? t('wk {{weeks}}', {
+                    weeks: [...concept.source_weeks].sort((a, b) => a - b).join(', '),
+                  })
                 : '—'}
             </span>
           </div>

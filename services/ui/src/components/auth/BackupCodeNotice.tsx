@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import i18n from '../../i18n'
 import { toast } from 'sonner'
 import { takeBackupCodesRemaining } from '../../lib/backupCodeNotice'
 
@@ -12,6 +13,7 @@ import { takeBackupCodesRemaining } from '../../lib/backupCodeNotice'
  * `lib/backupCodeNotice.ts` for why the count has to travel to get here.
  */
 export function BackupCodeNotice() {
+
   useEffect(() => {
     const remaining = takeBackupCodesRemaining()
     // `0` is a real value: the user just burned their last code and that is
@@ -19,19 +21,19 @@ export function BackupCodeNotice() {
     if (remaining === null) return
 
     if (remaining === 0) {
-      toast.warning('That was your last backup code', {
+      toast.warning(i18n.t('That was your last backup code'), {
         description:
-          'You have no backup codes left. Set up two-factor authentication again in Settings to get a new set.',
+          i18n.t('You have no backup codes left. Set up two-factor authentication again in Settings to get a new set.'),
         duration: 10000,
       })
       return
     }
 
-    toast.info(`Signed in with a backup code — ${remaining} left`, {
+    toast.info(i18n.t('Signed in with a backup code — {{count}} left', { count: remaining }), {
       description:
         remaining <= 2
-          ? 'Set up two-factor authentication again in Settings to get a fresh set.'
-          : 'Each code works once. Cross this one off your list.',
+          ? i18n.t('Set up two-factor authentication again in Settings to get a fresh set.')
+          : i18n.t('Each code works once. Cross this one off your list.'),
       duration: 8000,
     })
   }, [])

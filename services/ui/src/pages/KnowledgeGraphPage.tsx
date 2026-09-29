@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { List, Network } from 'lucide-react'
 import { ConceptGraph } from '../components/concepts/ConceptGraph'
 import { ConceptDetailPanel } from '../components/concepts/ConceptDetail'
@@ -10,6 +11,8 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus'
 type View = 'graph' | 'list'
 
 function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const { t } = useTranslation()
+
   const buttonClass = (active: boolean) =>
     `flex items-center gap-1.5 text-xs font-medium px-3 py-2 cursor-pointer transition-colors ${
       active ? 'bg-surface-2 text-text' : 'text-text-muted hover:text-text hover:bg-surface-2'
@@ -19,7 +22,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
     <div
       className="flex items-center border border-border rounded-lg overflow-hidden"
       role="group"
-      aria-label="View"
+      aria-label={t('View')}
     >
       <button
         type="button"
@@ -27,7 +30,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
         aria-pressed={view === 'graph'}
         onClick={() => onChange('graph')}
       >
-        <Network size={13} aria-hidden /> Graph
+        <Network size={13} aria-hidden /> {t('Graph')}
       </button>
       <button
         type="button"
@@ -35,7 +38,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
         aria-pressed={view === 'list'}
         onClick={() => onChange('list')}
       >
-        <List size={13} aria-hidden /> List
+        <List size={13} aria-hidden /> {t('List')}
       </button>
     </div>
   )
@@ -61,6 +64,8 @@ function LoadingMirror() {
 }
 
 export function KnowledgeGraphPage() {
+  const { t } = useTranslation()
+
   const [courseFilter, setCourseFilter] = useState('')
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null)
   const [view, setView] = useState<View>('graph')
@@ -84,7 +89,7 @@ export function KnowledgeGraphPage() {
   const handleSelect = (conceptId: string) => setSelectedConceptId(conceptId)
 
   const courseOptions = [
-    { value: '', label: 'All courses' },
+    { value: '', label: t('All courses') },
     ...(courses?.map((c) => ({ value: c.code, label: c.code })) ?? []),
   ]
 
@@ -103,10 +108,9 @@ export function KnowledgeGraphPage() {
         />
       ) : (
         <>
-          <SectionLabel>Selected concept</SectionLabel>
+          <SectionLabel>{t('Selected concept')}</SectionLabel>
           <p className="text-xs text-text-muted leading-relaxed">
-            Select a concept to see its description, relationships, and where it appears — then
-            scope a study session to it.
+            {t('Select a concept to see its description, relationships, and where it appears — then scope a study session to it.')}
           </p>
         </>
       )}
@@ -116,8 +120,8 @@ export function KnowledgeGraphPage() {
   return (
     <div>
       <PageHeader
-        title="Knowledge"
-        subtitle="Every extracted concept, linked. Select a node to scope a session."
+        title={t('Knowledge')}
+        subtitle={t('Every extracted concept, linked. Select a node to scope a session.')}
         actions={
           <>
             <Select
@@ -128,7 +132,7 @@ export function KnowledgeGraphPage() {
                 setCourseFilter(value)
                 setSelectedConceptId(null)
               }}
-              placeholder="All courses"
+              placeholder={t('All courses')}
             />
             <ViewToggle view={view} onChange={setView} />
           </>
@@ -141,9 +145,9 @@ export function KnowledgeGraphPage() {
         <Card>
           <EmptyState
             icon="🕸"
-            title="No concepts extracted yet"
-            description="Concepts are mined from your summaries. Process a lecture, then extract its concept graph."
-            actionLabel="Upload lectures"
+            title={t('No concepts extracted yet')}
+            description={t('Concepts are mined from your summaries. Process a lecture, then extract its concept graph.')}
+            actionLabel={t('Upload lectures')}
             actionTo="/upload"
           />
         </Card>
@@ -181,8 +185,8 @@ export function KnowledgeGraphPage() {
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search concepts…"
-                    aria-label="Search concepts"
+                    placeholder={t('Search concepts…')}
+                    aria-label={t('Search concepts')}
                     className="mb-3 sm:max-w-xs"
                   />
                   <ConceptList
@@ -195,10 +199,10 @@ export function KnowledgeGraphPage() {
 
               <p className="font-mono text-[11px] text-text-faint mt-3">
                 {view === 'graph'
-                  ? 'list view is the keyboard/screen-reader twin — arrows navigate, enter opens'
-                  : '↑↓ navigate · enter opens · same actions as the graph'}
+                  ? t('list view is the keyboard/screen-reader twin — arrows navigate, enter opens')
+                  : t('↑↓ navigate · enter opens · same actions as the graph')}
                 {graph && graph.nodes.length > 0 && (
-                  <> · {graph.nodes.length} concepts · {graph.edges.length} links</>
+                  <> · {graph.nodes.length} {t('concepts ·')} {graph.edges.length} {t('links')}</>
                 )}
               </p>
             </div>

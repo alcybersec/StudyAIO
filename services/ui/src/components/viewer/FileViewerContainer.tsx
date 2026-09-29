@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useReducer, useState, type Ref } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FileViewer } from './FileViewer'
 import { FileViewerToolbar } from './FileViewerToolbar'
 import { ViewerErrorBoundary } from './ViewerErrorBoundary'
@@ -37,6 +38,8 @@ interface ViewerBodyProps {
 }
 
 function ViewerBody({ artifacts, artifact, state, dispatch }: ViewerBodyProps) {
+  const { t } = useTranslation()
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.target instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return
     if (e.key === 'ArrowLeft') dispatch({ type: 'go_to_page', page: state.page - 1 })
@@ -75,7 +78,7 @@ function ViewerBody({ artifacts, artifact, state, dispatch }: ViewerBodyProps) {
       {state.totalPages > 0 && (
         <div className="flex items-center justify-center px-3 py-1.5 border-t border-border bg-surface-1">
           <span className="font-mono text-[11px] text-text-faint">
-            page {state.page} / {state.totalPages}
+            {t('page {{page}} / {{total}}', { page: state.page, total: state.totalPages })}
           </span>
         </div>
       )}

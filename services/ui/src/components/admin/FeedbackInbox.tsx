@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAdminFeedback, useSetFeedbackStatus } from '../../hooks/useApi'
 import { Button, ErrorState, Skeleton } from '../ui'
 import type { FeedbackStatus } from '../../types'
@@ -23,6 +24,8 @@ const KIND_LABELS: Record<string, string> = {
  * channel. This is the other half of the submit box.
  */
 export function FeedbackInbox() {
+  const { t } = useTranslation()
+
   const [status, setStatus] = useState<FeedbackStatus | undefined>('new')
   const { data, isLoading, isError, refetch } = useAdminFeedback(status)
   const setFeedbackStatus = useSetFeedbackStatus()
@@ -39,7 +42,7 @@ export function FeedbackInbox() {
   }
 
   if (isError && !data) {
-    return <ErrorState compact title="Feedback couldn't load" onRetry={() => refetch()} />
+    return <ErrorState compact title={t("Feedback couldn't load")} onRetry={() => refetch()} />
   }
 
   if (!data) return null
@@ -48,10 +51,10 @@ export function FeedbackInbox() {
     <section className="bg-surface-1 rounded-xl border border-border p-4 space-y-3">
       <header className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-sm font-medium text-text">
-          Feedback
+          {t('Feedback')}
           {data.counts.new > 0 && (
             <span className="ml-2 px-1.5 py-0.5 rounded-full text-[11px] bg-sage-soft text-text">
-              {data.counts.new} new
+              {t('{{count}} new', { count: data.counts.new })}
             </span>
           )}
         </h2>
@@ -76,7 +79,7 @@ export function FeedbackInbox() {
 
       {data.items.length === 0 ? (
         <p className="text-xs text-text-faint">
-          {status === 'new' ? 'Nothing new.' : 'Nothing here.'}
+          {status === 'new' ? t('Nothing new.') : t('Nothing here.')}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -105,7 +108,7 @@ export function FeedbackInbox() {
                       setFeedbackStatus.mutate({ id: item.id, status: 'triaged' })
                     }
                   >
-                    Triaged
+                    {t('Triaged')}
                   </Button>
                 )}
                 {item.status !== 'closed' && (
@@ -115,7 +118,7 @@ export function FeedbackInbox() {
                     disabled={setFeedbackStatus.isPending}
                     onClick={() => setFeedbackStatus.mutate({ id: item.id, status: 'closed' })}
                   >
-                    Close
+                    {t('Close')}
                   </Button>
                 )}
               </div>

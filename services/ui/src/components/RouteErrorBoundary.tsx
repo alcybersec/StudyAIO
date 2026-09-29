@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useRouteError } from 'react-router-dom'
 import { captureError } from '../lib/monitoring'
 import { RefreshCw } from 'lucide-react'
@@ -27,6 +28,8 @@ function errorDetail(error: unknown): string {
  * crash (or a stale chunk after a deploy) never takes down navigation.
  */
 export function RouteErrorBoundary() {
+  const { t } = useTranslation()
+
   const error = useRouteError()
   const navigate = useNavigate()
   const isStaleChunk = isChunkLoadError(error)
@@ -39,12 +42,12 @@ export function RouteErrorBoundary() {
   if (isStaleChunk) {
     return (
       <div role="alert" className="max-w-lg mx-auto mt-16 px-6 text-center space-y-3">
-        <p className="text-sm font-medium text-text">New version available — reload to update</p>
+        <p className="text-sm font-medium text-text">{t('New version available — reload to update')}</p>
         <p className="text-xs text-text-muted">
-          This page was updated since you last loaded the app, so its code couldn't be fetched.
+          {t("This page was updated since you last loaded the app, so its code couldn't be fetched.")}
         </p>
         <Button variant="primary" size="sm" onClick={() => window.location.reload()}>
-          <RefreshCw size={12} aria-hidden /> Reload
+          <RefreshCw size={12} aria-hidden /> {t('Reload')}
         </Button>
       </div>
     )
@@ -53,7 +56,7 @@ export function RouteErrorBoundary() {
   return (
     <div className="max-w-lg mx-auto mt-16 px-6">
       <ErrorState
-        title="This page hit a problem"
+        title={t('This page hit a problem')}
         detail={errorDetail(error)}
         onRetry={() => navigate(0)}
       />

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
@@ -19,6 +20,8 @@ function isIOS() {
 }
 
 export function InstallPrompt() {
+  const { t } = useTranslation()
+
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const showIOSPrompt = !isStandalone() && isIOS()
   const [dismissed, setDismissed] = useState(() => {
@@ -65,25 +68,25 @@ export function InstallPrompt() {
     <div className="rounded-lg border border-sage/20 bg-sage-soft p-4 mt-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <h3 className="text-sm font-semibold text-text">Install StudyAIO</h3>
+          <h3 className="text-sm font-semibold text-text">{t('Install StudyAIO')}</h3>
           {showIOSPrompt ? (
             <p className="mt-1 text-sm text-text-muted">
-              Tap the Share button
+              {t('Tap the Share button')}
               <svg className="inline-block w-4 h-4 mx-1 -mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
               </svg>
-              then "Add to Home Screen" for quick access and offline study.
+              {t('then "Add to Home Screen" for quick access and offline study.')}
             </p>
           ) : (
             <p className="mt-1 text-sm text-text-muted">
-              Add to your home screen for quick access and offline flashcard study.
+              {t('Add to your home screen for quick access and offline flashcard study.')}
             </p>
           )}
         </div>
         <button
           onClick={handleDismiss}
           className="text-text-muted hover:text-text shrink-0"
-          aria-label="Dismiss install prompt"
+          aria-label={t('Dismiss install prompt')}
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -95,7 +98,7 @@ export function InstallPrompt() {
           onClick={handleInstall}
           className="mt-3 rounded-md bg-sage px-4 py-2 text-sm font-medium text-on-accent hover:bg-sage-hover transition-colors"
         >
-          Install App
+          {t('Install App')}
         </button>
       )}
     </div>

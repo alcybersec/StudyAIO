@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import i18n from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { Lock, WifiOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { Card, EmptyState, PageHeader, toast } from '../components/ui'
@@ -25,6 +27,8 @@ let nextId = 0
 const BATCH_THRESHOLD = 3
 
 export function UploadPage() {
+  const { t } = useTranslation()
+
   const { isDemo } = useAuth()
   const [queue, setQueue] = useState<QueuedFile[]>([])
   const processingRef = useRef(false)
@@ -134,7 +138,7 @@ export function UploadPage() {
 
   const handleRetryStage = useCallback((artifactId: string) => {
     retryPipeline.mutate(artifactId, {
-      onSuccess: (res) => toast.success(`Retrying from ${res.retrying_from_stage}`),
+      onSuccess: (res) => toast.success(i18n.t('Retrying from {{stage}}', { stage: res.retrying_from_stage })),
       onError: (err) => toastMutationError(err, () => handleRetryStage(artifactId)),
     })
   }, [retryPipeline])
@@ -145,15 +149,15 @@ export function UploadPage() {
     return (
       <div>
         <PageHeader
-          title="Upload"
-          subtitle="Files move through six stages — each retryable on its own"
+          title={t('Upload')}
+          subtitle={t('Files move through six stages — each retryable on its own')}
         />
         <Card>
           <div className="text-center py-8">
             <Lock size={40} strokeWidth={1.25} className="mx-auto mb-4 text-text-faint" aria-hidden />
-            <h3 className="text-lg font-semibold text-text mb-2">Uploads disabled in demo</h3>
+            <h3 className="text-lg font-semibold text-text mb-2">{t('Uploads disabled in demo')}</h3>
             <p className="text-sm text-text-muted">
-              Create a free account to upload your own lecture files and start the processing pipeline.
+              {t('Create a free account to upload your own lecture files and start the processing pipeline.')}
             </p>
           </div>
         </Card>
@@ -164,8 +168,8 @@ export function UploadPage() {
   return (
     <div>
       <PageHeader
-        title="Upload"
-        subtitle="Files move through six stages — each retryable on its own"
+        title={t('Upload')}
+        subtitle={t('Files move through six stages — each retryable on its own')}
       />
 
       <DropZone onFiles={handleFiles} disabled={hasActive} />
@@ -174,29 +178,33 @@ export function UploadPage() {
       {batchResult && (
         <div className="bg-surface-1 rounded-xl border border-border px-4 py-3 mt-6">
           <p className="text-sm font-medium text-text">
-            Batch upload: {batchResult.succeeded} succeeded, {batchResult.duplicates} duplicates, {batchResult.failed} failed
-            <span className="text-text-muted"> ({batchResult.total} total)</span>
+            {t('Batch upload: {{succeeded}} succeeded, {{duplicates}} duplicates, {{failed}} failed', {
+              succeeded: batchResult.succeeded,
+              duplicates: batchResult.duplicates,
+              failed: batchResult.failed,
+            })}
+            <span className="text-text-muted"> {t('({{count}} total)', { count: batchResult.total })}</span>
           </p>
         </div>
       )}
 
       <h3 className="text-[11px] font-mono uppercase tracking-wider text-text-faint mt-6 mb-3">
-        Processing now
+        {t('Processing now')}
       </h3>
 
       {artifactIds.length > 0 && connectionState === 'reconnecting' && (
         <div className="flex items-center gap-2 bg-amber-soft border border-amber/25 rounded-lg px-3 py-2 mb-3">
           <WifiOff size={13} className="text-amber-fg shrink-0" aria-hidden />
           <span className="text-xs text-amber-fg">
-            Live progress stream disconnected — reconnecting. Stages keep running on the server.
+            {t('Live progress stream disconnected — reconnecting. Stages keep running on the server.')}
           </span>
         </div>
       )}
 
       {queue.length === 0 ? (
         <EmptyState
-          title="Nothing processing"
-          description="Drop files above — they'll appear here with live stage-by-stage progress."
+          title={t('Nothing processing')}
+          description={t("Drop files above — they'll appear here with live stage-by-stage progress.")}
         />
       ) : (
         <>
@@ -216,7 +224,7 @@ export function UploadPage() {
             />
           ))}
           <p className="text-[11px] text-text-faint font-mono mt-4">
-            event log capped at 200 entries · full history in each file's detail view
+            {t("event log capped at 200 entries · full history in each file's detail view")}
           </p>
         </>
       )}

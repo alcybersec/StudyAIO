@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import i18n from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Archive } from 'lucide-react'
 import { Button, Input, Modal, toast } from '../ui'
@@ -19,6 +21,8 @@ interface DeleteCourseModalProps {
  * an "Archive instead" escape hatch that keeps everything recoverable.
  */
 export function DeleteCourseModal({ open, onOpenChange, course, weeks }: DeleteCourseModalProps) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
   const [typed, setTyped] = useState('')
   const deleteMutation = useDeleteCourse()
@@ -42,7 +46,7 @@ export function DeleteCourseModal({ open, onOpenChange, course, weeks }: DeleteC
   const handleDelete = () => {
     deleteMutation.mutate(course.code, {
       onSuccess: () => {
-        toast.success(`${course.code} deleted`)
+        toast.success(i18n.t('{{code}} deleted', { code: course.code }))
         navigate('/')
       },
       onError: (err) => toastMutationError(err, handleDelete),
@@ -52,7 +56,7 @@ export function DeleteCourseModal({ open, onOpenChange, course, weeks }: DeleteC
   const handleArchive = () => {
     archiveMutation.mutate(course.code, {
       onSuccess: () => {
-        toast.success(`${course.code} archived — recoverable anytime`)
+        toast.success(i18n.t('{{code}} archived — recoverable anytime', { code: course.code }))
         navigate('/')
       },
       onError: (err) => toastMutationError(err, handleArchive),
@@ -68,22 +72,22 @@ export function DeleteCourseModal({ open, onOpenChange, course, weeks }: DeleteC
           <span className="w-8 h-8 rounded-lg bg-red-soft text-red-fg flex items-center justify-center shrink-0">
             <AlertTriangle size={15} aria-hidden />
           </span>
-          Delete {course.code}
+          {t('Delete {{code}}', { code: course.code })}
           {course.name ? ` — ${course.name}` : ''}?
         </span>
       }
-      description="This can't be undone. Archiving keeps everything recoverable."
+      description={t("This can't be undone. Archiving keeps everything recoverable.")}
       className="border-red/30"
     >
       <ul className="text-xs text-text-muted space-y-1 mb-4 ml-1">
-        <li>· {stats.weeks} weeks of summaries</li>
-        <li>· {stats.flashcards} flashcards with review history</li>
-        <li>· {stats.quizzes} quiz questions</li>
-        <li>· {stats.files} uploaded source files stay in storage until purged</li>
+        <li>· {t('{{count}} weeks of summaries', { count: stats.weeks })}</li>
+        <li>· {t('{{count}} flashcards with review history', { count: stats.flashcards })}</li>
+        <li>· {t('{{count}} quiz questions', { count: stats.quizzes })}</li>
+        <li>· {t('{{count}} uploaded source files stay in storage until purged', { count: stats.files })}</li>
       </ul>
       <Input
         id="delete-course-confirm"
-        label={`Type "${course.code}" to confirm`}
+        label={t('Type "{{code}}" to confirm', { code: course.code })}
         placeholder={course.code}
         value={typed}
         autoComplete="off"
@@ -91,7 +95,7 @@ export function DeleteCourseModal({ open, onOpenChange, course, weeks }: DeleteC
       />
       <div className="flex flex-wrap justify-end gap-2 mt-4">
         <Button variant="secondary" size="sm" onClick={() => handleOpenChange(false)}>
-          Cancel
+          {t('Cancel')}
         </Button>
         <Button
           variant="secondary"
@@ -99,7 +103,7 @@ export function DeleteCourseModal({ open, onOpenChange, course, weeks }: DeleteC
           loading={archiveMutation.isPending}
           onClick={handleArchive}
         >
-          <Archive size={12} aria-hidden /> Archive instead
+          <Archive size={12} aria-hidden /> {t('Archive instead')}
         </Button>
         <Button
           variant="danger"
@@ -108,7 +112,7 @@ export function DeleteCourseModal({ open, onOpenChange, course, weeks }: DeleteC
           loading={deleteMutation.isPending}
           onClick={handleDelete}
         >
-          Delete permanently
+          {t('Delete permanently')}
         </Button>
       </div>
     </Modal>

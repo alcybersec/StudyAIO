@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Button, Modal, Select, toast } from '../ui'
 import { toastMutationError } from '../../lib/toast'
@@ -16,6 +18,8 @@ interface MergeCourseModalProps {
  * the backend instead of silent overwrites, and the source course is archived.
  */
 export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModalProps) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
   const [target, setTarget] = useState('')
   const [targetError, setTargetError] = useState<string | undefined>(undefined)
@@ -48,7 +52,7 @@ export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModa
             result.conflict_weeks.length > 0
               ? ` — ${result.conflict_weeks.length} colliding weeks sent to Review`
               : ''
-          toast.success(`Merged ${course.code} into ${target}${conflictNote}`)
+          toast.success(i18n.t('Merged {{code}} into {{target}}{{note}}', { code: course.code, target, note: conflictNote }))
           navigate(`/courses/${target}`, { replace: true })
         },
         onError: (err) => toastMutationError(err, handleMerge),
@@ -60,13 +64,13 @@ export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModa
     <Modal
       open={open}
       onOpenChange={handleOpenChange}
-      title={`Merge ${course.code} into another course`}
-      description="All weeks, summaries and study assets move to the target. Colliding weeks create review items — nothing is overwritten. The source course is archived afterwards."
+      title={t('Merge {{code}} into another course', { code: course.code })}
+      description={t('All weeks, summaries and study assets move to the target. Colliding weeks create review items — nothing is overwritten. The source course is archived afterwards.')}
     >
       <div className="space-y-4">
         <Select
           id="merge-course-target"
-          label="Merge into"
+          label={t('Merge into')}
           options={options}
           value={target}
           onValueChange={setTarget}
@@ -76,7 +80,7 @@ export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModa
         />
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="secondary" size="sm" onClick={() => handleOpenChange(false)}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button
             size="sm"
@@ -84,7 +88,7 @@ export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModa
             loading={mergeMutation.isPending}
             onClick={handleMerge}
           >
-            Merge course
+            {t('Merge course')}
           </Button>
         </div>
       </div>

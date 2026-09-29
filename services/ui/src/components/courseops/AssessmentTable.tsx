@@ -1,4 +1,5 @@
 import { Badge, EmptyState, ErrorState, Skeleton, Table, TBody, TCell, THead, TRow } from '../ui'
+import { useTranslation } from 'react-i18next'
 import type { Assessment } from '../../types'
 
 interface AssessmentTableProps {
@@ -22,8 +23,10 @@ const TYPE_VARIANTS: Record<string, BadgeVariant> = {
 }
 
 function AssessmentTableSkeleton() {
+  const { t } = useTranslation()
+
   return (
-    <div className="space-y-3 py-2" role="status" aria-label="Loading assessments">
+    <div className="space-y-3 py-2" role="status" aria-label={t('Loading assessments')}>
       {Array.from({ length: 4 }).map((_, i) => (
         <div key={i} className="flex items-center gap-4">
           <Skeleton height={14} width="30%" />
@@ -37,17 +40,19 @@ function AssessmentTableSkeleton() {
 }
 
 export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSelect }: AssessmentTableProps) {
+  const { t } = useTranslation()
+
   if (isLoading && !assessments) return <AssessmentTableSkeleton />
 
   if (isError && !assessments) {
-    return <ErrorState title="Assessments couldn't load" onRetry={onRetry} />
+    return <ErrorState title={t("Assessments couldn't load")} onRetry={onRetry} />
   }
 
   if (!assessments || assessments.length === 0) {
     return (
       <EmptyState
-        title="No assessments extracted yet"
-        description="Upload a course outline in the Documents tab to get started."
+        title={t('No assessments extracted yet')}
+        description={t('Upload a course outline in the Documents tab to get started.')}
       />
     )
   }
@@ -57,13 +62,13 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
   return (
     <Table>
       <THead>
-        <TCell header className="w-[28%]">Assessment</TCell>
-        <TCell header className="w-[14%]">Type</TCell>
-        <TCell header className="w-[10%]">Weight</TCell>
-        <TCell header className="w-[12%]">Weeks</TCell>
-        <TCell header className="w-[26%]">Description</TCell>
+        <TCell header className="w-[28%]">{t('Assessment')}</TCell>
+        <TCell header className="w-[14%]">{t('Type')}</TCell>
+        <TCell header className="w-[10%]">{t('Weight')}</TCell>
+        <TCell header className="w-[12%]">{t('Weeks')}</TCell>
+        <TCell header className="w-[26%]">{t('Description')}</TCell>
         <TCell header align="right" className="w-[10%]">
-          Docs
+          {t('Docs')}
         </TCell>
       </THead>
       <TBody>
@@ -81,13 +86,13 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
             </TCell>
             <TCell className="max-w-0 truncate text-text-muted">{a.description ?? '—'}</TCell>
             <TCell align="right" className="text-xs text-peri-fg">
-              {onSelect ? 'Manage →' : ''}
+              {onSelect ? t('Manage →') : ''}
             </TCell>
           </TRow>
         ))}
         {totalWeight > 0 && (
           <TRow className="border-t border-border-strong">
-            <TCell className="font-medium text-text">Total</TCell>
+            <TCell className="font-medium text-text">{t('Total')}</TCell>
             <TCell />
             <TCell className="font-mono font-medium text-text">{totalWeight}%</TCell>
             <TCell />

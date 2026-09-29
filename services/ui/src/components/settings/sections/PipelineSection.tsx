@@ -1,4 +1,5 @@
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Card, ErrorState, Input, SkeletonCard } from '../../ui'
 import { FieldSavedNote } from '../FieldSavedNote'
@@ -57,13 +58,14 @@ function toFormValues(s: Settings): PipelineSettingsFormData {
 }
 
 export function PipelineSection() {
+  const { t } = useTranslation()
   const { data: settings, isLoading, error, refetch } = useSettings()
 
   if (isLoading) return <SkeletonCard />
   if (error) {
     return (
       <ErrorState
-        title="Pipeline settings couldn't load"
+        title={t("Pipeline settings couldn't load")}
         detail={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
@@ -75,6 +77,7 @@ export function PipelineSection() {
 }
 
 function PipelineForm({ settings }: { settings: Settings }) {
+  const { t } = useTranslation()
   const updateMutation = useUpdateSettings()
   const { saved, markSaved } = useSavedFields()
 
@@ -106,13 +109,13 @@ function PipelineForm({ settings }: { settings: Settings }) {
 
   return (
     <Card>
-      <h2 className="text-[13px] font-semibold text-text mb-4">Pipeline tuning</h2>
+      <h2 className="text-[13px] font-semibold text-text mb-4">{t('Pipeline tuning')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {FIELDS.map(({ name, label, hint, min, max }) => (
           <div key={name}>
             <div className="flex items-center justify-between mb-1.5">
               <label htmlFor={name} className="text-xs font-medium text-text-muted">
-                {label}
+                {t(label)}
               </label>
               <FieldSavedNote show={!!saved[name]} />
             </div>
@@ -124,12 +127,12 @@ function PipelineForm({ settings }: { settings: Settings }) {
               error={errors[name]?.message}
               {...register(name, { valueAsNumber: true, onBlur: () => saveField(name) })}
             />
-            <p className="mt-1.5 text-xs text-text-faint">{hint}</p>
+            <p className="mt-1.5 text-xs text-text-faint">{t(hint)}</p>
           </div>
         ))}
       </div>
       <div className="flex items-center justify-between mt-5 pt-3 border-t border-border">
-        <span className="text-xs text-text-faint">Changes save automatically</span>
+        <span className="text-xs text-text-faint">{t('Changes save automatically')}</span>
       </div>
     </Card>
   )

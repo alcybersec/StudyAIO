@@ -233,9 +233,9 @@ class TestSendMessage:
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
             patch(
-                "app.services.settings_service.get_user_agent_config",
+                "app.services.settings_service.get_user_ai_context",
                 new_callable=AsyncMock,
-                return_value=None,
+                return_value=(None, None),
             ),
         ):
             user_msg, assistant_msg = await send_message(
@@ -282,9 +282,9 @@ class TestSendMessage:
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
             patch(
-                "app.services.settings_service.get_user_agent_config",
+                "app.services.settings_service.get_user_ai_context",
                 new_callable=AsyncMock,
-                return_value=None,
+                return_value=(None, None),
             ),
         ):
             await send_message(session, "session-001", "user-001", "Explain TCP handshake")
@@ -335,9 +335,9 @@ class TestSendMessage:
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
             patch(
-                "app.services.settings_service.get_user_agent_config",
+                "app.services.settings_service.get_user_ai_context",
                 new_callable=AsyncMock,
-                return_value=None,
+                return_value=(None, None),
             ),
         ):
             user_msg, assistant_msg = await send_message(
@@ -378,9 +378,9 @@ class TestSendMessage:
             ),
             patch("app.services.chat_service.get_agent", return_value=mock_agent),
             patch(
-                "app.services.settings_service.get_user_agent_config",
+                "app.services.settings_service.get_user_ai_context",
                 new_callable=AsyncMock,
-                return_value=None,
+                return_value=(None, None),
             ),
         ):
             user_msg, assistant_msg = await send_message(
@@ -410,9 +410,9 @@ def _rag_patches(mock_agent, search_mock):
         ),
         patch("app.services.chat_service.get_agent", return_value=mock_agent),
         patch(
-            "app.services.settings_service.get_user_agent_config",
+            "app.services.settings_service.get_user_ai_context",
             new_callable=AsyncMock,
-            return_value=None,
+            return_value=(None, None),
         ),
     )
 

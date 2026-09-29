@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -16,6 +17,7 @@ function isRegisterField(key: string): key is RegisterField {
 }
 
 export function RegisterPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { register: registerUser, authConfig } = useAuth()
   const inviteRequired = authConfig?.invite_required ?? false
@@ -39,7 +41,7 @@ export function RegisterPage() {
   const onSubmit = handleSubmit(async (data) => {
     setNetworkFailed(false)
     if (inviteRequired && !data.invite_code?.trim()) {
-      setError('invite_code', { message: 'An invite code is required' })
+      setError('invite_code', { message: t('An invite code is required') })
       return
     }
     try {
@@ -62,7 +64,7 @@ export function RegisterPage() {
           }
           break
         case 'conflict':
-          setError('email', { message: 'An account with this email already exists' })
+          setError('email', { message: t('An account with this email already exists') })
           break
         case 'rate_limited':
           setCooldown((prev) => ({ key: (prev?.key ?? 0) + 1, seconds: outcome.retryAfterSeconds }))
@@ -72,7 +74,7 @@ export function RegisterPage() {
           break
         default:
           setError('root', {
-            message: 'message' in outcome ? outcome.message : 'Registration failed',
+            message: 'message' in outcome ? outcome.message : t('Registration failed'),
           })
       }
     }
@@ -80,12 +82,12 @@ export function RegisterPage() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-text mb-5">Create account</h2>
+      <h2 className="text-lg font-semibold text-text mb-5">{t('Create account')}</h2>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <Input
           id="email"
           type="email"
-          label="Email"
+          label={t('Email')}
           placeholder="you@example.com"
           autoComplete="email"
           error={errors.email?.message}
@@ -94,8 +96,8 @@ export function RegisterPage() {
         <Input
           id="username"
           type="text"
-          label="Username"
-          placeholder="johndoe"
+          label={t('Username')}
+          placeholder={t('johndoe')}
           autoComplete="username"
           error={errors.username?.message}
           {...register('username')}
@@ -103,8 +105,8 @@ export function RegisterPage() {
         <Input
           id="password"
           type="password"
-          label="Password"
-          placeholder="At least 8 characters"
+          label={t('Password')}
+          placeholder={t('At least 8 characters')}
           autoComplete="new-password"
           error={errors.password?.message}
           {...register('password')}
@@ -112,7 +114,7 @@ export function RegisterPage() {
         <Input
           id="confirm"
           type="password"
-          label="Confirm password"
+          label={t('Confirm password')}
           autoComplete="new-password"
           error={errors.confirm?.message}
           {...register('confirm')}
@@ -126,7 +128,7 @@ export function RegisterPage() {
             <>
               <input type="hidden" {...register('invite_code')} />
               <p className="text-xs text-text-muted">
-                You&rsquo;re signing up with an invite link.
+                {t('You’re signing up with an invite link.')}
               </p>
               {errors.invite_code?.message && (
                 <p role="alert" className="text-xs text-red-fg">
@@ -138,7 +140,7 @@ export function RegisterPage() {
             <Input
               id="invite_code"
               type="text"
-              label="Invite code"
+              label={t('Invite code')}
               placeholder="BETA-XXXXXXXX"
               autoComplete="off"
               autoCapitalize="characters"
@@ -162,7 +164,7 @@ export function RegisterPage() {
         {networkFailed && (
           <ErrorState
             compact
-            title="Couldn't reach the server"
+            title={t("Couldn't reach the server")}
             onRetry={() => void onSubmit()}
           />
         )}
@@ -173,13 +175,13 @@ export function RegisterPage() {
           loading={isSubmitting}
           disabled={cooldown !== null}
         >
-          {isSubmitting ? 'Creating account…' : 'Create account'}
+          {isSubmitting ? t('Creating account…') : t('Create account')}
         </Button>
       </form>
       <p className="text-xs text-text-muted text-center mt-6">
-        Already have an account?{' '}
+        {t('Already have an account?')}{' '}
         <Link to="/login" className="hover:text-text underline-offset-2 hover:underline">
-          Sign in
+          {t('Sign in')}
         </Link>
       </p>
     </div>
