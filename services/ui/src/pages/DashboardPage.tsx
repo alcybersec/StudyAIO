@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
@@ -24,6 +25,7 @@ import { AchievementUnlock } from '../components/gamification/AchievementUnlock'
 import { InstallPrompt } from '../components/pwa/InstallPrompt'
 
 export function DashboardPage() {
+  const { t } = useTranslation()
   // Header metadata only — the widget grid never blocks on this query.
   // Each widget owns its slice of the same cache entry with isolated states.
   const { data } = useDashboard()
@@ -91,34 +93,34 @@ export function DashboardPage() {
     <div ref={containerRef}>
       <div className="flex items-start justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-text">Home</h1>
+          <h1 className="text-xl font-bold tracking-tight text-text">{t('Home')}</h1>
           <p className="text-xs text-text-muted mt-1">
             {today}
             {courseCount !== undefined && (
               <>
                 {' · '}
-                {courseCount} course{courseCount !== 1 ? 's' : ''}
+                {t('{{count}} course', { count: courseCount })}
               </>
             )}
             {streakDays > 0 && (
               <>
                 {' · '}
                 <span className="text-amber-fg font-semibold inline-flex items-center gap-1">
-                  <Flame size={11} aria-hidden /> {streakDays}-day streak
+                  <Flame size={11} aria-hidden /> {t('{{count}}-day streak', { count: streakDays })}
                 </span>
               </>
             )}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button variant="ghost" size="sm" onClick={() => setCustomizerOpen(true)} aria-label="Customize dashboard">
-            <Settings2 size={13} aria-hidden /> Customize
+          <Button variant="ghost" size="sm" onClick={() => setCustomizerOpen(true)} aria-label={t('Customize dashboard')}>
+            <Settings2 size={13} aria-hidden /> {t('Customize')}
           </Button>
           <Link
             to="/study"
             className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md bg-sage text-on-accent hover:bg-sage-hover transition-colors"
           >
-            Start session
+            {t('Start session')}
           </Link>
         </div>
       </div>

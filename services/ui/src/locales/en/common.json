@@ -1,0 +1,6 @@
+{
+  "{{count}} course_one": "{{count}} course",
+  "{{count}} course_other": "{{count}} courses",
+  "{{count}} item needs your review before the pipeline can continue._one": "{{count}} item needs your review before the pipeline can continue.",
+  "{{count}} item needs your review before the pipeline can continue._other": "{{count}} items need your review before the pipeline can continue."
+}

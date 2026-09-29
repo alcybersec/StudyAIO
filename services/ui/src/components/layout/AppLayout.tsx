@@ -1,4 +1,5 @@
 import { Suspense, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation, useMatches } from 'react-router-dom'
 import { AnimatePresence } from 'motion/react'
 import { useAuth } from '../../hooks/useAuth'
@@ -22,6 +23,7 @@ import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 
 export function AppLayout() {
+  const { t } = useTranslation()
   const { isDemo } = useAuth()
   const location = useLocation()
   const matches = useMatches()
@@ -41,7 +43,7 @@ export function AppLayout() {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-sage focus:text-on-accent focus:rounded-lg focus:text-sm focus:font-medium"
       >
-        Skip to main content
+        {t('Skip to main content')}
       </a>
 
       {/* Demo account banner */}
@@ -77,14 +79,14 @@ export function AppLayout() {
           >
             <ErrorBoundary>
               {isFullBleed ? (
-                <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." />}>
+                <Suspense fallback={<LoadingSpinner size="lg" label={t('Loading…')} />}>
                   <Outlet />
                 </Suspense>
               ) : (
                 <div className="w-full">
                   <AnimatePresence mode="wait">
                     <PageTransition key={location.pathname}>
-                      <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." />}>
+                      <Suspense fallback={<LoadingSpinner size="lg" label={t('Loading…')} />}>
                         <Outlet />
                       </Suspense>
                     </PageTransition>

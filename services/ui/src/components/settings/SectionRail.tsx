@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router-dom'
 import { DEFAULT_SECTION, SETTINGS_SECTIONS, type SettingsSectionId } from './sectionRegistry'
 
@@ -7,8 +8,10 @@ interface SectionRailProps {
 
 /** Left settings navigation rail per the prototype; horizontal scroll on mobile. */
 export function SectionRail({ active }: SectionRailProps) {
+  const { t } = useTranslation()
+
   return (
-    <nav aria-label="Settings sections" className="md:w-44 shrink-0">
+    <nav aria-label={t('Settings sections')} className="md:w-44 shrink-0">
       <ul className="flex md:flex-col gap-0.5 md:space-y-0.5 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
         {SETTINGS_SECTIONS.map(({ id, label, icon: Icon }) => {
           const isActive = id === active
@@ -25,7 +28,7 @@ export function SectionRail({ active }: SectionRailProps) {
                 }`}
               >
                 <Icon size={14} className={isActive ? 'text-sage-fg' : 'text-text-faint'} aria-hidden />
-                {label}
+                {t(label)}
               </NavLink>
             </li>
           )

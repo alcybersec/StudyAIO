@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
 import { RefreshCw } from 'lucide-react'
 import { writeQueue } from '../../lib/writeQueue'
 
@@ -12,6 +13,7 @@ interface SyncChipProps {
  * (offline OR server errors). Disappears when the queue is flushed.
  */
 export function SyncChip({ floating }: SyncChipProps) {
+  const { t } = useTranslation()
   const count = useSyncExternalStore(writeQueue.subscribe, () => writeQueue.size())
 
   if (count === 0) return null
@@ -24,7 +26,7 @@ export function SyncChip({ floating }: SyncChipProps) {
       }`}
     >
       <RefreshCw size={10} className="animate-spin" style={{ animationDuration: '2s' }} aria-hidden />
-      {count} unsaved · syncing
+      {t('{{count}} unsaved · syncing', { count })}
     </span>
   )
 }

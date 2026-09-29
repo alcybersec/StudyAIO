@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Cpu, Globe, Server, Sparkles, Terminal, Zap, type LucideIcon } from 'lucide-react'
@@ -131,10 +132,12 @@ interface LabelRowProps {
 }
 
 function LabelRow({ htmlFor, label, saved }: LabelRowProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center justify-between mb-1.5">
       <label htmlFor={htmlFor} className="text-xs font-medium text-text-muted">
-        {label}
+        {t(label)}
       </label>
       <FieldSavedNote show={saved} />
     </div>
@@ -158,12 +161,14 @@ interface SecretLabelRowProps {
 
 /** Label for a write-only credential: says whether one is stored, never what. */
 function SecretLabelRow({ htmlFor, label, saved, configured, onClear }: SecretLabelRowProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center justify-between gap-2 mb-1.5">
       <label htmlFor={htmlFor} className="text-xs font-medium text-text-muted">
-        {label} —{' '}
+        {t(label)} —{' '}
         <span className={configured ? 'text-sage-fg' : 'text-text-faint'}>
-          {configured ? 'configured' : 'not set'}
+          {configured ? t('configured') : t('not set')}
         </span>
       </label>
       <span className="flex items-center gap-2">
@@ -174,7 +179,7 @@ function SecretLabelRow({ htmlFor, label, saved, configured, onClear }: SecretLa
             onClick={onClear}
             className="text-[11px] text-text-faint hover:text-red-fg underline cursor-pointer"
           >
-            Remove
+            {t('Remove')}
           </button>
         )}
       </span>
@@ -183,13 +188,14 @@ function SecretLabelRow({ htmlFor, label, saved, configured, onClear }: SecretLa
 }
 
 export function AiProvidersSection() {
+  const { t } = useTranslation()
   const { data: settings, isLoading, error, refetch } = useSettings()
 
   if (isLoading) return <SkeletonCard />
   if (error) {
     return (
       <ErrorState
-        title="AI provider settings couldn't load"
+        title={t("AI provider settings couldn't load")}
         detail={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
@@ -201,6 +207,7 @@ export function AiProvidersSection() {
 }
 
 function AiProvidersForm({ settings }: { settings: Settings }) {
+  const { t } = useTranslation()
   const updateMutation = useUpdateSettings()
   const { saved, markSaved } = useSavedFields()
   const [test, setTest] = useState<{ state: 'idle' | 'testing' | 'ok' | 'error'; message?: string }>(
@@ -281,7 +288,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
     } catch (err) {
       setTest({
         state: 'error',
-        message: err instanceof Error ? err.message : 'Connection test failed',
+        message: err instanceof Error ? err.message : t('Connection test failed'),
       })
     }
   }
@@ -291,10 +298,9 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
 
   return (
     <div>
-      <h2 className="text-[13px] font-semibold text-text mb-1">AI Providers</h2>
+      <h2 className="text-[13px] font-semibold text-text mb-1">{t('AI Providers')}</h2>
       <p className="text-xs text-text-muted mb-4 max-w-lg">
-        One provider handles everything — summaries, flashcards, Q&amp;A. Switch anytime; nothing
-        already generated is lost.
+        {t('One provider handles everything — summaries, flashcards, Q&A. Switch anytime; nothing already generated is lost.')}
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -319,9 +325,9 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   <Icon size={14} className={selected ? 'text-sage-fg' : 'text-text-faint'} aria-hidden />
                   {provider.name}
                 </span>
-                {selected && <Badge variant="success">active</Badge>}
+                {selected && <Badge variant="success">{t('active')}</Badge>}
               </span>
-              <span className="block text-xs text-text-muted mt-1.5">{provider.desc}</span>
+              <span className="block text-xs text-text-muted mt-1.5">{t(provider.desc)}</span>
               <span
                 className={`block text-[11px] font-mono mt-2 ${status.ok ? 'text-sage-fg' : 'text-text-faint'}`}
               >
@@ -333,14 +339,12 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
       </div>
 
       <Card className="mt-5">
-        <div className="text-[13px] font-semibold text-text mb-4">{PROVIDER_TITLES[backend]}</div>
+        <div className="text-[13px] font-semibold text-text mb-4">{t(PROVIDER_TITLES[backend])}</div>
 
         <div className="space-y-4 max-w-md">
           {backend === 'studyaio' && (
             <p className="text-xs text-text-muted">
-              StudyAIO runs the AI for you on its own provider account. There is nothing to set
-              up and no key to paste. Pick another provider above only if you want your work to
-              run on your own account and your own bill.
+              {t('StudyAIO runs the AI for you on its own provider account. There is nothing to set up and no key to paste. Pick another provider above only if you want your work to run on your own account and your own bill.')}
             </p>
           )}
 
@@ -569,7 +573,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               loading={test.state === 'testing'}
               onClick={runTest}
             >
-              {test.state === 'testing' ? 'Testing…' : 'Test connection'}
+              {test.state === 'testing' ? t('Testing…') : t('Test connection')}
             </Button>
             {test.state === 'ok' && (
               <span className="text-xs text-sage-fg" role="status">
@@ -586,7 +590,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
       </Card>
 
       <Card className="mt-4">
-        <div className="text-[13px] font-semibold text-text mb-4">Shared AI behavior</div>
+        <div className="text-[13px] font-semibold text-text mb-4">{t('Shared AI behavior')}</div>
         <div className="space-y-4 max-w-md">
           <div>
             <LabelRow
@@ -604,14 +608,14 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               {...registerWithSave('classification_confidence_threshold', true)}
             />
             <p className="mt-1.5 text-xs text-text-faint">
-              Below this threshold, classifications go to review (0.0 – 1.0)
+              {t('Below this threshold, classifications go to review (0.0 – 1.0)')}
             </p>
           </div>
         </div>
       </Card>
 
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
-        <span className="text-xs text-text-faint">Changes save automatically</span>
+        <span className="text-xs text-text-faint">{t('Changes save automatically')}</span>
       </div>
     </div>
   )

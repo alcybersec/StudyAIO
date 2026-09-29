@@ -1,4 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
+import i18n from '../../i18n'
 import { RefreshCw, WifiOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
@@ -33,7 +34,7 @@ export function ConnectionStatus() {
       hadQueuedRef.current = true
     } else if (hadQueuedRef.current && isOnline) {
       hadQueuedRef.current = false
-      toast.success('All changes synced')
+      toast.success(i18n.t('All changes synced'))
     }
   }, [queued, isOnline])
 

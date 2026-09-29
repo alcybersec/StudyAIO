@@ -1,6 +1,7 @@
 # App-wide language select
 
-**Status:** planned, not built. Written 2026-09-29.
+**Status:** built, 2026-09-29. See `docs/PROGRESS.md` § "App-Wide Language
+Select" for what shipped.
 **Branch:** `feat/language-select` — one MR to `main` when the whole feature is done.
 **Languages:** English and Russian.
 
@@ -243,3 +244,23 @@ English path to confirm the directive does not disturb it when inactive.
 7. Translate the surfaces listed in 3.3
 8. Frontend tests
 9. Full suite, then one MR to `main`
+
+---
+
+## 7. What changed during the build
+
+Three deviations from the plan above, each because the code said so:
+
+**Eighteen insertions, not sixteen.** `stream_answer` in the Anthropic and
+OpenAI adapters builds its own prompt, and it is the path the chat UI actually
+uses — `useStreamingChat`. Leaving it out would have given a Russian user
+English chat answers whenever streaming was on, which is always.
+
+**One query, not two.** `get_user_output_language()` alongside
+`get_user_agent_config()` meant two `SELECT`s on the same `user_settings` row
+at every AI call site. `get_user_ai_context()` returns both from one read. The
+tests that mock an exact query sequence noticed before a human would have.
+
+**English needs a bundle after all.** With English as the key set, the plan
+assumed `en/common.json` could be empty. It cannot: `t('{{count}} course')`
+with no entry renders "5 course". English carries its own plural forms.
