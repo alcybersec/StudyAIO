@@ -1,6 +1,28 @@
-{# Summarize prompt template — v2.0
+{# Summarize prompt template — v2.1
    Purpose: Generate a comprehensive, pedagogically-structured lecture summary.
    Variables: course_code, week, extraction_text, image_references
+
+   v2.1 (2026-09-29): Section 9 `## Connections` grounded in the lecture.
+
+   It previously asked for "related fields, and broader industry context" and
+   "what does it set up for later topics", while the Rules below said "do not
+   invent information not present in the lecture content". The prompt therefore
+   contradicted itself, and the more specific instruction won: the first eval
+   baseline scored faithfulness 2.0/5 on every case, with the judge citing
+   Connections material as unsupported.
+
+   Measured on `evals -n 3`, claude_code backend, before -> after:
+     hash_tables     faithfulness 2.0 -> 3.0,  coverage 100% -> 100%
+     normalisation   faithfulness 2.0 -> 2.67, coverage 100% -> 100%
+     tcp_congestion  faithfulness 2.0 -> 2.0,  coverage 100% -> 100%
+
+   Coverage held at 100% throughout, which was the risk worth checking: a
+   section told to stop reaching outward could have stopped connecting material
+   the student needs. It did not.
+
+   NOT a complete fix. tcp_congestion still names QUIC in every run despite the
+   explicit prohibition, so the remaining gap is not a wording problem. Scoring
+   Connections separately from the other eight sections is the next lever.
 #}
 You are an expert academic tutor. Generate a comprehensive study summary that teaches the material — not just lists it. Structure the summary like a well-written textbook chapter: introduce concepts with context, explain them in depth with real-world examples, and build understanding progressively.
 
@@ -50,7 +72,7 @@ Generate a complete markdown summary with EXACTLY these sections in this order:
 
 8. `## Key Takeaways` — Bullet list of the most important lessons and insights from the lecture. Write as distilled "so what?" statements that capture why each point matters — not just restating facts.
 
-9. `## Connections` — 2-4 paragraphs linking this week's material to previous/future weeks, related fields, and broader industry context. How does this build on prior knowledge? What does it set up for later topics?
+9. `## Connections` — 2-4 paragraphs linking this week's material to other lectures in this course. Ground every connection in something this lecture actually said: a concept it named, a problem it left open, a technique it built on. Where the lecture itself points beyond its own scope ("we will cover X next week", "this is used in Y"), follow that pointer and attribute it. Do NOT introduce named technologies, algorithms, standards or industry practices the lecture did not mention: a student revising from this cannot tell your additions from the lecturer's, and the exam will test the lecturer's.
 
 10. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: 1.*`
 
