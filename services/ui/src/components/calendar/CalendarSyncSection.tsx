@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Card } from '../ui'
 import {
   useCalendarStatus,
@@ -24,6 +25,8 @@ function formatLastSynced(iso: string | null): string {
 }
 
 function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
+  const { t } = useTranslation()
+
   const disconnectMutation = useDisconnectCalendar()
   const syncMutation = useSyncCalendar()
   const [confirming, setConfirming] = useState(false)
@@ -41,8 +44,8 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
         </div>
         <div className="mt-1 flex items-center gap-3 text-xs text-text-muted">
           <span className="capitalize">{cal.sync_direction}</span>
-          <span>{cal.event_count} events</span>
-          <span>Synced: {formatLastSynced(cal.last_synced_at)}</span>
+          <span>{t('{{count}} events', { count: cal.event_count })}</span>
+          <span>{t('Synced: {{when}}', { when: formatLastSynced(cal.last_synced_at) })}</span>
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -51,7 +54,7 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
           disabled={syncMutation.isPending}
           className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text hover:bg-surface-2 disabled:opacity-50 transition-colors"
         >
-          {syncMutation.isPending ? 'Syncing...' : 'Sync Now'}
+          {syncMutation.isPending ? t('Syncing...') : t('Sync Now')}
         </button>
         {confirming ? (
           <div className="flex items-center gap-1">
@@ -63,13 +66,13 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
               disabled={disconnectMutation.isPending}
               className="rounded-lg bg-red px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-50 transition-colors"
             >
-              Confirm
+              {t('Confirm')}
             </button>
             <button
               onClick={() => setConfirming(false)}
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text hover:bg-surface-2 transition-colors"
             >
-              Cancel
+              {t('Cancel')}
             </button>
           </div>
         ) : (
@@ -77,7 +80,7 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
             onClick={() => setConfirming(true)}
             className="rounded-lg border border-red/30 px-3 py-1.5 text-xs font-medium text-red-fg hover:bg-red-soft transition-colors"
           >
-            Disconnect
+            {t('Disconnect')}
           </button>
         )}
       </div>
@@ -86,6 +89,8 @@ function ConnectedCalendar({ cal }: { cal: CalendarSyncInfo }) {
 }
 
 export function CalendarSyncSection() {
+  const { t } = useTranslation()
+
   const { data, isLoading } = useCalendarStatus()
   const connectMutation = useConnectCalendar()
 
@@ -125,7 +130,7 @@ export function CalendarSyncSection() {
   if (isLoading) {
     return (
       <Card>
-        <h2 className="text-lg font-semibold text-text mb-4">Google Calendar</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('Google Calendar')}</h2>
         <div className="animate-pulse space-y-3">
           <div className="h-4 bg-surface-0 rounded w-3/4" />
           <div className="h-4 bg-surface-0 rounded w-1/2" />
@@ -136,9 +141,9 @@ export function CalendarSyncSection() {
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-text mb-1">Google Calendar</h2>
+      <h2 className="text-lg font-semibold text-text mb-1">{t('Google Calendar')}</h2>
       <p className="text-sm text-text-muted mb-4">
-        Sync your deadlines and exams with Google Calendar.
+        {t('Sync your deadlines and exams with Google Calendar.')}
       </p>
 
       {calendars.length > 0 ? (
@@ -159,7 +164,7 @@ export function CalendarSyncSection() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
           </svg>
           <p className="text-sm text-text-muted mb-3">
-            Connect your Google Calendar to automatically sync study deadlines and exam dates.
+            {t('Connect your Google Calendar to automatically sync study deadlines and exam dates.')}
           </p>
           <button
             onClick={handleConnect}
@@ -172,11 +177,11 @@ export function CalendarSyncSection() {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
             </svg>
-            {connectMutation.isPending ? 'Connecting...' : 'Connect Google Calendar'}
+            {connectMutation.isPending ? t('Connecting…') : t('Connect Google Calendar')}
           </button>
           {!GOOGLE_CLIENT_ID && (
             <p className="mt-2 text-xs text-text-muted">
-              Set VITE_GOOGLE_CLIENT_ID to enable Google Calendar integration.
+              {t('Set VITE_GOOGLE_CLIENT_ID to enable Google Calendar integration.')}
             </p>
           )}
         </div>
@@ -184,7 +189,12 @@ export function CalendarSyncSection() {
 
       {connectMutation.isError && (
         <p className="mt-3 text-sm text-red-fg">
-          Failed to connect: {connectMutation.error instanceof Error ? connectMutation.error.message : 'Unknown error'}
+          {t('Failed to connect: {{error}}', {
+            error:
+              connectMutation.error instanceof Error
+                ? connectMutation.error.message
+                : t('Unknown error'),
+          })}
         </p>
       )}
     </Card>

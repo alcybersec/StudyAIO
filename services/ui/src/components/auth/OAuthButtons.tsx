@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface OAuthButtonsProps {
   providers: string[]
@@ -38,6 +39,8 @@ const providerIcons: Record<string, React.ReactNode> = {
 }
 
 export function OAuthButtons({ providers }: OAuthButtonsProps) {
+  const { t } = useTranslation()
+
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
 
   if (providers.length === 0) return null
@@ -54,7 +57,7 @@ export function OAuthButtons({ providers }: OAuthButtonsProps) {
           <div className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="bg-surface-1 px-2 text-text-muted">or continue with</span>
+          <span className="bg-surface-1 px-2 text-text-muted">{t('or continue with')}</span>
         </div>
       </div>
       {providers.map((provider) => (
@@ -74,8 +77,8 @@ export function OAuthButtons({ providers }: OAuthButtonsProps) {
             providerIcons[provider]
           )}
           {loadingProvider === provider
-            ? `Connecting to ${providerLabels[provider] ?? provider}...`
-            : `Continue with ${providerLabels[provider] ?? provider}`}
+            ? t('Connecting to {{provider}}…', { provider: providerLabels[provider] ?? provider })
+            : t('Continue with {{provider}}', { provider: providerLabels[provider] ?? provider })}
         </button>
       ))}
     </div>

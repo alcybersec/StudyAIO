@@ -1,4 +1,5 @@
 import { Check, Clock, Loader2, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { formatStageMs, type PipelineStage, type StageStatus } from '../../lib/pipelineStages'
 
 function StageDot({ status }: { status: StageStatus }) {
@@ -43,8 +44,10 @@ interface PipelineStageRailProps {
 
 /** Pure six-stage rail: dots, per-stage timing and connector lines. */
 export function PipelineStageRail({ stages }: PipelineStageRailProps) {
+  const { t } = useTranslation()
+
   return (
-    <div className="flex items-center" role="list" aria-label="Pipeline stages">
+    <div className="flex items-center" role="list" aria-label={t('Pipeline stages')}>
       {stages.map((stage, i) => (
         <div
           key={stage.name}

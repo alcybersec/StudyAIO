@@ -1,4 +1,6 @@
 import { useForm } from 'react-hook-form'
+import { ASSESSMENT_TYPES, ASSESSMENT_TYPE_LABELS } from '../../lib/assessmentTypes'
+import { useTranslation } from 'react-i18next'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useUpdateDeadline } from '../../hooks/useApi'
@@ -11,6 +13,8 @@ interface DeadlineEditModalProps {
 }
 
 export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps) {
+  const { t } = useTranslation()
+
   const updateDeadline = useUpdateDeadline()
 
   const {
@@ -49,11 +53,11 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 mx-4 w-full max-w-md rounded-lg bg-surface-1 border border-border p-6 shadow-xl focus:outline-none">
-          <Dialog.Title className="mb-4 text-lg font-medium text-text">Edit Deadline</Dialog.Title>
+          <Dialog.Title className="mb-4 text-lg font-medium text-text">{t('Edit Deadline')}</Dialog.Title>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-text">Title</label>
+              <label className="block text-sm font-medium text-text">{t('Title')}</label>
               <input
                 type="text"
                 {...register('title')}
@@ -63,7 +67,7 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-text">Due Date</label>
+              <label className="block text-sm font-medium text-text">{t('Due Date')}</label>
               <input
                 type="date"
                 {...register('dueDate')}
@@ -73,21 +77,21 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-text">Type</label>
+              <label className="block text-sm font-medium text-text">{t('Type')}</label>
               <select
                 {...register('deadlineType')}
                 className="mt-1 w-full rounded-md border border-border bg-surface-1 text-text px-3 py-2 text-sm focus:border-sage focus:outline-none focus:ring-1 focus:ring-sage"
               >
-                {['exam', 'assignment', 'quiz', 'project', 'lab', 'presentation', 'other'].map((t) => (
-                  <option key={t} value={t}>
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                {ASSESSMENT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {t(ASSESSMENT_TYPE_LABELS[type])}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-text">Description</label>
+              <label className="block text-sm font-medium text-text">{t('Description')}</label>
               <textarea
                 {...register('description')}
                 rows={2}
@@ -101,7 +105,7 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
                   type="button"
                   className="rounded-md border border-border px-4 py-2 text-sm text-text hover:bg-surface-2"
                 >
-                  Cancel
+                  {t('Cancel')}
                 </button>
               </Dialog.Close>
               <button
@@ -109,7 +113,7 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
                 disabled={updateDeadline.isPending || !isValid}
                 className="rounded-md bg-sage px-4 py-2 text-sm text-on-accent hover:bg-sage-hover disabled:opacity-50"
               >
-                {updateDeadline.isPending ? 'Saving...' : 'Save & Confirm'}
+                {updateDeadline.isPending ? t('Saving...') : t('Save & Confirm')}
               </button>
             </div>
           </form>

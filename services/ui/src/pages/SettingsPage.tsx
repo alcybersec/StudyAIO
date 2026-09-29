@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
 import { PageHeader, SkeletonCard } from '../components/ui'
 import { SectionRail } from '../components/settings/SectionRail'
@@ -62,6 +63,7 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, React.LazyExoticComponent<()
 }
 
 export function SettingsPage() {
+  const { t } = useTranslation()
   const { section } = useParams<{ section: string }>()
   const active: SettingsSectionId = isSettingsSection(section) ? section : DEFAULT_SECTION
   const ActiveSection = SECTION_COMPONENTS[active]
@@ -69,8 +71,8 @@ export function SettingsPage() {
   return (
     <div>
       <PageHeader
-        title="Settings"
-        subtitle="Everything about how StudyAIO looks, thinks, and reaches you"
+        title={t('Settings')}
+        subtitle={t('Everything about how StudyAIO looks, thinks, and reaches you')}
       />
       <div className="flex flex-col md:flex-row gap-4 md:gap-8 items-start">
         <SectionRail active={active} />

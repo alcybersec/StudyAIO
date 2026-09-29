@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 interface XPBarProps {
   level: number
   totalXP: number
@@ -6,6 +7,8 @@ interface XPBarProps {
 }
 
 export function XPBar({ level, totalXP, progressPct, nextThreshold }: XPBarProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center gap-3">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-peri-soft text-peri-fg font-bold text-sm">
@@ -13,9 +16,14 @@ export function XPBar({ level, totalXP, progressPct, nextThreshold }: XPBarProps
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between text-xs mb-1">
-          <span className="font-medium text-text">Level {level}</span>
+          <span className="font-medium text-text">{t('Level {{level}}', { level })}</span>
           <span className="text-text-muted font-mono text-[11px]">
-            {totalXP.toLocaleString()} XP{nextThreshold !== null && ` / ${nextThreshold.toLocaleString()}`}
+            {nextThreshold !== null
+          ? t('{{xp}} XP / {{next}}', {
+              xp: totalXP.toLocaleString(),
+              next: nextThreshold.toLocaleString(),
+            })
+          : t('{{xp}} XP', { xp: totalXP.toLocaleString() })}
           </span>
         </div>
         <div className="h-1.5 w-full rounded-full bg-surface-2 overflow-hidden">

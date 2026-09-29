@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { GripVertical } from 'lucide-react'
 import { EmptyState, ErrorState, SectionLabel, SkeletonText } from '../../ui'
 import type { WidgetState } from './widgetState'
@@ -34,6 +35,7 @@ export function WidgetShell({
   skeleton,
   children,
 }: WidgetShellProps) {
+  const { t } = useTranslation()
   const measure = useWidgetMeasure()
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -62,7 +64,7 @@ export function WidgetShell({
       <div ref={contentRef}>
         <SectionLabel>{title}</SectionLabel>
         {state === 'loading' && (skeleton ?? <SkeletonText lines={3} />)}
-        {state === 'error' && <ErrorState compact title={`${title} couldn't load`} onRetry={onRetry} />}
+        {state === 'error' && <ErrorState compact title={t("{{widget}} couldn't load", { widget: title })} onRetry={onRetry} />}
         {state === 'empty' && (
           <EmptyState
             compact

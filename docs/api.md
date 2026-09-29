@@ -2164,6 +2164,22 @@ Partially update application settings.
 **Body** `UpdateSettingsRequest`
 **Response** `200` `SettingsResponse`
 
+**Language** — two fields, because "which language" and "how far it reaches"
+are separate questions:
+
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `language` | string | `"en"` | Interface language, a BCP-47 short tag. `en` or `ru`; anything else is rejected with `422`. |
+| `content_language` | bool | `false` | Whether `language` also applies to AI-generated study material — summaries, flashcards, quiz questions, chat answers. |
+
+`content_language` is off by default, so an account that only wants a Russian
+interface keeps English study material. Turning it on affects material
+generated from that point; nothing already written is re-generated.
+
+Classification, course-document extraction and concept extraction stay in
+English whatever these are set to: the app parses their output, so a
+translated course code or category is a parse failure rather than a feature.
+
 ### `POST /api/settings/test-ai`
 
 Verify the current user's AI credentials by sending a minimal classification prompt through the configured backend. Takes no body.

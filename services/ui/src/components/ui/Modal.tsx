@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 
@@ -12,6 +13,8 @@ interface ModalProps {
 }
 
 export function Modal({ open, onOpenChange, title, description, children, className = '' }: ModalProps) {
+  const { t } = useTranslation()
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -31,7 +34,7 @@ export function Modal({ open, onOpenChange, title, description, children, classN
             <Dialog.Close asChild>
               <button
                 type="button"
-                aria-label="Close"
+                aria-label={t('Close')}
                 className="shrink-0 -m-1 p-1 rounded-md text-text-faint hover:text-text hover:bg-surface-2 cursor-pointer"
               >
                 <X size={14} aria-hidden />

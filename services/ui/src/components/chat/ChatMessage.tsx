@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import { useTranslation } from 'react-i18next'
 import remarkGfm from 'remark-gfm'
 import { Link } from 'react-router-dom'
 import type { ChatMessage as ChatMessageType } from '../../types'
@@ -17,11 +18,13 @@ interface CitationData {
 }
 
 function CitationLinks({ citations }: { citations: CitationData[] }) {
+  const { t } = useTranslation()
+
   if (citations.length === 0) return null
 
   return (
     <div className="mt-3 pt-2 border-t border-border/50">
-      <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1.5">Sources</p>
+      <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1.5">{t('Sources')}</p>
       <div className="flex flex-wrap gap-1.5">
         {citations.map((c, i) => (
           <Link

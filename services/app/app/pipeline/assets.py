@@ -98,10 +98,11 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
             summary_md = summary.content_md if summary else ""
 
             # Get per-user AI settings
-            from app.services.settings_service import get_user_agent_config
+            from app.services.settings_service import get_user_ai_context
 
-            user_agent_config = await get_user_agent_config(session, user_id or artifact.user_id)
-            agent = get_agent(user_settings=user_agent_config)
+            owner_id = user_id or artifact.user_id
+            user_agent_config, output_language = await get_user_ai_context(session, owner_id)
+            agent = get_agent(user_settings=user_agent_config, output_language=output_language)
             flashcard_data = await agent.generate_flashcards(
                 summary=summary_md,
                 extraction=extraction_data,

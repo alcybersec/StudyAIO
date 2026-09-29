@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -43,6 +44,8 @@ interface PaletteItem {
 }
 
 export function CommandPalette() {
+  const { t } = useTranslation()
+
   const [open, setOpen] = useState(false)
   const [captureOpen, setCaptureOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
@@ -205,12 +208,12 @@ export function CommandPalette() {
             className="fixed left-1/2 top-24 -translate-x-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl bg-surface-1 border border-border-strong rounded-xl shadow-2xl shadow-black/20 overflow-hidden focus:outline-none"
             aria-describedby={undefined}
           >
-            <Dialog.Title className="sr-only">Command palette</Dialog.Title>
+            <Dialog.Title className="sr-only">{t('Command palette')}</Dialog.Title>
             <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border">
               <Search size={15} className="text-text-faint shrink-0" aria-hidden />
               <input
                 role="combobox"
-                aria-label="Search commands and destinations"
+                aria-label={t('Search commands and destinations')}
                 aria-expanded="true"
                 aria-controls="command-palette-list"
                 aria-activedescendant={filtered[clampedIndex]?.id}
@@ -221,21 +224,21 @@ export function CommandPalette() {
                   setActiveIndex(0)
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder="Search or jump to…"
+                placeholder={t('Search or jump to…')}
                 className="flex-1 bg-transparent text-sm text-text placeholder:text-text-faint focus:outline-none"
               />
-              <Kbd>esc</Kbd>
+              <Kbd>{t('esc')}</Kbd>
             </div>
 
             <div
               id="command-palette-list"
               role="listbox"
-              aria-label="Results"
+              aria-label={t('Results')}
               ref={listRef}
               className="max-h-96 overflow-y-auto py-2"
             >
               {filtered.length === 0 && !searchPending && (
-                <p className="px-4 py-6 text-center text-sm text-text-muted">No matches.</p>
+                <p className="px-4 py-6 text-center text-sm text-text-muted">{t('No matches.')}</p>
               )}
               {filtered.map((item, index) => {
                 const showSection = item.section !== lastSection
@@ -245,7 +248,7 @@ export function CommandPalette() {
                   <div key={item.id}>
                     {showSection && (
                       <div className="px-4 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.12em] text-text-faint">
-                        {item.section}
+                        {t(item.section)}
                       </div>
                     )}
                     <button
@@ -260,7 +263,7 @@ export function CommandPalette() {
                       }`}
                     >
                       <item.icon size={14} className="text-text-faint shrink-0" aria-hidden />
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate">{t(item.label)}</span>
                       {item.sub && (
                         <span className="ml-auto text-[11px] text-text-faint shrink-0">{item.sub}</span>
                       )}
@@ -271,9 +274,9 @@ export function CommandPalette() {
               })}
 
               {searchPending && (
-                <div aria-label="Searching your content">
+                <div aria-label={t('Searching your content')}>
                   <div className="px-4 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.12em] text-text-faint">
-                    Content
+                    {t('Content')}
                   </div>
                   {[0, 1, 2].map((i) => (
                     <div key={i} className="flex items-center gap-3 px-4 py-2">
@@ -286,24 +289,24 @@ export function CommandPalette() {
 
               {searchActive && search.isError && (
                 <p className="px-4 py-2 text-[11px] text-text-faint font-mono">
-                  search unavailable — navigation still works
+                  {t('search unavailable — navigation still works')}
                 </p>
               )}
             </div>
 
             <div className="flex items-center gap-4 px-4 py-2.5 border-t border-border text-[11px] text-text-faint font-mono">
               <span className="flex items-center gap-1.5">
-                <Kbd>↑↓</Kbd> navigate
+                <Kbd>↑↓</Kbd> {t('navigate')}
               </span>
               <span className="flex items-center gap-1.5">
-                <Kbd>↵</Kbd> open
+                <Kbd>↵</Kbd> {t('open')}
               </span>
               <button
                 type="button"
                 onClick={askInAsk}
                 className="ml-auto flex items-center gap-1.5 hover:text-text-muted cursor-pointer transition-colors"
               >
-                ask this in Ask <ArrowRight size={11} aria-hidden /> <Kbd>⌘↵</Kbd>
+                {t('ask this in Ask')} <ArrowRight size={11} aria-hidden /> <Kbd>⌘↵</Kbd>
               </button>
             </div>
           </Dialog.Content>

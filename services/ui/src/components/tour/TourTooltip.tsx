@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 interface TourTooltipProps {
   title: string
   description: string
@@ -19,6 +20,8 @@ export function TourTooltip({
   onPrev,
   onSkip,
 }: TourTooltipProps) {
+  const { t } = useTranslation()
+
   const isLast = step === totalSteps - 1
   const isFirst = step === 0
 
@@ -44,7 +47,7 @@ export function TourTooltip({
 
         <div className="flex items-center justify-between">
           <span className="text-xs text-text-muted">
-            {step + 1} of {totalSteps}
+            {t('{{step}} of {{total}}', { step: step + 1, total: totalSteps })}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -52,7 +55,7 @@ export function TourTooltip({
               onClick={onSkip}
               className="px-2 py-1 text-xs text-text-muted hover:text-text transition-colors"
             >
-              Skip
+              {t('Skip')}
             </button>
             {!isFirst && (
               <button
@@ -60,7 +63,7 @@ export function TourTooltip({
                 onClick={onPrev}
                 className="px-3 py-1.5 text-xs font-medium rounded-md border border-border text-text hover:bg-surface-2 transition-colors"
               >
-                Back
+                {t('Back')}
               </button>
             )}
             <button
@@ -68,7 +71,7 @@ export function TourTooltip({
               onClick={onNext}
               className="px-3 py-1.5 text-xs font-medium rounded-md bg-sage text-on-accent hover:bg-sage-hover transition-colors"
             >
-              {isLast ? 'Done' : 'Next'}
+              {isLast ? t('Done') : t('Next')}
             </button>
           </div>
         </div>

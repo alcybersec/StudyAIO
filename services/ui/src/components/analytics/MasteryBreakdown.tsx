@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   BarChart,
   Bar,
@@ -13,6 +14,8 @@ import { Card, EmptyState, ErrorState, SectionLabel, Select, Skeleton } from '..
 import { useAnalyticsMastery, useCourses } from '../../hooks/useApi'
 
 export function MasteryBreakdown() {
+  const { t } = useTranslation()
+
   const [courseCode, setCourseCode] = useState('')
   const { data: courses } = useCourses()
   const { data, isLoading, error, refetch } = useAnalyticsMastery(courseCode || undefined)
@@ -43,10 +46,10 @@ export function MasteryBreakdown() {
 
   const courseOptions = useMemo(
     () => [
-      { value: '', label: 'All courses' },
+      { value: '', label: t('All courses') },
       ...(courses?.map((c) => ({ value: c.code, label: c.code })) ?? []),
     ],
-    [courses],
+    [courses, t],
   )
 
   if (isLoading) {
@@ -61,7 +64,7 @@ export function MasteryBreakdown() {
   if (error) {
     return (
       <ErrorState
-        title="Mastery breakdown couldn't load"
+        title={t("Mastery breakdown couldn't load")}
         detail={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
@@ -73,9 +76,9 @@ export function MasteryBreakdown() {
       <Card>
         <EmptyState
           icon="🗂"
-          title="No flashcard data yet"
-          description="Upload lectures and generate flashcards to see mastery by week."
-          actionLabel="Upload lectures"
+          title={t('No flashcard data yet')}
+          description={t('Upload lectures and generate flashcards to see mastery by week.')}
+          actionLabel={t('Upload lectures')}
           actionTo="/upload"
         />
       </Card>
@@ -85,7 +88,7 @@ export function MasteryBreakdown() {
   return (
     <Card padding>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
-        <SectionLabel className="mb-0">Mastery by week</SectionLabel>
+        <SectionLabel className="mb-0">{t('Mastery by week')}</SectionLabel>
         {courses && courses.length > 1 && (
           <Select
             className="w-36"
@@ -119,14 +122,14 @@ export function MasteryBreakdown() {
             ]) as never}
           />
           <Legend wrapperStyle={{ fontSize: 12, color: 'var(--t-text-muted)' }} />
-          <Bar dataKey="mastered" stackId="a" fill="var(--t-sage)" name="Mastered" />
-          <Bar dataKey="learning" stackId="a" fill="var(--t-amber)" name="Learning" />
-          <Bar dataKey="new" stackId="a" fill="var(--t-border-strong)" name="New" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="mastered" stackId="a" fill="var(--t-sage)" name={t('Mastered')} />
+          <Bar dataKey="learning" stackId="a" fill="var(--t-amber)" name={t('Learning')} />
+          <Bar dataKey="new" stackId="a" fill="var(--t-border-strong)" name={t('New')} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
 
       <p className="font-mono text-[11px] text-text-faint text-center mt-3">
-        {totals.cards} cards · avg mastery {totals.avgMastery}%
+        {t('{{cards}} cards · avg mastery {{mastery}}%', { cards: totals.cards, mastery: totals.avgMastery })}
       </p>
     </Card>
   )

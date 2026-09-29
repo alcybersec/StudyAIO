@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useMarkNotificationsRead, useNotifications } from '../../hooks/useNotificationInbox'
 import { notificationIcon, relativeTime } from '../../lib/notificationDisplay'
 import type { InboxNotification } from '../../types'
@@ -11,6 +12,8 @@ interface NotificationCenterProps {
 }
 
 export function NotificationCenter({ onNavigate }: NotificationCenterProps) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
   const { data: notifications, isLoading, isError, refetch } = useNotifications()
   const markRead = useMarkNotificationsRead()
@@ -30,20 +33,20 @@ export function NotificationCenter({ onNavigate }: NotificationCenterProps) {
   return (
     <div className="flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <span className="text-sm font-semibold text-text">Notifications</span>
+        <span className="text-sm font-semibold text-text">{t('Notifications')}</span>
         <button
           type="button"
           onClick={() => markRead.mutate(unreadIds)}
           disabled={unreadIds.length === 0 || markRead.isPending}
           className="text-[11px] text-text-faint hover:text-text-muted disabled:opacity-50 disabled:cursor-default cursor-pointer transition-colors"
         >
-          mark all read
+          {t('mark all read')}
         </button>
       </div>
 
       {/* Cached data wins over a background error — offline still shows the inbox. */}
       {isLoading ? (
-        <div className="px-4 py-3 space-y-3" aria-label="Loading notifications">
+        <div className="px-4 py-3 space-y-3" aria-label={t('Loading notifications')}>
           {[0, 1, 2].map((i) => (
             <div key={i} className="flex gap-3">
               <Skeleton width={14} height={14} rounded />
@@ -57,7 +60,7 @@ export function NotificationCenter({ onNavigate }: NotificationCenterProps) {
       ) : notifications ? (
         notifications.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-text-muted">
-            You&apos;re all caught up.
+            {t("You're all caught up.")}
           </p>
         ) : (
           <ul className="divide-y divide-border max-h-80 overflow-y-auto">
@@ -88,7 +91,7 @@ export function NotificationCenter({ onNavigate }: NotificationCenterProps) {
                     {unread && (
                       <span
                         className="ml-auto mt-1.5 w-1.5 h-1.5 rounded-full bg-amber shrink-0"
-                        aria-label="unread"
+                        aria-label={t('unread')}
                       />
                     )}
                   </button>
@@ -99,12 +102,12 @@ export function NotificationCenter({ onNavigate }: NotificationCenterProps) {
         )
       ) : isError ? (
         <div className="p-4">
-          <ErrorState compact title="Notifications couldn't load" onRetry={() => refetch()} />
+          <ErrorState compact title={t("Notifications couldn't load")} onRetry={() => refetch()} />
         </div>
       ) : null}
 
       <div className="px-4 py-2.5 border-t border-border text-[10px] font-mono text-text-faint">
-        pipeline · review · achievements · deadlines — all in one place
+        {t('pipeline · review · achievements · deadlines — all in one place')}
       </div>
     </div>
   )

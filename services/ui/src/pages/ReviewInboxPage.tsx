@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
+import i18n from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { Card, ErrorState, PageHeader, Skeleton, toast } from '../components/ui'
 import { ReviewRow } from '../components/review/ReviewRow'
 import { ReviewEmptyState } from '../components/review/ReviewEmptyState'
@@ -28,6 +30,8 @@ function RowSkeleton() {
 }
 
 export function ReviewInboxPage() {
+  const { t } = useTranslation()
+
   const [filter, setFilter] = useState<ReviewFilter>('pending')
   const [rawFocus, setRawFocus] = useState(0)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -55,9 +59,9 @@ export function ReviewInboxPage() {
       try {
         await resolve.mutateAsync({ reviewId: item.id, resolution })
         setEditingId(null)
-        toast.success('Review item resolved.')
+        toast.success(i18n.t('Review item resolved.'))
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to resolve the item.')
+        toast.error(err instanceof Error ? err.message : i18n.t('Failed to resolve the item.'))
       }
     },
     [resolve],
@@ -68,9 +72,9 @@ export function ReviewInboxPage() {
       try {
         await dismiss.mutateAsync(item.id)
         setEditingId(null)
-        toast.success('Review item dismissed.')
+        toast.success(i18n.t('Review item dismissed.'))
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to dismiss the item.')
+        toast.error(err instanceof Error ? err.message : i18n.t('Failed to dismiss the item.'))
       }
     },
     [dismiss],
@@ -115,8 +119,8 @@ export function ReviewInboxPage() {
   return (
     <div>
       <PageHeader
-        title="Review inbox"
-        subtitle="Files the pipeline wasn't confident about — approve, correct, or dismiss."
+        title={t('Review inbox')}
+        subtitle={t("Files the pipeline wasn't confident about — approve, correct, or dismiss.")}
         actions={
           <ReviewFilterPills filter={filter} pendingCount={pendingCount} onChange={changeFilter} />
         }
@@ -124,7 +128,7 @@ export function ReviewInboxPage() {
 
       {isLoading && (
         <Card padding={false}>
-          <div className="divide-y divide-border" role="status" aria-label="Loading review items">
+          <div className="divide-y divide-border" role="status" aria-label={t('Loading review items')}>
             <RowSkeleton />
             <RowSkeleton />
             <RowSkeleton />
@@ -173,7 +177,7 @@ export function ReviewInboxPage() {
 
           {filter === 'pending' && (
             <p className="text-[11px] font-mono text-text-faint mt-3 text-center">
-              j/k navigate · a approve · e edit · d dismiss
+              {t('j/k navigate · a approve · e edit · d dismiss')}
             </p>
           )}
         </>

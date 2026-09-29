@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 export type ReviewFilter = 'pending' | 'resolved' | 'dismissed'
 
 const FILTERS: { id: ReviewFilter; label: string }[] = [
@@ -14,8 +15,10 @@ interface ReviewFilterPillsProps {
 
 /** Status filter as compact pills; the pending pill carries a count. */
 export function ReviewFilterPills({ filter, pendingCount, onChange }: ReviewFilterPillsProps) {
+  const { t } = useTranslation()
+
   return (
-    <div className="flex items-center gap-1.5" role="tablist" aria-label="Filter review items">
+    <div className="flex items-center gap-1.5" role="tablist" aria-label={t('Filter review items')}>
       {FILTERS.map((f) => (
         <button
           key={f.id}
@@ -28,7 +31,7 @@ export function ReviewFilterPills({ filter, pendingCount, onChange }: ReviewFilt
               : 'border-transparent text-text-muted hover:text-text hover:bg-surface-2'
           }`}
         >
-          {f.label}
+          {t(f.label)}
           {f.id === 'pending' && pendingCount > 0 && (
             <span className="font-mono text-[10px] ml-1.5 text-amber-fg">{pendingCount}</span>
           )}

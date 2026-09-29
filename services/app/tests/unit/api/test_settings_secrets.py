@@ -41,6 +41,8 @@ def _stub_user_settings(overrides: dict | None = None) -> MagicMock:
     stub = MagicMock()
     stub.settings_json = overrides or {}
     stub.theme = "system"
+    stub.language = "en"
+    stub.content_language = False
     stub.dashboard_layout = None
     return stub
 

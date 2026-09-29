@@ -360,6 +360,7 @@ After the summary, emit:
                 extraction_text, image_references, course_code, week, existing_summary
             )
 
+        prompt = self.with_language(prompt)
         result_text = await self._run_claude_code(prompt, timeout=_SUMMARY_TIMEOUT)
         markdown, embedded_images = parsing.parse_summary_response(result_text)
 
@@ -404,6 +405,7 @@ After the summary, emit:
                 course_code, week, summary, extraction_text, count
             )
 
+        prompt = self.with_language(prompt)
         result_text = await self._run_claude_code(prompt, timeout=_SUMMARY_TIMEOUT)
         items = parsing.parse_json_array_response(result_text)
 
@@ -472,6 +474,7 @@ Respond with ONLY a JSON array:
         else:
             prompt = self._build_quiz_prompt(course_code, week, summary, extraction_text, count)
 
+        prompt = self.with_language(prompt)
         result_text = await self._run_claude_code(prompt, timeout=_SUMMARY_TIMEOUT)
         items = parsing.parse_json_array_response(result_text)
 
@@ -533,6 +536,7 @@ Respond with ONLY a JSON array:
         else:
             prompt = self._build_qa_prompt(question, context_chunks)
 
+        prompt = self.with_language(prompt)
         result_text = await self._run_claude_code(prompt)
         parsed = parsing.parse_json_response(result_text)
 

@@ -18,7 +18,10 @@ from app.services.settings_service import (
 )
 
 
-def get_agent(user_settings: dict[str, Any] | None = None) -> AgentAdapter:
+def get_agent(
+    user_settings: dict[str, Any] | None = None,
+    output_language: str | None = None,
+) -> AgentAdapter:
     """Get the configured agent adapter instance.
 
     Args:
@@ -29,9 +32,34 @@ def get_agent(user_settings: dict[str, Any] | None = None) -> AgentAdapter:
             anthropic_api_key, openai_api_key, openai_model,
             zai_api_key, zai_model, zai_base_url,
             ollama_base_url, ollama_model, claude_cli_credentials.
+        output_language: Language for generated study material, from
+            `settings_service.get_user_output_language()`. None means English.
+
+            A separate parameter, not a key in `user_settings`: that config is
+            None for every user on instance credentials (issue #30), so a
+            language riding inside it would reach only the minority running
+            their own API keys.
 
     Returns:
         An AgentAdapter implementation.
+
+    Raises:
+        ProviderCredentialError: If the user selected a provider explicitly but
+            stored no credential for it.
+    """
+    agent = _build_agent(user_settings)
+    agent.set_output_language(output_language)
+    return agent
+
+
+def _build_agent(user_settings: dict[str, Any] | None) -> AgentAdapter:
+    """Construct the adapter for a provider selection.
+
+    Args:
+        user_settings: As `get_agent`.
+
+    Returns:
+        An AgentAdapter implementation, with no language preference applied.
 
     Raises:
         ProviderCredentialError: If the user selected a provider explicitly but

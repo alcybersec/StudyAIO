@@ -16,6 +16,7 @@ import {
   Upload,
   User as UserIcon,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useDashboard, useCourses } from '../../hooks/useApi'
 import { useAuth } from '../../hooks/useAuth'
 import { useUnreadCount } from '../../hooks/useNotificationInbox'
@@ -57,6 +58,7 @@ function SheetLink({ to, icon: Icon, label, active, badge, onNavigate }: SheetLi
 
 export function MobileNav() {
   const location = useLocation()
+  const { t } = useTranslation()
   const { data: dashboard } = useDashboard()
   const { data: courses } = useCourses()
   const { user } = useAuth()
@@ -70,9 +72,9 @@ export function MobileNav() {
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)
 
   const tabs: { to: string; icon: IconType; label: string }[] = [
-    { to: '/', icon: Home, label: 'Home' },
-    { to: '/study', icon: GraduationCap, label: 'Study' },
-    { to: '/ask', icon: MessageSquare, label: 'Ask' },
+    { to: '/', icon: Home, label: t('Home') },
+    { to: '/study', icon: GraduationCap, label: t('Study') },
+    { to: '/ask', icon: MessageSquare, label: t('Ask') },
   ]
 
   const libraryActive =
@@ -111,21 +113,21 @@ export function MobileNav() {
           <button
             type="button"
             onClick={() => setLibraryOpen(true)}
-            aria-label="Library"
+            aria-label={t('Library')}
             className={tabClass(libraryActive)}
           >
             <Library size={17} strokeWidth={1.8} className={libraryActive ? 'text-sage-fg' : 'text-text-faint'} aria-hidden />
-            <span>Library</span>
+            <span>{t('Library')}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setMoreOpen(true)}
-            aria-label="More"
+            aria-label={t('More')}
             className={tabClass(moreActive)}
           >
             <MoreHorizontal size={17} strokeWidth={1.8} className={moreActive ? 'text-sage-fg' : 'text-text-faint'} aria-hidden />
-            <span>More</span>
+            <span>{t('More')}</span>
             {pendingCount > 0 && (
               <span className="absolute top-1 right-1/4 w-1.5 h-1.5 rounded-full bg-amber" aria-hidden />
             )}
@@ -134,7 +136,7 @@ export function MobileNav() {
       </nav>
 
       {/* Library sheet: browsable course list + Upload */}
-      <Sheet open={libraryOpen} onOpenChange={setLibraryOpen} side="bottom" title="Library">
+      <Sheet open={libraryOpen} onOpenChange={setLibraryOpen} side="bottom" title={t('Library')}>
         <div className="space-y-1 pb-4">
           {(courses ?? []).map((course) => (
             <SheetLink
@@ -147,14 +149,16 @@ export function MobileNav() {
             />
           ))}
           {(courses ?? []).length === 0 && (
-            <p className="px-3 py-2 text-sm text-text-muted">No courses yet — upload a lecture to create one.</p>
+            <p className="px-3 py-2 text-sm text-text-muted">
+              {t('No courses yet — upload a lecture to create one.')}
+            </p>
           )}
-          <SheetLink to="/upload" icon={Upload} label="Upload" active={isActive('/upload')} onNavigate={closeSheets} />
+          <SheetLink to="/upload" icon={Upload} label={t('Upload')} active={isActive('/upload')} onNavigate={closeSheets} />
         </div>
       </Sheet>
 
       {/* More sheet: secondary destinations */}
-      <Sheet open={moreOpen} onOpenChange={setMoreOpen} side="bottom" title="More">
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen} side="bottom" title={t('More')}>
         <div className="space-y-1 pb-4">
           <button
             type="button"
@@ -165,7 +169,7 @@ export function MobileNav() {
             className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors min-h-[44px] text-text-muted hover:text-text hover:bg-surface-2/60 cursor-pointer"
           >
             <Bell size={17} strokeWidth={1.8} className="text-text-faint" aria-hidden />
-            <span>Notifications</span>
+            <span>{t('Notifications')}</span>
             {unreadCount > 0 && (
               <span className="ml-auto">
                 <Badge variant="warning">{unreadCount > 9 ? '9+' : unreadCount}</Badge>
@@ -175,18 +179,18 @@ export function MobileNav() {
           <SheetLink
             to="/review"
             icon={Inbox}
-            label="Review inbox"
+            label={t('Review inbox')}
             active={isActive('/review')}
             badge={pendingCount}
             onNavigate={closeSheets}
           />
-          <SheetLink to="/knowledge" icon={Network} label="Knowledge" active={isActive('/knowledge')} onNavigate={closeSheets} />
-          <SheetLink to="/analytics" icon={BarChart3} label="Analytics" active={isActive('/analytics')} onNavigate={closeSheets} />
-          <SheetLink to="/achievements" icon={Trophy} label="Achievements" active={isActive('/achievements')} onNavigate={closeSheets} />
-          <SheetLink to="/settings" icon={Settings} label="Settings" active={isActive('/settings')} onNavigate={closeSheets} />
-          <SheetLink to="/profile" icon={UserIcon} label="Profile" active={isActive('/profile')} onNavigate={closeSheets} />
+          <SheetLink to="/knowledge" icon={Network} label={t('Knowledge')} active={isActive('/knowledge')} onNavigate={closeSheets} />
+          <SheetLink to="/analytics" icon={BarChart3} label={t('Analytics')} active={isActive('/analytics')} onNavigate={closeSheets} />
+          <SheetLink to="/achievements" icon={Trophy} label={t('Achievements')} active={isActive('/achievements')} onNavigate={closeSheets} />
+          <SheetLink to="/settings" icon={Settings} label={t('Settings')} active={isActive('/settings')} onNavigate={closeSheets} />
+          <SheetLink to="/profile" icon={UserIcon} label={t('Profile')} active={isActive('/profile')} onNavigate={closeSheets} />
           {user?.role === 'admin' && (
-            <SheetLink to="/admin" icon={ShieldCheck} label="Admin" active={isActive('/admin')} onNavigate={closeSheets} />
+            <SheetLink to="/admin" icon={ShieldCheck} label={t('Admin')} active={isActive('/admin')} onNavigate={closeSheets} />
           )}
         </div>
       </Sheet>
@@ -196,7 +200,7 @@ export function MobileNav() {
         open={notificationsOpen}
         onOpenChange={setNotificationsOpen}
         side="bottom"
-        title="Notifications"
+        title={t('Notifications')}
         titleVisible={false}
       >
         <NotificationCenter onNavigate={() => setNotificationsOpen(false)} />

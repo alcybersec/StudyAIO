@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAdminUsers, useSystemMetrics, useUpdateAdminUser } from '../hooks/useApi'
@@ -50,6 +52,8 @@ function MetricCard({ label, value }: { label: string; value: string | number })
 }
 
 function MetricsGrid() {
+  const { t } = useTranslation()
+
   const { data: metrics, isLoading, isError, refetch } = useSystemMetrics()
 
   if (isLoading) {
@@ -66,19 +70,19 @@ function MetricsGrid() {
   }
 
   if (isError && !metrics) {
-    return <ErrorState compact title="System metrics couldn't load" onRetry={() => refetch()} />
+    return <ErrorState compact title={t("System metrics couldn't load")} onRetry={() => refetch()} />
   }
 
   if (!metrics) return null
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-      <MetricCard label="Users" value={metrics.total_users} />
-      <MetricCard label="Courses" value={metrics.total_courses} />
-      <MetricCard label="Artifacts" value={metrics.total_artifacts} />
-      <MetricCard label="Pipelines 24h" value={metrics.pipeline_runs_24h} />
-      <MetricCard label="Storage MB" value={metrics.total_storage_mb.toFixed(1)} />
-      <MetricCard label="Storage bytes" value={metrics.total_storage_bytes.toLocaleString()} />
+      <MetricCard label={t('Users')} value={metrics.total_users} />
+      <MetricCard label={t('Courses')} value={metrics.total_courses} />
+      <MetricCard label={t('Artifacts')} value={metrics.total_artifacts} />
+      <MetricCard label={t('Pipelines 24h')} value={metrics.pipeline_runs_24h} />
+      <MetricCard label={t('Storage MB')} value={metrics.total_storage_mb.toFixed(1)} />
+      <MetricCard label={t('Storage bytes')} value={metrics.total_storage_bytes.toLocaleString()} />
     </div>
   )
 }
@@ -191,6 +195,8 @@ function UserRow({
   ) => void
   currentUserId: string | undefined
 }) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
   const [pending, setPending] = useState<PendingChange | null>(null)
 
@@ -229,14 +235,14 @@ function UserRow({
           className="cursor-pointer"
           aria-label={user.is_active ? 'Deactivate user' : 'Activate user'}
         >
-          <Badge variant={user.is_active ? 'success' : 'danger'}>{user.is_active ? 'active' : 'inactive'}</Badge>
+          <Badge variant={user.is_active ? 'success' : 'danger'}>{user.is_active ? t('active') : t('inactive')}</Badge>
         </button>
       </TCell>
       <TCell className="font-mono text-[11px] text-text-faint">
         {user.created_at ? new Date(user.created_at).toLocaleDateString() : '—'}
       </TCell>
       <TCell className="font-mono text-[11px] text-text-faint">
-        {user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'never'}
+        {user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : t('never')}
       </TCell>
       <TCell>
         <UserRowActions user={user} currentUserId={currentUserId} />
@@ -264,8 +270,10 @@ function UserRow({
 }
 
 function UsersSkeleton() {
+  const { t } = useTranslation()
+
   return (
-    <div className="p-4 space-y-3" role="status" aria-label="Loading users">
+    <div className="p-4 space-y-3" role="status" aria-label={t('Loading users')}>
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="flex items-center gap-4">
           <Skeleton height={14} width="30%" />
@@ -280,6 +288,8 @@ function UsersSkeleton() {
 }
 
 export function AdminPage() {
+  const { t } = useTranslation()
+
   const [page, setPage] = useState(0)
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [tierFilter, setTierFilter] = useState<string>('all')
@@ -328,7 +338,7 @@ export function AdminPage() {
         },
         onError: (err: unknown) =>
           toast.error(
-            err instanceof Error && err.message ? err.message : "Couldn't update this account",
+            err instanceof Error && err.message ? err.message : i18n.t("Couldn't update this account"),
           ),
       },
     )
@@ -338,7 +348,7 @@ export function AdminPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Admin" subtitle="System metrics and user management" />
+      <PageHeader title={t('Admin')} subtitle={t('System metrics and user management')} />
 
       <MetricsGrid />
 
@@ -350,11 +360,11 @@ export function AdminPage() {
 
       <div className="bg-surface-1 rounded-xl border border-border">
         <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-text">Users</h2>
+          <h2 className="text-sm font-semibold text-text">{t('Users')}</h2>
           <div className="flex-1" />
           <Select
             className="w-32"
-            options={[{ value: 'all', label: 'All roles' }, ...ROLE_OPTIONS]}
+            options={[{ value: 'all', label: t('All roles') }, ...ROLE_OPTIONS]}
             value={roleFilter}
             onValueChange={(v) => {
               setRoleFilter(v)
@@ -363,7 +373,7 @@ export function AdminPage() {
           />
           <Select
             className="w-32"
-            options={[{ value: 'all', label: 'All tiers' }, ...TIER_OPTIONS]}
+            options={[{ value: 'all', label: t('All tiers') }, ...TIER_OPTIONS]}
             value={tierFilter}
             onValueChange={(v) => {
               setTierFilter(v)
@@ -378,21 +388,21 @@ export function AdminPage() {
           <UsersSkeleton />
         ) : usersError && !usersData ? (
           <div className="p-4">
-            <ErrorState compact title="Users couldn't load" onRetry={() => refetchUsers()} />
+            <ErrorState compact title={t("Users couldn't load")} onRetry={() => refetchUsers()} />
           </div>
         ) : usersData && usersData.users.length > 0 ? (
           <>
             <div className="px-4">
               <Table>
                 <THead>
-                  <TCell header>Email</TCell>
-                  <TCell header>Username</TCell>
-                  <TCell header>Role</TCell>
-                  <TCell header>Tier</TCell>
-                  <TCell header>Status</TCell>
-                  <TCell header>Created</TCell>
-                  <TCell header>Last login</TCell>
-                  <TCell header>Actions</TCell>
+                  <TCell header>{t('Email')}</TCell>
+                  <TCell header>{t('Username')}</TCell>
+                  <TCell header>{t('Role')}</TCell>
+                  <TCell header>{t('Tier')}</TCell>
+                  <TCell header>{t('Status')}</TCell>
+                  <TCell header>{t('Created')}</TCell>
+                  <TCell header>{t('Last login')}</TCell>
+                  <TCell header>{t('Actions')}</TCell>
                 </THead>
                 <TBody>
                   {usersData.users.map((user) => (
@@ -410,11 +420,15 @@ export function AdminPage() {
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-border">
                 <span className="text-[11px] font-mono text-text-faint">
-                  {usersData.total} user{usersData.total !== 1 ? 's' : ''} · page {page + 1}/{totalPages}
+                  {t('{{count}} users · page {{page}}/{{pages}}', {
+                count: usersData.total,
+                page: page + 1,
+                pages: totalPages,
+              })}
                 </span>
                 <div className="flex items-center gap-2">
                   <Button variant="secondary" size="sm" onClick={() => setPage(page - 1)} disabled={page === 0}>
-                    <ChevronLeft size={13} aria-hidden /> Prev
+                    <ChevronLeft size={13} aria-hidden /> {t('Prev')}
                   </Button>
                   <Button
                     variant="secondary"
@@ -422,7 +436,7 @@ export function AdminPage() {
                     onClick={() => setPage(page + 1)}
                     disabled={page + 1 >= totalPages}
                   >
-                    Next <ChevronRight size={13} aria-hidden />
+                    {t('Next')} <ChevronRight size={13} aria-hidden />
                   </Button>
                 </div>
               </div>
@@ -431,8 +445,8 @@ export function AdminPage() {
         ) : (
           <EmptyState
             compact
-            title="No users match these filters"
-            description="Try clearing the role or tier filter."
+            title={t('No users match these filters')}
+            description={t('Try clearing the role or tier filter.')}
           />
         )}
       </div>

@@ -25,6 +25,8 @@ def mock_user_settings():
     us.user_id = "user-001"
     us.settings_json = {}
     us.theme = "system"
+    us.language = "en"
+    us.content_language = False
     us.dashboard_layout = None
     us.updated_at = datetime.now(UTC)
     return us

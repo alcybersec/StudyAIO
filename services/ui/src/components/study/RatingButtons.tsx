@@ -1,4 +1,5 @@
 import { Kbd } from '../ui'
+import { useTranslation } from 'react-i18next'
 
 interface RatingButtonsProps {
   onRate: (quality: number) => void
@@ -13,15 +14,17 @@ const ratings = [
 ]
 
 export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="w-full max-w-xl mx-auto space-y-3">
-      <div className="grid grid-cols-4 gap-1.5" aria-label="Rate recall">
+      <div className="grid grid-cols-4 gap-1.5" aria-label={t('Rate recall')}>
         {ratings.map((r) => (
           <button
             key={r.quality}
             onClick={() => onRate(r.quality)}
             disabled={disabled}
-            title={`${r.label} — next review ${r.hint}`}
+            title={t('{{label}} — next review {{hint}}', { label: t(r.label), hint: r.hint })}
             className={`text-xs font-medium rounded-lg py-2.5 min-h-[56px] cursor-pointer transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri ${r.tone}`}
           >
             {r.label}
@@ -30,7 +33,7 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
         ))}
       </div>
       <p className="text-center text-[11px] font-mono text-text-faint">
-        <Kbd>1</Kbd> again · <Kbd>2</Kbd> hard · <Kbd>3</Kbd> good · <Kbd>4</Kbd> easy
+        <Kbd>1</Kbd> {t('again ·')} <Kbd>2</Kbd> {t('hard ·')} <Kbd>3</Kbd> {t('good ·')} <Kbd>4</Kbd> {t('easy')}
       </p>
     </div>
   )

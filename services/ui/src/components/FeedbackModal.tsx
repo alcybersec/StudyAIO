@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Button, Modal } from './ui'
@@ -44,6 +46,8 @@ interface FeedbackModalProps {
  * with a page and a commit is reproducible.
  */
 export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
+  const { t } = useTranslation()
+
   const location = useLocation()
   const [kind, setKind] = useState<FeedbackKind>('bug')
   const [message, setMessage] = useState('')
@@ -72,7 +76,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       },
       {
         onSuccess: () => {
-          toast.success('Thank you — that went straight to the maintainer.')
+          toast.success(i18n.t('Thank you — that went straight to the maintainer.'))
           close()
         },
         onError: (err: unknown) => {
@@ -92,7 +96,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
     <Modal
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
-      title="Send feedback"
+      title={t('Send feedback')}
     >
       <div className="space-y-3">
         <div className="flex flex-wrap gap-1.5">
@@ -115,7 +119,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
 
         <div>
           <label htmlFor="feedback-message" className="sr-only">
-            Your feedback
+            {t('Your feedback')}
           </label>
           <textarea
             id="feedback-message"
@@ -128,8 +132,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
             className="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-xs text-text placeholder:text-text-faint"
           />
           <p className="mt-1 text-[11px] text-text-faint">
-            The page you are on is included so this can be reproduced. Nothing else is
-            collected.
+            {t('The page you are on is included so this can be reproduced. Nothing else is collected.')}
           </p>
         </div>
 
@@ -141,10 +144,10 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
 
         <div className="flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={close}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button size="sm" disabled={!canSubmit} onClick={send}>
-            {submit.isPending ? 'Sending…' : 'Send'}
+            {submit.isPending ? t('Sending…') : t('Send')}
           </Button>
         </div>
       </div>

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { Check, Copy, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import type { InviteSendResult } from '../../types'
@@ -16,6 +18,8 @@ interface InviteLinkNoticeProps {
  * is ever visible — the server stores only its hash.
  */
 export function InviteLinkNotice({ result }: InviteLinkNoticeProps) {
+  const { t } = useTranslation()
+
   const [copied, setCopied] = useState(false)
 
   return (
@@ -23,11 +27,11 @@ export function InviteLinkNotice({ result }: InviteLinkNoticeProps) {
       {!result.email_sent && (
         <p className="mb-1.5 flex items-center gap-1.5 text-[11px] text-amber-fg">
           <TriangleAlert size={12} aria-hidden />
-          The email could not be sent. Pass this link on yourself.
+          {t('The email could not be sent. Pass this link on yourself.')}
         </p>
       )}
       <p className="mb-1 text-[11px] text-text-faint">
-        Invite link for {result.invite.email} — shown once, single use.
+        {t('Invite link for {{email}} — shown once, single use.', { email: result.invite.email })}
       </p>
       <button
         type="button"
@@ -39,9 +43,9 @@ export function InviteLinkNotice({ result }: InviteLinkNoticeProps) {
               setCopied(true)
               setTimeout(() => setCopied(false), 1500)
             })
-            .catch(() => toast.error('Could not copy to clipboard'))
+            .catch(() => toast.error(i18n.t('Could not copy to clipboard')))
         }}
-        aria-label="Copy invite link"
+        aria-label={t('Copy invite link')}
       >
         <span className="truncate">{result.invite_url}</span>
         {copied ? (

@@ -38,6 +38,8 @@ function settings(overrides: Partial<Settings> = {}): Settings {
     quiz_question_count_per_week: 8,
     chunk_size_tokens: 500,
     chunk_overlap_tokens: 50,
+    language: 'en',
+    content_language: false,
     dashboard_layout: null,
     ...overrides,
   }

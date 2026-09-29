@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import i18n from '../../i18n'
 import { ErrorState } from '../ui'
 
 interface ViewerErrorBoundaryProps {
@@ -34,7 +35,7 @@ export class ViewerErrorBoundary extends Component<ViewerErrorBoundaryProps, Vie
       return (
         <div className="p-4 h-full bg-surface-0">
           <ErrorState
-            title="The original file viewer failed"
+            title={i18n.t('The original file viewer failed')}
             detail={this.state.error.message}
             onRetry={this.handleRetry}
           />

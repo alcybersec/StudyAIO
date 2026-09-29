@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useDashboardExams } from '../../../hooks/useApi'
 import { Badge, Skeleton } from '../../ui'
@@ -20,6 +21,8 @@ function ExamsSkeleton() {
 }
 
 export const ExamsWidget = memo(function ExamsWidget() {
+  const { t } = useTranslation()
+
   const { data, isLoading, isError, refetch } = useDashboardExams()
   const state = selectWidgetState({
     isLoading,
@@ -30,12 +33,12 @@ export const ExamsWidget = memo(function ExamsWidget() {
 
   return (
     <WidgetShell
-      title="Active exams"
+      title={t('Active exams')}
       state={state}
       onRetry={() => refetch()}
-      emptyTitle="No exams tracked"
-      emptyHint="Create one from Study → Exams to get a readiness countdown."
-      emptyActionLabel="Go to Exams"
+      emptyTitle={t('No exams tracked')}
+      emptyHint={t('Create one from Study → Exams to get a readiness countdown.')}
+      emptyActionLabel={t('Go to Exams')}
       emptyActionTo="/study?tab=exams"
       skeleton={<ExamsSkeleton />}
     >
@@ -57,8 +60,8 @@ export const ExamsWidget = memo(function ExamsWidget() {
               />
             </div>
             <div className="text-[11px] text-text-muted mt-1.5">
-              <span className="font-mono text-[10px] text-text-faint">{exam.course_code}</span> · mastery{' '}
-              <span className="font-medium text-text">{Math.round(exam.mastery_pct)}%</span> of{' '}
+              <span className="font-mono text-[10px] text-text-faint">{exam.course_code}</span> {t('· mastery')}{' '}
+              <span className="font-medium text-text">{Math.round(exam.mastery_pct)}%</span> {t('of')}{' '}
               {exam.target_mastery_pct}%
             </div>
           </Link>

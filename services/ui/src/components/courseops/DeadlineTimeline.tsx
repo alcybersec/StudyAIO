@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CalendarPlus } from 'lucide-react'
 import { useCreateExamFromDeadline, useDeleteDeadline, useUpdateDeadline } from '../../hooks/useApi'
 import { useCalendarStatus, useSyncCalendar } from '../../hooks/useCalendar'
@@ -25,8 +26,10 @@ const TYPE_TONES: Record<string, { card: string; dot: string }> = {
 }
 
 function TimelineSkeleton() {
+  const { t } = useTranslation()
+
   return (
-    <div className="space-y-3" role="status" aria-label="Loading deadlines">
+    <div className="space-y-3" role="status" aria-label={t('Loading deadlines')}>
       {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="rounded-xl border border-border p-3 space-y-2">
           <Skeleton height={14} width="40%" />
@@ -38,6 +41,8 @@ function TimelineSkeleton() {
 }
 
 export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: DeadlineTimelineProps) {
+  const { t } = useTranslation()
+
   const [editingDeadline, setEditingDeadline] = useState<Deadline | null>(null)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const updateDeadline = useUpdateDeadline()
@@ -50,14 +55,14 @@ export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: Dea
   if (isLoading && !deadlines) return <TimelineSkeleton />
 
   if (isError && !deadlines) {
-    return <ErrorState title="Deadlines couldn't load" onRetry={onRetry} />
+    return <ErrorState title={t("Deadlines couldn't load")} onRetry={onRetry} />
   }
 
   if (!deadlines || deadlines.length === 0) {
     return (
       <EmptyState
-        title="No deadlines extracted yet"
-        description="Upload a course outline in the Documents tab to get started."
+        title={t('No deadlines extracted yet')}
+        description={t('Upload a course outline in the Documents tab to get started.')}
       />
     )
   }
@@ -85,15 +90,15 @@ export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: Dea
                   <h4 className={`text-sm font-medium ${isPast ? 'text-text-muted line-through' : 'text-text'}`}>
                     {d.title}
                   </h4>
-                  {d.is_confirmed && <Badge variant="success">confirmed</Badge>}
-                  {isUrgent && <Badge variant="danger">urgent</Badge>}
-                  {isSoon && <Badge variant="warning">soon</Badge>}
+                  {d.is_confirmed && <Badge variant="success">{t('confirmed')}</Badge>}
+                  {isUrgent && <Badge variant="danger">{t('urgent')}</Badge>}
+                  {isSoon && <Badge variant="warning">{t('soon')}</Badge>}
                 </div>
                 <div className="mt-0.5 flex items-center gap-3 text-xs text-text-muted">
                   <span className="font-mono text-[11px]">{d.due_date}</span>
                   <span className="capitalize">{d.deadline_type}</span>
-                  {!isPast && <span className="font-mono text-[11px]">{days === 0 ? 'today' : `${days}d`}</span>}
-                  {isPast && <span className="font-mono text-[11px]">past</span>}
+                  {!isPast && <span className="font-mono text-[11px]">{days === 0 ? t('today') : t('{{days}}d', { days })}</span>}
+                  {isPast && <span className="font-mono text-[11px]">{t('past')}</span>}
                 </div>
                 {d.description && <p className="mt-1 text-xs text-text-muted">{d.description}</p>}
               </div>
@@ -103,8 +108,8 @@ export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: Dea
                     onClick={() => syncCalendar.mutate()}
                     disabled={syncCalendar.isPending}
                     className="rounded-md px-2 py-1 text-xs text-peri-fg hover:bg-peri-soft transition-colors disabled:opacity-50"
-                    title="Sync to Google Calendar"
-                    aria-label="Sync to Google Calendar"
+                    title={t('Sync to Google Calendar')}
+                    aria-label={t('Sync to Google Calendar')}
                   >
                     <CalendarPlus size={14} aria-hidden />
                   </button>
@@ -113,16 +118,16 @@ export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: Dea
                   <button
                     onClick={() => updateDeadline.mutate({ deadlineId: d.id, data: { is_confirmed: true } })}
                     className="rounded-md px-2 py-1 text-xs text-sage-fg hover:bg-sage-soft transition-colors"
-                    title="Confirm deadline"
+                    title={t('Confirm deadline')}
                   >
-                    Confirm
+                    {t('Confirm')}
                   </button>
                 )}
                 <button
                   onClick={() => setEditingDeadline(d)}
                   className="rounded-md px-2 py-1 text-xs text-peri-fg hover:bg-peri-soft transition-colors"
                 >
-                  Edit
+                  {t('Edit')}
                 </button>
                 {d.deadline_type === 'exam' && (
                   <button
@@ -130,7 +135,7 @@ export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: Dea
                     disabled={createExam.isPending}
                     className="rounded-md px-2 py-1 text-xs text-peri-fg hover:bg-peri-soft transition-colors disabled:opacity-50"
                   >
-                    Create Exam
+                    {t('Create Exam')}
                   </button>
                 )}
                 {confirmingDeleteId === d.id ? (
@@ -142,13 +147,13 @@ export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: Dea
                       }}
                       className="rounded-md bg-red px-2 py-1 text-xs text-on-accent hover:opacity-90 transition-opacity"
                     >
-                      Confirm
+                      {t('Confirm')}
                     </button>
                     <button
                       onClick={() => setConfirmingDeleteId(null)}
                       className="rounded-md px-2 py-1 text-xs text-text-muted hover:bg-surface-2 transition-colors"
                     >
-                      Cancel
+                      {t('Cancel')}
                     </button>
                   </span>
                 ) : (
@@ -156,7 +161,7 @@ export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: Dea
                     onClick={() => setConfirmingDeleteId(d.id)}
                     className="rounded-md px-2 py-1 text-xs text-red-fg hover:bg-red-soft transition-colors"
                   >
-                    Delete
+                    {t('Delete')}
                   </button>
                 )}
               </div>

@@ -240,6 +240,7 @@ After the summary, emit:
 ---JSON_META---
 """
 
+        prompt = self.with_language(prompt)
         result_text = await self._call_api(prompt, max_tokens=_SUMMARY_MAX_TOKENS)
         markdown, embedded_images = parsing.parse_summary_response(result_text)
 
@@ -280,6 +281,7 @@ Respond with ONLY a JSON array:
 [{{"front": "question", "back": "answer", "tags": ["topic"], "source_page_ref": 1}}]
 """
 
+        prompt = self.with_language(prompt)
         result_text = await self._call_api(prompt, max_tokens=_SUMMARY_MAX_TOKENS)
         items = parsing.parse_json_array_response(result_text)
 
@@ -329,6 +331,7 @@ Respond with ONLY a JSON array:
 [{{"question_type": "multiple_choice", "question": "...", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "correct_answer": "B", "explanation": "...", "source_page_ref": 1}}]
 """
 
+        prompt = self.with_language(prompt)
         result_text = await self._call_api(prompt, max_tokens=_SUMMARY_MAX_TOKENS)
         items = parsing.parse_json_array_response(result_text)
 
@@ -380,6 +383,7 @@ Respond with ONLY a JSON object:
   "citations": [{{"ref": 1, "chunk_id": "", "text_snippet": "brief quote", "course_code": "CSIT302", "week": 5, "page_ref": 1}}]
 }}"""
 
+        prompt = self.with_language(prompt)
         result_text = await self._call_api(prompt)
         parsed = parsing.parse_json_response(result_text)
 
@@ -432,6 +436,7 @@ Respond with ONLY a JSON object:
   "citations": [{{"ref": 1, "chunk_id": "", "text_snippet": "brief quote", "course_code": "CSIT302", "week": 5, "page_ref": 1}}]
 }}"""
 
+        prompt = self.with_language(prompt)
         self._require_api_key()
 
         client = self._client()

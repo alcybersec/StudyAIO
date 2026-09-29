@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Cpu, Globe, Server, Sparkles, Terminal, Zap, type LucideIcon } from 'lucide-react'
@@ -25,6 +26,7 @@ interface ProviderMeta {
   status: (s: Settings) => { text: string; ok: boolean }
 }
 
+//: Status text is a key; the render site translates it.
 const NOT_SET = { text: 'your key is not set', ok: false }
 
 const PROVIDERS: ProviderMeta[] = [
@@ -131,10 +133,12 @@ interface LabelRowProps {
 }
 
 function LabelRow({ htmlFor, label, saved }: LabelRowProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center justify-between mb-1.5">
       <label htmlFor={htmlFor} className="text-xs font-medium text-text-muted">
-        {label}
+        {t(label)}
       </label>
       <FieldSavedNote show={saved} />
     </div>
@@ -158,12 +162,14 @@ interface SecretLabelRowProps {
 
 /** Label for a write-only credential: says whether one is stored, never what. */
 function SecretLabelRow({ htmlFor, label, saved, configured, onClear }: SecretLabelRowProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center justify-between gap-2 mb-1.5">
       <label htmlFor={htmlFor} className="text-xs font-medium text-text-muted">
-        {label} —{' '}
+        {t(label)} —{' '}
         <span className={configured ? 'text-sage-fg' : 'text-text-faint'}>
-          {configured ? 'configured' : 'not set'}
+          {configured ? t('configured') : t('not set')}
         </span>
       </label>
       <span className="flex items-center gap-2">
@@ -174,7 +180,7 @@ function SecretLabelRow({ htmlFor, label, saved, configured, onClear }: SecretLa
             onClick={onClear}
             className="text-[11px] text-text-faint hover:text-red-fg underline cursor-pointer"
           >
-            Remove
+            {t('Remove')}
           </button>
         )}
       </span>
@@ -183,13 +189,14 @@ function SecretLabelRow({ htmlFor, label, saved, configured, onClear }: SecretLa
 }
 
 export function AiProvidersSection() {
+  const { t } = useTranslation()
   const { data: settings, isLoading, error, refetch } = useSettings()
 
   if (isLoading) return <SkeletonCard />
   if (error) {
     return (
       <ErrorState
-        title="AI provider settings couldn't load"
+        title={t("AI provider settings couldn't load")}
         detail={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
@@ -201,6 +208,7 @@ export function AiProvidersSection() {
 }
 
 function AiProvidersForm({ settings }: { settings: Settings }) {
+  const { t } = useTranslation()
   const updateMutation = useUpdateSettings()
   const { saved, markSaved } = useSavedFields()
   const [test, setTest] = useState<{ state: 'idle' | 'testing' | 'ok' | 'error'; message?: string }>(
@@ -277,11 +285,14 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
       // The instance reports itself as `studyaio` — it does not name which
       // provider the operator pays for, and neither do we.
       const label = result.backend === 'studyaio' ? 'StudyAIO' : result.backend
-      setTest({ state: 'ok', message: `✓ ${label} responded in ${secs}s` })
+      setTest({
+      state: 'ok',
+      message: t('✓ {{provider}} responded in {{seconds}}s', { provider: label, seconds: secs }),
+    })
     } catch (err) {
       setTest({
         state: 'error',
-        message: err instanceof Error ? err.message : 'Connection test failed',
+        message: err instanceof Error ? err.message : t('Connection test failed'),
       })
     }
   }
@@ -291,10 +302,9 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
 
   return (
     <div>
-      <h2 className="text-[13px] font-semibold text-text mb-1">AI Providers</h2>
+      <h2 className="text-[13px] font-semibold text-text mb-1">{t('AI Providers')}</h2>
       <p className="text-xs text-text-muted mb-4 max-w-lg">
-        One provider handles everything — summaries, flashcards, Q&amp;A. Switch anytime; nothing
-        already generated is lost.
+        {t('One provider handles everything — summaries, flashcards, Q&A. Switch anytime; nothing already generated is lost.')}
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -319,13 +329,13 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   <Icon size={14} className={selected ? 'text-sage-fg' : 'text-text-faint'} aria-hidden />
                   {provider.name}
                 </span>
-                {selected && <Badge variant="success">active</Badge>}
+                {selected && <Badge variant="success">{t('active')}</Badge>}
               </span>
-              <span className="block text-xs text-text-muted mt-1.5">{provider.desc}</span>
+              <span className="block text-xs text-text-muted mt-1.5">{t(provider.desc)}</span>
               <span
                 className={`block text-[11px] font-mono mt-2 ${status.ok ? 'text-sage-fg' : 'text-text-faint'}`}
               >
-                {status.text}
+                {t(status.text)}
               </span>
             </button>
           )
@@ -333,21 +343,19 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
       </div>
 
       <Card className="mt-5">
-        <div className="text-[13px] font-semibold text-text mb-4">{PROVIDER_TITLES[backend]}</div>
+        <div className="text-[13px] font-semibold text-text mb-4">{t(PROVIDER_TITLES[backend])}</div>
 
         <div className="space-y-4 max-w-md">
           {backend === 'studyaio' && (
             <p className="text-xs text-text-muted">
-              StudyAIO runs the AI for you on its own provider account. There is nothing to set
-              up and no key to paste. Pick another provider above only if you want your work to
-              run on your own account and your own bill.
+              {t('StudyAIO runs the AI for you on its own provider account. There is nothing to set up and no key to paste. Pick another provider above only if you want your work to run on your own account and your own bill.')}
             </p>
           )}
 
           {backend === 'claude_code' && (
             <>
               <div>
-                <LabelRow htmlFor="claude_code_path" label="Claude CLI path" saved={!!saved.claude_code_path} />
+                <LabelRow htmlFor="claude_code_path" label={t('Claude CLI path')} saved={!!saved.claude_code_path} />
                 <Input
                   id="claude_code_path"
                   className="font-mono"
@@ -356,7 +364,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                 />
               </div>
               <div>
-                <LabelRow htmlFor="claude_model" label="Model" saved={!!saved.claude_model} />
+                <LabelRow htmlFor="claude_model" label={t('Model')} saved={!!saved.claude_model} />
                 <Select
                   id="claude_model"
                   options={CLAUDE_MODEL_OPTIONS}
@@ -367,7 +375,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               <div>
                 <SecretLabelRow
                   htmlFor="claude_cli_credentials"
-                  label="CLI credentials"
+                  label={t('CLI credentials')}
                   saved={!!saved.claude_cli_credentials}
                   configured={settings.claude_cli_credentials_configured}
                   onClear={() => clearSecret('claude_cli_credentials')}
@@ -385,13 +393,12 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {...registerWithSave('claude_cli_credentials')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
-                  To use your own Max subscription: run{' '}
-                  <code className="px-1 py-0.5 bg-surface-2 rounded text-[11px]">claude login</code> on
-                  your computer, then paste the contents of{' '}
+                  {t('To use your own Max subscription: run')}{' '}
+                  <code className="px-1 py-0.5 bg-surface-2 rounded text-[11px]">{t('claude login')}</code> {t('on your computer, then paste the contents of')}{' '}
                   <code className="px-1 py-0.5 bg-surface-2 rounded text-[11px]">
-                    ~/.claude/.credentials.json
+                    {t('~/.claude/.credentials.json')}
                   </code>
-                  . Leaving this blank keeps whatever is already stored.
+                  {t('. Leaving this blank keeps whatever is already stored.')}
                 </p>
               </div>
             </>
@@ -402,7 +409,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               <div>
                 <SecretLabelRow
                   htmlFor="anthropic_api_key"
-                  label="API key"
+                  label={t('API key')}
                   saved={!!saved.anthropic_api_key}
                   configured={settings.anthropic_api_key_configured}
                   onClear={() => clearSecret('anthropic_api_key')}
@@ -422,7 +429,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                 />
               </div>
               <div>
-                <LabelRow htmlFor="claude_model_api" label="Model" saved={!!saved.claude_model} />
+                <LabelRow htmlFor="claude_model_api" label={t('Model')} saved={!!saved.claude_model} />
                 <Select
                   id="claude_model_api"
                   options={CLAUDE_MODEL_OPTIONS}
@@ -438,7 +445,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               <div>
                 <SecretLabelRow
                   htmlFor="openai_api_key"
-                  label="API key"
+                  label={t('API key')}
                   saved={!!saved.openai_api_key}
                   configured={settings.openai_api_key_configured}
                   onClear={() => clearSecret('openai_api_key')}
@@ -458,15 +465,15 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                 />
               </div>
               <div>
-                <LabelRow htmlFor="openai_model" label="Model" saved={!!saved.openai_model} />
+                <LabelRow htmlFor="openai_model" label={t('Model')} saved={!!saved.openai_model} />
                 <Input
                   id="openai_model"
-                  placeholder="gpt-4o"
+                  placeholder={t('gpt-4o')}
                   className="font-mono"
                   error={errors.openai_model?.message}
                   {...registerWithSave('openai_model')}
                 />
-                <p className="mt-1.5 text-xs text-text-faint">e.g. gpt-4o, gpt-4o-mini, o1</p>
+                <p className="mt-1.5 text-xs text-text-faint">{t('e.g. gpt-4o, gpt-4o-mini, o1')}</p>
               </div>
             </>
           )}
@@ -476,7 +483,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               <div>
                 <SecretLabelRow
                   htmlFor="zai_api_key"
-                  label="API key"
+                  label={t('API key')}
                   saved={!!saved.zai_api_key}
                   configured={settings.zai_api_key_configured}
                   onClear={() => clearSecret('zai_api_key')}
@@ -495,26 +502,26 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {...registerWithSave('zai_api_key')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
-                  From the Z.ai console at z.ai/model-api
+                  {t('From the Z.ai console at z.ai/model-api')}
                 </p>
               </div>
               <div>
-                <LabelRow htmlFor="zai_model" label="Model" saved={!!saved.zai_model} />
+                <LabelRow htmlFor="zai_model" label={t('Model')} saved={!!saved.zai_model} />
                 <Input
                   id="zai_model"
-                  placeholder="glm-5.3"
+                  placeholder={t('glm-5.3')}
                   className="font-mono"
                   error={errors.zai_model?.message}
                   {...registerWithSave('zai_model')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
-                  e.g. glm-5.3 (flagship), glm-5.3-flash (cheaper), glm-4.6
+                  {t('e.g. glm-5.3 (flagship), glm-5.3-flash (cheaper), glm-4.6')}
                 </p>
               </div>
               <div>
                 <LabelRow
                   htmlFor="zai_base_url"
-                  label="Endpoint"
+                  label={t('Endpoint')}
                   saved={!!saved.zai_base_url}
                 />
                 <Input
@@ -525,7 +532,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {...registerWithSave('zai_base_url')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
-                  Leave blank unless you use a regional or self-hosted endpoint.
+                  {t('Leave blank unless you use a regional or self-hosted endpoint.')}
                 </p>
               </div>
             </>
@@ -534,7 +541,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
           {backend === 'ollama' && (
             <>
               <div>
-                <LabelRow htmlFor="ollama_base_url" label="Base URL" saved={!!saved.ollama_base_url} />
+                <LabelRow htmlFor="ollama_base_url" label={t('Base URL')} saved={!!saved.ollama_base_url} />
                 <Input
                   id="ollama_base_url"
                   placeholder="http://ollama:11434"
@@ -543,20 +550,19 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {...registerWithSave('ollama_base_url')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
-                  Your own Ollama server. Required — this provider runs on your hardware, not
-                  StudyAIO's.
+                  {t("Your own Ollama server. Required — this provider runs on your hardware, not StudyAIO's.")}
                 </p>
               </div>
               <div>
-                <LabelRow htmlFor="ollama_model" label="Model" saved={!!saved.ollama_model} />
+                <LabelRow htmlFor="ollama_model" label={t('Model')} saved={!!saved.ollama_model} />
                 <Input
                   id="ollama_model"
-                  placeholder="llama3.2"
+                  placeholder={t('llama3.2')}
                   className="font-mono"
                   error={errors.ollama_model?.message}
                   {...registerWithSave('ollama_model')}
                 />
-                <p className="mt-1.5 text-xs text-text-faint">Model name as shown in `ollama list`</p>
+                <p className="mt-1.5 text-xs text-text-faint">{t('Model name as shown in `ollama list`')}</p>
               </div>
             </>
           )}
@@ -569,7 +575,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               loading={test.state === 'testing'}
               onClick={runTest}
             >
-              {test.state === 'testing' ? 'Testing…' : 'Test connection'}
+              {test.state === 'testing' ? t('Testing…') : t('Test connection')}
             </Button>
             {test.state === 'ok' && (
               <span className="text-xs text-sage-fg" role="status">
@@ -586,12 +592,12 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
       </Card>
 
       <Card className="mt-4">
-        <div className="text-[13px] font-semibold text-text mb-4">Shared AI behavior</div>
+        <div className="text-[13px] font-semibold text-text mb-4">{t('Shared AI behavior')}</div>
         <div className="space-y-4 max-w-md">
           <div>
             <LabelRow
               htmlFor="classification_confidence_threshold"
-              label="Classification confidence threshold"
+              label={t('Classification confidence threshold')}
               saved={!!saved.classification_confidence_threshold}
             />
             <Input
@@ -604,14 +610,14 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               {...registerWithSave('classification_confidence_threshold', true)}
             />
             <p className="mt-1.5 text-xs text-text-faint">
-              Below this threshold, classifications go to review (0.0 – 1.0)
+              {t('Below this threshold, classifications go to review (0.0 – 1.0)')}
             </p>
           </div>
         </div>
       </Card>
 
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
-        <span className="text-xs text-text-faint">Changes save automatically</span>
+        <span className="text-xs text-text-faint">{t('Changes save automatically')}</span>
       </div>
     </div>
   )

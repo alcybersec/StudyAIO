@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth, useChangePassword, useSessionHandoff, useUpdateProfile } from '../hooks/useAuth'
 import { MFASetup } from '../components/auth/MFASetup'
 import { ApiError } from '../api/client'
 
 export function ProfilePage() {
+  const { t } = useTranslation()
+
   const { user } = useAuth()
   const updateProfile = useUpdateProfile()
   const changePassword = useChangePassword()
@@ -68,22 +71,22 @@ export function ProfilePage() {
   if (!user) {
     return (
       <div className="text-center py-12 text-text-muted">
-        Not available in self-hosted mode
+        {t('Not available in self-hosted mode')}
       </div>
     )
   }
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className="text-2xl font-bold text-text">Profile</h1>
+      <h1 className="text-2xl font-bold text-text">{t('Profile')}</h1>
 
       {/* Profile Info */}
       <div className="bg-surface-1 rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-text mb-4">Profile Info</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('Profile Info')}</h2>
         <form onSubmit={handleProfileSubmit} className="space-y-4">
           <div>
             <label htmlFor="prof-email" className="block text-sm font-medium text-text mb-1">
-              Email
+              {t('Email')}
             </label>
             <input
               id="prof-email"
@@ -95,7 +98,7 @@ export function ProfilePage() {
           </div>
           <div>
             <label htmlFor="prof-username" className="block text-sm font-medium text-text mb-1">
-              Username
+              {t('Username')}
             </label>
             <input
               id="prof-username"
@@ -107,7 +110,7 @@ export function ProfilePage() {
           </div>
           <div>
             <label htmlFor="prof-avatar" className="block text-sm font-medium text-text mb-1">
-              Avatar URL
+              {t('Avatar URL')}
             </label>
             <input
               id="prof-avatar"
@@ -128,18 +131,18 @@ export function ProfilePage() {
             disabled={updateProfile.isPending}
             className="min-h-[44px] px-4 bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover disabled:opacity-50 transition-colors"
           >
-            {updateProfile.isPending ? 'Saving...' : 'Save'}
+            {updateProfile.isPending ? t('Saving...') : t('Save')}
           </button>
         </form>
       </div>
 
       {/* Change Password */}
       <div className="bg-surface-1 rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-text mb-4">Change Password</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('Change Password')}</h2>
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
           <div>
             <label htmlFor="pw-old" className="block text-sm font-medium text-text mb-1">
-              Current password
+              {t('Current password')}
             </label>
             <input
               id="pw-old"
@@ -152,7 +155,7 @@ export function ProfilePage() {
           </div>
           <div>
             <label htmlFor="pw-new" className="block text-sm font-medium text-text mb-1">
-              New password
+              {t('New password')}
             </label>
             <input
               id="pw-new"
@@ -162,12 +165,12 @@ export function ProfilePage() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface-1 focus:outline-none focus:ring-2 focus:ring-sage/30"
-              placeholder="At least 8 characters"
+              placeholder={t('At least 8 characters')}
             />
           </div>
           <div>
             <label htmlFor="pw-confirm" className="block text-sm font-medium text-text mb-1">
-              Confirm new password
+              {t('Confirm new password')}
             </label>
             <input
               id="pw-confirm"
@@ -185,14 +188,14 @@ export function ProfilePage() {
             disabled={changePassword.isPending}
             className="min-h-[44px] px-4 bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover disabled:opacity-50 transition-colors"
           >
-            {changePassword.isPending ? 'Changing...' : 'Change password'}
+            {changePassword.isPending ? t('Changing...') : t('Change password')}
           </button>
         </form>
       </div>
 
       {/* MFA */}
       <div className="bg-surface-1 rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-text mb-4">Two-Factor Authentication</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('Two-Factor Authentication')}</h2>
         <MFASetup mfaEnabled={user.mfa_enabled} />
       </div>
     </div>

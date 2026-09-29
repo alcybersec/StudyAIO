@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, Link } from 'react-router-dom'
 import { BookOpen, Sparkles, X } from 'lucide-react'
 import { Badge } from '../ui/Badge'
@@ -46,6 +47,8 @@ function ChipRow({ chips, onNavigate }: { chips: RelatedChip[]; onNavigate?: (id
 }
 
 export function ConceptDetailPanel({ conceptId, onNavigate, onClose }: ConceptDetailProps) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
   const { data: concept, isLoading } = useConceptDetail(conceptId)
   const { data: related } = useRelatedConcepts(conceptId)
@@ -84,7 +87,7 @@ export function ConceptDetailPanel({ conceptId, onNavigate, onClose }: ConceptDe
   }
 
   if (!concept) {
-    return <p className="text-sm text-text-muted">Concept not found</p>
+    return <p className="text-sm text-text-muted">{t('Concept not found')}</p>
   }
 
   const weeks = [...concept.source_weeks].sort((a, b) => a - b)
@@ -94,13 +97,13 @@ export function ConceptDetailPanel({ conceptId, onNavigate, onClose }: ConceptDe
     <div className="space-y-4">
       <div>
         <div className="flex items-center justify-between gap-2">
-          <SectionLabel className="mb-0">Selected concept</SectionLabel>
+          <SectionLabel className="mb-0">{t('Selected concept')}</SectionLabel>
           {onClose && (
             <button
               type="button"
               onClick={onClose}
               className="text-text-faint hover:text-text p-1 rounded-md cursor-pointer transition-colors"
-              aria-label="Close concept detail"
+              aria-label={t('Close concept detail')}
             >
               <X size={14} aria-hidden />
             </button>
@@ -112,20 +115,23 @@ export function ConceptDetailPanel({ conceptId, onNavigate, onClose }: ConceptDe
         </div>
         <p className="text-xs text-text-muted mt-2 leading-relaxed">{concept.description}</p>
         <p className="font-mono text-[10px] text-text-faint mt-2">
-          {concept.category.replace('_', ' ')} · mentioned {concept.mention_count}×
+          {t('{{category}} · mentioned {{count}}×', {
+          category: concept.category.replace('_', ' '),
+          count: concept.mention_count,
+        })}
         </p>
       </div>
 
       {relatedChips.length > 0 && (
         <div>
-          <SectionLabel>Related concepts</SectionLabel>
+          <SectionLabel>{t('Related concepts')}</SectionLabel>
           <ChipRow chips={relatedChips} onNavigate={onNavigate} />
         </div>
       )}
 
       {related && related.length > 0 && (
         <div>
-          <SectionLabel>Semantically similar</SectionLabel>
+          <SectionLabel>{t('Semantically similar')}</SectionLabel>
           <ChipRow
             chips={related.map((s) => ({
               id: s.id,
@@ -139,7 +145,7 @@ export function ConceptDetailPanel({ conceptId, onNavigate, onClose }: ConceptDe
 
       {weeks.length > 0 && (
         <div>
-          <SectionLabel>Appears in</SectionLabel>
+          <SectionLabel>{t('Appears in')}</SectionLabel>
           <ul className="text-xs space-y-1.5">
             {weeks.map((week) => (
               <li key={week}>
@@ -150,13 +156,13 @@ export function ConceptDetailPanel({ conceptId, onNavigate, onClose }: ConceptDe
                   >
                     <BookOpen size={12} className="text-text-faint shrink-0" aria-hidden />
                     <span className="underline decoration-border-strong underline-offset-2">
-                      Week {week}
+                      {t('Week {{week}}', { week })}
                     </span>
                   </Link>
                 ) : (
                   <span className="flex items-center gap-2 text-text-muted">
                     <BookOpen size={12} className="text-text-faint shrink-0" aria-hidden />
-                    Week {week}
+                    {t('Week {{week}}', { week })}
                   </span>
                 )}
               </li>
@@ -174,7 +180,7 @@ export function ConceptDetailPanel({ conceptId, onNavigate, onClose }: ConceptDe
           navigate(`/study?tab=flashcards&course=${courseCode}&week=${studyWeek}`)
         }}
       >
-        <Sparkles size={13} aria-hidden /> Study this
+        <Sparkles size={13} aria-hidden /> {t('Study this')}
       </Button>
     </div>
   )

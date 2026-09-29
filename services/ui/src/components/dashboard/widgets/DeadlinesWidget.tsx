@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useDashboardDeadlines } from '../../../hooks/useApi'
 import { Skeleton } from '../../ui'
 import { WidgetShell } from './WidgetShell'
@@ -19,6 +20,8 @@ function DeadlinesSkeleton() {
 }
 
 export const DeadlinesWidget = memo(function DeadlinesWidget() {
+  const { t } = useTranslation()
+
   const { data, isLoading, isError, refetch } = useDashboardDeadlines()
   // eslint-disable-next-line react-hooks/purity -- capture "now" once per mount for stable countdowns
   const now = useMemo(() => Date.now(), [])
@@ -31,11 +34,11 @@ export const DeadlinesWidget = memo(function DeadlinesWidget() {
 
   return (
     <WidgetShell
-      title="Upcoming deadlines"
+      title={t('Upcoming deadlines')}
       state={state}
       onRetry={() => refetch()}
-      emptyTitle="No deadlines"
-      emptyHint="Import a course outline in Course Ops to track deadlines."
+      emptyTitle={t('No deadlines')}
+      emptyHint={t('Import a course outline in Course Ops to track deadlines.')}
       skeleton={<DeadlinesSkeleton />}
     >
       <ul className="text-[13px] divide-y divide-border">
@@ -46,10 +49,10 @@ export const DeadlinesWidget = memo(function DeadlinesWidget() {
               <span className="flex items-center gap-2 min-w-0">
                 <span className="font-mono text-[10px] text-text-faint shrink-0">{d.course_code}</span>
                 <span className="truncate text-text">{d.title}</span>
-                {!d.is_confirmed && <span className="text-[10px] text-amber-fg shrink-0">unconfirmed</span>}
+                {!d.is_confirmed && <span className="text-[10px] text-amber-fg shrink-0">{t('unconfirmed')}</span>}
               </span>
               <span className={`text-xs font-semibold shrink-0 ml-3 ${deadlineToneClass(days)}`}>
-                {days <= 0 ? 'Today' : `${days}d`}
+                {days <= 0 ? t('Today') : t('{{days}}d', { days })}
               </span>
             </li>
           )

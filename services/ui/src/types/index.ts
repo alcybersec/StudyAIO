@@ -193,6 +193,10 @@ export interface Settings {
   quiz_question_count_per_week: number
   chunk_size_tokens: number
   chunk_overlap_tokens: number
+  /** Interface language as a BCP-47 short tag. */
+  language: string
+  /** Whether `language` also applies to AI-generated study material. */
+  content_language: boolean
   dashboard_layout: Record<string, unknown> | null
 }
 
