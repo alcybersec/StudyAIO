@@ -94,9 +94,22 @@ Gated by `REGISTRATION_MODE`:
 In `invite` mode the code is redeemed *before* the user is created, so an invalid
 code costs nothing; the redeemed invite's ID is recorded on `users.invite_code_id`.
 
+`invite_code` accepts either flavour: a shared code (`BETA-7F3KQ2MN`) or the raw
+token from an emailed invite link, which is 43 characters.
+
+**An emailed invite is redeemable only by the address it was sent to.** Receiving
+a forwarded link is not entitlement: `email` must match the invited address,
+compared case-insensitively after trimming. A mismatch is refused **without
+consuming the single use**, so a stranger with a forwarded link cannot destroy an
+invitation the real invitee has not accepted yet. Shared codes name no recipient
+and are unaffected.
+
 **Body** `RegisterRequest` — `{ email, username, password, invite_code? }`
 **Response** `201` `UserProfileResponse` + Set-Cookie (access_token, refresh_token)
-**Response** `400` invite code missing, unknown, expired, revoked, or used up
+**Response** `400` invite code missing, unknown, expired, revoked, or used up —
+all reported identically, so a stranger cannot tell a real code from a guess. A
+valid token presented with the wrong `email` is reported distinctly, since
+reaching that branch already requires holding the token.
 **Response** `403` registration is closed
 
 ### `POST /api/auth/login`

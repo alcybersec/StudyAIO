@@ -286,7 +286,11 @@ class TestRedeemToken:
         invite = make_invite(email="tester@example.com", token_hash=hash_magic_link_token(token))
         self._with_invite(mock_session, invite)
 
-        redeemed = await invite_service.redeem_invite(mock_session, token)
+        # The address is required now: an email invite is redeemable only by the
+        # person it was sent to. See TestEmailInviteBinding.
+        redeemed = await invite_service.redeem_invite(
+            mock_session, token, email="tester@example.com"
+        )
 
         assert redeemed.used_count == 1
         assert redeemed.accepted_at is not None
@@ -485,3 +489,108 @@ class TestResendEmailInvite:
         mock_session.execute.return_value = result
 
         assert await invite_service.resend_email_invite(mock_session, "nope") is None
+
+
+class TestEmailInviteBinding:
+    """An email invite is redeemable only by the address it was sent to."""
+
+    def _with_invite(self, mock_session, invite):
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = invite
+        mock_session.execute.return_value = result
+
+    def _email_invite(self, token, **overrides):
+        return make_invite(
+            email="sam@example.com", token_hash=hash_magic_link_token(token), **overrides
+        )
+
+    @pytest.mark.asyncio
+    async def test_the_addressee_can_redeem(self, mock_session):
+        token = generate_magic_link_token()
+        self._with_invite(mock_session, self._email_invite(token))
+
+        redeemed = await invite_service.redeem_invite(mock_session, token, email="sam@example.com")
+
+        assert redeemed.used_count == 1
+
+    @pytest.mark.asyncio
+    async def test_a_forwarded_link_is_refused(self, mock_session):
+        """Being sent the link is not the same as being entitled to it."""
+        token = generate_magic_link_token()
+        self._with_invite(mock_session, self._email_invite(token))
+
+        with pytest.raises(InviteError):
+            await invite_service.redeem_invite(
+                mock_session, token, email="someone-else@example.com"
+            )
+
+    @pytest.mark.asyncio
+    async def test_a_refused_forward_does_not_consume_the_use(self, mock_session):
+        """The load-bearing one. Burning the use would let a stranger destroy an
+        invitation the real invitee is still waiting to accept."""
+        token = generate_magic_link_token()
+        invite = self._email_invite(token)
+        self._with_invite(mock_session, invite)
+
+        with pytest.raises(InviteError):
+            await invite_service.redeem_invite(mock_session, token, email="nope@example.com")
+
+        assert invite.used_count == 0
+        assert invite.accepted_at is None
+
+    @pytest.mark.asyncio
+    async def test_the_match_ignores_case_and_whitespace(self, mock_session):
+        """Sign-up forms hand back what people type."""
+        token = generate_magic_link_token()
+        self._with_invite(mock_session, self._email_invite(token))
+
+        redeemed = await invite_service.redeem_invite(
+            mock_session, token, email="  SAM@Example.COM  "
+        )
+
+        assert redeemed.used_count == 1
+
+    @pytest.mark.asyncio
+    async def test_a_missing_email_is_refused(self, mock_session):
+        """No address supplied cannot silently pass the check."""
+        token = generate_magic_link_token()
+        self._with_invite(mock_session, self._email_invite(token))
+
+        with pytest.raises(InviteError):
+            await invite_service.redeem_invite(mock_session, token, email=None)
+
+    @pytest.mark.asyncio
+    async def test_a_shared_code_is_unaffected(self, mock_session):
+        """Shared codes name no recipient, so any address may redeem one."""
+        self._with_invite(mock_session, make_invite())
+
+        redeemed = await invite_service.redeem_invite(
+            mock_session, "BETA-ABCD2345", email="anyone@example.com"
+        )
+
+        assert redeemed.used_count == 1
+
+    @pytest.mark.asyncio
+    async def test_a_shared_code_redeems_with_no_email_at_all(self, mock_session):
+        """Back-compat: callers that never pass an address still work."""
+        self._with_invite(mock_session, make_invite())
+        assert (await invite_service.redeem_invite(mock_session, "BETA-ABCD2345")).used_count == 1
+
+    @pytest.mark.asyncio
+    async def test_an_expired_invite_reports_the_generic_error_not_the_mismatch(self, mock_session):
+        """Ordering matters: the enumeration-safe rejection must win, so an
+        attacker cannot use the mismatch message to confirm a token exists."""
+        token = generate_magic_link_token()
+        self._with_invite(
+            mock_session,
+            self._email_invite(token, expires_at=datetime(2020, 1, 1, tzinfo=UTC)),
+        )
+
+        with pytest.raises(InviteError) as expired:
+            await invite_service.redeem_invite(mock_session, token, email="wrong@example.com")
+
+        self._with_invite(mock_session, None)
+        with pytest.raises(InviteError) as unknown:
+            await invite_service.redeem_invite(mock_session, generate_magic_link_token())
+
+        assert str(expired.value) == str(unknown.value)
