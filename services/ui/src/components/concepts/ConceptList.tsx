@@ -108,7 +108,9 @@ export function ConceptList({ concepts, onSelect, selectedId }: ConceptListProps
             </span>
             <span className="font-mono text-[10px] text-text-faint w-20 text-right shrink-0 truncate">
               {concept.source_weeks.length > 0
-                ? `wk ${[...concept.source_weeks].sort((a, b) => a - b).join(', ')}`
+                ? t('wk {{weeks}}', {
+                    weeks: [...concept.source_weeks].sort((a, b) => a - b).join(', '),
+                  })
                 : '—'}
             </span>
           </div>

@@ -1,4 +1,5 @@
 import { Card } from '../ui'
+import i18n from '../../i18n'
 import { useTranslation } from 'react-i18next'
 import { useBillingOverview, useCheckout, usePortal } from '../../hooks/useBilling'
 import { usePlan } from '../../hooks/usePlan'
@@ -110,8 +111,12 @@ export function BillingSection() {
       {subscription.current_period_end && (
         <p className="text-xs text-text-muted mb-4">
           {subscription.cancel_at_period_end
-            ? `Cancels on ${new Date(subscription.current_period_end).toLocaleDateString()}`
-            : `Renews on ${new Date(subscription.current_period_end).toLocaleDateString()}`}
+            ? t('Cancels on {{date}}', {
+                date: new Date(subscription.current_period_end).toLocaleDateString(i18n.language),
+              })
+            : t('Renews on {{date}}', {
+                date: new Date(subscription.current_period_end).toLocaleDateString(i18n.language),
+              })}
         </p>
       )}
 
@@ -124,7 +129,7 @@ export function BillingSection() {
             disabled={checkout.isPending}
             className="px-4 py-2 text-sm font-medium rounded-lg bg-sage text-on-accent hover:bg-sage-hover disabled:opacity-50 transition-colors"
           >
-            {checkout.isPending ? 'Loading...' : 'Upgrade to Pro'}
+            {checkout.isPending ? t('Loading...') : t('Upgrade to Pro')}
           </button>
         )}
         {isPro && (
@@ -134,7 +139,7 @@ export function BillingSection() {
             disabled={portal.isPending}
             className="px-4 py-2 text-sm font-medium rounded-lg border border-border text-text hover:bg-surface-2 disabled:opacity-50 transition-colors"
           >
-            {portal.isPending ? 'Loading...' : 'Manage Subscription'}
+            {portal.isPending ? t('Loading...') : t('Manage Subscription')}
           </button>
         )}
       </div>

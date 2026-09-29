@@ -58,7 +58,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
             disabled={unlinkMutation.isPending}
             className="px-3 py-1.5 text-sm font-medium text-red-fg bg-red-soft border border-red/30 rounded-lg hover:border-red/50 disabled:opacity-50 transition-colors"
           >
-            {unlinkMutation.isPending ? 'Unlinking...' : 'Unlink Telegram'}
+            {unlinkMutation.isPending ? t('Unlinking...') : t('Unlink Telegram')}
           </button>
         </div>
       ) : (
@@ -88,7 +88,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
               disabled={linkMutation.isPending}
               className="px-3 py-1.5 text-sm font-medium text-sage-fg bg-sage-soft border border-sage/20 rounded-lg hover:bg-sage/20 disabled:opacity-50 transition-colors"
             >
-              {linkMutation.isPending ? 'Generating link...' : 'Generate Link'}
+              {linkMutation.isPending ? t('Generating link…') : t('Generate Link')}
             </button>
           )}
 
@@ -96,7 +96,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
             <p className="text-sm text-red-fg">
               {linkMutation.error instanceof Error
                 ? linkMutation.error.message
-                : 'Failed to generate link. Is the Telegram bot configured?'}
+                : t('Failed to generate link. Is the Telegram bot configured?')}
             </p>
           )}
         </div>

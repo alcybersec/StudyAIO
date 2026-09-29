@@ -1,4 +1,5 @@
 import { memo, useCallback, useRef, useState } from 'react'
+import i18n from '../../../i18n'
 import { useTranslation } from 'react-i18next'
 import { Upload } from 'lucide-react'
 import { useUpload } from '../../../hooks/useApi'
@@ -22,9 +23,12 @@ export const QuickUploadWidget = memo(function QuickUploadWidget() {
       setLastResult(null)
       try {
         const result = await upload.mutateAsync(file)
-        setLastResult({ ok: true, message: `${result.filename} uploaded` })
+        setLastResult({
+          ok: true,
+          message: i18n.t('{{file}} uploaded', { file: result.filename }),
+        })
       } catch (err) {
-        setLastResult({ ok: false, message: err instanceof Error ? err.message : 'Upload failed' })
+        setLastResult({ ok: false, message: err instanceof Error ? err.message : i18n.t('Upload failed') })
       }
     },
     [upload],
@@ -68,7 +72,7 @@ export const QuickUploadWidget = memo(function QuickUploadWidget() {
         }`}
       >
         <Upload size={14} aria-hidden />
-        {upload.isPending ? 'Uploading…' : 'Drop lecture files or click — PDF, DOCX, PPTX'}
+        {upload.isPending ? t('Uploading…') : t('Drop lecture files or click — PDF, DOCX, PPTX')}
       </button>
       <input ref={inputRef} type="file" accept={ACCEPTED_EXT.join(',')} onChange={handleChange} className="hidden" />
       {lastResult && (

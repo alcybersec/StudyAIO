@@ -37,7 +37,7 @@ export function ReclassifyPanel({ artifact, courseCode, week, onClose }: Reclass
       { artifactId: artifact.id, courseCode: targetCourse, week: parsedWeek },
       {
         onSuccess: () => {
-          toast.success(`Moved to ${targetCourse} week ${parsedWeek}`, {
+          toast.success(i18n.t('Moved to {{course}} week {{week}}', { course: targetCourse, week: parsedWeek }), {
             action: {
               label: i18n.t('Open'),
               onClick: () => navigate(`/courses/${targetCourse}/weeks/${parsedWeek}`),

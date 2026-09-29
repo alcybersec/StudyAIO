@@ -144,7 +144,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
             disabled={createExam.isPending || !isValid}
             className="flex-1 px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-sage text-on-accent hover:bg-sage-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {createExam.isPending ? 'Creating...' : 'Create Exam'}
+            {createExam.isPending ? t('Creating...') : t('Create Exam')}
           </button>
           <button
             type="button"
@@ -157,7 +157,7 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
 
         {createExam.isError && (
           <div className="p-3 rounded-lg bg-red-soft text-sm text-red-fg">
-            {(createExam.error as Error).message || 'Failed to create exam'}
+            {(createExam.error as Error).message || t('Failed to create exam')}
           </div>
         )}
       </form>

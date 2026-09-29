@@ -63,7 +63,7 @@ function SessionItem({
         className="flex-1 min-w-0 text-left pl-2.5 py-2 rounded-lg cursor-pointer"
       >
         <span className={`block text-[13px] truncate ${isSelected ? 'text-text font-medium' : 'text-text-muted'}`}>
-          {session.title || 'New question'}
+          {session.title || t('New question')}
         </span>
         <span className="block text-[10px] text-text-faint font-mono mt-0.5">
           {t('{{date}} · {{count}} msgs', { date: formatSessionDate(session.updated_at), count: session.message_count })}

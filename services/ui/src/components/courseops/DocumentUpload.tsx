@@ -85,7 +85,7 @@ export function DocumentUpload({ courseCode }: DocumentUploadProps) {
 
       {upload.isError && (
         <p className="text-sm text-red-fg" role="alert">
-          {upload.error instanceof Error ? upload.error.message : 'Upload failed'}
+          {upload.error instanceof Error ? upload.error.message : t('Upload failed')}
         </p>
       )}
 

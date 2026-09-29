@@ -107,7 +107,7 @@ export function WeekViewPage() {
   return (
     <div>
       <PageHeader
-        title={`Week ${data.week}`}
+        title={t('Week {{week}}', { week: data.week })}
         subtitle={data.course.name ?? data.course.code}
         breadcrumbs={[
           { label: 'Dashboard', to: '/' },
@@ -137,7 +137,7 @@ export function WeekViewPage() {
                 ) : (
                   <PanelRightOpen size={13} aria-hidden />
                 )}
-                {viewerOpen ? 'Hide original' : 'Show original'}
+                {viewerOpen ? t('Hide original') : t('Show original')}
               </Button>
               <Button
                 variant="ghost"

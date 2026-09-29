@@ -1,4 +1,5 @@
 import { useForm } from 'react-hook-form'
+import { ASSESSMENT_TYPES, ASSESSMENT_TYPE_LABELS } from '../../lib/assessmentTypes'
 import { useTranslation } from 'react-i18next'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -81,9 +82,9 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
                 {...register('deadlineType')}
                 className="mt-1 w-full rounded-md border border-border bg-surface-1 text-text px-3 py-2 text-sm focus:border-sage focus:outline-none focus:ring-1 focus:ring-sage"
               >
-                {['exam', 'assignment', 'quiz', 'project', 'lab', 'presentation', 'other'].map((t) => (
-                  <option key={t} value={t}>
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                {ASSESSMENT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {t(ASSESSMENT_TYPE_LABELS[type])}
                   </option>
                 ))}
               </select>
@@ -112,7 +113,7 @@ export function DeadlineEditModal({ deadline, onClose }: DeadlineEditModalProps)
                 disabled={updateDeadline.isPending || !isValid}
                 className="rounded-md bg-sage px-4 py-2 text-sm text-on-accent hover:bg-sage-hover disabled:opacity-50"
               >
-                {updateDeadline.isPending ? 'Saving...' : 'Save & Confirm'}
+                {updateDeadline.isPending ? t('Saving...') : t('Save & Confirm')}
               </button>
             </div>
           </form>

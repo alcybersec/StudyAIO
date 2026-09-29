@@ -21,7 +21,7 @@ export function BackupCodeNotice() {
     if (remaining === null) return
 
     if (remaining === 0) {
-      toast.warning(i18n.t(i18n.t('That was your last backup code')), {
+      toast.warning(i18n.t('That was your last backup code'), {
         description:
           i18n.t('You have no backup codes left. Set up two-factor authentication again in Settings to get a new set.'),
         duration: 10000,
@@ -29,7 +29,7 @@ export function BackupCodeNotice() {
       return
     }
 
-    toast.info(`Signed in with a backup code — ${remaining} left`, {
+    toast.info(i18n.t('Signed in with a backup code — {{count}} left', { count: remaining }), {
       description:
         remaining <= 2
           ? i18n.t('Set up two-factor authentication again in Settings to get a fresh set.')

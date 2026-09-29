@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import i18n from '../../../i18n'
 import { useTranslation } from 'react-i18next'
 import { useDashboardGamification } from '../../../hooks/useApi'
 import { Badge, Skeleton } from '../../ui'
@@ -30,7 +31,14 @@ export const GamificationWidget = memo(function GamificationWidget() {
 
   return (
     <WidgetShell
-      title={data ? `Level ${data.level} · ${data.total_xp.toLocaleString()} XP` : 'Progress'}
+      title={
+        data
+          ? t('Level {{level}} · {{xp}} XP', {
+              level: data.level,
+              xp: data.total_xp.toLocaleString(i18n.language),
+            })
+          : t('Progress')
+      }
       state={state}
       onRetry={() => refetch()}
       emptyTitle={t('No XP yet')}
@@ -43,12 +51,17 @@ export const GamificationWidget = memo(function GamificationWidget() {
             <div className="h-full bg-peri rounded-full" style={{ width: `${Math.min(data.progress_pct, 100)}%` }} />
           </div>
           <div className="text-[11px] text-text-faint mt-2 font-mono">
-            {xpToNext != null ? `${xpToNext.toLocaleString()} XP to level ${data.level + 1}` : 'max level reached'}
+            {xpToNext != null
+              ? t('{{xp}} XP to level {{level}}', {
+                  xp: xpToNext.toLocaleString(),
+                  level: data.level + 1,
+                })
+              : t('max level reached')}
           </div>
           {data.daily_challenge_description && (
             <div className="text-xs text-text-muted mt-3 flex items-center gap-1.5">
               <Badge variant={data.daily_challenge_completed ? 'success' : 'info'}>
-                {data.daily_challenge_completed ? 'done' : 'daily'}
+                {data.daily_challenge_completed ? t('done') : t('daily')}
               </Badge>
               <span className="truncate">{data.daily_challenge_description}</span>
               <span className="font-mono text-[10px] text-text-faint shrink-0 ml-auto">

@@ -37,7 +37,7 @@ function inviteStatus(invite: InviteCode): { label: string; variant: 'success' |
 }
 
 function CopyButton({ code }: { code: string }) {
-
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   return (
@@ -51,9 +51,9 @@ function CopyButton({ code }: { code: string }) {
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)
           })
-          .catch(() => toast.error(i18n.t(i18n.t('Could not copy to clipboard'))))
+          .catch(() => toast.error(i18n.t('Could not copy to clipboard')))
       }}
-      aria-label={`Copy invite code ${code}`}
+      aria-label={t('Copy invite code {{code}}', { code })}
     >
       {code}
       {copied ? <Check size={12} aria-hidden /> : <Copy size={12} aria-hidden />}
@@ -128,15 +128,15 @@ export function InvitePanel() {
               {
                 onSuccess: (invite) => {
                   setNote('')
-                  toast.success(`Created ${invite.code}`)
+                  toast.success(i18n.t('Created {{code}}', { code: invite.code }))
                 },
-                onError: () => toast.error(i18n.t(i18n.t("Couldn't create the invite code"))),
+                onError: () => toast.error(i18n.t("Couldn't create the invite code")),
               },
             )
           }
         >
           <Plus size={12} aria-hidden />
-          {createInvite.isPending ? 'Creating…' : 'Create invite'}
+          {createInvite.isPending ? t('Creating…') : t('Create invite')}
         </Button>
       </div>
 
@@ -209,7 +209,7 @@ export function InvitePanel() {
                       <span className="text-xs text-text-faint">
                         {invite.expires_at
                           ? new Date(invite.expires_at).toLocaleDateString()
-                          : 'never'}
+                          : t('never')}
                       </span>
                     </TCell>
                     <TCell>
@@ -226,14 +226,14 @@ export function InvitePanel() {
                                   onSuccess: (sent) => {
                                     setResent(sent)
                                     if (sent.email_sent) {
-                                      toast.success(`Invite resent to ${sent.invite.email}`)
+                                      toast.success(i18n.t('Invite resent to {{email}}', { email: sent.invite.email }))
                                     } else {
                                       toast.warning(
-                                        i18n.t(i18n.t('Invite reissued, but the email could not be sent')),
+                                        i18n.t('Invite reissued, but the email could not be sent'),
                                       )
                                     }
                                   },
-                                  onError: () => toast.error(i18n.t(i18n.t("Couldn't resend the invite"))),
+                                  onError: () => toast.error(i18n.t("Couldn't resend the invite")),
                                 },
                               )
                             }
@@ -249,8 +249,8 @@ export function InvitePanel() {
                             disabled={revokeInvite.isPending}
                             onClick={() =>
                               revokeInvite.mutate(invite.id, {
-                                onSuccess: () => toast.success(i18n.t(i18n.t('Invite revoked'))),
-                                onError: () => toast.error(i18n.t(i18n.t("Couldn't revoke the invite code"))),
+                                onSuccess: () => toast.success(i18n.t('Invite revoked')),
+                                onError: () => toast.error(i18n.t("Couldn't revoke the invite code")),
                               })
                             }
                           >

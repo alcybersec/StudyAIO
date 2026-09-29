@@ -125,20 +125,22 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
                 resendVerification.mutate(user.id, {
                   onSuccess: (r) => {
                     if (r.email_sent) {
-                      toast.success(`Verification link sent to ${changedTo}`)
+                      toast.success(i18n.t('Verification link sent to {{email}}', { email: changedTo }))
                       return
                     }
                     void navigator.clipboard
                       .writeText(r.url)
-                      .then(() => toast.success(i18n.t(i18n.t('No email configured — link copied to clipboard'))))
-                      .catch(() => toast.message(i18n.t(i18n.t('No email configured. Link:')), { description: r.url }))
+                      .then(() => toast.success(i18n.t('No email configured — link copied to clipboard')))
+                      .catch(() =>
+                        toast.message(i18n.t('No email configured. Link:'), { description: r.url }),
+                      )
                   },
                   onError: (e) =>
                     toast.error(errorMessage(e, i18n.t("Couldn't create a verification link"))),
                 })
               }
             >
-              {resendVerification.isPending ? 'Sending…' : 'Send verification link'}
+              {resendVerification.isPending ? t('Sending…') : t('Send verification link')}
             </Button>
             <Button variant="ghost" size="sm" onClick={close}>
               {t('Done')}
@@ -153,7 +155,7 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
     <Modal
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
-      title={`Change the email for ${user.email}?`}
+      title={t('Change the email for {{email}}?', { email: user.email })}
     >
       <div className="space-y-3">
         <p className="flex items-start gap-2 text-xs text-red-fg">
@@ -246,7 +248,7 @@ export function ChangeEmailDialog({ open, onOpenChange, user }: ChangeEmailDialo
 
         <div className="flex gap-2 pt-1">
           <Button variant="danger" size="sm" disabled={!canSubmit} onClick={submit}>
-            {updateUser.isPending ? 'Changing…' : 'Change email and sign them out'}
+            {updateUser.isPending ? t('Changing…') : t('Change email and sign them out')}
           </Button>
           <Button variant="ghost" size="sm" disabled={updateUser.isPending} onClick={close}>
             {t('Cancel')}

@@ -211,7 +211,7 @@ export function ExamDetailInline({ examId, onBack }: ExamDetailInlineProps) {
                   <div
                     key={day.date}
                     className={`w-full aspect-square rounded-sm ${bg}`}
-                    title={`${day.date}: ${day.cards_reviewed} cards, ${day.quiz_answered} quiz`}
+                    title={t('{{date}}: {{cards}} cards, {{quiz}} quiz', { date: day.date, cards: day.cards_reviewed, quiz: day.quiz_answered })}
                   />
                 )
               })}

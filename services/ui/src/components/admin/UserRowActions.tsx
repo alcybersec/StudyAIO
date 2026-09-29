@@ -59,8 +59,8 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
     // No SMTP — the admin has to relay it, so put it on the clipboard.
     void navigator.clipboard
       .writeText(url)
-      .then(() => toast.success(i18n.t(i18n.t('No email configured — link copied to clipboard'))))
-      .catch(() => toast.message(i18n.t(i18n.t('No email configured. Link:')), { description: url }))
+      .then(() => toast.success(i18n.t('No email configured — link copied to clipboard')))
+      .catch(() => toast.message(i18n.t('No email configured. Link:'), { description: url }))
   }
 
   return (
@@ -129,8 +129,8 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
         <ShieldOff size={12} aria-hidden />
         <span className="sr-only">
           {user.mfa_enabled
-            ? `Clear MFA for ${user.email}`
-            : `Clear MFA for ${user.email} (no MFA configured)`}
+            ? t('Clear MFA for {{email}}', { email: user.email })
+            : t('Clear MFA for {{email}} (no MFA configured)', { email: user.email })}
         </span>
       </Button>
 
@@ -139,7 +139,7 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
       <ConfirmAction
         open={confirmingMfaReset}
         onOpenChange={setConfirmingMfaReset}
-        title={`Clear MFA for ${user.email}?`}
+        title={t('Clear MFA for {{email}}?', { email: user.email })}
         confirmLabel={t('Clear MFA')}
         pending={clearMfa.isPending}
         consequences={[
@@ -154,9 +154,9 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
               // no-op. Reporting both as success would tell the operator they
               // fixed a lockout they did not touch.
               if (r.mfa_was_enabled) {
-                toast.success(`MFA cleared for ${user.email} — they are signed out and can re-enrol`)
+                toast.success(i18n.t('MFA cleared for {{email}} — they are signed out and can re-enrol', { email: user.email }))
               } else {
-                toast.message(`MFA was already off for ${user.email} — nothing changed`)
+                toast.message(i18n.t('MFA was already off for {{email}} — nothing changed', { email: user.email }))
               }
             },
             onError: (e) => toast.error(errorMessage(e, i18n.t("Couldn't clear MFA for this account"))),
@@ -174,13 +174,13 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
             onClick={() =>
               deleteUser.mutate(user.id, {
                 onSuccess: (r) =>
-                  toast.success(`${user.email} deleted (${r.rows_deleted} rows)`),
+                  toast.success(i18n.t('{{email}} deleted ({{rows}} rows)', { email: user.email, rows: r.rows_deleted })),
                 onError: (e) => toast.error(errorMessage(e, i18n.t("Couldn't delete the account"))),
                 onSettled: () => setConfirmingDelete(false),
               })
             }
           >
-            {deleteUser.isPending ? 'Deleting…' : 'Confirm'}
+            {deleteUser.isPending ? t('Deleting…') : t('Confirm')}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
             {t('Cancel')}

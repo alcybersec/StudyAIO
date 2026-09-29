@@ -59,7 +59,7 @@ export function ReviewInboxPage() {
       try {
         await resolve.mutateAsync({ reviewId: item.id, resolution })
         setEditingId(null)
-        toast.success(i18n.t(i18n.t('Review item resolved.')))
+        toast.success(i18n.t('Review item resolved.'))
       } catch (err) {
         toast.error(err instanceof Error ? err.message : i18n.t('Failed to resolve the item.'))
       }
@@ -72,7 +72,7 @@ export function ReviewInboxPage() {
       try {
         await dismiss.mutateAsync(item.id)
         setEditingId(null)
-        toast.success(i18n.t(i18n.t('Review item dismissed.')))
+        toast.success(i18n.t('Review item dismissed.'))
       } catch (err) {
         toast.error(err instanceof Error ? err.message : i18n.t('Failed to dismiss the item.'))
       }

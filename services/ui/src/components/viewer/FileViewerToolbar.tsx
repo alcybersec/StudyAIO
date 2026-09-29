@@ -42,7 +42,7 @@ export function FileViewerToolbar({
         />
       ) : (
         <span className="font-mono text-[11px] text-text-muted truncate">
-          {selectedArtifact?.original_filename ?? 'No file'}
+          {selectedArtifact?.original_filename ?? t('No file')}
         </span>
       )}
 

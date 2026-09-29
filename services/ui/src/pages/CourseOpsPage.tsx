@@ -44,7 +44,7 @@ export function CourseOpsPage() {
   return (
     <div>
       <PageHeader
-        title={`${courseCode} — Course Documents`}
+        title={t('{{course}} — Course Documents', { course: courseCode })}
         breadcrumbs={[
           { label: 'Dashboard', to: '/' },
           { label: courseCode, to: `/courses/${courseCode}` },

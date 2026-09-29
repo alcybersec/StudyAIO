@@ -45,8 +45,8 @@ export const StreakWidget = memo(function StreakWidget() {
           </div>
           <div className="text-[11px] text-text-faint font-mono mt-2">
             {data.longest_streak > data.current_streak
-              ? `best ${data.longest_streak} days`
-              : 'personal best — keep it alive'}
+              ? t('best {{count}} days', { count: data.longest_streak })
+              : t('personal best — keep it alive')}
           </div>
         </>
       )}

@@ -245,12 +245,12 @@ export function TimedStudyTab() {
             onClick={handleStart}
             loading={timedPlanMutation.isPending}
           >
-            {timedPlanMutation.isPending ? 'Generating plan…' : `Start ${minutes}-minute session`}
+            {timedPlanMutation.isPending ? t('Generating plan…') : t('Start {{minutes}}-minute session', { minutes })}
           </Button>
 
           {timedPlanMutation.isError && (
             <p className="text-sm text-red-fg" role="alert">
-              {timedPlanMutation.error instanceof Error ? timedPlanMutation.error.message : 'Failed to generate plan'}
+              {timedPlanMutation.error instanceof Error ? timedPlanMutation.error.message : t('Failed to generate plan')}
             </p>
           )}
         </div>
@@ -279,7 +279,7 @@ export function TimedStudyTab() {
             />
           </div>
           <Button variant="secondary" size="sm" onClick={() => setPaused(!paused)}>
-            {paused ? 'Resume' : 'Pause'}
+            {paused ? t('Resume') : t('Pause')}
           </Button>
         </div>
 

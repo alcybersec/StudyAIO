@@ -1,4 +1,5 @@
 import { useForm } from 'react-hook-form'
+import { ASSESSMENT_TYPES, ASSESSMENT_TYPE_LABELS } from '../../lib/assessmentTypes'
 import { useTranslation } from 'react-i18next'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -63,9 +64,9 @@ export function AddDeadlineModal({ courseCode, onClose }: AddDeadlineModalProps)
             <div>
               <label className="block text-sm font-medium text-text">{t('Type')}</label>
               <select {...register('deadlineType')} className={FIELD}>
-                {['exam', 'assignment', 'quiz', 'project', 'lab', 'presentation', 'other'].map((t) => (
-                  <option key={t} value={t}>
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                {ASSESSMENT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {t(ASSESSMENT_TYPE_LABELS[type])}
                   </option>
                 ))}
               </select>
@@ -96,7 +97,7 @@ export function AddDeadlineModal({ courseCode, onClose }: AddDeadlineModalProps)
                 disabled={createDeadline.isPending || !isValid}
                 className="rounded-md bg-sage px-4 py-2 text-sm text-on-accent hover:bg-sage-hover disabled:opacity-50"
               >
-                {createDeadline.isPending ? 'Adding…' : 'Add deadline'}
+                {createDeadline.isPending ? t('Adding…') : t('Add deadline')}
               </button>
             </div>
           </form>

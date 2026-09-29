@@ -79,7 +79,7 @@ export function FeedbackInbox() {
 
       {data.items.length === 0 ? (
         <p className="text-xs text-text-faint">
-          {status === 'new' ? 'Nothing new.' : 'Nothing here.'}
+          {status === 'new' ? t('Nothing new.') : t('Nothing here.')}
         </p>
       ) : (
         <ul className="space-y-2">

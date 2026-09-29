@@ -24,7 +24,7 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
             key={r.quality}
             onClick={() => onRate(r.quality)}
             disabled={disabled}
-            title={`${r.label} — next review ${r.hint}`}
+            title={t('{{label}} — next review {{hint}}', { label: t(r.label), hint: r.hint })}
             className={`text-xs font-medium rounded-lg py-2.5 min-h-[56px] cursor-pointer transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri ${r.tone}`}
           >
             {r.label}

@@ -71,16 +71,16 @@ export function SendInviteForm() {
                   setResult(sent)
                   setEmail('')
                   setNote('')
-                  if (sent.email_sent) toast.success(`Invite sent to ${sent.invite.email}`)
-                  else toast.warning(i18n.t(i18n.t('Invite created, but the email could not be sent')))
+                  if (sent.email_sent) toast.success(i18n.t('Invite sent to {{email}}', { email: sent.invite.email }))
+                  else toast.warning(i18n.t('Invite created, but the email could not be sent'))
                 },
-                onError: () => toast.error(i18n.t(i18n.t("Couldn't create the invite"))),
+                onError: () => toast.error(i18n.t("Couldn't create the invite")),
               },
             )
           }
         >
           <Mail size={12} aria-hidden />
-          {sendInvite.isPending ? 'Sending…' : 'Send invite'}
+          {sendInvite.isPending ? t('Sending…') : t('Send invite')}
         </Button>
       </div>
 

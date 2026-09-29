@@ -76,7 +76,7 @@ export function AppearanceSection() {
             ))}
           </div>
           <p className="mt-1.5 text-xs text-text-faint">
-            {t('The language of the interface. Translation is still in progress, so some screens stay in English.')}
+            {t('The language of the interface, applied everywhere in the app.')}
           </p>
 
           <label className="mt-3 flex items-start gap-2.5 cursor-pointer has-disabled:cursor-not-allowed">

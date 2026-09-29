@@ -52,7 +52,7 @@ export const DeadlinesWidget = memo(function DeadlinesWidget() {
                 {!d.is_confirmed && <span className="text-[10px] text-amber-fg shrink-0">{t('unconfirmed')}</span>}
               </span>
               <span className={`text-xs font-semibold shrink-0 ml-3 ${deadlineToneClass(days)}`}>
-                {days <= 0 ? 'Today' : `${days}d`}
+                {days <= 0 ? t('Today') : t('{{days}}d', { days })}
               </span>
             </li>
           )

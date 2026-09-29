@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import i18n from '../../i18n'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Button, Modal, Select, toast } from '../ui'
@@ -51,7 +52,7 @@ export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModa
             result.conflict_weeks.length > 0
               ? ` — ${result.conflict_weeks.length} colliding weeks sent to Review`
               : ''
-          toast.success(`Merged ${course.code} into ${target}${conflictNote}`)
+          toast.success(i18n.t('Merged {{code}} into {{target}}{{note}}', { code: course.code, target, note: conflictNote }))
           navigate(`/courses/${target}`, { replace: true })
         },
         onError: (err) => toastMutationError(err, handleMerge),
@@ -63,7 +64,7 @@ export function MergeCourseModal({ open, onOpenChange, course }: MergeCourseModa
     <Modal
       open={open}
       onOpenChange={handleOpenChange}
-      title={`Merge ${course.code} into another course`}
+      title={t('Merge {{code}} into another course', { code: course.code })}
       description={t('All weeks, summaries and study assets move to the target. Colliding weeks create review items — nothing is overwritten. The source course is archived afterwards.')}
     >
       <div className="space-y-4">

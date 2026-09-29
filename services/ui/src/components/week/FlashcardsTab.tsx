@@ -144,7 +144,7 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
               : 'bg-surface-2 text-text-muted hover:text-text'
           }`}
         >
-          {t('Shuffle')} {shuffledCards ? 'On' : 'Off'}
+          {t('Shuffle')} {shuffledCards ? t('On') : t('Off')}
         </button>
       </div>
 
@@ -155,7 +155,7 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
         aria-label={flipped ? 'Showing answer, click to see question' : 'Showing question, click to see answer'}
       >
         <div className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-faint mb-4">
-          {flipped ? 'Answer' : 'Question'}
+          {flipped ? t('Answer') : t('Question')}
         </div>
         <div className="text-lg leading-relaxed text-text whitespace-pre-wrap">
           {flipped ? card.back : card.front}

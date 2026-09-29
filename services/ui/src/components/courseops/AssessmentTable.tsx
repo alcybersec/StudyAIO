@@ -86,7 +86,7 @@ export function AssessmentTable({ assessments, isLoading, isError, onRetry, onSe
             </TCell>
             <TCell className="max-w-0 truncate text-text-muted">{a.description ?? '—'}</TCell>
             <TCell align="right" className="text-xs text-peri-fg">
-              {onSelect ? 'Manage →' : ''}
+              {onSelect ? t('Manage →') : ''}
             </TCell>
           </TRow>
         ))}

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { useTour } from '../../hooks/useTour'
 import { useAuth } from '../../hooks/useAuth'
 import { TourTooltip } from './TourTooltip'
 
 export function OnboardingTour() {
+  const { t } = useTranslation()
   const { isDemo } = useAuth()
   const { active, step, currentStep, totalSteps, completed, start, next, prev, skip } = useTour()
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
@@ -69,8 +71,8 @@ export function OnboardingTour() {
       <div className="fixed inset-0 z-[9999]" onClick={skip} />
       {/* Tooltip */}
       <TourTooltip
-        title={currentStep.title}
-        description={currentStep.description}
+        title={t(currentStep.title)}
+        description={t(currentStep.description)}
         step={step}
         totalSteps={totalSteps}
         position={{

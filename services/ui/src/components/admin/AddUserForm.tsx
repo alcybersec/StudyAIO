@@ -50,11 +50,11 @@ function SetupLink({ result, onDismiss }: { result: AdminUserCreated; onDismiss:
                 setCopied(true)
                 setTimeout(() => setCopied(false), 1500)
               })
-              .catch(() => toast.error(i18n.t(i18n.t('Could not copy to clipboard'))))
+              .catch(() => toast.error(i18n.t('Could not copy to clipboard')))
           }}
         >
           {copied ? <Check size={12} aria-hidden /> : <Copy size={12} aria-hidden />}
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t('Copied') : t('Copy')}
         </Button>
       </div>
       <p className="text-[11px] text-text-faint">
@@ -160,7 +160,7 @@ export function AddUserForm() {
             )
           }}
         >
-          {createUser.isPending ? 'Creating…' : 'Create'}
+          {createUser.isPending ? t('Creating…') : t('Create')}
         </Button>
         <Button
           variant="ghost"

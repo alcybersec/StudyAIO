@@ -74,7 +74,7 @@ export function StudyHubPage() {
               value={tab}
               className="px-4 py-2.5 text-sm font-medium text-text-muted transition-colors border-b-2 border-transparent hover:text-text data-[state=active]:text-text data-[state=active]:border-sage min-h-[44px]"
             >
-              {tabLabels[tab]}
+              {t(tabLabels[tab])}
               {tab === 'plan' && (
                 <span className="ml-1.5 inline-flex align-middle">
                   <Badge variant="success">{t('new')}</Badge>

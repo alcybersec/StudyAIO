@@ -37,9 +37,9 @@ export function DataPrivacySection() {
       link.click()
       link.remove()
       URL.revokeObjectURL(url)
-      toast.success(i18n.t(i18n.t('Your data has been downloaded')))
+      toast.success(i18n.t('Your data has been downloaded'))
     },
-    onError: () => toast.error(i18n.t(i18n.t("Couldn't export your data. Please try again."))),
+    onError: () => toast.error(i18n.t("Couldn't export your data. Please try again.")),
   })
 
   const deleteMutation = useMutation({

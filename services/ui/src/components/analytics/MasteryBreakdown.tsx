@@ -46,10 +46,10 @@ export function MasteryBreakdown() {
 
   const courseOptions = useMemo(
     () => [
-      { value: '', label: 'All courses' },
+      { value: '', label: t('All courses') },
       ...(courses?.map((c) => ({ value: c.code, label: c.code })) ?? []),
     ],
-    [courses],
+    [courses, t],
   )
 
   if (isLoading) {

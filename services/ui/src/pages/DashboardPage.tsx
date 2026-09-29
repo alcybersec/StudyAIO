@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import i18n from '../i18n'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout'
@@ -42,7 +43,12 @@ export function DashboardPage() {
   }, [])
 
   const today = useMemo(
-    () => new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
+    () =>
+      new Date().toLocaleDateString(i18n.language, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
     [],
   )
 

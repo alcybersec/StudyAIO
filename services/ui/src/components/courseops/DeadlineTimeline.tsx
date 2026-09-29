@@ -97,7 +97,7 @@ export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: Dea
                 <div className="mt-0.5 flex items-center gap-3 text-xs text-text-muted">
                   <span className="font-mono text-[11px]">{d.due_date}</span>
                   <span className="capitalize">{d.deadline_type}</span>
-                  {!isPast && <span className="font-mono text-[11px]">{days === 0 ? 'today' : `${days}d`}</span>}
+                  {!isPast && <span className="font-mono text-[11px]">{days === 0 ? t('today') : t('{{days}}d', { days })}</span>}
                   {isPast && <span className="font-mono text-[11px]">{t('past')}</span>}
                 </div>
                 {d.description && <p className="mt-1 text-xs text-text-muted">{d.description}</p>}
