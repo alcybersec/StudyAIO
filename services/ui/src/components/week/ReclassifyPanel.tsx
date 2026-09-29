@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { FolderInput, X } from 'lucide-react'
 import { Badge, Button, Card, Input, Select, toast } from '../ui'
@@ -17,6 +19,8 @@ const MIN_WEEK = 0
 const MAX_WEEK = 52
 
 export function ReclassifyPanel({ artifact, courseCode, week, onClose }: ReclassifyPanelProps) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
   const { data: courses, isLoading: coursesLoading } = useCourses()
   const reclassify = useReclassifyArtifact()
@@ -35,7 +39,7 @@ export function ReclassifyPanel({ artifact, courseCode, week, onClose }: Reclass
         onSuccess: () => {
           toast.success(`Moved to ${targetCourse} week ${parsedWeek}`, {
             action: {
-              label: 'Open',
+              label: i18n.t('Open'),
               onClick: () => navigate(`/courses/${targetCourse}/weeks/${parsedWeek}`),
             },
           })
@@ -51,19 +55,19 @@ export function ReclassifyPanel({ artifact, courseCode, week, onClose }: Reclass
       <div className="flex items-start justify-between mb-3">
         <div>
           <p className="text-sm font-semibold text-text flex items-center gap-2">
-            <FolderInput size={14} className="text-peri-fg" aria-hidden /> Reclassify this week's material
+            <FolderInput size={14} className="text-peri-fg" aria-hidden /> {t("Reclassify this week's material")}
           </p>
           <p className="text-xs text-text-muted mt-1">
-            Applies to <span className="font-mono">{artifact.original_filename}</span> — currently{' '}
+            {t('Applies to')} <span className="font-mono">{artifact.original_filename}</span> {t('— currently')}{' '}
             <Badge>
-              {courseCode} · Week {week}
+              {t('{{course}} · Week {{week}}', { course: courseCode, week })}
             </Badge>
           </p>
         </div>
         <button
           onClick={onClose}
           className="text-text-faint hover:text-text-muted cursor-pointer p-1"
-          aria-label="Close reclassify panel"
+          aria-label={t('Close reclassify panel')}
         >
           <X size={14} aria-hidden />
         </button>
@@ -71,7 +75,7 @@ export function ReclassifyPanel({ artifact, courseCode, week, onClose }: Reclass
 
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-3 items-end max-w-lg">
         <Select
-          label="Move to course"
+          label={t('Move to course')}
           options={(courses ?? []).map((c) => ({
             value: c.code,
             label: c.name ? `${c.code} — ${c.name}` : c.code,
@@ -82,7 +86,7 @@ export function ReclassifyPanel({ artifact, courseCode, week, onClose }: Reclass
           placeholder={coursesLoading ? 'Loading courses…' : 'Select course'}
         />
         <Input
-          label="Week"
+          label={t('Week')}
           inputMode="numeric"
           value={weekInput}
           onChange={(e) => setWeekInput(e.target.value)}
@@ -90,17 +94,16 @@ export function ReclassifyPanel({ artifact, courseCode, week, onClose }: Reclass
         />
         <div className="flex gap-2">
           <Button size="md" onClick={move} loading={reclassify.isPending} disabled={!weekValid || unchanged}>
-            Move
+            {t('Move')}
           </Button>
           <Button size="md" variant="ghost" onClick={onClose}>
-            Cancel
+            {t('Cancel')}
           </Button>
         </div>
       </div>
 
       <p className="text-[11px] text-text-faint mt-3">
-        The summary, flashcards and quiz move with the file. If the destination week already has a summary, it's
-        re-generated as a new version merging both sources — nothing is overwritten silently.
+        {t("The summary, flashcards and quiz move with the file. If the destination week already has a summary, it's re-generated as a new version merging both sources — nothing is overwritten silently.")}
       </p>
     </Card>
   )

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Download, FileText, Presentation } from 'lucide-react'
 import { PdfViewer } from './PdfViewer'
 import type { Artifact } from '../../types'
@@ -22,6 +23,8 @@ function formatSize(bytes: number): string {
 }
 
 function FallbackViewer({ artifact }: { artifact: Artifact }) {
+  const { t } = useTranslation()
+
   const Icon = artifact.file_type === 'pptx' ? Presentation : FileText
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px] bg-surface-0">
@@ -31,13 +34,13 @@ function FallbackViewer({ artifact }: { artifact: Artifact }) {
       <span className="inline-block px-2 py-0.5 font-mono text-[11px] rounded bg-surface-2 text-text-muted mb-4">
         {artifact.file_type.toUpperCase()}
       </span>
-      <p className="text-xs text-text-faint mb-3">Inline preview not available for this file</p>
+      <p className="text-xs text-text-faint mb-3">{t('Inline preview not available for this file')}</p>
       <a
         href={`/api/files/uploads/artifacts/${artifact.id}`}
         download
         className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-on-accent bg-sage rounded-lg hover:bg-sage-hover transition-colors min-h-[44px]"
       >
-        <Download size={14} aria-hidden /> Download to view
+        <Download size={14} aria-hidden /> {t('Download to view')}
       </a>
     </div>
   )

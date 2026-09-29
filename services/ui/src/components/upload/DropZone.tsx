@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FolderOpen, Upload } from 'lucide-react'
 
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.pptx']
@@ -9,6 +10,8 @@ interface DropZoneProps {
 }
 
 export function DropZone({ onFiles, disabled }: DropZoneProps) {
+  const { t } = useTranslation()
+
   const inputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -53,7 +56,7 @@ export function DropZone({ onFiles, disabled }: DropZoneProps) {
       >
         <Upload size={20} strokeWidth={1.5} aria-hidden />
         {dragOver ? 'Drop to upload' : 'Drop lecture files here — PDF, DOCX, PPTX · up to 20 at once'}
-        <span className="text-[11px] text-text-faint">duplicates are detected and skipped automatically</span>
+        <span className="text-[11px] text-text-faint">{t('duplicates are detected and skipped automatically')}</span>
       </button>
       <input
         ref={inputRef}
@@ -72,7 +75,7 @@ export function DropZone({ onFiles, disabled }: DropZoneProps) {
           className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-text-muted bg-surface-1 border border-border rounded-lg hover:bg-surface-2 hover:text-text disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
         >
           <FolderOpen size={14} aria-hidden />
-          Upload folder
+          {t('Upload folder')}
         </button>
         <input
           ref={folderInputRef}

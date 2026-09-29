@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useDashboardActivity } from '../../../hooks/useApi'
 import { Skeleton, StatusBadge } from '../../ui'
 import { WidgetShell } from './WidgetShell'
@@ -19,6 +20,8 @@ function ActivitySkeleton() {
 }
 
 export const ActivityWidget = memo(function ActivityWidget() {
+  const { t } = useTranslation()
+
   const { data, isLoading, isError, refetch } = useDashboardActivity()
   const state = selectWidgetState({
     isLoading,
@@ -29,11 +32,11 @@ export const ActivityWidget = memo(function ActivityWidget() {
 
   return (
     <WidgetShell
-      title="Recent activity"
+      title={t('Recent activity')}
       state={state}
       onRetry={() => refetch()}
-      emptyTitle="No activity yet"
-      emptyHint="Pipeline runs show up here as your files are processed."
+      emptyTitle={t('No activity yet')}
+      emptyHint={t('Pipeline runs show up here as your files are processed.')}
       skeleton={<ActivitySkeleton />}
     >
       <ul className="divide-y divide-border">

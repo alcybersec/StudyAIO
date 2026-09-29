@@ -1,4 +1,5 @@
 import { useAchievements, useLeaderboard, useXPSummary } from '../hooks/useApi'
+import { useTranslation } from 'react-i18next'
 import { useTabRouting } from '../hooks/useTabRouting'
 import {
   EmptyState,
@@ -19,6 +20,8 @@ const TABS = ['achievements', 'leaderboard'] as const
 const CATEGORIES = ['all', 'study', 'milestone', 'streak', 'mastery'] as const
 
 function XPSection() {
+  const { t } = useTranslation()
+
   const { data: xp, isLoading, isError, refetch } = useXPSummary()
 
   if (isLoading && !xp) {
@@ -26,7 +29,7 @@ function XPSection() {
       <div
         className="mb-6 rounded-xl border border-border bg-surface-1 p-4 flex items-center gap-3"
         role="status"
-        aria-label="Loading XP"
+        aria-label={t('Loading XP')}
       >
         <Skeleton height={40} width={40} rounded />
         <div className="flex-1 space-y-2">
@@ -40,7 +43,7 @@ function XPSection() {
   if (isError && !xp) {
     return (
       <div className="mb-6">
-        <ErrorState compact title="XP progress couldn't load" onRetry={() => refetch()} />
+        <ErrorState compact title={t("XP progress couldn't load")} onRetry={() => refetch()} />
       </div>
     )
   }
@@ -55,11 +58,13 @@ function XPSection() {
 }
 
 function AchievementsGridSkeleton() {
+  const { t } = useTranslation()
+
   return (
     <div
       className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"
       role="status"
-      aria-label="Loading achievements"
+      aria-label={t('Loading achievements')}
     >
       {Array.from({ length: 10 }).map((_, i) => (
         <div key={i} className="rounded-xl border border-border bg-surface-1 p-3 flex flex-col items-center gap-2">
@@ -73,19 +78,21 @@ function AchievementsGridSkeleton() {
 }
 
 function AchievementsTab({ category, onCategoryChange }: { category: string; onCategoryChange: (c: string) => void }) {
+  const { t } = useTranslation()
+
   const { data, isLoading, isError, refetch } = useAchievements()
 
   if (isLoading && !data) return <AchievementsGridSkeleton />
 
   if (isError && !data) {
-    return <ErrorState title="Achievements couldn't load" onRetry={() => refetch()} />
+    return <ErrorState title={t("Achievements couldn't load")} onRetry={() => refetch()} />
   }
 
   if (!data || data.achievements.length === 0) {
     return (
       <EmptyState
-        title="No achievements yet"
-        description="Upload lectures and study cards to start unlocking achievements."
+        title={t('No achievements yet')}
+        description={t('Upload lectures and study cards to start unlocking achievements.')}
       />
     )
   }
@@ -117,15 +124,17 @@ function AchievementsTab({ category, onCategoryChange }: { category: string; onC
           ))}
         </div>
       ) : (
-        <EmptyState compact title="No achievements in this category" description="Try another category filter." />
+        <EmptyState compact title={t('No achievements in this category')} description={t('Try another category filter.')} />
       )}
     </>
   )
 }
 
 function LeaderboardSkeleton() {
+  const { t } = useTranslation()
+
   return (
-    <div className="p-4 space-y-3" role="status" aria-label="Loading leaderboard">
+    <div className="p-4 space-y-3" role="status" aria-label={t('Loading leaderboard')}>
       {Array.from({ length: 5 }).map((_, i) => (
         <div key={i} className="flex items-center gap-4">
           <Skeleton height={14} width={24} />
@@ -139,6 +148,8 @@ function LeaderboardSkeleton() {
 }
 
 function LeaderboardTab() {
+  const { t } = useTranslation()
+
   const { data, isLoading, isError, refetch } = useLeaderboard()
 
   return (
@@ -147,25 +158,25 @@ function LeaderboardTab() {
         <LeaderboardSkeleton />
       ) : isError && !data ? (
         <div className="p-4">
-          <ErrorState compact title="Leaderboard couldn't load" onRetry={() => refetch()} />
+          <ErrorState compact title={t("Leaderboard couldn't load")} onRetry={() => refetch()} />
         </div>
       ) : !data || data.entries.length === 0 ? (
         <EmptyState
           compact
-          title="No leaderboard entries yet"
-          description="Start studying to earn XP and claim a spot."
+          title={t('No leaderboard entries yet')}
+          description={t('Start studying to earn XP and claim a spot.')}
         />
       ) : (
         <div className="px-4 py-2">
           <Table>
             <THead>
               <TCell header>#</TCell>
-              <TCell header>User</TCell>
+              <TCell header>{t('User')}</TCell>
               <TCell header align="right">
-                Level
+                {t('Level')}
               </TCell>
               <TCell header align="right">
-                XP
+                {t('XP')}
               </TCell>
             </THead>
             <TBody>
@@ -192,6 +203,8 @@ function LeaderboardTab() {
 }
 
 export function AchievementsPage() {
+  const { t } = useTranslation()
+
   const [tab, setTab] = useTabRouting(TABS, 'achievements')
   const [category, setCategory] = useTabRouting(CATEGORIES, 'all', 'category')
 
@@ -200,7 +213,7 @@ export function AchievementsPage() {
   return (
     <div>
       <PageHeader
-        title="Achievements"
+        title={t('Achievements')}
         subtitle={achievements ? `${achievements.earned} / ${achievements.total} unlocked` : undefined}
       />
 

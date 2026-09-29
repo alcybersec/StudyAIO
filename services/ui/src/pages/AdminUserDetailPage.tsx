@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import type { ReactNode } from 'react'
 import { useAdminUserDetail } from '../hooks/useApi'
 import {
@@ -15,10 +16,12 @@ import {
 } from '../components/ui'
 
 function SectionCard({ title, children, unavailable }: { title: string; children: ReactNode; unavailable?: boolean }) {
+  const { t } = useTranslation()
+
   return (
     <div className="bg-surface-1 rounded-xl border border-border p-4">
       <SectionLabel>{title}</SectionLabel>
-      {unavailable ? <p className="text-sm text-text-faint italic">Data unavailable</p> : children}
+      {unavailable ? <p className="text-sm text-text-faint italic">{t('Data unavailable')}</p> : children}
     </div>
   )
 }
@@ -35,8 +38,10 @@ function StatRow({ label, value }: { label: string; value: string | number | boo
 }
 
 function DetailSkeleton() {
+  const { t } = useTranslation()
+
   return (
-    <div className="space-y-6" role="status" aria-label="Loading user details">
+    <div className="space-y-6" role="status" aria-label={t('Loading user details')}>
       <Skeleton height={14} width={220} />
       <Skeleton height={24} width={160} />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -63,17 +68,19 @@ function DetailSkeleton() {
 }
 
 export function AdminUserDetailPage() {
+  const { t } = useTranslation()
+
   const { userId } = useParams<{ userId: string }>()
   const { data, isLoading, isError, refetch } = useAdminUserDetail(userId)
 
   if (isLoading && !data) return <DetailSkeleton />
 
   if (isError && !data) {
-    return <ErrorState title="User details couldn't load" onRetry={() => refetch()} />
+    return <ErrorState title={t("User details couldn't load")} onRetry={() => refetch()} />
   }
 
   if (!data) {
-    return <EmptyState title="User not found" description="This user may have been deleted." actionLabel="Back to Admin" actionTo="/admin" />
+    return <EmptyState title={t('User not found')} description={t('This user may have been deleted.')} actionLabel={t('Back to Admin')} actionTo="/admin" />
   }
 
   const { profile, subscription, storage, usage, pipeline, study, content, gamification, chat } = data
@@ -83,21 +90,21 @@ export function AdminUserDetailPage() {
       {/* Breadcrumbs */}
       <nav className="flex items-center gap-2 text-sm text-text-muted">
         <Link to="/" className="hover:text-text transition-colors">
-          Home
+          {t('Home')}
         </Link>
         <span className="text-border">/</span>
         <Link to="/admin" className="hover:text-text transition-colors">
-          Admin
+          {t('Admin')}
         </Link>
         <span className="text-border">/</span>
         <span className="text-text font-medium">{profile.username || profile.email}</span>
       </nav>
 
-      <h1 className="text-xl font-bold tracking-tight text-text">User details</h1>
+      <h1 className="text-xl font-bold tracking-tight text-text">{t('User details')}</h1>
 
       {/* Top row: Profile + Subscription */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SectionCard title="Profile">
+        <SectionCard title={t('Profile')}>
           <div className="flex items-center gap-3 mb-4">
             {profile.avatar_url ? (
               <img src={profile.avatar_url} alt="" className="w-10 h-10 rounded-full" />
@@ -116,26 +123,26 @@ export function AdminUserDetailPage() {
             <Badge variant={profile.tier === 'pro' ? 'success' : 'default'}>{profile.tier}</Badge>
             <Badge variant={profile.is_active ? 'success' : 'danger'}>{profile.is_active ? 'active' : 'inactive'}</Badge>
           </div>
-          <StatRow label="Email verified" value={profile.email_verified} />
-          <StatRow label="MFA enabled" value={profile.mfa_enabled} />
-          <StatRow label="Last login" value={profile.last_login_at ? new Date(profile.last_login_at).toLocaleString() : null} />
-          <StatRow label="Created" value={profile.created_at ? new Date(profile.created_at).toLocaleDateString() : null} />
+          <StatRow label={t('Email verified')} value={profile.email_verified} />
+          <StatRow label={t('MFA enabled')} value={profile.mfa_enabled} />
+          <StatRow label={t('Last login')} value={profile.last_login_at ? new Date(profile.last_login_at).toLocaleString() : null} />
+          <StatRow label={t('Created')} value={profile.created_at ? new Date(profile.created_at).toLocaleDateString() : null} />
         </SectionCard>
 
-        <SectionCard title="Subscription" unavailable={!subscription}>
+        <SectionCard title={t('Subscription')} unavailable={!subscription}>
           {subscription && (
             <>
-              <StatRow label="Plan" value={subscription.plan} />
-              <StatRow label="Status" value={subscription.status} />
+              <StatRow label={t('Plan')} value={subscription.plan} />
+              <StatRow label={t('Status')} value={subscription.status} />
               <StatRow
-                label="Period start"
+                label={t('Period start')}
                 value={subscription.current_period_start ? new Date(subscription.current_period_start).toLocaleDateString() : null}
               />
               <StatRow
-                label="Period end"
+                label={t('Period end')}
                 value={subscription.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString() : null}
               />
-              <StatRow label="Cancel at period end" value={subscription.cancel_at_period_end} />
+              <StatRow label={t('Cancel at period end')} value={subscription.cancel_at_period_end} />
             </>
           )}
         </SectionCard>
@@ -143,14 +150,14 @@ export function AdminUserDetailPage() {
 
       {/* Middle grid: Storage, Usage, Study */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <SectionCard title="Storage" unavailable={!storage}>
+        <SectionCard title={t('Storage')} unavailable={!storage}>
           {storage && (
             <>
-              <StatRow label="Total files" value={storage.total_files} />
-              <StatRow label="Total size" value={`${storage.total_mb} MB`} />
+              <StatRow label={t('Total files')} value={storage.total_files} />
+              <StatRow label={t('Total size')} value={`${storage.total_mb} MB`} />
               {Object.keys(storage.status_breakdown).length > 0 && (
                 <div className="mt-2 pt-2 border-t border-border">
-                  <SectionLabel>By status</SectionLabel>
+                  <SectionLabel>{t('By status')}</SectionLabel>
                   {Object.entries(storage.status_breakdown).map(([status, count]) => (
                     <StatRow key={status} label={status} value={count} />
                   ))}
@@ -160,34 +167,34 @@ export function AdminUserDetailPage() {
           )}
         </SectionCard>
 
-        <SectionCard title="AI / API usage" unavailable={!usage}>
+        <SectionCard title={t('AI / API usage')} unavailable={!usage}>
           {usage && (
             <>
-              <SectionLabel>Today</SectionLabel>
-              <StatRow label="AI calls" value={usage.today.ai_calls} />
-              <StatRow label="Tokens in" value={usage.today.tokens_input.toLocaleString()} />
-              <StatRow label="Tokens out" value={usage.today.tokens_output.toLocaleString()} />
-              <StatRow label="Uploads" value={usage.today.uploads} />
+              <SectionLabel>{t('Today')}</SectionLabel>
+              <StatRow label={t('AI calls')} value={usage.today.ai_calls} />
+              <StatRow label={t('Tokens in')} value={usage.today.tokens_input.toLocaleString()} />
+              <StatRow label={t('Tokens out')} value={usage.today.tokens_output.toLocaleString()} />
+              <StatRow label={t('Uploads')} value={usage.today.uploads} />
               <div className="mt-3">
-                <SectionLabel>Last 30 days</SectionLabel>
+                <SectionLabel>{t('Last 30 days')}</SectionLabel>
               </div>
-              <StatRow label="AI calls" value={usage.last_30_days.ai_calls} />
-              <StatRow label="Tokens in" value={usage.last_30_days.tokens_input.toLocaleString()} />
-              <StatRow label="Tokens out" value={usage.last_30_days.tokens_output.toLocaleString()} />
-              <StatRow label="Uploads" value={usage.last_30_days.uploads} />
+              <StatRow label={t('AI calls')} value={usage.last_30_days.ai_calls} />
+              <StatRow label={t('Tokens in')} value={usage.last_30_days.tokens_input.toLocaleString()} />
+              <StatRow label={t('Tokens out')} value={usage.last_30_days.tokens_output.toLocaleString()} />
+              <StatRow label={t('Uploads')} value={usage.last_30_days.uploads} />
             </>
           )}
         </SectionCard>
 
-        <SectionCard title="Study activity" unavailable={!study}>
+        <SectionCard title={t('Study activity')} unavailable={!study}>
           {study && (
             <>
-              <StatRow label="Total sessions" value={study.total_sessions} />
-              <StatRow label="Cards reviewed" value={study.cards_reviewed} />
-              <StatRow label="Quiz answered" value={study.quiz_questions_answered} />
-              <StatRow label="Quiz correct" value={study.quiz_correct} />
-              <StatRow label="Quiz accuracy" value={`${study.quiz_accuracy_pct}%`} />
-              <StatRow label="Study hours" value={study.total_study_hours} />
+              <StatRow label={t('Total sessions')} value={study.total_sessions} />
+              <StatRow label={t('Cards reviewed')} value={study.cards_reviewed} />
+              <StatRow label={t('Quiz answered')} value={study.quiz_questions_answered} />
+              <StatRow label={t('Quiz correct')} value={study.quiz_correct} />
+              <StatRow label={t('Quiz accuracy')} value={`${study.quiz_accuracy_pct}%`} />
+              <StatRow label={t('Study hours')} value={study.total_study_hours} />
             </>
           )}
         </SectionCard>
@@ -195,15 +202,15 @@ export function AdminUserDetailPage() {
 
       {/* Second grid: Content, Gamification, Chat */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <SectionCard title="Content" unavailable={!content}>
+        <SectionCard title={t('Content')} unavailable={!content}>
           {content && (
             <>
-              <StatRow label="Courses" value={content.courses_count} />
-              <StatRow label="Artifacts" value={content.artifacts_count} />
-              <StatRow label="Exams" value={content.exams_count} />
+              <StatRow label={t('Courses')} value={content.courses_count} />
+              <StatRow label={t('Artifacts')} value={content.artifacts_count} />
+              <StatRow label={t('Exams')} value={content.exams_count} />
               {content.per_course.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-border">
-                  <SectionLabel>Per course</SectionLabel>
+                  <SectionLabel>{t('Per course')}</SectionLabel>
                   {content.per_course.map((c) => (
                     <StatRow key={c.code} label={c.code} value={`${c.artifact_count} files`} />
                   ))}
@@ -213,64 +220,64 @@ export function AdminUserDetailPage() {
           )}
         </SectionCard>
 
-        <SectionCard title="Gamification" unavailable={!gamification}>
+        <SectionCard title={t('Gamification')} unavailable={!gamification}>
           {gamification && (
             <>
-              <StatRow label="Total XP" value={gamification.total_xp.toLocaleString()} />
-              <StatRow label="Level" value={gamification.level} />
-              <StatRow label="Achievements" value={gamification.achievements_count} />
+              <StatRow label={t('Total XP')} value={gamification.total_xp.toLocaleString()} />
+              <StatRow label={t('Level')} value={gamification.level} />
+              <StatRow label={t('Achievements')} value={gamification.achievements_count} />
             </>
           )}
         </SectionCard>
 
-        <SectionCard title="Chat" unavailable={!chat}>
+        <SectionCard title={t('Chat')} unavailable={!chat}>
           {chat && (
             <>
-              <StatRow label="Sessions" value={chat.total_sessions} />
-              <StatRow label="Messages" value={chat.total_messages} />
-              <StatRow label="Tokens used" value={chat.total_tokens.toLocaleString()} />
+              <StatRow label={t('Sessions')} value={chat.total_sessions} />
+              <StatRow label={t('Messages')} value={chat.total_messages} />
+              <StatRow label={t('Tokens used')} value={chat.total_tokens.toLocaleString()} />
             </>
           )}
         </SectionCard>
       </div>
 
       {/* Full width: Pipeline */}
-      <SectionCard title="Pipeline" unavailable={!pipeline}>
+      <SectionCard title={t('Pipeline')} unavailable={!pipeline}>
         {pipeline && (
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div>
-                <SectionLabel>Total runs</SectionLabel>
+                <SectionLabel>{t('Total runs')}</SectionLabel>
                 <div className="text-lg font-bold text-text">{pipeline.total_runs}</div>
               </div>
               <div>
-                <SectionLabel>Success</SectionLabel>
+                <SectionLabel>{t('Success')}</SectionLabel>
                 <div className="text-lg font-bold text-sage-fg">{pipeline.success_count}</div>
               </div>
               <div>
-                <SectionLabel>Failed</SectionLabel>
+                <SectionLabel>{t('Failed')}</SectionLabel>
                 <div className="text-lg font-bold text-red-fg">{pipeline.failed_count}</div>
               </div>
               <div>
-                <SectionLabel>Avg duration</SectionLabel>
-                <div className="text-lg font-bold text-text font-mono">{pipeline.avg_duration_ms}ms</div>
+                <SectionLabel>{t('Avg duration')}</SectionLabel>
+                <div className="text-lg font-bold text-text font-mono">{t('{{ms}}ms', { ms: pipeline.avg_duration_ms })}</div>
               </div>
             </div>
 
             {pipeline.stages.length > 0 && (
               <div className="mb-4">
-                <SectionLabel>Per stage</SectionLabel>
+                <SectionLabel>{t('Per stage')}</SectionLabel>
                 <Table>
                   <THead>
-                    <TCell header>Stage</TCell>
+                    <TCell header>{t('Stage')}</TCell>
                     <TCell header align="right">
-                      Total
+                      {t('Total')}
                     </TCell>
                     <TCell header align="right">
-                      Success
+                      {t('Success')}
                     </TCell>
                     <TCell header align="right">
-                      Failed
+                      {t('Failed')}
                     </TCell>
                   </THead>
                   <TBody>
@@ -295,7 +302,7 @@ export function AdminUserDetailPage() {
 
             {pipeline.recent_failures.length > 0 && (
               <div>
-                <SectionLabel>Recent failures</SectionLabel>
+                <SectionLabel>{t('Recent failures')}</SectionLabel>
                 <div className="space-y-2">
                   {pipeline.recent_failures.map((f, i) => (
                     <div key={i} className="text-xs bg-red-soft border border-red/30 rounded-lg p-2">

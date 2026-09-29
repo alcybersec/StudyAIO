@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { Card, Button, Input } from '../ui'
 import { CountdownTimer } from './CountdownTimer'
@@ -16,6 +17,8 @@ interface StudyItem {
 }
 
 export function TimedStudyTab() {
+  const { t } = useTranslation()
+
   const [searchParams] = useSearchParams()
   const timedPlanMutation = useTimedPlan()
   const recordReview = useRecordReview()
@@ -206,7 +209,7 @@ export function TimedStudyTab() {
         <div className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-text mb-2">
-              How many minutes do you have?
+              {t('How many minutes do you have?')}
             </label>
             <div className="flex items-center gap-4">
               <input
@@ -223,15 +226,15 @@ export function TimedStudyTab() {
               </span>
             </div>
             <div className="flex justify-between text-xs text-text-muted mt-1">
-              <span>5 min</span>
-              <span>120 min</span>
+              <span>{t('5 min')}</span>
+              <span>{t('120 min')}</span>
             </div>
           </div>
 
           <Input
             id="timed-course"
-            label="Course (optional)"
-            placeholder="e.g. CSIT302"
+            label={t('Course (optional)')}
+            placeholder={t('e.g. CSIT302')}
             value={courseCode}
             onChange={e => setCourseCode(e.target.value)}
           />
@@ -283,7 +286,7 @@ export function TimedStudyTab() {
         {currentItem?.type === 'card' && currentCard && (
           <Card>
             <div className="text-center py-8">
-              <span className="text-xs font-medium text-text-muted uppercase tracking-wider">Flashcard</span>
+              <span className="text-xs font-medium text-text-muted uppercase tracking-wider">{t('Flashcard')}</span>
               <div
                 className="mt-4 cursor-pointer min-h-[200px] flex items-center justify-center"
                 onClick={() => !flipped && setFlipped(true)}
@@ -291,7 +294,7 @@ export function TimedStudyTab() {
                 {!flipped ? (
                   <div>
                     <p className="text-lg font-medium text-text">{currentCard.front}</p>
-                    <p className="text-sm text-text-muted mt-4">Click or press Space to reveal</p>
+                    <p className="text-sm text-text-muted mt-4">{t('Click or press Space to reveal')}</p>
                   </div>
                 ) : (
                   <p className="text-lg text-text">{currentCard.back}</p>
@@ -299,7 +302,7 @@ export function TimedStudyTab() {
               </div>
               {flipped && (
                 <div className="mt-6">
-                  <p className="text-xs text-text-muted mb-2">How well did you know this? (0-5)</p>
+                  <p className="text-xs text-text-muted mb-2">{t('How well did you know this? (0-5)')}</p>
                   <div className="flex justify-center gap-2">
                     {[0, 1, 2, 3, 4, 5].map(q => (
                       <button
@@ -327,7 +330,9 @@ export function TimedStudyTab() {
           <Card>
             <div className="py-4">
               <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                Quiz — {currentQuiz.question_type === 'multiple_choice' ? 'Multiple Choice' : 'Short Answer'}
+                {currentQuiz.question_type === 'multiple_choice'
+                      ? t('Quiz — Multiple Choice')
+                      : t('Quiz — Short Answer')}
               </span>
               <p className="text-lg font-medium text-text mt-3">{currentQuiz.question}</p>
 
@@ -360,7 +365,7 @@ export function TimedStudyTab() {
                 <div className="mt-4">
                   <Input
                     id="timed-short-answer"
-                    placeholder="Your answer…"
+                    placeholder={t('Your answer…')}
                     value={selectedAnswer}
                     onChange={e => setSelectedAnswer(e.target.value)}
                     disabled={showQuizAnswer}
@@ -370,14 +375,14 @@ export function TimedStudyTab() {
 
               {!showQuizAnswer ? (
                 <Button className="mt-4" onClick={handleQuizSubmit} disabled={!selectedAnswer}>
-                  Submit answer
+                  {t('Submit answer')}
                 </Button>
               ) : (
                 <div className="mt-4">
                   {currentQuiz.explanation && (
                     <p className="text-sm text-text-muted mb-3">{currentQuiz.explanation}</p>
                   )}
-                  <Button onClick={advanceItem}>Next</Button>
+                  <Button onClick={advanceItem}>{t('Next')}</Button>
                 </div>
               )}
             </div>
@@ -387,7 +392,7 @@ export function TimedStudyTab() {
         {items.length === 0 && (
           <Card>
             <div className="text-center py-8">
-              <p className="text-text-muted">No study material available for this scope.</p>
+              <p className="text-text-muted">{t('No study material available for this scope.')}</p>
             </div>
           </Card>
         )}
@@ -403,23 +408,23 @@ export function TimedStudyTab() {
           {quizAnswered > 0 && quizCorrect / quizAnswered >= 0.8 ? '\u2B50' : '\u2705'}
         </div>
         <h2 className="text-xl font-semibold text-text">
-          {plan?.total_minutes}-minute session complete
+          {t('{{minutes}}-minute session complete', { minutes: plan?.total_minutes })}
         </h2>
         <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
           <div className="bg-peri-soft rounded-lg p-4">
             <p className="text-2xl font-bold text-peri-fg">{cardsReviewed}</p>
-            <p className="text-xs text-peri-fg/80">Cards reviewed</p>
+            <p className="text-xs text-peri-fg/80">{t('Cards reviewed')}</p>
           </div>
           <div className="bg-amber-soft rounded-lg p-4">
             <p className="text-2xl font-bold text-amber-fg">{quizAnswered}</p>
-            <p className="text-xs text-amber-fg/80">Quiz questions</p>
+            <p className="text-xs text-amber-fg/80">{t('Quiz questions')}</p>
           </div>
           {quizAnswered > 0 && (
             <div className="col-span-2 bg-sage-soft rounded-lg p-4">
               <p className="text-2xl font-bold text-sage-fg">
                 {Math.round((quizCorrect / quizAnswered) * 100)}%
               </p>
-              <p className="text-xs text-sage-fg/80">Quiz accuracy ({quizCorrect}/{quizAnswered})</p>
+              <p className="text-xs text-sage-fg/80">{t('Quiz accuracy ({{correct}}/{{answered}})', { correct: quizCorrect, answered: quizAnswered })}</p>
             </div>
           )}
         </div>
@@ -435,7 +440,7 @@ export function TimedStudyTab() {
               setPlan(null)
             }}
           >
-            Start another session
+            {t('Start another session')}
           </Button>
         </div>
       </div>

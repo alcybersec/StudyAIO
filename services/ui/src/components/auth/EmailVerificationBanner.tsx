@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { authApi } from '../../api/auth'
@@ -12,6 +13,8 @@ import { useAuth } from '../../hooks/useAuth'
  * Renders nothing for verified, demo, or anonymous sessions.
  */
 export function EmailVerificationBanner() {
+  const { t } = useTranslation()
+
   const { user, isDemo } = useAuth()
   const [dismissed, setDismissed] = useState(false)
   const [resent, setResent] = useState(false)
@@ -33,10 +36,10 @@ export function EmailVerificationBanner() {
   return (
     <div className="bg-amber text-on-accent text-center text-sm py-2 px-4 flex items-center justify-center gap-3 sticky top-0 z-50">
       {resent ? (
-        <span role="status">Verification email sent — check your inbox.</span>
+        <span role="status">{t('Verification email sent — check your inbox.')}</span>
       ) : (
         <>
-          <span>Your email isn't verified yet.</span>
+          <span>{t("Your email isn't verified yet.")}</span>
           <button
             type="button"
             onClick={() => resend.mutate()}
@@ -47,14 +50,14 @@ export function EmailVerificationBanner() {
           </button>
           {rateLimited && (
             <span role="alert" className="text-xs">
-              Too many attempts — try again in a minute.
+              {t('Too many attempts — try again in a minute.')}
             </span>
           )}
         </>
       )}
       <button
         type="button"
-        aria-label="Dismiss verification notice"
+        aria-label={t('Dismiss verification notice')}
         onClick={() => setDismissed(true)}
         className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-on-accent/10 transition-colors"
       >

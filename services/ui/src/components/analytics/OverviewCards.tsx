@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Card, EmptyState, ErrorState, SectionLabel, Skeleton } from '../ui'
 import { useAnalyticsHeatmap, useAnalyticsOverview, useStreak } from '../../hooks/useApi'
 import { weeklyTrend } from './trend'
@@ -31,6 +32,8 @@ function Sparkline({ trend, tone }: { trend: number[]; tone: string }) {
 }
 
 export function OverviewCards() {
+  const { t } = useTranslation()
+
   const { data, isLoading, error, refetch } = useAnalyticsOverview()
   const { data: heatmap } = useAnalyticsHeatmap(91)
   const { data: streak } = useStreak()
@@ -82,7 +85,7 @@ export function OverviewCards() {
   if (error) {
     return (
       <ErrorState
-        title="Analytics overview couldn't load"
+        title={t("Analytics overview couldn't load")}
         detail={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
@@ -94,9 +97,9 @@ export function OverviewCards() {
       <Card>
         <EmptyState
           icon="📊"
-          title="No study data yet"
-          description="Analytics appear after your first review session. Ten cards is enough to start the picture."
-          actionLabel="Start a session"
+          title={t('No study data yet')}
+          description={t('Analytics appear after your first review session. Ten cards is enough to start the picture.')}
+          actionLabel={t('Start a session')}
           actionTo="/study?tab=flashcards"
         />
       </Card>

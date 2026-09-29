@@ -1,13 +1,16 @@
 import { Card } from '../ui'
+import { useTranslation } from 'react-i18next'
 import { useBillingOverview, useCheckout, usePortal } from '../../hooks/useBilling'
 import { usePlan } from '../../hooks/usePlan'
 
 function UsageBar({ current, limit, label }: { current: number; limit: number | null; label: string }) {
+  const { t } = useTranslation()
+
   if (limit === null) {
     return (
       <div className="flex items-center justify-between text-sm">
         <span className="text-text-muted">{label}</span>
-        <span className="text-text font-medium">{current} used</span>
+        <span className="text-text font-medium">{t('{{count}} used', { count: current })}</span>
       </div>
     )
   }
@@ -36,6 +39,8 @@ function UsageBar({ current, limit, label }: { current: number; limit: number | 
 }
 
 export function BillingSection() {
+  const { t } = useTranslation()
+
   const { isSelfHosted, isPro, canUpgrade } = usePlan()
   const { data: billing, isLoading } = useBillingOverview()
   const checkout = useCheckout()
@@ -44,9 +49,9 @@ export function BillingSection() {
   if (isSelfHosted) {
     return (
       <Card>
-        <h2 className="text-lg font-semibold text-text mb-4">Plan & Billing</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('Plan & Billing')}</h2>
         <p className="text-sm text-text-muted">
-          You're running StudyAIO in self-hosted mode. All features are unlocked with no usage limits.
+          {t("You're running StudyAIO in self-hosted mode. All features are unlocked with no usage limits.")}
         </p>
       </Card>
     )
@@ -55,7 +60,7 @@ export function BillingSection() {
   if (isLoading || !billing) {
     return (
       <Card>
-        <h2 className="text-lg font-semibold text-text mb-4">Plan & Billing</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('Plan & Billing')}</h2>
         <div className="animate-pulse space-y-3">
           <div className="h-4 bg-surface-0 rounded w-1/3" />
           <div className="h-2 bg-surface-0 rounded" />
@@ -70,7 +75,7 @@ export function BillingSection() {
   return (
     <Card>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-text">Plan & Billing</h2>
+        <h2 className="text-lg font-semibold text-text">{t('Plan & Billing')}</h2>
         <span
           className={`px-2.5 py-1 text-xs font-bold uppercase rounded-full ${
             isPro
@@ -87,17 +92,17 @@ export function BillingSection() {
         <UsageBar
           current={usage.ai_calls_today}
           limit={usage.ai_calls_limit}
-          label="AI calls today"
+          label={t('AI calls today')}
         />
         <UsageBar
           current={usage.uploads_this_month}
           limit={usage.uploads_limit}
-          label="Uploads this month"
+          label={t('Uploads this month')}
         />
         <UsageBar
           current={usage.courses_count}
           limit={usage.courses_limit}
-          label="Courses"
+          label={t('Courses')}
         />
       </div>
 

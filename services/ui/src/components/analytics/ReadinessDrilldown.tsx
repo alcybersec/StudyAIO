@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { Card, EmptyState, ErrorState, SectionLabel, Select, Skeleton } from '../ui'
@@ -11,6 +12,8 @@ function daysOut(examDate: string): number {
 }
 
 function TopicRow({ topic, studyHref }: { topic: ReadinessTopic; studyHref: string | null }) {
+  const { t } = useTranslation()
+
   const weak = isWeakTopic(topic.accuracy)
   return (
     <div className="flex items-center gap-3 py-2 text-[13px]" role="row">
@@ -18,7 +21,7 @@ function TopicRow({ topic, studyHref }: { topic: ReadinessTopic; studyHref: stri
         {topic.topic}
       </span>
       <span className="font-mono text-[10px] text-text-faint w-10 shrink-0" role="cell">
-        wk {topic.week}
+        {t('wk {{week}}', { week: topic.week })}
       </span>
       <span className="w-24 h-1 bg-surface-2 rounded-full overflow-hidden shrink-0" aria-hidden>
         {topic.accuracy !== null && (
@@ -42,7 +45,7 @@ function TopicRow({ topic, studyHref }: { topic: ReadinessTopic; studyHref: stri
             to={studyHref}
             className="inline-flex items-center gap-1 text-xs font-medium text-text-muted hover:text-text px-2 py-1 rounded-md hover:bg-surface-2 transition-colors"
           >
-            Study now <ArrowRight size={12} aria-hidden />
+            {t('Study now')} <ArrowRight size={12} aria-hidden />
           </Link>
         )}
       </span>
@@ -55,6 +58,8 @@ function TopicRow({ topic, studyHref }: { topic: ReadinessTopic; studyHref: stri
  * wired to `GET /api/exams/{id}/readiness`.
  */
 export function ReadinessDrilldown() {
+  const { t } = useTranslation()
+
   const [pickedExamId, setPickedExamId] = useState('')
   const { data: exams, isLoading: examsLoading, error: examsError, refetch: refetchExams } = useExams(undefined, 'active')
   const { data: courses } = useCourses()
@@ -96,7 +101,7 @@ export function ReadinessDrilldown() {
   if (examsError || detailError) {
     return (
       <ErrorState
-        title="Readiness couldn't load"
+        title={t("Readiness couldn't load")}
         detail={String(examsError ?? detailError)}
         onRetry={() => (examsError ? refetchExams() : refetchDetail())}
       />
@@ -108,9 +113,9 @@ export function ReadinessDrilldown() {
       <Card>
         <EmptyState
           icon="🎯"
-          title="No active exams"
-          description="Create an exam to see a topic-level readiness breakdown of the weeks in scope."
-          actionLabel="Set up an exam"
+          title={t('No active exams')}
+          description={t('Create an exam to see a topic-level readiness breakdown of the weeks in scope.')}
+          actionLabel={t('Set up an exam')}
           actionTo="/study?tab=exams"
         />
       </Card>
@@ -125,12 +130,12 @@ export function ReadinessDrilldown() {
     <Card padding>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <SectionLabel className="mb-0">
-          Exam readiness — {detail.title} · {detail.overall}%
+          {t('Exam readiness — {{title}} · {{percent}}%', { title: detail.title, percent: detail.overall })}
         </SectionLabel>
         <div className="flex items-center gap-3">
           {remaining !== null && remaining >= 0 && (
             <span className="font-mono text-[10px] text-text-faint shrink-0">
-              {remaining} day{remaining === 1 ? '' : 's'} out
+              {t('{{count}} day out', { count: remaining })}
             </span>
           )}
           {exams.length > 1 && (
@@ -149,9 +154,9 @@ export function ReadinessDrilldown() {
       </div>
 
       {sortedTopics.length === 0 ? (
-        <p className="text-sm text-text-muted py-4">No topics in this exam's scope yet.</p>
+        <p className="text-sm text-text-muted py-4">{t("No topics in this exam's scope yet.")}</p>
       ) : (
-        <div className="divide-y divide-border" role="table" aria-label="Per-topic mastery">
+        <div className="divide-y divide-border" role="table" aria-label={t('Per-topic mastery')}>
           {sortedTopics.map((topic) => (
             <TopicRow
               key={`${topic.week}-${topic.topic}`}
@@ -165,7 +170,7 @@ export function ReadinessDrilldown() {
       )}
 
       <p className="font-mono text-[11px] text-text-faint mt-3">
-        readiness = weighted topic mastery × coverage · weak rows link to a scoped session
+        {t('readiness = weighted topic mastery × coverage · weak rows link to a scoped session')}
       </p>
     </Card>
   )

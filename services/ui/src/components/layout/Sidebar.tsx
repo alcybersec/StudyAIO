@@ -136,7 +136,7 @@ export function Sidebar() {
             <span className="w-6 h-6 rounded-md bg-sage flex items-center justify-center text-on-accent text-xs font-bold">
               S
             </span>
-            <span className="text-sm font-bold tracking-tight text-text">StudyAIO</span>
+            <span className="text-sm font-bold tracking-tight text-text">{t('StudyAIO')}</span>
           </Link>
         )}
         <div className={`flex items-center ${collapsed ? 'flex-col gap-1' : 'gap-0.5'}`}>

@@ -97,7 +97,7 @@ export function RegisterPage() {
           id="username"
           type="text"
           label={t('Username')}
-          placeholder="johndoe"
+          placeholder={t('johndoe')}
           autoComplete="username"
           error={errors.username?.message}
           {...register('username')}

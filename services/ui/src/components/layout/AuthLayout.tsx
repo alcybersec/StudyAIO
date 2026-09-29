@@ -8,7 +8,7 @@ export function AuthLayout() {
     <div className="min-h-screen bg-surface-0 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-sage-fg">StudyAIO</h1>
+          <h1 className="text-3xl font-bold text-sage-fg">{t('StudyAIO')}</h1>
           <p className="mt-2 text-sm text-text-muted">{t('AI-powered study workspace')}</p>
         </div>
         <div className="bg-surface-1 rounded-lg border border-border shadow-sm p-6">

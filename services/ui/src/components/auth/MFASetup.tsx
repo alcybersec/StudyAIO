@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMFASetup, useMFAVerify, useMFADisable, useSessionHandoff } from '../../hooks/useAuth'
 
 interface MFASetupProps {
@@ -6,6 +7,8 @@ interface MFASetupProps {
 }
 
 export function MFASetup({ mfaEnabled }: MFASetupProps) {
+  const { t } = useTranslation()
+
   const [step, setStep] = useState<'idle' | 'qr' | 'verify' | 'done' | 'disable'>('idle')
   const [secret, setSecret] = useState('')
   const [code, setCode] = useState('')
@@ -58,13 +61,13 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
     return (
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm text-sage-fg font-medium">
-          <span>MFA is enabled</span>
+          <span>{t('MFA is enabled')}</span>
         </div>
         <button
           onClick={() => setStep('disable')}
           className="text-sm text-red-fg hover:underline"
         >
-          Disable MFA
+          {t('Disable MFA')}
         </button>
       </div>
     )
@@ -73,12 +76,12 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
   if (step === 'disable') {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-text-muted">Enter your TOTP code to disable MFA:</p>
+        <p className="text-sm text-text-muted">{t('Enter your TOTP code to disable MFA:')}</p>
         <input
           type="text"
           value={disableCode}
           onChange={(e) => setDisableCode(e.target.value)}
-          placeholder="6-digit code"
+          placeholder={t('6-digit code')}
           maxLength={6}
           className="w-full px-3 py-2 bg-surface-1 border border-border rounded-lg text-text placeholder:text-text-faint text-sm focus:outline-none focus:ring-2 focus:ring-sage/30"
         />
@@ -95,7 +98,7 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
             onClick={() => { setStep('idle'); setError('') }}
             className="px-4 min-h-[44px] text-sm text-text-muted hover:text-text"
           >
-            Cancel
+            {t('Cancel')}
           </button>
         </div>
       </div>
@@ -105,8 +108,8 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
   if (step === 'done') {
     return (
       <div className="space-y-3">
-        <p className="text-sm font-medium text-sage-fg">MFA enabled successfully!</p>
-        <p className="text-sm text-text-muted">Save these backup codes in a secure place:</p>
+        <p className="text-sm font-medium text-sage-fg">{t('MFA enabled successfully!')}</p>
+        <p className="text-sm text-text-muted">{t('Save these backup codes in a secure place:')}</p>
         <div className="bg-surface-2 text-text rounded-lg p-3 font-mono text-sm space-y-1">
           {backupCodes.map((c, i) => (
             <div key={i}>{c}</div>
@@ -116,7 +119,7 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
           onClick={() => setStep('idle')}
           className="px-4 min-h-[44px] bg-sage text-on-accent rounded-lg text-sm font-medium hover:bg-sage-hover"
         >
-          Done
+          {t('Done')}
         </button>
       </div>
     )
@@ -126,23 +129,23 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
     return (
       <div className="space-y-3">
         <p className="text-sm text-text-muted">
-          Scan this QR code with your authenticator app:
+          {t('Scan this QR code with your authenticator app:')}
         </p>
         {setupMutation.data && (
           <div className="flex justify-center">
             <img
               src={`data:image/png;base64,${setupMutation.data.qr_code_base64}`}
-              alt="MFA QR Code"
+              alt={t('MFA QR Code')}
               className="w-48 h-48"
             />
           </div>
         )}
         <p className="text-xs text-text-faint break-all">
-          Manual key: {secret}
+          {t('Manual key: {{secret}}', { secret })}
         </p>
         <div>
           <label className="block text-sm font-medium text-text-muted mb-1">
-            Enter the 6-digit code from your app
+            {t('Enter the 6-digit code from your app')}
           </label>
           <input
             type="text"
@@ -169,7 +172,7 @@ export function MFASetup({ mfaEnabled }: MFASetupProps) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-text-muted">
-        Add an extra layer of security with two-factor authentication.
+        {t('Add an extra layer of security with two-factor authentication.')}
       </p>
       <button
         onClick={handleSetup}

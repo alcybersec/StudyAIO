@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import * as Tabs from '@radix-ui/react-tabs'
 import { Badge, PageHeader } from '../components/ui'
@@ -25,6 +26,8 @@ const tabLabels: Record<TabValue, string> = {
 const TAB_SCOPED_PARAMS: Record<string, TabValue> = { exam: 'exams' }
 
 export function StudyHubPage() {
+  const { t } = useTranslation()
+
   const [searchParams, setSearchParams] = useSearchParams()
   const [tabFromUrl, setTab] = useTabRouting(TAB_VALUES, 'plan', 'tab', {
     clearParams: TAB_SCOPED_PARAMS,
@@ -58,8 +61,8 @@ export function StudyHubPage() {
   return (
     <div>
       <PageHeader
-        title="Study"
-        subtitle="Plan the week, then work the queue"
+        title={t('Study')}
+        subtitle={t('Plan the week, then work the queue')}
         actions={<SyncChip />}
       />
 
@@ -74,7 +77,7 @@ export function StudyHubPage() {
               {tabLabels[tab]}
               {tab === 'plan' && (
                 <span className="ml-1.5 inline-flex align-middle">
-                  <Badge variant="success">new</Badge>
+                  <Badge variant="success">{t('new')}</Badge>
                 </span>
               )}
             </Tabs.Trigger>

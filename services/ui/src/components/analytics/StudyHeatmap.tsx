@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Card, EmptyState, ErrorState, SectionLabel, Skeleton } from '../ui'
 import { useAnalyticsHeatmap } from '../../hooks/useApi'
 import { heatLevel, LEVEL_OPACITY } from './trend'
@@ -27,6 +28,8 @@ function getMonthLabels(days: { date: string }[]): { label: string; col: number 
 }
 
 export function StudyHeatmap() {
+  const { t } = useTranslation()
+
   const { data, isLoading, error, refetch } = useAnalyticsHeatmap(91)
 
   const grid = useMemo(() => {
@@ -55,7 +58,7 @@ export function StudyHeatmap() {
   if (error) {
     return (
       <ErrorState
-        title="Study heatmap couldn't load"
+        title={t("Study heatmap couldn't load")}
         detail={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
@@ -67,9 +70,9 @@ export function StudyHeatmap() {
       <Card>
         <EmptyState
           icon="🗓"
-          title="No study activity yet"
-          description="No sessions in the last 90 days. Study a few cards and the grid starts filling in."
-          actionLabel="Start a session"
+          title={t('No study activity yet')}
+          description={t('No sessions in the last 90 days. Study a few cards and the grid starts filling in.')}
+          actionLabel={t('Start a session')}
           actionTo="/study?tab=flashcards"
         />
       </Card>
@@ -81,7 +84,7 @@ export function StudyHeatmap() {
 
   return (
     <Card padding>
-      <SectionLabel>Study heatmap</SectionLabel>
+      <SectionLabel>{t('Study heatmap')}</SectionLabel>
       <div className="overflow-x-auto">
         <svg
           width={svgWidth}
@@ -89,7 +92,7 @@ export function StudyHeatmap() {
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           className="block"
           role="img"
-          aria-label="Study activity heatmap — last 13 weeks"
+          aria-label={t('Study activity heatmap — last 13 weeks')}
         >
           {monthLabels.map(({ label, col }, i) => (
             <text
@@ -149,7 +152,7 @@ export function StudyHeatmap() {
       </div>
 
       <div className="flex items-center gap-1.5 mt-2.5 font-mono text-[10px] text-text-faint">
-        less
+        {t('less')}
         <span
           className="inline-block rounded-[3px]"
           style={{ width: CELL_SIZE, height: CELL_SIZE, background: 'var(--t-surface-2)' }}
@@ -161,7 +164,7 @@ export function StudyHeatmap() {
             style={{ width: CELL_SIZE, height: CELL_SIZE, background: 'var(--t-sage)', opacity: o }}
           />
         ))}
-        more
+        {t('more')}
       </div>
     </Card>
   )

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Card } from '../ui'
 import { useTelegramLink, useUnlinkTelegram } from '../../hooks/useNotifications'
 
@@ -8,6 +9,8 @@ interface TelegramLinkCardProps {
 }
 
 export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
+  const { t } = useTranslation()
+
   const linkMutation = useTelegramLink()
   const unlinkMutation = useUnlinkTelegram()
   const [deepLink, setDeepLink] = useState<string | null>(null)
@@ -33,14 +36,14 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-text">Telegram</h3>
+        <h3 className="text-sm font-semibold text-text">{t('Telegram')}</h3>
         {linked ? (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-sage-soft text-sage-fg">
-            Connected{username ? ` (@${username})` : ''}
+            {username ? t('Connected (@{{username}})', { username }) : t('Connected')}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-surface-0 text-text-muted">
-            Not connected
+            {t('Not connected')}
           </span>
         )}
       </div>
@@ -48,7 +51,7 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
       {linked ? (
         <div className="space-y-3">
           <p className="text-sm text-text-muted">
-            Your Telegram account is linked. You'll receive notifications via the StudyAIO bot.
+            {t("Your Telegram account is linked. You'll receive notifications via the StudyAIO bot.")}
           </p>
           <button
             onClick={handleUnlink}
@@ -61,22 +64,22 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-text-muted">
-            Link your Telegram account to receive notifications via the StudyAIO bot.
+            {t('Link your Telegram account to receive notifications via the StudyAIO bot.')}
           </p>
 
           {deepLink ? (
             <div className="space-y-2">
-              <p className="text-sm text-text">Click the link below to connect in Telegram:</p>
+              <p className="text-sm text-text">{t('Click the link below to connect in Telegram:')}</p>
               <a
                 href={deepLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] text-on-accent text-sm font-medium rounded-lg hover:bg-[#006da3] transition-colors"
               >
-                Open in Telegram
+                {t('Open in Telegram')}
               </a>
               <p className="text-xs text-text-muted">
-                After clicking, press Start in the Telegram bot to complete the link.
+                {t('After clicking, press Start in the Telegram bot to complete the link.')}
               </p>
             </div>
           ) : (

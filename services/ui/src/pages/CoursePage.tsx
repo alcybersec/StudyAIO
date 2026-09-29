@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useArchiveCourse, useCourseDetail } from '../hooks/useApi'
 import {
@@ -42,6 +43,8 @@ function CourseSkeleton() {
 }
 
 export function CoursePage() {
+  const { t } = useTranslation()
+
   const { courseCode } = useParams<{ courseCode: string }>()
   const navigate = useNavigate()
   const { data, isLoading, error, refetch } = useCourseDetail(courseCode ?? '')
@@ -57,14 +60,14 @@ export function CoursePage() {
   if (error) {
     return (
       <ErrorState
-        title="Course couldn't load"
+        title={t("Course couldn't load")}
         detail={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
     )
   }
   if (!data) {
-    return <EmptyState title="Course not found" description="It may have been renamed or deleted." />
+    return <EmptyState title={t('Course not found')} description={t('It may have been renamed or deleted.')} />
   }
 
   const { course, weeks } = data
@@ -92,10 +95,10 @@ export function CoursePage() {
               size="sm"
               onClick={() => navigate(`/courses/${course.code}/ops`)}
             >
-              Course ops
+              {t('Course ops')}
             </Button>
             <Button size="sm" onClick={() => navigate(`/study?course=${course.code}`)}>
-              Study this course
+              {t('Study this course')}
             </Button>
             <ManageMenu
               courseCode={course.code}
@@ -111,9 +114,9 @@ export function CoursePage() {
       {weeks.length === 0 ? (
         <Card>
           <EmptyState
-            title="No weeks yet"
-            description="Upload lectures for this course — weeks are created from classification."
-            actionLabel="Upload lectures"
+            title={t('No weeks yet')}
+            description={t('Upload lectures for this course — weeks are created from classification.')}
+            actionLabel={t('Upload lectures')}
             actionTo="/upload"
           />
         </Card>
@@ -122,20 +125,20 @@ export function CoursePage() {
           <Table>
             <THead>
               <TCell header className="pl-1">
-                Week
+                {t('Week')}
               </TCell>
-              <TCell header>Topic</TCell>
+              <TCell header>{t('Topic')}</TCell>
               <TCell header align="right">
-                Cards
-              </TCell>
-              <TCell header align="right">
-                Due
+                {t('Cards')}
               </TCell>
               <TCell header align="right">
-                Quiz
+                {t('Due')}
+              </TCell>
+              <TCell header align="right">
+                {t('Quiz')}
               </TCell>
               <TCell header align="right" className="pr-1">
-                Updated
+                {t('Updated')}
               </TCell>
             </THead>
             <TBody>

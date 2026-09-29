@@ -351,7 +351,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
           {backend === 'claude_code' && (
             <>
               <div>
-                <LabelRow htmlFor="claude_code_path" label="Claude CLI path" saved={!!saved.claude_code_path} />
+                <LabelRow htmlFor="claude_code_path" label={t('Claude CLI path')} saved={!!saved.claude_code_path} />
                 <Input
                   id="claude_code_path"
                   className="font-mono"
@@ -360,7 +360,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                 />
               </div>
               <div>
-                <LabelRow htmlFor="claude_model" label="Model" saved={!!saved.claude_model} />
+                <LabelRow htmlFor="claude_model" label={t('Model')} saved={!!saved.claude_model} />
                 <Select
                   id="claude_model"
                   options={CLAUDE_MODEL_OPTIONS}
@@ -371,7 +371,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               <div>
                 <SecretLabelRow
                   htmlFor="claude_cli_credentials"
-                  label="CLI credentials"
+                  label={t('CLI credentials')}
                   saved={!!saved.claude_cli_credentials}
                   configured={settings.claude_cli_credentials_configured}
                   onClear={() => clearSecret('claude_cli_credentials')}
@@ -389,13 +389,12 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {...registerWithSave('claude_cli_credentials')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
-                  To use your own Max subscription: run{' '}
-                  <code className="px-1 py-0.5 bg-surface-2 rounded text-[11px]">claude login</code> on
-                  your computer, then paste the contents of{' '}
+                  {t('To use your own Max subscription: run')}{' '}
+                  <code className="px-1 py-0.5 bg-surface-2 rounded text-[11px]">{t('claude login')}</code> {t('on your computer, then paste the contents of')}{' '}
                   <code className="px-1 py-0.5 bg-surface-2 rounded text-[11px]">
-                    ~/.claude/.credentials.json
+                    {t('~/.claude/.credentials.json')}
                   </code>
-                  . Leaving this blank keeps whatever is already stored.
+                  {t('. Leaving this blank keeps whatever is already stored.')}
                 </p>
               </div>
             </>
@@ -406,7 +405,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               <div>
                 <SecretLabelRow
                   htmlFor="anthropic_api_key"
-                  label="API key"
+                  label={t('API key')}
                   saved={!!saved.anthropic_api_key}
                   configured={settings.anthropic_api_key_configured}
                   onClear={() => clearSecret('anthropic_api_key')}
@@ -426,7 +425,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                 />
               </div>
               <div>
-                <LabelRow htmlFor="claude_model_api" label="Model" saved={!!saved.claude_model} />
+                <LabelRow htmlFor="claude_model_api" label={t('Model')} saved={!!saved.claude_model} />
                 <Select
                   id="claude_model_api"
                   options={CLAUDE_MODEL_OPTIONS}
@@ -442,7 +441,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               <div>
                 <SecretLabelRow
                   htmlFor="openai_api_key"
-                  label="API key"
+                  label={t('API key')}
                   saved={!!saved.openai_api_key}
                   configured={settings.openai_api_key_configured}
                   onClear={() => clearSecret('openai_api_key')}
@@ -462,15 +461,15 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                 />
               </div>
               <div>
-                <LabelRow htmlFor="openai_model" label="Model" saved={!!saved.openai_model} />
+                <LabelRow htmlFor="openai_model" label={t('Model')} saved={!!saved.openai_model} />
                 <Input
                   id="openai_model"
-                  placeholder="gpt-4o"
+                  placeholder={t('gpt-4o')}
                   className="font-mono"
                   error={errors.openai_model?.message}
                   {...registerWithSave('openai_model')}
                 />
-                <p className="mt-1.5 text-xs text-text-faint">e.g. gpt-4o, gpt-4o-mini, o1</p>
+                <p className="mt-1.5 text-xs text-text-faint">{t('e.g. gpt-4o, gpt-4o-mini, o1')}</p>
               </div>
             </>
           )}
@@ -480,7 +479,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               <div>
                 <SecretLabelRow
                   htmlFor="zai_api_key"
-                  label="API key"
+                  label={t('API key')}
                   saved={!!saved.zai_api_key}
                   configured={settings.zai_api_key_configured}
                   onClear={() => clearSecret('zai_api_key')}
@@ -499,26 +498,26 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {...registerWithSave('zai_api_key')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
-                  From the Z.ai console at z.ai/model-api
+                  {t('From the Z.ai console at z.ai/model-api')}
                 </p>
               </div>
               <div>
-                <LabelRow htmlFor="zai_model" label="Model" saved={!!saved.zai_model} />
+                <LabelRow htmlFor="zai_model" label={t('Model')} saved={!!saved.zai_model} />
                 <Input
                   id="zai_model"
-                  placeholder="glm-5.3"
+                  placeholder={t('glm-5.3')}
                   className="font-mono"
                   error={errors.zai_model?.message}
                   {...registerWithSave('zai_model')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
-                  e.g. glm-5.3 (flagship), glm-5.3-flash (cheaper), glm-4.6
+                  {t('e.g. glm-5.3 (flagship), glm-5.3-flash (cheaper), glm-4.6')}
                 </p>
               </div>
               <div>
                 <LabelRow
                   htmlFor="zai_base_url"
-                  label="Endpoint"
+                  label={t('Endpoint')}
                   saved={!!saved.zai_base_url}
                 />
                 <Input
@@ -529,7 +528,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {...registerWithSave('zai_base_url')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
-                  Leave blank unless you use a regional or self-hosted endpoint.
+                  {t('Leave blank unless you use a regional or self-hosted endpoint.')}
                 </p>
               </div>
             </>
@@ -538,7 +537,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
           {backend === 'ollama' && (
             <>
               <div>
-                <LabelRow htmlFor="ollama_base_url" label="Base URL" saved={!!saved.ollama_base_url} />
+                <LabelRow htmlFor="ollama_base_url" label={t('Base URL')} saved={!!saved.ollama_base_url} />
                 <Input
                   id="ollama_base_url"
                   placeholder="http://ollama:11434"
@@ -547,20 +546,19 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {...registerWithSave('ollama_base_url')}
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
-                  Your own Ollama server. Required — this provider runs on your hardware, not
-                  StudyAIO's.
+                  {t("Your own Ollama server. Required — this provider runs on your hardware, not StudyAIO's.")}
                 </p>
               </div>
               <div>
-                <LabelRow htmlFor="ollama_model" label="Model" saved={!!saved.ollama_model} />
+                <LabelRow htmlFor="ollama_model" label={t('Model')} saved={!!saved.ollama_model} />
                 <Input
                   id="ollama_model"
-                  placeholder="llama3.2"
+                  placeholder={t('llama3.2')}
                   className="font-mono"
                   error={errors.ollama_model?.message}
                   {...registerWithSave('ollama_model')}
                 />
-                <p className="mt-1.5 text-xs text-text-faint">Model name as shown in `ollama list`</p>
+                <p className="mt-1.5 text-xs text-text-faint">{t('Model name as shown in `ollama list`')}</p>
               </div>
             </>
           )}
@@ -595,7 +593,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
           <div>
             <LabelRow
               htmlFor="classification_confidence_threshold"
-              label="Classification confidence threshold"
+              label={t('Classification confidence threshold')}
               saved={!!saved.classification_confidence_threshold}
             />
             <Input

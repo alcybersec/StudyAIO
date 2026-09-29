@@ -1,4 +1,6 @@
 import { RotateCcw, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import i18n from '../../i18n'
 import { Badge, Button, Card } from '../ui'
 import { PipelineStageRail } from './PipelineStageRail'
 import type { PipelineStage } from '../../lib/pipelineStages'
@@ -24,13 +26,13 @@ function formatSize(bytes: number): string {
 }
 
 function statusBadge(uploadStatus: UploadStatus, failedStage: PipelineStage | undefined, stages?: PipelineStage[]) {
-  if (uploadStatus === 'error') return <Badge variant="danger">upload failed</Badge>
-  if (uploadStatus === 'duplicate') return <Badge>duplicate · skipped</Badge>
-  if (uploadStatus === 'queued') return <Badge>queued</Badge>
-  if (uploadStatus === 'uploading') return <Badge variant="info">uploading</Badge>
-  if (failedStage) return <Badge variant="danger">failed at {failedStage.name}</Badge>
-  if (stages && stages.every((s) => s.status === 'done')) return <Badge variant="success">processed</Badge>
-  return <Badge variant="info">processing</Badge>
+  if (uploadStatus === 'error') return <Badge variant="danger">{i18n.t('upload failed')}</Badge>
+  if (uploadStatus === 'duplicate') return <Badge>{i18n.t('duplicate · skipped')}</Badge>
+  if (uploadStatus === 'queued') return <Badge>{i18n.t('queued')}</Badge>
+  if (uploadStatus === 'uploading') return <Badge variant="info">{i18n.t('uploading')}</Badge>
+  if (failedStage) return <Badge variant="danger">{i18n.t('failed at {{stage}}', { stage: failedStage.name })}</Badge>
+  if (stages && stages.every((s) => s.status === 'done')) return <Badge variant="success">{i18n.t('processed')}</Badge>
+  return <Badge variant="info">{i18n.t('processing')}</Badge>
 }
 
 export function PipelineFileCard({
@@ -43,6 +45,8 @@ export function PipelineFileCard({
   retrying,
   onRemove,
 }: PipelineFileCardProps) {
+  const { t } = useTranslation()
+
   const failedStage = stages?.find((s) => s.status === 'failed')
 
   return (
@@ -69,7 +73,7 @@ export function PipelineFileCard({
       {stages && uploadStatus !== 'duplicate' && <PipelineStageRail stages={stages} />}
 
       {uploadStatus === 'duplicate' && (
-        <p className="text-xs text-text-faint">Already in your library — the pipeline was skipped.</p>
+        <p className="text-xs text-text-faint">{t('Already in your library — the pipeline was skipped.')}</p>
       )}
 
       {uploadStatus === 'error' && uploadError && (
@@ -83,7 +87,7 @@ export function PipelineFileCard({
           <span className="text-xs text-red-fg">{failedStage.error ?? 'Stage failed'}</span>
           {onRetryStage && (
             <Button variant="secondary" size="sm" onClick={onRetryStage} loading={retrying}>
-              <RotateCcw size={12} aria-hidden /> Retry stage
+              <RotateCcw size={12} aria-hidden /> {t('Retry stage')}
             </Button>
           )}
         </div>

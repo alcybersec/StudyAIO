@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useDashboardGamification } from '../../../hooks/useApi'
 import { Badge, Skeleton } from '../../ui'
 import { WidgetShell } from './WidgetShell'
@@ -15,6 +16,8 @@ function GamificationSkeleton() {
 }
 
 export const GamificationWidget = memo(function GamificationWidget() {
+  const { t } = useTranslation()
+
   const { data, isLoading, isError, refetch } = useDashboardGamification()
   const state = selectWidgetState({
     isLoading,
@@ -30,8 +33,8 @@ export const GamificationWidget = memo(function GamificationWidget() {
       title={data ? `Level ${data.level} · ${data.total_xp.toLocaleString()} XP` : 'Progress'}
       state={state}
       onRetry={() => refetch()}
-      emptyTitle="No XP yet"
-      emptyHint="Study a few cards to start earning XP."
+      emptyTitle={t('No XP yet')}
+      emptyHint={t('Study a few cards to start earning XP.')}
       skeleton={<GamificationSkeleton />}
     >
       {data && (

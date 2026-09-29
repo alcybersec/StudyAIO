@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -21,6 +23,8 @@ interface QuickCaptureModalProps {
 
 /** Palette quick-capture: paste text or a URL straight into the pipeline. */
 export function QuickCaptureModal({ open, onOpenChange }: QuickCaptureModalProps) {
+  const { t } = useTranslation()
+
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [mode, setMode] = useState<CaptureMode>('text')
@@ -33,8 +37,8 @@ export function QuickCaptureModal({ open, onOpenChange }: QuickCaptureModalProps
     mutationFn: (body: CaptureRequest) => uploadApi.capture(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      toast.success('Capturing — processing started', {
-        action: { label: 'View pipeline', onClick: () => navigate('/upload') },
+      toast.success(i18n.t(i18n.t('Capturing — processing started')), {
+        action: { label: i18n.t('View pipeline'), onClick: () => navigate('/upload') },
       })
       setText('')
       setUrl('')
@@ -44,8 +48,8 @@ export function QuickCaptureModal({ open, onOpenChange }: QuickCaptureModalProps
     },
     onError: (err) => {
       if (err instanceof AppApiError && err.status === 413) {
-        toast.error('That capture is too large', {
-          description: 'Pasted text must stay under 1 MB — trim it down and retry.',
+        toast.error(i18n.t(i18n.t('That capture is too large')), {
+          description: i18n.t('Pasted text must stay under 1 MB — trim it down and retry.'),
         })
         return
       }
@@ -86,11 +90,11 @@ export function QuickCaptureModal({ open, onOpenChange }: QuickCaptureModalProps
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="Quick capture"
-      description="Paste text or a URL straight into the pipeline."
+      title={t('Quick capture')}
+      description={t('Paste text or a URL straight into the pipeline.')}
     >
       <div className="space-y-3">
-        <div role="tablist" aria-label="Capture source" className="flex gap-1 p-0.5 rounded-lg bg-surface-2 w-fit">
+        <div role="tablist" aria-label={t('Capture source')} className="flex gap-1 p-0.5 rounded-lg bg-surface-2 w-fit">
           {(['text', 'url'] as const).map((m) => (
             <button
               key={m}
@@ -109,16 +113,16 @@ export function QuickCaptureModal({ open, onOpenChange }: QuickCaptureModalProps
 
         {mode === 'text' ? (
           <Textarea
-            label="Text"
+            label={t('Text')}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Paste lecture notes, an article, a snippet…"
+            placeholder={t('Paste lecture notes, an article, a snippet…')}
             rows={6}
             error={errors.text}
           />
         ) : (
           <Input
-            label="URL"
+            label={t('URL')}
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -128,19 +132,19 @@ export function QuickCaptureModal({ open, onOpenChange }: QuickCaptureModalProps
         )}
 
         <Input
-          label="Title (optional)"
+          label={t('Title (optional)')}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Give this capture a name"
+          placeholder={t('Give this capture a name')}
           error={errors.title}
         />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button onClick={handleSubmit} loading={capture.isPending}>
-            Capture
+            {t('Capture')}
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useBetaFunnel } from '../../hooks/useApi'
 import { ErrorState, Skeleton } from '../ui'
 import type { BetaFunnel as BetaFunnelData } from '../../types'
@@ -62,6 +63,8 @@ function widthPct(value: number, max: number): number {
  * testers who signed up long before anyone thought to measure them.
  */
 export function BetaFunnel() {
+  const { t } = useTranslation()
+
   const [includeAdmins, setIncludeAdmins] = useState(false)
   const { data, isLoading, isError, refetch } = useBetaFunnel(includeAdmins)
 
@@ -77,7 +80,7 @@ export function BetaFunnel() {
   }
 
   if (isError && !data) {
-    return <ErrorState compact title="The funnel couldn't load" onRetry={() => refetch()} />
+    return <ErrorState compact title={t("The funnel couldn't load")} onRetry={() => refetch()} />
   }
 
   if (!data) return null
@@ -89,9 +92,9 @@ export function BetaFunnel() {
     <section className="bg-surface-1 rounded-xl border border-border p-4 space-y-3">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium text-text">Beta funnel</h2>
+          <h2 className="text-sm font-medium text-text">{t('Beta funnel')}</h2>
           <p className="text-[11px] text-text-faint">
-            Derived from existing data — accurate for testers who signed up before this existed.
+            {t('Derived from existing data — accurate for testers who signed up before this existed.')}
           </p>
         </div>
         <label className="flex items-center gap-1.5 text-[11px] text-text-muted shrink-0">
@@ -100,7 +103,7 @@ export function BetaFunnel() {
             checked={includeAdmins}
             onChange={(e) => setIncludeAdmins(e.target.checked)}
           />
-          Include admins
+          {t('Include admins')}
         </label>
       </header>
 
@@ -123,18 +126,22 @@ export function BetaFunnel() {
 
       {data.stalled_after_registering > 0 && (
         <p className="text-xs text-text-muted">
-          <span className="font-medium text-text">{data.stalled_after_registering}</span>{' '}
-          {data.stalled_after_registering === 1 ? 'account has' : 'accounts have'} registered
-          without ever uploading.
+          {t('{{count}} account registered without ever uploading.', {
+            count: data.stalled_after_registering,
+          })}
         </p>
       )}
 
       {!includeAdmins && data.excluded_admins > 0 && (
         <p className="text-[11px] text-text-faint">
-          {data.excluded_admins} admin {data.excluded_admins === 1 ? 'account is' : 'accounts are'}{' '}
-          excluded
-          {data.excluded_demo > 0 ? `, and ${data.excluded_demo} demo` : ''}. Totals here will not
-          match the user count above.
+          {data.excluded_demo > 0
+            ? t(
+                '{{admins}} admin and {{demo}} demo accounts are excluded. Totals here will not match the user count above.',
+                { admins: data.excluded_admins, demo: data.excluded_demo },
+              )
+            : t('{{count}} admin account is excluded. Totals here will not match the user count above.', {
+                count: data.excluded_admins,
+              })}
         </p>
       )}
     </section>

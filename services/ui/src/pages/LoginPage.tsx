@@ -122,7 +122,7 @@ function SecondFactorFields({
           id="backup_code"
           type="text"
           label={t('Backup code')}
-          placeholder="XXXX-XXXX-XXXX-XXXX"
+          placeholder={t('XXXX-XXXX-XXXX-XXXX')}
           // Deliberately not `inputMode="numeric"` / `maxLength={6}`: a backup
           // code is 16 Crockford-base32 symbols shown in four dashed groups,
           // which the TOTP field's constraints make literally untypeable.

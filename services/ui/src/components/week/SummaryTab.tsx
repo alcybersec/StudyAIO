@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Badge } from '../ui'
@@ -11,6 +12,8 @@ interface SummaryTabProps {
 }
 
 export function SummaryTab({ summary, artifactId }: SummaryTabProps) {
+  const { t } = useTranslation()
+
   const sourceArtifacts = summary?.source_artifacts ?? []
 
   const handleImgError = useCallback(
@@ -34,8 +37,8 @@ export function SummaryTab({ summary, artifactId }: SummaryTabProps) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <span className="text-3xl mb-2">{'\u{1F4DD}'}</span>
-        <p className="text-sm text-text-muted">No summary generated yet for this week.</p>
-        <p className="text-xs text-text-faint mt-1">Upload and process lecture files to generate a summary.</p>
+        <p className="text-sm text-text-muted">{t('No summary generated yet for this week.')}</p>
+        <p className="text-xs text-text-faint mt-1">{t('Upload and process lecture files to generate a summary.')}</p>
       </div>
     )
   }
@@ -46,11 +49,11 @@ export function SummaryTab({ summary, artifactId }: SummaryTabProps) {
         <Badge variant="info">v{summary.version}</Badge>
         {summary.source_artifacts && (
           <span className="text-xs text-text-faint">
-            From {summary.source_artifacts.length} source{summary.source_artifacts.length !== 1 ? 's' : ''}
+            {t('From {{count}} source', { count: summary.source_artifacts.length })}
           </span>
         )}
         <span className="text-xs text-text-faint ml-auto">
-          Updated {new Date(summary.updated_at).toLocaleDateString()}
+          {t('Updated {{date}}', { date: new Date(summary.updated_at).toLocaleDateString() })}
         </span>
       </div>
       <div className="prose prose-sm max-w-none prose-headings:text-text prose-p:text-text prose-li:text-text prose-td:text-text prose-a:text-peri-fg prose-strong:text-text prose-code:text-peri-fg prose-code:bg-peri/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-table:text-sm prose-th:bg-surface-2 prose-th:text-text prose-pre:bg-surface-2 prose-pre:text-text [&_pre_code]:text-text [&_pre_code]:bg-transparent [&_pre_code]:p-0">

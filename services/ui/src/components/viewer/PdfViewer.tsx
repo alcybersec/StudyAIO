@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/TextLayer.css'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
@@ -26,6 +27,8 @@ interface PdfViewerProps {
 }
 
 export function PdfViewer({ fileUrl, targetPage, navToken, zoom = 100, onPageChange, onTotalPages, onError, loadingLabel = 'Loading PDF...' }: PdfViewerProps) {
+  const { t } = useTranslation()
+
   const [numPages, setNumPages] = useState<number>(0)
   const [containerWidth, setContainerWidth] = useState<number>(600)
   const [pagesRendered, setPagesRendered] = useState(false)
@@ -152,7 +155,7 @@ export function PdfViewer({ fileUrl, targetPage, navToken, zoom = 100, onPageCha
         loading={<LoadingSpinner label={loadingLabel} />}
         error={
           <div className="text-center py-8 px-4 text-sm text-red-fg">
-            Failed to load PDF. Try downloading the file instead.
+            {t('Failed to load PDF. Try downloading the file instead.')}
           </div>
         }
       >

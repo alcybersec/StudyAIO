@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuizQuestions, useRecordQuizAttempt } from '../../hooks/useApi'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { EmptyState, ErrorState, Skeleton } from '../ui'
@@ -17,6 +18,8 @@ function MCQOptions({
   question: QuizQuestion
   onAnswer: (correct: boolean) => void
 }) {
+  const { t } = useTranslation()
+
   const [selected, setSelected] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
 
@@ -72,7 +75,7 @@ function MCQOptions({
           disabled={!selected}
           className="px-4 py-2 rounded-lg text-sm font-medium bg-sage text-on-accent hover:bg-sage-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
         >
-          Submit
+          {t('Submit')}
         </button>
       )}
 
@@ -97,6 +100,8 @@ function ShortAnswer({
   question: QuizQuestion
   onAnswer: (correct: boolean) => void
 }) {
+  const { t } = useTranslation()
+
   const [answer, setAnswer] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [selfAssessed, setSelfAssessed] = useState<boolean | null>(null)
@@ -117,7 +122,7 @@ function ShortAnswer({
         value={answer}
         onChange={(e) => setAnswer(e.target.value)}
         disabled={submitted}
-        placeholder="Type your answer..."
+        placeholder={t('Type your answer...')}
         rows={3}
         className="w-full p-3 rounded-lg border border-border bg-surface-1 text-sm text-text placeholder:text-text-faint focus:outline-none focus:border-peri disabled:bg-surface-2 disabled:opacity-70"
       />
@@ -128,14 +133,14 @@ function ShortAnswer({
           disabled={!answer.trim()}
           className="px-4 py-2 rounded-lg text-sm font-medium bg-sage text-on-accent hover:bg-sage-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
         >
-          Submit
+          {t('Submit')}
         </button>
       )}
 
       {submitted && (
         <>
           <div className="p-3 rounded-lg bg-peri-soft text-sm text-peri-fg">
-            <span className="font-medium">Model answer:</span>{' '}
+            <span className="font-medium">{t('Model answer:')}</span>{' '}
             <span className="text-text">{question.correct_answer}</span>
           </div>
           <div className="p-3 rounded-lg bg-surface-2 text-sm text-text-muted">
@@ -144,18 +149,18 @@ function ShortAnswer({
 
           {selfAssessed === null && (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-text-muted">How did you do?</span>
+              <span className="text-sm text-text-muted">{t('How did you do?')}</span>
               <button
                 onClick={() => handleSelfAssess(true)}
                 className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-sage-soft text-sage-fg hover:opacity-80 transition-opacity cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
               >
-                Correct
+                {t('Correct')}
               </button>
               <button
                 onClick={() => handleSelfAssess(false)}
                 className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-red-soft text-red-fg hover:opacity-80 transition-opacity cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
               >
-                Incorrect
+                {t('Incorrect')}
               </button>
             </div>
           )}
@@ -164,7 +169,7 @@ function ShortAnswer({
             <div
               className={`text-sm font-medium ${selfAssessed ? 'text-sage-fg' : 'text-red-fg'}`}
             >
-              Marked as {selfAssessed ? 'correct' : 'incorrect'}
+              {selfAssessed ? t('Marked as correct') : t('Marked as incorrect')}
             </div>
           )}
         </>
@@ -191,6 +196,8 @@ function QuizSkeleton() {
 }
 
 export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
+  const { t } = useTranslation()
+
   const { data: questions, isLoading, error, refetch } = useQuizQuestions(courseCode, week)
   const recordAttempt = useRecordQuizAttempt()
   const online = useOnlineStatus()
@@ -246,8 +253,8 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
   if (!questions && !online) {
     return (
       <ErrorState
-        title="You're offline"
-        detail="Quiz questions for this week haven't been cached. They'll load once you're back online."
+        title={t("You're offline")}
+        detail={t("Quiz questions for this week haven't been cached. They'll load once you're back online.")}
         onRetry={() => refetch()}
       />
     )
@@ -256,8 +263,8 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
   if (!total) {
     return (
       <EmptyState
-        title="No quiz questions yet"
-        description="Quiz questions will be generated when the pipeline processes lecture files."
+        title={t('No quiz questions yet')}
+        description={t('Quiz questions will be generated when the pipeline processes lecture files.')}
       />
     )
   }
@@ -268,7 +275,7 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
       <div className="flex flex-col items-center gap-6 py-8">
         <div className="text-5xl font-bold text-text">{pct}%</div>
         <div className="text-lg text-text-muted">
-          {correctCount} / {total} correct
+          {t('{{correct}} / {{total}} correct', { correct: correctCount, total })}
         </div>
         <div
           className={`text-sm font-medium ${pct >= 70 ? 'text-sage-fg' : 'text-amber-fg'}`}
@@ -283,7 +290,7 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
           onClick={restart}
           className="px-5 py-2.5 rounded-lg text-sm font-medium bg-sage text-on-accent hover:bg-sage-hover transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri"
         >
-          Restart Quiz
+          {t('Restart Quiz')}
         </button>
       </div>
     )
@@ -294,7 +301,7 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
       {/* Progress */}
       <div className="flex items-center justify-between text-sm">
         <span className="text-text-muted font-mono font-medium">
-          Question {currentIndex + 1} / {total}
+          {t('Question {{number}} / {{total}}', { number: currentIndex + 1, total })}
         </span>
         <div className="flex items-center gap-1" aria-hidden>
           {Array.from({ length: total }, (_, i) => (

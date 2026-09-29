@@ -264,3 +264,11 @@ tests that mock an exact query sequence noticed before a human would have.
 **English needs a bundle after all.** With English as the key set, the plan
 assumed `en/common.json` could be empty. It cannot: `t('{{count}} course')`
 with no entry renders "5 course". English carries its own plural forms.
+
+**Partial coverage did not survive contact.** §3.3 planned to translate the
+surfaces a user meets constantly and defer the rest. Measured properly — an AST
+scan rather than a line-based grep — the whole UI was 864 strings across 124
+files, and a codemod does that in one pass about as safely as it does a
+quarter of it, because `tsc` catches every component left without `t` in scope.
+So the feature ships fully translated, and `src/i18n/coverage.test.ts` keeps it
+that way. The honest statement in §3.3 is superseded, not quietly dropped.

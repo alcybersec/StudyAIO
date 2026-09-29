@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { useStudyDue, useRecordReview, useExamDetail } from '../../hooks/useApi'
 import { examsApi } from '../../api/endpoints'
@@ -12,6 +13,8 @@ import { SessionSummary } from './SessionSummary'
 type Phase = 'setup' | 'studying' | 'done'
 
 export function FlashcardsStudyTab() {
+  const { t } = useTranslation()
+
   const [searchParams] = useSearchParams()
   const [courseCode, setCourseCode] = useState(searchParams.get('course') ?? '')
   const [week, setWeek] = useState(searchParams.get('week') ?? '')
@@ -145,14 +148,14 @@ export function FlashcardsStudyTab() {
     )
   }
 
-  if (isLoading) return <LoadingSpinner label="Loading cards..." />
+  if (isLoading) return <LoadingSpinner label={t('Loading cards...')} />
 
   if (!currentCard) {
     return (
       <EmptyState
         icon="&#10003;"
-        title="All caught up!"
-        description="No more cards due right now. Check back later."
+        title={t('All caught up!')}
+        description={t('No more cards due right now. Check back later.')}
       />
     )
   }
@@ -160,7 +163,7 @@ export function FlashcardsStudyTab() {
   return (
     <div className="space-y-6">
       <p className="text-sm text-text-muted text-center">
-        Card {currentIndex + 1} of {cards.length}
+        {t('Card {{number}} of {{total}}', { number: currentIndex + 1, total: cards.length })}
       </p>
       <StudyCard card={currentCard} onFlip={handleFlip} flipped={flipped} />
       {flipped && (

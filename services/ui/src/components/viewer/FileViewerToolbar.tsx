@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, FileText, ZoomIn, ZoomOut } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button, Select } from '../ui'
 import type { Artifact } from '../../types'
 
@@ -27,6 +28,8 @@ export function FileViewerToolbar({
   onZoomIn,
   onZoomOut,
 }: FileViewerToolbarProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-surface-1">
       <FileText size={13} className="text-text-faint shrink-0" aria-hidden />
@@ -44,18 +47,18 @@ export function FileViewerToolbar({
       )}
 
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
-        <Button variant="ghost" size="sm" aria-label="Zoom out" kbd="-" onClick={onZoomOut}>
+        <Button variant="ghost" size="sm" aria-label={t('Zoom out')} kbd="-" onClick={onZoomOut}>
           <ZoomOut size={13} aria-hidden />
         </Button>
         <span className="font-mono text-[11px] text-text-faint">{zoom}%</span>
-        <Button variant="ghost" size="sm" aria-label="Zoom in" kbd="+" onClick={onZoomIn}>
+        <Button variant="ghost" size="sm" aria-label={t('Zoom in')} kbd="+" onClick={onZoomIn}>
           <ZoomIn size={13} aria-hidden />
         </Button>
         <span className="w-px h-4 bg-border mx-1" aria-hidden />
         <Button
           variant="ghost"
           size="sm"
-          aria-label="Previous page"
+          aria-label={t('Previous page')}
           kbd="←"
           onClick={onPrevPage}
           disabled={totalPages > 0 && page <= 1}
@@ -65,7 +68,7 @@ export function FileViewerToolbar({
         <Button
           variant="ghost"
           size="sm"
-          aria-label="Next page"
+          aria-label={t('Next page')}
           kbd="→"
           onClick={onNextPage}
           disabled={totalPages > 0 && page >= totalPages}

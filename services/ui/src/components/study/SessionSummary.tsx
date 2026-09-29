@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Check, Flame } from 'lucide-react'
 import { useStreak } from '../../hooks/useApi'
 import { Button, Card } from '../ui'
@@ -18,6 +19,8 @@ const ratingLabels: Record<number, { label: string; tone: string }> = {
 }
 
 export function SessionSummary({ totalReviewed, ratings, onRestart, examId }: SessionSummaryProps) {
+  const { t } = useTranslation()
+
   const { data: streak } = useStreak()
 
   return (
@@ -26,16 +29,15 @@ export function SessionSummary({ totalReviewed, ratings, onRestart, examId }: Se
         <div className="mx-auto w-12 h-12 rounded-full bg-sage-soft flex items-center justify-center">
           <Check size={24} className="text-sage-fg" aria-hidden />
         </div>
-        <h2 className="text-xl font-bold text-text">Session Complete</h2>
+        <h2 className="text-xl font-bold text-text">{t('Session Complete')}</h2>
         <p className="text-text-muted">
-          You reviewed <span className="font-semibold text-text">{totalReviewed}</span>{' '}
-          {totalReviewed === 1 ? 'card' : 'cards'}
+          {t('You reviewed {{count}} cards', { count: totalReviewed })}
         </p>
 
         {streak && streak.current_streak > 0 && (
           <div className="flex items-center justify-center gap-2 text-sm text-text-muted">
             <Flame size={16} className="text-amber-fg" aria-hidden />
-            <span>{streak.current_streak} day streak</span>
+            <span>{t('{{count}} day streak', { count: streak.current_streak })}</span>
           </div>
         )}
 
@@ -54,7 +56,7 @@ export function SessionSummary({ totalReviewed, ratings, onRestart, examId }: Se
 
         <div className="flex flex-col gap-3 pt-2">
           <Button size="lg" onClick={onRestart} className="w-full min-h-[48px]">
-            Study More
+            {t('Study More')}
           </Button>
           <Link
             to={examId ? `/study?tab=exams&exam=${examId}` : '/'}

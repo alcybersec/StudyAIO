@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Flame } from 'lucide-react'
 import { useDashboardStreak } from '../../../hooks/useApi'
 import { Skeleton } from '../../ui'
@@ -15,6 +16,8 @@ function StreakSkeleton() {
 }
 
 export const StreakWidget = memo(function StreakWidget() {
+  const { t } = useTranslation()
+
   const { data, isLoading, isError, refetch } = useDashboardStreak()
   const state = selectWidgetState({
     isLoading,
@@ -25,12 +28,12 @@ export const StreakWidget = memo(function StreakWidget() {
 
   return (
     <WidgetShell
-      title="Streak"
+      title={t('Streak')}
       state={state}
       onRetry={() => refetch()}
-      emptyTitle="No sessions yet"
-      emptyHint="Review a few cards to start a streak."
-      emptyActionLabel="Start studying"
+      emptyTitle={t('No sessions yet')}
+      emptyHint={t('Review a few cards to start a streak.')}
+      emptyActionLabel={t('Start studying')}
       emptyActionTo="/study"
       skeleton={<StreakSkeleton />}
     >
@@ -38,7 +41,7 @@ export const StreakWidget = memo(function StreakWidget() {
         <>
           <div className="text-2xl font-bold text-amber-fg inline-flex items-center gap-1.5">
             <Flame size={20} aria-hidden />
-            {data.current_streak} day{data.current_streak !== 1 ? 's' : ''}
+            {t('{{count}} day', { count: data.current_streak })}
           </div>
           <div className="text-[11px] text-text-faint font-mono mt-2">
             {data.longest_streak > data.current_streak

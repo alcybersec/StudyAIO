@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { TriangleAlert } from 'lucide-react'
 import { Button, Modal } from '../ui'
 
@@ -40,12 +41,14 @@ export function ConfirmAction({
   pending = false,
   error = null,
 }: ConfirmActionProps) {
+  const { t } = useTranslation()
+
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title}>
       <div className="space-y-3">
         <p className="flex items-start gap-2 text-xs text-red-fg">
           <TriangleAlert size={14} className="mt-px shrink-0" aria-hidden />
-          <span>This takes effect immediately. There is no undo.</span>
+          <span>{t('This takes effect immediately. There is no undo.')}</span>
         </p>
 
         <ul className="space-y-1.5 text-xs text-text-muted list-disc pl-4">
@@ -65,7 +68,7 @@ export function ConfirmAction({
             {pending ? 'Working…' : confirmLabel}
           </Button>
           <Button variant="ghost" size="sm" disabled={pending} onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('Cancel')}
           </Button>
         </div>
       </div>

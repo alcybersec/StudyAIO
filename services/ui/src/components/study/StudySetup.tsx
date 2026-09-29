@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Target } from 'lucide-react'
 import { useCourses, useStudyStats, useExams } from '../../hooks/useApi'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
@@ -35,6 +36,8 @@ function SetupSkeleton() {
 }
 
 export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onStart }: StudySetupProps) {
+  const { t } = useTranslation()
+
   const { data: courses, isLoading: loadingCourses, error: coursesError, refetch } = useCourses()
   const { data: activeExams } = useExams(courseCode || undefined, 'active')
   const online = useOnlineStatus()
@@ -61,8 +64,8 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
     return (
       <div className="max-w-md mx-auto">
         <ErrorState
-          title="You're offline"
-          detail="The course list hasn't been cached. It will load once you're back online."
+          title={t("You're offline")}
+          detail={t("The course list hasn't been cached. It will load once you're back online.")}
           onRetry={() => refetch()}
         />
       </div>
@@ -73,9 +76,9 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
   if (courses.length === 0) {
     return (
       <EmptyState
-        title="No courses yet"
-        description="Upload lecture files and the pipeline will build flashcards you can study here."
-        actionLabel="Upload lectures"
+        title={t('No courses yet')}
+        description={t('Upload lecture files and the pipeline will build flashcards you can study here.')}
+        actionLabel={t('Upload lectures')}
         actionTo="/upload"
       />
     )
@@ -86,7 +89,7 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
       <Card className="space-y-5">
         <div>
           <label htmlFor="study-course" className="block text-xs font-medium text-text-muted mb-1.5">
-            Course
+            {t('Course')}
           </label>
           <select
             id="study-course"
@@ -97,7 +100,7 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
             }}
             className="w-full rounded-lg border border-border bg-surface-1 text-text px-3 py-2.5 text-sm focus:outline-none focus:border-peri"
           >
-            <option value="">All courses</option>
+            <option value="">{t('All courses')}</option>
             {courses.map((c) => (
               <option key={c.id} value={c.code}>
                 {c.code}{c.name ? ` — ${c.name}` : ''}
@@ -108,14 +111,14 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
 
         <div>
           <label htmlFor="study-week" className="block text-xs font-medium text-text-muted mb-1.5">
-            Week (optional)
+            {t('Week (optional)')}
           </label>
           <input
             id="study-week"
             type="number"
             min={1}
             max={52}
-            placeholder="All weeks"
+            placeholder={t('All weeks')}
             value={week}
             onChange={(e) => onWeekChange(e.target.value)}
             className="w-full rounded-lg border border-border bg-surface-1 text-text placeholder:text-text-faint px-3 py-2.5 text-sm focus:outline-none focus:border-peri"
@@ -132,7 +135,7 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
             <>
               <p className="text-3xl font-bold font-mono text-text mb-1">{dueCount}</p>
               <p className="text-sm text-text-muted mb-4">
-                {dueCount === 1 ? 'card' : 'cards'} due for review
+                {t('{{count}} cards due for review', { count: dueCount })}
               </p>
             </>
           )}
@@ -144,12 +147,12 @@ export function StudySetup({ courseCode, week, onCourseChange, onWeekChange, onS
           disabled={dueCount === 0 || loadingStats}
           className="w-full min-h-[48px]"
         >
-          Start Session
+          {t('Start Session')}
         </Button>
 
         {activeExams && activeExams.length > 0 && (
           <div className="pt-2 border-t border-border">
-            <p className="text-xs font-medium text-text-muted mb-2">Study for an exam:</p>
+            <p className="text-xs font-medium text-text-muted mb-2">{t('Study for an exam:')}</p>
             <div className="space-y-1.5">
               {activeExams.map((exam) => (
                 <Link

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import i18n from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { Check, Copy, Plus, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, ErrorState, Input, Table, TBody, TCell, THead, TRow } from '../ui'
@@ -35,6 +37,7 @@ function inviteStatus(invite: InviteCode): { label: string; variant: 'success' |
 }
 
 function CopyButton({ code }: { code: string }) {
+
   const [copied, setCopied] = useState(false)
 
   return (
@@ -48,7 +51,7 @@ function CopyButton({ code }: { code: string }) {
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)
           })
-          .catch(() => toast.error('Could not copy to clipboard'))
+          .catch(() => toast.error(i18n.t(i18n.t('Could not copy to clipboard'))))
       }}
       aria-label={`Copy invite code ${code}`}
     >
@@ -60,6 +63,8 @@ function CopyButton({ code }: { code: string }) {
 
 /** Issue and revoke registration invite codes. Admin-only. */
 export function InvitePanel() {
+  const { t } = useTranslation()
+
   const [note, setNote] = useState('')
   const [maxUses, setMaxUses] = useState('1')
   const [expiryDays, setExpiryDays] = useState('30')
@@ -75,9 +80,9 @@ export function InvitePanel() {
   return (
     <div className="bg-surface-1 rounded-xl border border-border">
       <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">
-        <h2 className="text-sm font-semibold text-text">Invite codes</h2>
+        <h2 className="text-sm font-semibold text-text">{t('Invite codes')}</h2>
         <span className="text-[11px] text-text-faint">
-          Required to register when REGISTRATION_MODE=invite
+          {t('Required to register when REGISTRATION_MODE=invite')}
         </span>
       </div>
 
@@ -86,15 +91,15 @@ export function InvitePanel() {
       <div className="flex flex-wrap items-end gap-3 p-4 border-b border-border">
         <Input
           id="invite-note"
-          label="Note"
-          placeholder="Who is this for?"
+          label={t('Note')}
+          placeholder={t('Who is this for?')}
           className="w-48"
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
         <Input
           id="invite-max-uses"
-          label="Max uses"
+          label={t('Max uses')}
           type="number"
           min={1}
           className="w-24"
@@ -103,7 +108,7 @@ export function InvitePanel() {
         />
         <Input
           id="invite-expiry"
-          label="Expires in (days)"
+          label={t('Expires in (days)')}
           type="number"
           min={1}
           className="w-32"
@@ -125,7 +130,7 @@ export function InvitePanel() {
                   setNote('')
                   toast.success(`Created ${invite.code}`)
                 },
-                onError: () => toast.error("Couldn't create the invite code"),
+                onError: () => toast.error(i18n.t(i18n.t("Couldn't create the invite code"))),
               },
             )
           }
@@ -142,22 +147,22 @@ export function InvitePanel() {
       )}
 
       {isLoading && !data ? (
-        <p className="p-4 text-xs text-text-muted">Loading invite codes…</p>
+        <p className="p-4 text-xs text-text-muted">{t('Loading invite codes…')}</p>
       ) : isError && !data ? (
         <div className="p-4">
-          <ErrorState compact title="Invite codes couldn't load" onRetry={() => void refetch()} />
+          <ErrorState compact title={t("Invite codes couldn't load")} onRetry={() => void refetch()} />
         </div>
       ) : data && data.invites.length > 0 ? (
         <div className="px-4 pb-2">
           <Table>
             <THead>
-              <TCell header>Code</TCell>
-              <TCell header>Sent to</TCell>
-              <TCell header>Note</TCell>
-              <TCell header>Uses</TCell>
-              <TCell header>Accepted</TCell>
-              <TCell header>Status</TCell>
-              <TCell header>Expires</TCell>
+              <TCell header>{t('Code')}</TCell>
+              <TCell header>{t('Sent to')}</TCell>
+              <TCell header>{t('Note')}</TCell>
+              <TCell header>{t('Uses')}</TCell>
+              <TCell header>{t('Accepted')}</TCell>
+              <TCell header>{t('Status')}</TCell>
+              <TCell header>{t('Expires')}</TCell>
               <TCell header />
             </THead>
             <TBody>
@@ -175,11 +180,11 @@ export function InvitePanel() {
                           {/* Created but never delivered: an SMTP problem, not
                               a disinterested tester. Worth distinguishing. */}
                           {!invite.sent_at && (
-                            <span className="ml-1 text-[10px] text-amber-fg">not sent</span>
+                            <span className="ml-1 text-[10px] text-amber-fg">{t('not sent')}</span>
                           )}
                         </span>
                       ) : (
-                        <span className="text-xs text-text-faint">shared code</span>
+                        <span className="text-xs text-text-faint">{t('shared code')}</span>
                       )}
                     </TCell>
                     <TCell>
@@ -224,17 +229,17 @@ export function InvitePanel() {
                                       toast.success(`Invite resent to ${sent.invite.email}`)
                                     } else {
                                       toast.warning(
-                                        'Invite reissued, but the email could not be sent',
+                                        i18n.t(i18n.t('Invite reissued, but the email could not be sent')),
                                       )
                                     }
                                   },
-                                  onError: () => toast.error("Couldn't resend the invite"),
+                                  onError: () => toast.error(i18n.t(i18n.t("Couldn't resend the invite"))),
                                 },
                               )
                             }
                           >
                             <Send size={12} aria-hidden />
-                            Resend
+                            {t('Resend')}
                           </Button>
                         )}
                         {!invite.revoked_at && (
@@ -244,12 +249,12 @@ export function InvitePanel() {
                             disabled={revokeInvite.isPending}
                             onClick={() =>
                               revokeInvite.mutate(invite.id, {
-                                onSuccess: () => toast.success('Invite revoked'),
-                                onError: () => toast.error("Couldn't revoke the invite code"),
+                                onSuccess: () => toast.success(i18n.t(i18n.t('Invite revoked'))),
+                                onError: () => toast.error(i18n.t(i18n.t("Couldn't revoke the invite code"))),
                               })
                             }
                           >
-                            Revoke
+                            {t('Revoke')}
                           </Button>
                         )}
                       </div>
@@ -262,7 +267,7 @@ export function InvitePanel() {
         </div>
       ) : (
         <p className="p-4 text-xs text-text-muted">
-          No invite codes yet. Create one to let a tester sign up.
+          {t('No invite codes yet. Create one to let a tester sign up.')}
         </p>
       )}
     </div>
