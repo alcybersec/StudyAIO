@@ -1,7 +1,9 @@
 """Floor 4 — user data is never lost.
 
     nothing deletes uploads or generated content under data/ except explicit
-    account deletion, and dedup/re-summarize never destroys prior versions
+    account deletion and the explicit user-initiated deletes of the user's own
+    items enumerated in ADR 0004, and dedup/re-summarize/asset regeneration
+    never destroys prior versions or study history
 
 Static inventories (exact in both directions, so a new delete site fails until
 someone classifies it, and a removed one fails until it is unlisted):
@@ -12,17 +14,20 @@ someone classifies it, and a removed one fails until it is unlisted):
 
 Each site is one of:
 
-* ``SANCTIONED`` — account deletion (the floor's one exception), or a
-  temp file outside ``data/``, or a *move* (write the new key, then drop the
-  old one) where the content survives;
+* ``SANCTIONED`` — account deletion, one of ADR 0004's user-item deletes
+  (exact allowlist, callers pinned), a temp file outside ``data/``, or a
+  *move* (write the new key, then drop the old one) where the content survives;
 * ``PENDING_RULING`` — the floor's text and a shipped, documented behaviour
-  disagree; the user must rule (``test_floor4_no_delete_site_awaits_a_ruling``
-  is ``xfail(strict=True)`` until they do);
-* ``VIOLATIONS`` — a live breach, each with a behavioural test below that is
-  red until fixed.
+  disagree and the user has not ruled. Empty since the 2026-10-04 rulings;
+  ``test_floor4_no_delete_site_awaits_a_ruling`` keeps it that way;
+* ``VIOLATIONS`` — a live breach. ``test_floor4_no_violation_site_remains`` is
+  red while any is still in the code. A fixed site may vanish from the code
+  before it is unlisted here; the inventory does not call that stale.
 
-Plus behaviour: account purge is reachable only from account deletion; lecture
-dedup writes and deletes nothing; re-summarize increments the version.
+Plus behaviour: account purge and every user-item delete are reachable only
+from their routes; lecture dedup writes and deletes nothing; re-summarize and
+merge ``keep_source`` retain the superseded summary (row and blob); asset
+regeneration keeps study history.
 """
 
 from __future__ import annotations
@@ -40,8 +45,78 @@ from tests.safety._source import app_modules, dotted, parse, rel, walk_with_scop
 STORAGE_PRIMITIVES = "app/core/storage.py"  # defines delete/delete_prefix; not a caller
 NOT_STORAGE_RECEIVERS = frozenset({"session", "db", "router", "client", "pipe", "r"})
 
+# ── ADR 0004: explicit user-initiated deletes of the user's own items ──
+# Verbatim from docs/adr/0004-floor4-user-initiated-item-deletes.md, Decision 3.
+# Changing one of these sets is changing the floor: it needs ADR 0004 amended
+# with the user's agreement, not a drive-by edit here.
+
+#: (module, function) of each content-row delete this ADR sanctions.
+USER_ITEM_DB_DELETE_SITES = {
+    ("app/services/course_service.py", "delete_course"),
+    ("app/services/course_service.py", "_discard_summary"),
+    ("app/services/courseops_service.py", "delete_course_document"),
+    ("app/services/courseops_service.py", "delete_deadline"),
+    ("app/services/chat_service.py", "delete_session"),
+}
+
+#: (module, function, callee) of each blob delete this ADR sanctions.
+USER_ITEM_BLOB_DELETE_SITES = {
+    ("app/services/courseops_service.py", "_delete_blob_if_unreferenced", "store.delete"),
+    ("app/services/course_service.py", "_discard_summary", "storage.delete"),
+}
+
+#: Reachability: callee (module, function) -> the exact set of its callers in app/**.
+#: "Explicit" (condition 1) is pinned by these edges, so a new caller fails the floor.
+USER_ITEM_DELETE_CALLERS = {
+    ("app/services/course_service.py", "delete_course"): {
+        ("app/api/courses.py", "delete_course"),
+    },
+    ("app/services/course_service.py", "merge_courses"): {
+        ("app/api/courses.py", "merge_course"),
+    },
+    ("app/services/course_service.py", "_discard_summary"): {
+        ("app/services/course_service.py", "merge_courses"),
+    },
+    ("app/services/courseops_service.py", "delete_course_document"): {
+        ("app/api/courseops.py", "delete_document"),
+    },
+    ("app/services/courseops_service.py", "delete_deadline"): {
+        ("app/api/courseops.py", "delete_deadline"),
+    },
+    ("app/services/chat_service.py", "delete_session"): {
+        ("app/api/chat.py", "delete_session"),
+    },
+}
+
+_ADR_0004_ITEM = {
+    ("app/services/course_service.py", "delete_course"): (
+        "ADR 0004 #1: DELETE /api/courses/{code} (X-Confirm); the course and its DB "
+        "children, no blob"
+    ),
+    ("app/services/courseops_service.py", "delete_course_document"): (
+        "ADR 0004 #2: DELETE /api/courseops/documents/{id}; one course_documents row"
+    ),
+    ("app/services/courseops_service.py", "_delete_blob_if_unreferenced"): (
+        "ADR 0004 #2: the document's blob, only if no other row of the same user "
+        "references it, only under courseops/<user_id>/. The failed-upload caller is "
+        "sanctioned separately (REFERENCE_CHECKED_DELETE_CALLERS)"
+    ),
+    ("app/services/courseops_service.py", "delete_deadline"): (
+        "ADR 0004 #3: DELETE /api/courseops/deadlines/{id}; one deadlines row"
+    ),
+    ("app/services/chat_service.py", "delete_session"): (
+        "ADR 0004 #4: DELETE /api/chat/sessions/{id}; one session and its messages"
+    ),
+    ("app/services/course_service.py", "_discard_summary"): (
+        "ADR 0004 #5 (narrowed on acceptance): merge-discard of the SOURCE-side "
+        "summary row and blob only. The keep_source overwrite of the target is not "
+        "this exemption; see test_floor4_merge_keep_source_snapshots_target_summary"
+    ),
+}
+
 #: (module, function, callee) -> reason.
 BLOB_SANCTIONED = {
+    **{site: _ADR_0004_ITEM[site[:2]] for site in USER_ITEM_BLOB_DELETE_SITES},
     ("app/services/account_service.py", "purge_user_storage", "store.delete"): (
         "explicit account deletion; reachability pinned by "
         "test_floor4_account_purge_reachable_only_from_account_deletion"
@@ -70,21 +145,9 @@ BLOB_SANCTIONED = {
     ),
 }
 
-#: User-initiated deletion of a single item (not of the account). The floor
-#: allows only account deletion; the product lets a user delete one document or
-#: discard one side of a merge. Needs the user's ruling.
-BLOB_PENDING_RULING = {
-    ("app/services/courseops_service.py", "_delete_blob_if_unreferenced", "store.delete"): (
-        "DELETE /api/courseops/documents/{id}: user deletes one course document; "
-        "blob dropped when no other row of theirs references it. The same helper "
-        "also serves the failed-upload cleanup, which is sanctioned on its own "
-        "(see REFERENCE_CHECKED_DELETE_CALLERS)"
-    ),
-    ("app/services/course_service.py", "_discard_summary", "storage.delete"): (
-        "POST /api/courses/{code}/merge with keep_target/keep_source: the losing "
-        "week's summary row and blob are deleted"
-    ),
-}
+#: Floor questions the user has not ruled on. Emptied by the 2026-10-04
+#: rulings (ADR 0004 for the item deletes).
+BLOB_PENDING_RULING: dict[tuple[str, str, str], str] = {}
 
 #: Empty since M31-S1-BACKEND-008 (a2cd687). Both courseops upload routes used
 #: to ``storage.delete(storage_key)`` on failure, which for a re-upload of the
@@ -99,7 +162,8 @@ BLOB_VIOLATIONS: dict[tuple[str, str, str], str] = {}
 #: (module, caller) -> classification and reason.
 REFERENCE_CHECKED_DELETE_CALLERS = {
     ("app/services/courseops_service.py", "delete_course_document"): (
-        "PENDING_RULING: single-item user delete (DB_PENDING_RULING)"
+        "SANCTIONED: ADR 0004 #2, the user deletes one course document; its own "
+        "callers are pinned in USER_ITEM_DELETE_CALLERS"
     ),
     ("app/services/courseops_service.py", "discard_failed_upload_blob"): (
         "SANCTIONED: cleanup of the blob a failed upload request just wrote. The "
@@ -148,6 +212,7 @@ CONTENT_MODELS = frozenset(
         "LectureArtifact",
         "Extraction",
         "Summary",
+        "SummaryVersion",
         "Flashcard",
         "FlashcardReview",
         "QuizQuestion",
@@ -169,6 +234,7 @@ CONTENT_MODELS = frozenset(
 #: (module, function) -> reason. ``session.delete(x)`` is listed whatever x is:
 #: the type is not knowable statically, so every one is classified by hand.
 DB_SANCTIONED = {
+    **{site: _ADR_0004_ITEM[site] for site in USER_ITEM_DB_DELETE_SITES},
     ("app/services/index_service.py", "index_artifact_chunks"): (
         "chunks are a derived search index, rebuilt from the stored extraction"
     ),
@@ -180,27 +246,16 @@ DB_SANCTIONED = {
     ),
 }
 
-DB_PENDING_RULING = {
-    ("app/services/course_service.py", "delete_course"): (
-        "DELETE /api/courses/{code}: user deletes a course; every artifact, "
-        "extraction, summary, flashcard (+reviews), quiz (+attempts), concept, "
-        "exam and document row of that course is deleted (blobs are kept)"
-    ),
-    ("app/services/course_service.py", "_discard_summary"): (
-        "merge keep_target/keep_source deletes the losing summary row"
-    ),
-    ("app/services/courseops_service.py", "delete_course_document"): (
-        "user deletes one course document row"
-    ),
-    ("app/services/courseops_service.py", "delete_deadline"): (
-        "user deletes one (AI-extracted or manual) deadline row"
-    ),
-    ("app/services/chat_service.py", "delete_session"): (
-        "user deletes one chat session and its messages"
-    ),
+#: Emptied by the 2026-10-04 rulings: item deletes went to ADR 0004
+#: (DB_SANCTIONED), regeneration to DB_VIOLATIONS ("fix the code").
+DB_PENDING_RULING: dict[tuple[str, str], str] = {}
+
+#: Live breaches. Ruled "fix the code" on 2026-10-04 (R-007, ADR 0004 §4);
+#: M31-S2-BACKEND-019 archives (``archived_at``) instead of deleting.
+DB_VIOLATIONS = {
     ("app/services/asset_service.py", "save_flashcards"): (
         "regeneration deletes the artifact's flashcards; flashcard_reviews "
-        "cascade, so SRS history is lost (PRD.md §'Regeneration' says replace). "
+        "cascade, so SRS history is lost. "
         "Behaviour: test_floor4_asset_regeneration_keeps_study_history"
     ),
     ("app/services/asset_service.py", "save_quiz_questions"): (
@@ -236,15 +291,23 @@ def db_content_delete_sites() -> dict[tuple[str, str], str]:
 # so it never matches a model name above; its reachability is pinned instead.
 
 
-def _assert_exact(found: dict, *classified: dict, what: str) -> None:
+def _assert_exact(found: dict, *classified: dict, violations: dict, what: str) -> None:
+    """``found`` equals the classified sets; a violation may already be fixed away.
+
+    Sanctioned and pending entries are pinned both ways. A ``violations`` entry
+    is not called stale when it disappears, so the code fix can land green
+    before safety unlists it; ``test_floor4_no_violation_site_remains`` holds
+    the other direction.
+    """
     known = set().union(*classified)
-    new = {k: v for k, v in found.items() if k not in known}
+    new = {k: v for k, v in found.items() if k not in known and k not in violations}
     stale = sorted(known - set(found))
     assert not new, (
         f"Floor 4: unclassified {what}:\n"
         + "\n".join(f"  {loc}  {key}" for key, loc in sorted(new.items()))
-        + "\nA delete of user data is allowed only on account deletion. Classify it "
-        "in tests/safety/test_floor4_user_data_never_lost.py with a reason, or remove it."
+        + "\nA delete of user data is allowed only on account deletion and the "
+        "user-item deletes ADR 0004 enumerates. Classify it in "
+        "tests/safety/test_floor4_user_data_never_lost.py with a reason, or remove it."
     )
     assert not stale, f"Classified {what} no longer present — unlist them:\n" + "\n".join(
         f"  {k}" for k in stale
@@ -257,7 +320,7 @@ def test_floor4_every_blob_delete_is_classified():
         blob_delete_sites(),
         BLOB_SANCTIONED,
         BLOB_PENDING_RULING,
-        BLOB_VIOLATIONS,
+        violations=BLOB_VIOLATIONS,
         what="blob/file delete site(s)",
     )
 
@@ -265,26 +328,44 @@ def test_floor4_every_blob_delete_is_classified():
 def test_floor4_every_content_row_delete_is_classified():
     """No DB delete of uploaded/generated content exists outside the inventory."""
     _assert_exact(
-        db_content_delete_sites(), DB_SANCTIONED, DB_PENDING_RULING, what="content row delete(s)"
+        db_content_delete_sites(),
+        DB_SANCTIONED,
+        DB_PENDING_RULING,
+        violations=DB_VIOLATIONS,
+        what="content row delete(s)",
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="VETO-relevant, awaiting user ruling: floor 4 allows deletion only on "
-    "account deletion; single-item user deletes, merge discards and asset "
-    "regeneration delete user data (BLOB_/DB_PENDING_RULING)",
-)
 def test_floor4_no_delete_site_awaits_a_ruling():
-    """Every delete of user data is either account deletion or ruled acceptable.
+    """Every delete of user data is sanctioned, ruled a violation, or gone.
 
-    Strict: when the user rules (behaviour changed, or floor 4 amended by ADR
-    to admit user-initiated item deletion) and the dicts empty, this XPASSes
-    and fails, forcing the marker off.
+    The 2026-10-04 rulings emptied both pending dicts (ADR 0004 for the item
+    deletes, "fix the code" for regeneration). A new entry here is a floor
+    question for the user, and the floor is not green while one is open.
     """
     pending = {**BLOB_PENDING_RULING, **DB_PENDING_RULING}
     assert not pending, "\n".join(f"  {k}: {v}" for k, v in pending.items())
+
+
+def test_floor4_user_item_allowlist_is_exactly_adr_0004():
+    """The sanctioned user-item sites are ADR 0004's, and every one is still in the code.
+
+    The inventory tests prove nothing outside the classified sets deletes.
+    This proves the ADR 0004 part of the classification is the ADR's list and
+    nothing wider: a site cannot be slipped into DB_SANCTIONED under another
+    reason and still claim the exemption.
+    """
+    db_found = set(db_content_delete_sites())
+    blob_found = set(blob_delete_sites())
+    assert db_found >= USER_ITEM_DB_DELETE_SITES, USER_ITEM_DB_DELETE_SITES - db_found
+    assert blob_found >= USER_ITEM_BLOB_DELETE_SITES, USER_ITEM_BLOB_DELETE_SITES - blob_found
+    adr_db = {k for k, v in DB_SANCTIONED.items() if v.startswith("ADR 0004")}
+    adr_blob = {k for k, v in BLOB_SANCTIONED.items() if v.startswith("ADR 0004")}
+    assert adr_db == USER_ITEM_DB_DELETE_SITES
+    assert adr_blob == USER_ITEM_BLOB_DELETE_SITES
+    assert {k[:2] for k in USER_ITEM_BLOB_DELETE_SITES} | USER_ITEM_DB_DELETE_SITES <= set(
+        _ADR_0004_ITEM
+    )
 
 
 # ── account purge reachability ─────────────────────────────────────────
@@ -311,6 +392,22 @@ def test_floor4_account_purge_reachable_only_from_account_deletion():
         ("app/services/admin_service.py", "delete_user"),
     }
     assert _callers("admin_service.delete_user") == {("app/api/admin.py", "delete_user")}
+
+
+def test_floor4_user_item_deletes_reachable_only_from_their_routes():
+    """ADR 0004 condition 1 ("explicit"): each sanctioned delete has exactly its listed callers.
+
+    Callers are matched by function name across ``app/**``, so a same-named
+    function elsewhere shows up as an extra caller and fails here rather than
+    hiding one. A Celery task, a beat job or another route reaching one of
+    these deletes needs ADR 0004 amended first.
+    """
+    for (module, function), callers in USER_ITEM_DELETE_CALLERS.items():
+        found = _callers(function)
+        assert found == callers, (
+            f"Floor 4: {module}:{function} is an ADR 0004 user-item delete and must be "
+            f"reached only from its route.\n  found:  {sorted(found)}\n  listed: {sorted(callers)}"
+        )
 
 
 def test_floor4_reference_checked_delete_has_only_classified_callers():
