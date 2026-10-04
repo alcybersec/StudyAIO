@@ -195,6 +195,27 @@ async def delete_exam(session: AsyncSession, exam_id: str, user_id: str | None =
     return True
 
 
+async def get_owned_quiz_question(
+    session: AsyncSession, quiz_question_id: str, *, user_id: str
+) -> QuizQuestion | None:
+    """Fetch a quiz question only if its course belongs to ``user_id``.
+
+    Args:
+        session: Database session.
+        quiz_question_id: Quiz question UUID (caller supplied).
+        user_id: The caller.
+
+    Returns:
+        The question, or None when absent or owned by someone else.
+    """
+    result = await session.execute(
+        select(QuizQuestion)
+        .join(Course, QuizQuestion.course_id == Course.id)
+        .where(QuizQuestion.id == quiz_question_id, Course.user_id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+
 async def record_quiz_attempt(
     session: AsyncSession,
     quiz_question_id: str,

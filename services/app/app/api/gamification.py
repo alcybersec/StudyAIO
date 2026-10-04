@@ -131,5 +131,5 @@ async def mark_achievements_notified(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Mark achievements as notified."""
-    await achievement_service.mark_notified(session, body.user_achievement_ids)
+    await achievement_service.mark_notified(session, body.user_achievement_ids, user_id=user.id)
     await session.commit()

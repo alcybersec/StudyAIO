@@ -124,6 +124,29 @@ async def get_due_cards(
     return list(result.scalars().all())
 
 
+async def get_owned_flashcard(
+    session: AsyncSession, flashcard_id: str, *, user_id: str
+) -> Flashcard | None:
+    """Fetch a flashcard only if its course belongs to ``user_id``.
+
+    Flashcards carry no user_id of their own; ownership is the course's.
+
+    Args:
+        session: Database session.
+        flashcard_id: Flashcard UUID (caller supplied).
+        user_id: The caller.
+
+    Returns:
+        The flashcard, or None when absent or owned by someone else.
+    """
+    result = await session.execute(
+        select(Flashcard)
+        .join(Course, Flashcard.course_id == Course.id)
+        .where(Flashcard.id == flashcard_id, Course.user_id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+
 async def record_review(
     session: AsyncSession,
     flashcard_id: str,
@@ -145,9 +168,10 @@ async def record_review(
     now = datetime.now(UTC)
 
     # Find existing review
-    result = await session.execute(
-        select(FlashcardReview).where(FlashcardReview.flashcard_id == flashcard_id)
-    )
+    review_query = select(FlashcardReview).where(FlashcardReview.flashcard_id == flashcard_id)
+    if user_id is not None:
+        review_query = review_query.where(FlashcardReview.user_id == user_id)
+    result = await session.execute(review_query)
     review = result.scalar_one_or_none()
 
     if review:

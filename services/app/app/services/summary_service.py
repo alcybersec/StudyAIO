@@ -189,7 +189,7 @@ async def get_summary_by_id(
 
 
 async def get_summary_for_week(
-    session: AsyncSession, course_code: str, week: int
+    session: AsyncSession, course_code: str, week: int, user_id: str | None = None
 ) -> Summary | None:
     """Get the summary for a specific course code + week.
 
@@ -197,17 +197,22 @@ async def get_summary_for_week(
         session: Database session.
         course_code: Course code (e.g., "CSIT302").
         week: Week number.
+        user_id: The caller. Course codes are unique per user, not globally,
+            so the code alone can match several users' summaries.
 
     Returns:
         Summary if found, None otherwise.
     """
     from app.models.course import Course as CourseModel
 
-    result = await session.execute(
+    query = (
         select(Summary)
         .join(CourseModel, Summary.course_id == CourseModel.id)
         .where(CourseModel.code == course_code, Summary.week == week)
     )
+    if user_id is not None:
+        query = query.where(CourseModel.user_id == user_id)
+    result = await session.execute(query)
     return result.scalar_one_or_none()
 
 

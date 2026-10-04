@@ -162,6 +162,7 @@ class TestWeekDetailSummaryWiring:
         course.id = "c1"
         course.code = "NET101"
         course.name = "Net"
+        course.term = "2024-S1"
         course.created_at = datetime(2024, 1, 1)
         course.updated_at = datetime(2024, 1, 1)
         with (

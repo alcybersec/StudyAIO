@@ -226,19 +226,23 @@ async def get_unnotified(session: AsyncSession, user_id: str) -> list[dict]:
     ]
 
 
-async def mark_notified(session: AsyncSession, user_achievement_ids: list[str]) -> None:
+async def mark_notified(
+    session: AsyncSession, user_achievement_ids: list[str], user_id: str | None = None
+) -> None:
     """Mark achievements as notified.
 
     Args:
         session: Database session.
         user_achievement_ids: List of UserAchievement IDs to mark.
+        user_id: The caller; rows owned by anyone else are left untouched.
     """
     if not user_achievement_ids:
         return
 
-    result = await session.execute(
-        select(UserAchievement).where(UserAchievement.id.in_(user_achievement_ids))
-    )
+    query = select(UserAchievement).where(UserAchievement.id.in_(user_achievement_ids))
+    if user_id is not None:
+        query = query.where(UserAchievement.user_id == user_id)
+    result = await session.execute(query)
     for ua in result.scalars().all():
         ua.notified = True
     await session.flush()
