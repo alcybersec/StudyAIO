@@ -399,3 +399,32 @@ async def client_factory(db_session):
         await client.aclose()
     app.dependency_overrides.clear()
     limiter.reset()
+
+
+# ── Embeddings ────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _fixed_embeddings():
+    """Never load a real sentence-transformers model in the integration suite.
+
+    The provider is bound by name into several modules at import time, so each
+    binding is patched. Tests that need different behaviour patch on top of this.
+    """
+    from tests.integration._support import FixedEmbeddings
+
+    provider = FixedEmbeddings()
+    targets = (
+        "app.agents.embeddings.get_embedding_provider",
+        "app.api.qa.get_embedding_provider",
+        "app.services.chat_service.get_embedding_provider",
+        "app.pipeline.index.get_embedding_provider",
+    )
+    patches = [patch(t, return_value=provider) for t in targets]
+    for p in patches:
+        p.start()
+    try:
+        yield provider
+    finally:
+        for p in patches:
+            p.stop()
