@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,6 +29,9 @@ class Flashcard(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
+    #: Soft-retire marker. Regeneration sets this instead of deleting, so the
+    #: card's review (study history) survives. NULL = active.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="flashcards")
@@ -37,4 +40,12 @@ class Flashcard(Base):
         back_populates="flashcard", uselist=False, cascade="all, delete-orphan"
     )
 
-    __table_args__ = (Index("ix_flashcards_course_week", "course_id", "week"),)
+    __table_args__ = (
+        Index("ix_flashcards_course_week", "course_id", "week"),
+        Index(
+            "ix_flashcards_active",
+            "course_id",
+            "week",
+            postgresql_where=text("archived_at IS NULL"),
+        ),
+    )

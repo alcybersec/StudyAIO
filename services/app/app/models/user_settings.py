@@ -27,6 +27,8 @@ class UserSettings(Base):
     #: Whether `language` also applies to AI-generated study material.
     #: False by default so shipping this changes nobody's existing output.
     content_language: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    #: Opt-in to appear on the XP leaderboard. Hidden (False) by default.
+    leaderboard_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
