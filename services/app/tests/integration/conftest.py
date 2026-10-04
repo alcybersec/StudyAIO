@@ -169,7 +169,25 @@ def _run_migrations(_verify_app_wiring, _require_env):
     # async engine. The migration target is therefore whatever the environment
     # said at import time — which _verify_app_wiring has already checked.
     alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "..", "..", "alembic.ini"))
-    command.upgrade(alembic_cfg, "head")
+
+    # alembic/env.py drives its async engine with `asyncio.run()`, which on exit
+    # unsets this thread's current event loop. Put back whatever was current, or
+    # the next async test fails with "There is no current event loop" whenever a
+    # loop-bound test ran before the first one that needed the database.
+    import asyncio
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        try:
+            current_loop = asyncio.get_event_loop_policy().get_event_loop()
+        except RuntimeError:
+            current_loop = None
+    try:
+        command.upgrade(alembic_cfg, "head")
+    finally:
+        if current_loop is not None and not current_loop.is_closed():
+            asyncio.set_event_loop(current_loop)
 
     # Seed a test user for integration tests (multi-tenant FK requirement)
     engine2 = sqlalchemy.create_engine(sync_url)
@@ -505,3 +523,21 @@ async def committed_user():
             await session.commit()
             await account_service.delete_user_account(session, uid)
             await session.commit()
+
+
+# ── Event-loop anchor ─────────────────────────────────────────────────
+
+
+@pytest_asyncio.fixture(loop_scope="session", scope="session", autouse=True)
+async def _session_loop_anchor():
+    """Create the session-scoped event loop before the first test runs.
+
+    Every async test here declares `loop_scope="session"`. pytest-asyncio only
+    builds that loop when a session-scoped async fixture asks for it, which until
+    now happened as a side effect of the first test that used `db_session`. A test
+    with no such fixture that happened to run first (a pure-logic test, `-k`, a
+    reordered run) ran fine, and then every later test failed with "There is no
+    current event loop". Anchoring the loop here makes the suite independent of
+    which test runs first.
+    """
+    yield
