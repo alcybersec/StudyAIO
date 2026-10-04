@@ -96,6 +96,8 @@ backend-tests:
     - python -m pytest tests/unit -x -v -n auto --cov=app --cov-report=term-missing
       --cov-report=xml:coverage.xml
     - python -m pytest tests/golden -x -v
+    # Architect-owned contracts (M31-S2-DEVOPS-016); `make test` already runs them.
+    - python -m pytest tests/contracts -x -v
   artifacts:
     when: always
     paths: [services/app/coverage.xml]
