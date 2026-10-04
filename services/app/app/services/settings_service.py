@@ -426,7 +426,8 @@ async def get_user_settings(session: AsyncSession, user_id: str) -> dict[str, An
     merged["theme"] = user_settings.theme
     merged["language"] = user_settings.language
     merged["content_language"] = user_settings.content_language
-    merged["leaderboard_opt_in"] = bool(user_settings.leaderboard_opt_in)
+    # getattr: tolerant of lightweight settings stand-ins; the column defaults to False
+    merged["leaderboard_opt_in"] = bool(getattr(user_settings, "leaderboard_opt_in", False))
     merged["dashboard_layout"] = user_settings.dashboard_layout
     return merged
 
