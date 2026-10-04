@@ -330,3 +330,182 @@ async def seed_course(
         flashcards=cards,
         questions=questions,
     )
+
+
+# ── Provider transport fakes (for exercising the real adapters) ───────
+
+
+class Transport:
+    """Scripted stand-in for a provider's network/CLI boundary.
+
+    Queue canned response text with `push`; the adapter under test consumes one
+    per request. Every prompt and system prompt it sent is recorded.
+    """
+
+    def __init__(self) -> None:
+        self.queue: list[str] = []
+        self.prompts: list[str] = []
+        self.systems: list[str | None] = []
+        self.fail: Exception | None = None
+        self.input_tokens = 11
+        self.output_tokens = 7
+
+    def push(self, *texts: str) -> Transport:
+        self.queue.extend(texts)
+        return self
+
+    def serve(self, prompt: str, system: str | None = None) -> str:
+        self.prompts.append(prompt)
+        self.systems.append(system)
+        if self.fail is not None:
+            raise self.fail
+        return self.queue.pop(0)
+
+    @staticmethod
+    def pieces(text: str) -> list[str]:
+        third = max(1, len(text) // 3)
+        return [text[:third], text[third : 2 * third], text[2 * third :]]
+
+
+BACKEND_SETTINGS: dict[str, dict] = {
+    "anthropic_api": {"agent_backend": "anthropic_api", "anthropic_api_key": "sk-ant-test"},
+    "openai": {"agent_backend": "openai", "openai_api_key": "sk-oai-test"},
+    "zai": {"agent_backend": "zai", "zai_api_key": "zai-test"},
+    "ollama": {"agent_backend": "ollama", "ollama_base_url": "http://ollama.test:11434"},
+    "claude_code": {
+        "agent_backend": "claude_code",
+        "claude_cli_credentials": (
+            '{"claudeAiOauth": {"accessToken": "a", "refreshToken": "r", "expiresAt": 1}}'
+        ),
+    },
+}
+
+
+def install_transport(stack, backend: str, transport: Transport) -> None:
+    """Patch the provider boundary for `backend` so it talks to `transport`.
+
+    Args:
+        stack: A `contextlib.ExitStack` that owns the patches.
+        backend: One of `BACKEND_SETTINGS`.
+        transport: The scripted transport to serve requests from.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    if backend == "anthropic_api":
+
+        class FakeAnthropic:
+            def __init__(self, api_key=None, **_):
+                self.messages = SimpleNamespace(create=self._create, stream=self._stream)
+
+            async def _create(self, **kw):
+                text = transport.serve(kw["messages"][0]["content"], kw.get("system"))
+                return SimpleNamespace(
+                    content=[SimpleNamespace(type="text", text=text)],
+                    usage=SimpleNamespace(
+                        input_tokens=transport.input_tokens, output_tokens=transport.output_tokens
+                    ),
+                )
+
+            def _stream(self, **kw):
+                text = transport.serve(kw["messages"][0]["content"], kw.get("system"))
+
+                class CM:
+                    async def __aenter__(cm):
+                        async def gen():
+                            for piece in Transport.pieces(text):
+                                yield piece
+
+                        return SimpleNamespace(text_stream=gen())
+
+                    async def __aexit__(cm, *exc):
+                        return False
+
+                return CM()
+
+        stack.enter_context(patch("app.agents.anthropic_api.AsyncAnthropic", FakeAnthropic))
+
+    elif backend in ("openai", "zai"):
+
+        class FakeOpenAI:
+            def __init__(self, api_key=None, base_url=None, **_):
+                self.base_url = base_url
+                self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+            async def _create(self, **kw):
+                text = transport.serve(
+                    kw["messages"][-1]["content"],
+                    kw["messages"][0]["content"] if kw["messages"][0]["role"] == "system" else None,
+                )
+                if kw.get("stream"):
+
+                    async def gen():
+                        for piece in Transport.pieces(text):
+                            yield SimpleNamespace(
+                                choices=[SimpleNamespace(delta=SimpleNamespace(content=piece))]
+                            )
+
+                    return gen()
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=text))],
+                    usage=SimpleNamespace(
+                        prompt_tokens=transport.input_tokens,
+                        completion_tokens=transport.output_tokens,
+                    ),
+                )
+
+        stack.enter_context(patch("app.agents.openai_adapter.AsyncOpenAI", FakeOpenAI))
+
+    elif backend == "ollama":
+
+        class FakeOllama:
+            def __init__(self, host=None, **_):
+                self.host = host
+
+            async def chat(self, model, messages, options=None, **_):
+                text = transport.serve(messages[0]["content"])
+                return SimpleNamespace(
+                    message=SimpleNamespace(content=text),
+                    prompt_eval_count=transport.input_tokens,
+                    eval_count=transport.output_tokens,
+                )
+
+        stack.enter_context(patch("app.agents.ollama_adapter.AsyncClient", FakeOllama))
+
+    elif backend == "claude_code":
+
+        async def fake_exec(*cmd, stdin=None, stdout=None, stderr=None, env=None, **_):
+            class Proc:
+                returncode = 0
+
+                async def communicate(self, input=None):
+                    prompt = (input or b"").decode()
+                    try:
+                        return transport.serve(prompt).encode(), b""
+                    except Exception as exc:  # the CLI reports failures via exit status
+                        self.returncode = 1
+                        return b"", str(exc).encode()
+
+                def kill(self):
+                    return None
+
+            return Proc()
+
+        stack.enter_context(patch("asyncio.create_subprocess_exec", fake_exec))
+    else:  # pragma: no cover - guards the test table itself
+        raise ValueError(backend)
+
+
+def sample_extraction(pages: int = 2) -> ExtractionData:
+    """Extraction data shaped like a real manifest, with an image on page 1."""
+    return ExtractionData(
+        pages=[
+            {
+                "page_number": i + 1,
+                "text": f"Page {i + 1}: {LECTURE_PAGES[i % len(LECTURE_PAGES)]}",
+                "images": [{"filename": f"img{i + 1}.png"}] if i == 0 else [],
+            }
+            for i in range(pages)
+        ],
+        metadata={"course_code": "NET101", "week": 3},
+    )
