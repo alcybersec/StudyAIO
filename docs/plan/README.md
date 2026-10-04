@@ -20,12 +20,17 @@ confirmed by the user.
 
 **Integration branch.** `kit/retrofit` @ `9b3ef84` = … → QA-011 (`c04b31d`) → DEVOPS-005bc (`9b3ef84`); before that `02c9443` = ARCH-001 → DEVOPS-002 → QA-004 → DEVOPS-005a → ARCH-006 (`da8c596`) → SAFETY-003 (bc55b24) → BACKEND-008 → SAFETY-009 → BACKEND-010 (`718faa0`) → QA-007 (14 cherry-picks). Local only, not pushed.
 
-**Blocked on the user:** embeddings scope of floor 3 (R-004; `safety` recommends: in scope, `EmbeddingProvider` as a second sanctioned gateway with its own allowlist); 4 floor rulings (R-007); pushing to GitLab to prove the CI gates (user: "not yet", 2026-10-04).
+**User rulings 2026-10-04** (`docs/decisions.md` § Rulings): re-summarize + regeneration + leaderboard → fix code (next wave: `data`/`ai`/`backend`/`frontend`); single-item deletes → amend floor 4 (ADR 0004); embeddings → in floor 3. Throwaway red-proof push authorised.
 
 ## Active
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M31-S2-SAFETY-012 (floor-1 sweep gap; F2 pins: concepts site, worker, global handler) | `safety` | 2026-10-04 | isolated |
+| M31-S2-BACKEND-013 (R-015 × 6 backend sites; `studyaio_error_handler` stops echoing `AgentError`) | `backend` | 2026-10-04 | isolated |
+| M31-S2-AI-014 (redact at `AgentError` construction / R-012; `_get_known_courses` scope; quick-capture `txt`) | `ai` | 2026-10-04 | isolated |
+| M31-S2-ARCH-015 (ADR 0004 floor-4 item deletes; floor 3 covers embeddings) | `architect` | 2026-10-04 | isolated |
+| M31-S2-DEVOPS-016 (pipeline red-proof, push authorised by user; contracts in CI; runbook) | `devops` | 2026-10-04 | isolated |
 
 ## Completed
 
