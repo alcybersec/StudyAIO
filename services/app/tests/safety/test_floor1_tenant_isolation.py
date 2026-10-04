@@ -35,6 +35,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.routing import APIRoute
+
 from tests.safety._source import app_modules, dotted, parse, rel, walk_with_scope
 from tests.safety._tenant import (
     UNOWNED_TABLES,
@@ -297,13 +298,11 @@ UNSCOPED_GET_ALLOWED = {
 
 #: Live violations. Each has a behavioural test below that fails until fixed;
 #: an entry here only keeps the static test from double-reporting it.
-UNSCOPED_GET_VIOLATIONS = {
-    ("app/services/courseops_service.py", "attach_assessment_document", "Assessment"): (
-        "POST /api/courseops/assessments/{assessment_id}/documents resolves the "
-        "assessment with session.get and never checks its course's owner, so any "
-        "user can attach a document to another user's assessment and course"
-    ),
-}
+#:
+#: Empty since M31-S1-BACKEND-008 (a2cd687): ``attach_assessment_document`` now
+#: resolves the assessment through ``_get_course_owned`` (a join on
+#: ``courses.user_id``). Its behavioural test stays as the regression pin.
+UNSCOPED_GET_VIOLATIONS: dict[tuple[str, str, str], str] = {}
 
 SESSION_NAMES = frozenset({"session", "db"})
 SCANNED = ("app/api/", "app/services/")
@@ -401,9 +400,16 @@ def test_floor1_pipeline_only_fetch_is_pipeline_only():
 async def test_floor1_cannot_attach_document_to_another_users_assessment():
     """User B must not be able to attach a document to user A's assessment.
 
-    Implementation-agnostic: a fix may scope the lookup in SQL (then the
-    mock's empty result means "not found"), or fetch and compare the course's
-    owner. Either way the call must return None and add nothing.
+    Implementation-agnostic: a fix may scope the lookup in SQL, or fetch and
+    compare the course's owner. Either way the call must return None and add
+    nothing.
+
+    The fake session behaves like the database holding A's assessment: a
+    lookup that filters on B's ``user_id`` finds nothing, and any other lookup
+    (``session.get``, or a ``select`` with no owner filter, or one filtered on
+    the wrong user) finds A's row. So an unscoped ``select`` does not pass by
+    accident on an empty mock result. The control call as owner A must find the
+    row, which shows the fake is not empty for everyone.
     """
     from app.models.assessment import Assessment
     from app.models.course import Course
@@ -417,29 +423,48 @@ async def test_floor1_cannot_attach_document_to_another_users_assessment():
     course.id = "course-of-a"
     course.user_id = owner_a
 
-    session = AsyncMock()
-    session.add = MagicMock()
-    session.execute = AsyncMock(side_effect=_empty_result)
+    def as_database(statement, *_a, **_k):
+        result = _empty_result()
+        if "assessments" in tables_in(statement) and not filters_on_user(statement, caller_b):
+            result.scalar_one_or_none.return_value = assessment
+            result.scalars.return_value.first.return_value = assessment
+            result.first.return_value = assessment
+        return result
 
-    async def get(model, ident, *_a, **_k):
-        return {Assessment: assessment, Course: course}.get(model)
+    def fake_session() -> AsyncMock:
+        session = AsyncMock()
+        session.add = MagicMock()
+        session.execute = AsyncMock(side_effect=as_database)
 
-    session.get = AsyncMock(side_effect=get)
+        async def get(model, ident, *_a, **_k):
+            return {Assessment: assessment, Course: course}.get(model)
 
-    doc = await courseops_service.attach_assessment_document(
-        session=session,
-        assessment_id="assessment-of-a",
-        document_type="brief",
-        original_filename="brief.pdf",
-        file_path="courseops/user-b/x/brief.pdf",
-        file_type="pdf",
-        sha256="b" * 64,
-        file_size_bytes=10,
-        user_id=caller_b,
+        session.get = AsyncMock(side_effect=get)
+        return session
+
+    def attach(session: AsyncMock, user_id: str):
+        return courseops_service.attach_assessment_document(
+            session=session,
+            assessment_id="assessment-of-a",
+            document_type="brief",
+            original_filename="brief.pdf",
+            file_path=f"courseops/{user_id}/x/brief.pdf",
+            file_type="pdf",
+            sha256="b" * 64,
+            file_size_bytes=10,
+            user_id=user_id,
+        )
+
+    control = fake_session()
+    assert await attach(control, owner_a) is not None, (
+        "control: the owner's own attach found nothing, so the fake proves nothing"
     )
+
+    session = fake_session()
+    doc = await attach(session, caller_b)
 
     assert doc is None, (
         "Floor 1 VIOLATION: attach_assessment_document attached user B's document "
-        "to user A's assessment (unscoped session.get(Assessment, ...))."
+        "to user A's assessment (lookup not scoped to the course owner)."
     )
     session.add.assert_not_called()

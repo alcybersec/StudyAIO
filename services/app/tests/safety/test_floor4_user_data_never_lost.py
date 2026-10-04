@@ -32,6 +32,7 @@ import hashlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from tests.safety._source import app_modules, dotted, parse, rel, walk_with_scope
 
 # ── inventory 1: blob and file deletes ─────────────────────────────────
@@ -75,7 +76,9 @@ BLOB_SANCTIONED = {
 BLOB_PENDING_RULING = {
     ("app/services/courseops_service.py", "_delete_blob_if_unreferenced", "store.delete"): (
         "DELETE /api/courseops/documents/{id}: user deletes one course document; "
-        "blob dropped when no other row of theirs references it"
+        "blob dropped when no other row of theirs references it. The same helper "
+        "also serves the failed-upload cleanup, which is sanctioned on its own "
+        "(see REFERENCE_CHECKED_DELETE_CALLERS)"
     ),
     ("app/services/course_service.py", "_discard_summary", "storage.delete"): (
         "POST /api/courses/{code}/merge with keep_target/keep_source: the losing "
@@ -83,18 +86,35 @@ BLOB_PENDING_RULING = {
     ),
 }
 
-BLOB_VIOLATIONS = {
-    ("app/api/courseops.py", "upload_course_document", "storage.delete"): (
-        "on CourseOpsError (incl. 'already uploaded') deletes storage_key — which, "
-        "for a re-upload of the same file, is the key the EXISTING document's row "
-        "points at (courseops_key is user+sha256+name). Dedup destroys the original. "
-        "Behaviour: test_floor4_duplicate_course_document_upload_keeps_original_blob"
+#: Empty since M31-S1-BACKEND-008 (a2cd687). Both courseops upload routes used
+#: to ``storage.delete(storage_key)`` on failure, which for a re-upload of the
+#: same file is the key an existing document points at. They now go through
+#: ``courseops_service.discard_failed_upload_blob`` (classified below). The
+#: behavioural tests further down stay as the regression pins.
+BLOB_VIOLATIONS: dict[tuple[str, str, str], str] = {}
+
+#: ``_delete_blob_if_unreferenced`` is one ``store.delete`` site with more than
+#: one meaning, so its callers are pinned exactly as well. A new caller has to
+#: be classified here; it cannot inherit the classification of the delete site.
+#: (module, caller) -> classification and reason.
+REFERENCE_CHECKED_DELETE_CALLERS = {
+    ("app/services/courseops_service.py", "delete_course_document"): (
+        "PENDING_RULING: single-item user delete (DB_PENDING_RULING)"
     ),
-    ("app/api/courseops.py", "upload_assessment_document", "storage.delete"): (
-        "on a 404 assessment deletes storage_key, the same key an existing course "
-        "document of the same file already uses. "
-        "Behaviour: test_floor4_failed_assessment_attach_keeps_existing_blob"
+    ("app/services/courseops_service.py", "discard_failed_upload_blob"): (
+        "SANCTIONED: cleanup of the blob a failed upload request just wrote. The "
+        "helper refuses keys outside the caller's own courseops/<user_id>/ prefix "
+        "and deletes only when no CourseDocument row of that user (course "
+        "documents and assessment attachments share the table) points at the key"
     ),
+}
+
+#: ``discard_failed_upload_blob`` deletes whatever the caller hands it (subject
+#: to the reference check), so it may be called only from the failure branch of
+#: the two upload routes, with the key that request built.
+DISCARD_FAILED_UPLOAD_CALLERS = {
+    ("app/api/courseops.py", "upload_course_document"),
+    ("app/api/courseops.py", "upload_assessment_document"),
 }
 
 
@@ -293,6 +313,18 @@ def test_floor4_account_purge_reachable_only_from_account_deletion():
     assert _callers("admin_service.delete_user") == {("app/api/admin.py", "delete_user")}
 
 
+def test_floor4_reference_checked_delete_has_only_classified_callers():
+    """The shared courseops blob delete is reached only from classified callers.
+
+    ``store.delete`` inside ``_delete_blob_if_unreferenced`` is one site in the
+    blob inventory, but it serves both a user's single-document delete (pending
+    a ruling) and the failed-upload cleanup (sanctioned). Pinning the callers
+    keeps a third use from hiding behind either classification.
+    """
+    assert _callers("_delete_blob_if_unreferenced") == set(REFERENCE_CHECKED_DELETE_CALLERS)
+    assert _callers("discard_failed_upload_blob") == DISCARD_FAILED_UPLOAD_CALLERS
+
+
 # ── dedup ──────────────────────────────────────────────────────────────
 
 
@@ -340,9 +372,37 @@ async def _seed_existing_courseops_blob(user_id: str, content: bytes, filename: 
     return key
 
 
+def _references(rows: set[tuple[str, str]]):
+    """A fake ``session.execute`` holding ``course_documents`` rows (user_id, file_path).
+
+    Answers a ``count`` over ``course_documents`` with the number of rows the
+    statement's ``user_id`` and ``file_path`` binds both match, the way the
+    database would. Every other statement finds nothing. The shared
+    ``mock_session`` would otherwise answer every count with a truthy
+    ``MagicMock``, so a cleanup that skipped the reference check would still
+    look like it kept the blob.
+    """
+
+    def execute(statement, *_a, **_k):
+        from tests.safety._tenant import tables_in
+
+        result = MagicMock()
+        result.scalar_one.return_value = 0
+        result.scalar.return_value = 0
+        result.scalar_one_or_none.return_value = None
+        if "course_documents" in tables_in(statement):
+            binds = {v for v in statement.compile().params.values() if isinstance(v, str)}
+            hits = sum(1 for user_id, key in rows if user_id in binds and key in binds)
+            result.scalar_one.return_value = hits
+            result.scalar.return_value = hits
+        return result
+
+    return AsyncMock(side_effect=execute)
+
+
 @pytest.mark.asyncio
 async def test_floor4_duplicate_course_document_upload_keeps_original_blob(
-    async_client, default_test_user, simple_pdf
+    async_client, mock_session, default_test_user, simple_pdf
 ):
     """Re-uploading a course document that already exists must not delete its file."""
     from app.core.storage import get_storage
@@ -350,6 +410,7 @@ async def test_floor4_duplicate_course_document_upload_keeps_original_blob(
 
     content = simple_pdf.read_bytes()
     key = await _seed_existing_courseops_blob(default_test_user.id, content, "outline.pdf")
+    mock_session.execute = _references({(default_test_user.id, key)})
 
     with patch(
         "app.api.courseops.courseops_service.upload_course_document",
@@ -369,13 +430,14 @@ async def test_floor4_duplicate_course_document_upload_keeps_original_blob(
 
 @pytest.mark.asyncio
 async def test_floor4_failed_assessment_attach_keeps_existing_blob(
-    async_client, default_test_user, simple_pdf
+    async_client, mock_session, default_test_user, simple_pdf
 ):
     """A failed attach must not delete a blob another document of the user's uses."""
     from app.core.storage import get_storage
 
     content = simple_pdf.read_bytes()
     key = await _seed_existing_courseops_blob(default_test_user.id, content, "rubric.pdf")
+    mock_session.execute = _references({(default_test_user.id, key)})
 
     with patch(
         "app.api.courseops.courseops_service.attach_assessment_document",
@@ -390,6 +452,51 @@ async def test_floor4_failed_assessment_attach_keeps_existing_blob(
     assert await get_storage().exists(key), (
         "Floor 4 VIOLATION: a failed assessment attach deleted the blob an existing "
         f"course document points at ({key})."
+    )
+
+
+@pytest.mark.asyncio
+async def test_floor4_failed_upload_never_deletes_another_users_blob(
+    async_client, mock_session, default_test_user, simple_pdf
+):
+    """User B's failed upload of user A's exact file leaves A's blob alone.
+
+    Two halves. Through the route: B's failed attach of the same bytes under
+    the same name must not touch the blob A's document points at. Directly: the
+    cleanup must refuse a key outside the caller's own prefix even when nothing
+    of the caller's references it, since a reference count over B's rows says
+    nothing about A's.
+    """
+    from app.core.storage import get_storage
+    from app.services import courseops_service
+
+    owner_a = "00000000-0000-0000-0000-00000000000a"
+    content = simple_pdf.read_bytes()
+    key_a = await _seed_existing_courseops_blob(owner_a, content, "rubric.pdf")
+    mock_session.execute = _references({(owner_a, key_a)})
+
+    with patch(
+        "app.api.courseops.courseops_service.attach_assessment_document",
+        new=AsyncMock(return_value=None),
+    ):
+        response = await async_client.post(
+            "/api/courseops/assessments/no-such-assessment/documents?document_type=rubric",
+            files={"file": ("rubric.pdf", content, "application/pdf")},
+        )
+    assert response.status_code == 404, response.text
+    assert await get_storage().exists(key_a), (
+        f"Floor 4 VIOLATION: user B's failed upload deleted user A's blob ({key_a})."
+    )
+
+    session = AsyncMock()
+    session.execute = _references(set())
+    deleted = await courseops_service.discard_failed_upload_blob(
+        session, default_test_user.id, key_a, get_storage()
+    )
+    assert deleted is False
+    assert await get_storage().exists(key_a), (
+        "Floor 4 VIOLATION: discard_failed_upload_blob deleted a blob under another "
+        f"user's prefix ({key_a})."
     )
 
 
@@ -488,10 +595,10 @@ async def test_floor4_asset_regeneration_keeps_study_history():
     absence of reviews / attempts; an unconditional one destroys history.
     """
     from sqlalchemy.sql.dml import Delete
-    from tests.safety._tenant import tables_in
 
     from app.agents.base import FlashcardData, QuizQuestionData
     from app.services import asset_service
+    from tests.safety._tenant import tables_in
 
     captured = []
 
