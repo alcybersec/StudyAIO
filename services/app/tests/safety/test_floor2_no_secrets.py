@@ -828,6 +828,32 @@ def _tracked_files() -> list[pathlib.Path]:
     ]
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [FileNotFoundError("git"), subprocess.CalledProcessError(128, "git"), "empty"],
+    ids=["git-missing", "not-a-checkout", "no-files"],
+)
+def test_floor2_tracked_file_scan_fails_loudly_without_git(failure):
+    """No git, no scan: the committed-secret checks must fail, not shrink to services/app.
+
+    In CI the ``python:3.12-slim`` job had no git, ``_tracked_files`` swallowed
+    the OSError and fell back to the service tree, and an AKIA sentinel
+    committed under ``docs/`` passed ``test-floor`` (pipeline 525, job 4301).
+    """
+    real_run = subprocess.run
+
+    def run(cmd, *a, **k):
+        if cmd and cmd[0] == "git":
+            if failure == "empty":
+                return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
+            raise failure
+        return real_run(cmd, *a, **k)
+
+    with patch.object(subprocess, "run", run), pytest.raises(pytest.fail.Exception) as info:
+        _tracked_files()
+    assert "git" in str(info.value)
+
+
 def test_floor2_no_high_confidence_secret_in_tracked_files():
     """No tracked file contains a credential in a fixed, unmistakable format."""
     files = _tracked_files()
