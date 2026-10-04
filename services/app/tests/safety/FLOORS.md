@@ -27,7 +27,7 @@ cd services/app && .venv/bin/python -m pytest tests/safety -v
 | `…::test_floor1_every_table_is_classified` | A table is neither user-owned (it has `user_id`, a FK to an owned table, or is polymorphic) nor listed in `UNOWNED_TABLES`. |
 | `…::test_floor1_no_unscoped_session_get_on_owned_model` | An `api/` or `services/` function calls `session.get(OwnedModel, <its own parameter>)` and the call is not classified. |
 | `…::test_floor1_pipeline_only_fetch_is_pipeline_only` | The one allowlisted worker-only unscoped fetch gains a caller outside `app/pipeline/`. |
-| `…::test_floor1_cannot_attach_document_to_another_users_assessment` | **RED today.** `attach_assessment_document` resolves the assessment with no owner check. |
+| `…::test_floor1_cannot_attach_document_to_another_users_assessment` | `attach_assessment_document` lets user B attach a document to user A's assessment. The fake session answers like a database: only a lookup filtered on the caller's `user_id` comes back empty, so an unscoped `select` fails too, and a control call as the owner must find the row. Fixed in M31-S1-BACKEND-008 (`a2cd687`). |
 | `…::test_floor1_no_cross_user_route_awaits_a_ruling` | xfail(strict). The leaderboard is a cross-user read, pending a ruling. |
 
 The deeper layers live in other tiers: `tests/integration/test_idor_row_level.py`
@@ -44,7 +44,8 @@ plus `test_idor_scoping.py` cover endpoint wiring.
 | `test_floor2_no_secrets.py::test_floor2_settings_get_never_returns_a_stored_credential` | `GET /api/settings` contains any stored per-user credential. |
 | `…::test_floor2_settings_put_never_echoes_a_credential` | The `PUT /api/settings` response echoes one back. |
 | `…::test_floor2_settings_schemas_carry_no_credential_value` | `SettingsResponse` gains a credential-valued field, or `SettingsUpdateRequest` gains a credential input that is not in `SECRET_KEYS`. |
-| `…::test_floor2_account_export_never_returns_a_stored_credential` | **RED today.** `GET /api/auth/account/export` returns `user_settings.settings_json` whole, credentials included. |
+| `…::test_floor2_account_export_never_returns_a_stored_credential` | `GET /api/auth/account/export` returns any stored credential from `user_settings.settings_json`, including the token nested in `claude_cli_credentials`. Fixed in M31-S1-BACKEND-008 (`b5f57e6`). |
+| `…::test_floor2_provider_error_never_echoes_a_stored_credential[<site>]` | A provider error that quotes every stored credential (the nested CLI token too) reaches the response, a structlog event or a stdlib log record at a request-time AI call site: `POST /api/settings/test-ai`, `POST /api/qa/ask`, `chat_service.send_message`, `chat_service.stream_message`. It also fails if the adapter was never called. test-ai is green (`7eecbac`, R-008). **RED today** on the other three: `qa.py` returns and logs `str(e)`, and chat logs it. |
 | `…::test_floor2_credentials_never_logged` | A stored credential appears in a structlog event or a stdlib log record during save, rejected save, or adapter construction for any backend. It also fails if one appears in a 422 body. |
 | `…::test_floor2_no_high_confidence_secret_in_tracked_files` | A tracked file contains a private key block, or an AWS, Anthropic, OpenAI, GitHub, GitLab, Slack, Google, Stripe-live or Telegram credential in its fixed format. |
 | `…::test_floor2_no_env_file_tracked` | A `.env*` file other than a template is tracked. |
@@ -93,8 +94,10 @@ on R-004. Whichever way the ruling goes, it would add the following:
 | `…::test_floor4_every_content_row_delete_is_classified` | The same check for DB deletes of uploaded or generated-content models, and for every `session.delete`. |
 | `…::test_floor4_account_purge_reachable_only_from_account_deletion` | `purge_user_storage` or `delete_user_account` gains a caller outside account deletion. |
 | `…::test_floor4_lecture_upload_dedup_writes_and_deletes_nothing` | A duplicate lecture upload stores, deletes or dispatches anything. |
-| `…::test_floor4_duplicate_course_document_upload_keeps_original_blob` | **RED today.** Re-uploading the same course document deletes the existing document's blob. |
-| `…::test_floor4_failed_assessment_attach_keeps_existing_blob` | **RED today.** A 404 on attach deletes a blob that an existing document uses. |
+| `…::test_floor4_reference_checked_delete_has_only_classified_callers` | `_delete_blob_if_unreferenced` gains a caller not in `REFERENCE_CHECKED_DELETE_CALLERS`, or `discard_failed_upload_blob` is called from anywhere but the two courseops upload routes. The shared `store.delete` site is pending a ruling for the single-document delete and sanctioned for failed-upload cleanup, so its callers are pinned. |
+| `…::test_floor4_duplicate_course_document_upload_keeps_original_blob` | Re-uploading the same course document deletes the blob the existing document's row points at. The fake session answers the reference count from real rows, so cleanup that skips the count fails. Fixed in M31-S1-BACKEND-008 (`a2cd687`). |
+| `…::test_floor4_failed_assessment_attach_keeps_existing_blob` | A 404 on attach deletes a blob that an existing document uses (same fake). Fixed in `a2cd687`. |
+| `…::test_floor4_failed_upload_never_deletes_another_users_blob` | User B's failed upload of user A's exact file deletes A's blob, or `discard_failed_upload_blob` deletes a key outside the caller's own `courseops/<user_id>/` prefix. |
 | `…::test_floor4_resummarize_increments_version` | Re-summarizing a course and week does not increment `version`. |
 | `…::test_floor4_resummarize_preserves_prior_version` | xfail(strict). Re-summarize overwrites version N-1, pending a ruling. |
 | `…::test_floor4_asset_regeneration_keeps_study_history` | xfail(strict). Regeneration cascades away flashcard reviews and quiz attempts, pending a ruling. |

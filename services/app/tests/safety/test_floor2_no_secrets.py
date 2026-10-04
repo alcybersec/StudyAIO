@@ -27,11 +27,12 @@ import pathlib
 import re
 import subprocess
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import structlog
 import yaml
+
 from tests.safety._source import SERVICE_ROOT
 
 REPO_ROOT = SERVICE_ROOT.parents[1]
@@ -252,6 +253,195 @@ async def test_floor2_credentials_never_logged(async_client, caplog):
     _assert_no_sentinel(repr(events), "structlog events")
     _assert_no_sentinel(caplog.text, "stdlib log records")
     _assert_no_sentinel(bad.text, "the 422 error body")
+
+
+# ── provider errors at the request-time AI call sites (R-008) ──────────
+#
+# A provider SDK can echo the credential it was sent ("invalid key sk-...").
+# Adapters wrap SDK error text verbatim into ``AgentError``, so whatever a
+# request-time call site does with ``str(e)`` (log it, put it in a response)
+# carries the user's key unless something redacts it. These tests make every
+# adapter call raise an error that quotes each stored credential, including
+# the token nested inside ``claude_cli_credentials``, and check the response
+# and both log streams. They do not care where the redaction happens: at the
+# call site, in a shared helper, or at the adapter boundary.
+
+
+def _echoing_error():
+    from app.core.exceptions import AgentError
+
+    return AgentError("provider rejected credentials: " + " | ".join(_all_sentinels()))
+
+
+def _echoing_agent() -> MagicMock:
+    agent = MagicMock()
+    agent.classify_lecture = AsyncMock(side_effect=_echoing_error())
+    agent.answer_question = AsyncMock(side_effect=_echoing_error())
+
+    async def stream_answer(*_a, **_k):
+        raise _echoing_error()
+        yield  # pragma: no cover  (makes this an async generator)
+
+    agent.stream_answer = MagicMock(side_effect=stream_answer)
+    return agent
+
+
+def _db_with_stored_credentials(extra=None):
+    """A fake ``session.execute`` whose ``user_settings`` row holds every credential.
+
+    ``extra`` maps a table name to the row a lookup on it returns (e.g. the
+    chat session); every other statement finds nothing.
+    """
+    from tests.safety._tenant import tables_in
+
+    settings_row = SimpleNamespace(settings_json=_stored_credentials())
+
+    def execute(statement, *_a, **_k):
+        result = MagicMock()
+        tables = tables_in(statement)
+        row = None
+        if "user_settings" in tables:
+            row = settings_row
+        for table, value in (extra or {}).items():
+            if table in tables:
+                row = value
+        result.scalar_one_or_none.return_value = row
+        result.scalars.return_value.all.return_value = []
+        result.scalars.return_value.first.return_value = row
+        result.first.return_value = row
+        result.all.return_value = []
+        result.scalar_one.return_value = 0
+        result.scalar.return_value = 0
+        return result
+
+    return AsyncMock(side_effect=execute)
+
+
+def _user_agent_config() -> dict:
+    return {"agent_backend": "openai", **_stored_credentials()}
+
+
+async def _site_test_ai(agent, async_client, mock_session) -> str:
+    mock_session.execute = _db_with_stored_credentials()
+    with (
+        patch(
+            "app.services.settings_service.get_user_agent_config",
+            new=AsyncMock(return_value=_user_agent_config()),
+        ),
+        patch("app.agents.factory.get_agent", return_value=agent),
+    ):
+        response = await async_client.post("/api/settings/test-ai")
+    assert response.status_code == 502, response.text
+    return response.text
+
+
+async def _site_qa_ask(agent, async_client, mock_session) -> str:
+    mock_session.execute = _db_with_stored_credentials()
+    provider = MagicMock()
+    provider.embed_texts.return_value = [[0.0, 0.0, 0.0]]
+    chunk = {
+        "chunk_id": "c1",
+        "artifact_id": "a1",
+        "content": "text",
+        "score": 0.9,
+        "course_code": "CSIT302",
+        "week": 1,
+        "filename": "w1.pdf",
+    }
+    with (
+        patch("app.api.qa.quota_service.check_ai_quota", new=AsyncMock()),
+        patch("app.api.qa.get_embedding_provider", return_value=provider),
+        patch("app.api.qa.search_service.search_chunks", new=AsyncMock(return_value=[chunk])),
+        patch(
+            "app.services.settings_service.get_user_ai_context",
+            new=AsyncMock(return_value=(_user_agent_config(), "en")),
+        ),
+        patch("app.api.qa.get_agent", return_value=agent),
+    ):
+        response = await async_client.post("/api/qa/ask", json={"question": "what is X?"})
+    assert response.status_code >= 400, response.text
+    return response.text
+
+
+def _chat_patches(agent):
+    no_embeddings = MagicMock(side_effect=RuntimeError("embeddings offline"))
+    return (
+        patch("app.services.chat_service.get_embedding_provider", new=no_embeddings),
+        patch(
+            "app.services.settings_service.get_user_ai_context",
+            new=AsyncMock(return_value=(_user_agent_config(), "en")),
+        ),
+        patch("app.services.chat_service.get_agent", return_value=agent),
+    )
+
+
+def _chat_session():
+    session = AsyncMock()
+    session.add = MagicMock()
+    chat = SimpleNamespace(
+        id="chat-1", user_id="u1", course_id=None, title="t", message_count=0, updated_at=None
+    )
+    session.execute = _db_with_stored_credentials({"chat_sessions": chat})
+    return session
+
+
+async def _site_chat_send(agent, async_client, mock_session) -> str:
+    from app.services import chat_service
+
+    p1, p2, p3 = _chat_patches(agent)
+    with p1, p2, p3:
+        _user_msg, reply = await chat_service.send_message(
+            session=_chat_session(), session_id="chat-1", user_id="u1", content="hi"
+        )
+    return str(reply.content)
+
+
+async def _site_chat_stream(agent, async_client, mock_session) -> str:
+    from app.services import chat_service
+
+    p1, p2, p3 = _chat_patches(agent)
+    events = []
+    with p1, p2, p3:
+        async for event in chat_service.stream_message(
+            session=_chat_session(), session_id="chat-1", user_id="u1", content="hi"
+        ):
+            events.append(event)
+    return repr(events)
+
+
+#: Every request-time ``get_agent`` call site that turns a provider failure
+#: into a response or a log line (floor 3's ADR 0003 allowlist, minus
+#: ``concept_service``, whose failure propagates unhandled to a generic 500).
+REQUEST_TIME_AI_ERROR_SITES = {
+    "POST /api/settings/test-ai": _site_test_ai,
+    "POST /api/qa/ask": _site_qa_ask,
+    "chat_service.send_message": _site_chat_send,
+    "chat_service.stream_message": _site_chat_stream,
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("site", sorted(REQUEST_TIME_AI_ERROR_SITES))
+async def test_floor2_provider_error_never_echoes_a_stored_credential(
+    site, async_client, mock_session, caplog
+):
+    """A provider error quoting the user's key is neither returned nor logged.
+
+    Covers R-008. ``test-ai`` was fixed in M31-S1-BACKEND-008 (7eecbac); the
+    other request-time AI call sites share the same ``str(e)`` handling.
+    """
+    agent = _echoing_agent()
+    caplog.set_level(logging.DEBUG)
+    with structlog.testing.capture_logs() as events:
+        returned = await REQUEST_TIME_AI_ERROR_SITES[site](agent, async_client, mock_session)
+
+    assert agent.mock_calls, (
+        f"{site}: the adapter was never called, so no provider error was raised and "
+        "this test proves nothing"
+    )
+    _assert_no_sentinel(returned, f"{site} response")
+    _assert_no_sentinel(repr(events), f"{site} structlog events")
+    _assert_no_sentinel(caplog.text, f"{site} stdlib log records")
 
 
 # ── committed ──────────────────────────────────────────────────────────
