@@ -807,7 +807,13 @@ MAX_SCAN_BYTES = 2_000_000
 
 
 def _tracked_files() -> list[pathlib.Path]:
-    """Files git tracks; outside a checkout, the service tree minus build dirs."""
+    """Every file git tracks in the repository. Fails the test if git cannot say.
+
+    There is deliberately no fallback. The old one scanned ``services/app``
+    when git was missing, which silently dropped ``docs/``, ``infra/`` and the
+    rest of the tree from a check whose subject is "the tree" (a false green
+    in CI, pipeline 525). A floor check that cannot see its subject fails.
+    """
     try:
         out = subprocess.run(
             ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
@@ -815,17 +821,16 @@ def _tracked_files() -> list[pathlib.Path]:
             check=True,
             timeout=60,
         ).stdout
-        files = [REPO_ROOT / p.decode() for p in out.split(b"\0") if p]
-        if files:
-            return files
-    except (OSError, subprocess.SubprocessError):
-        pass
-    skip = {".venv", "__pycache__", "node_modules", ".pytest_cache", ".ruff_cache"}
-    return [
-        p
-        for p in SERVICE_ROOT.rglob("*")
-        if p.is_file() and not (skip & set(p.relative_to(SERVICE_ROOT).parts))
-    ]
+    except (OSError, subprocess.SubprocessError) as exc:
+        pytest.fail(
+            f"Floor 2: cannot list tracked files with git ({exc!r}). The committed-secret "
+            "checks need git and a checkout; install git in this environment rather than "
+            "scanning a subset of the tree."
+        )
+    files = [REPO_ROOT / p.decode() for p in out.split(b"\0") if p]
+    if not files:
+        pytest.fail(f"Floor 2: git ls-files listed nothing under {REPO_ROOT}; not a checkout?")
+    return files
 
 
 @pytest.mark.parametrize(
