@@ -362,12 +362,20 @@ services/app/tests/
 ### Running Tests
 
 ```bash
-make test               # All unit tests
+make bootstrap          # Build services/app/.venv from the lock file (make test does this for you)
+make test               # Unit + golden + contracts, using the .venv interpreter (not PATH)
 make test-unit          # Unit tests only
 make test-integration   # Integration tests (starts Postgres + Redis for you)
 make test-golden        # Golden structural tests
 make coverage           # Unit tests with coverage report
 ```
+
+`make test` is the one command from a clean clone. It needs `python3.12` or `uv`
+on PATH, builds `services/app/.venv` (CPU torch, constrained by
+`requirements.lock.txt`, as CI does) and runs `tests/unit`, `tests/golden` and
+`tests/contracts`. It does **not** run integration tests, which need Postgres and
+Redis: use `make test-integration`. An empty collection (pytest exit 5) fails the
+target. Override the paths with `make test TEST_PATHS=tests/unit`.
 
 ### Integration Tests
 

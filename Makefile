@@ -1,4 +1,4 @@
-.PHONY: up down logs test test-unit test-integration test-golden test-e2e migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup restore preflight ensure-admin
+.PHONY: bootstrap up down logs test test-unit test-integration test-golden test-e2e migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup restore preflight ensure-admin
 
 # === Docker ===
 up:
@@ -64,11 +64,26 @@ db:
 	docker compose exec db psql -U studyaio -d studyaio
 
 # === Testing ===
-test:
-	cd services/app && pytest -x -v
+# One command from a clean clone: `make test`. It builds services/app/.venv on
+# first use (scripts/bootstrap.sh, constrained by requirements.lock.txt) and runs
+# every host-runnable tier with that venv's interpreter, never whatever is on PATH.
+# Covers unit + golden + contracts. Integration needs Postgres + Redis and stays a
+# separate command: `make test-integration`. pytest exits 5 on an empty collection
+# and make propagates it, so a mis-pointed path fails instead of passing.
+PYTHON := $(CURDIR)/services/app/.venv/bin/python
+VENV_STAMP := services/app/.venv/.bootstrap-stamp
+TEST_PATHS ?= tests/unit tests/golden tests/contracts
 
-test-unit:
-	cd services/app && pytest tests/unit -x -v
+bootstrap: $(VENV_STAMP)
+
+$(VENV_STAMP): services/app/requirements.txt services/app/requirements.lock.txt scripts/bootstrap.sh
+	bash scripts/bootstrap.sh
+
+test: bootstrap
+	cd services/app && $(PYTHON) -m pytest $(TEST_PATHS) -x -v
+
+test-unit: bootstrap
+	cd services/app && $(PYTHON) -m pytest tests/unit -x -v
 
 # Integration tests need a real Postgres + Redis, addressed by DATABASE_URL /
 # DATABASE_URL_SYNC / REDIS_URL. Those must be exported before pytest starts —
@@ -78,16 +93,16 @@ test-unit:
 test-integration:
 	bash scripts/test-integration.sh $(ARGS)
 
-test-golden:
-	cd services/app && pytest tests/golden -x -v
+test-golden: bootstrap
+	cd services/app && $(PYTHON) -m pytest tests/golden -x -v
 
 # Playwright suite. Needs the stack running (`make up`) — it drives the UI on
 # :3001 and seeds data through the API on :8000.
 test-e2e:
 	cd services/ui && npm run test:e2e
 
-coverage:
-	cd services/app && pytest tests/unit --cov=app --cov-report=term-missing --cov-fail-under=70
+coverage: bootstrap
+	cd services/app && $(PYTHON) -m pytest tests/unit --cov=app --cov-report=term-missing --cov-fail-under=70
 
 # === Linting ===
 lint-python:
