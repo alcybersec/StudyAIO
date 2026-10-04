@@ -87,17 +87,26 @@ TWO_STEP_SCOPED = {
 }
 
 #: Routes that read across users on purpose, where the floor's text and the
-#: product disagree. Each needs the user's ruling: scope it, make it opt-in,
-#: or amend the floor by ADR. Pinned both ways: an entry that stops crossing
-#: users fails as stale, and the xfail(strict) test below fails once empty.
-SWEEP_PENDING_RULING = {
+#: product disagree and the user has not ruled. An entry that stops crossing
+#: users fails as stale, and ``test_floor1_no_cross_user_route_awaits_a_ruling``
+#: is red while any entry is open. Empty since the 2026-10-04 rulings.
+SWEEP_PENDING_RULING: dict[str, str] = {}
+
+#: Cross-user reads the user ruled acceptable *only* for users who opted in.
+#: The sweep cannot judge an opt-in filter (it asks whether ``user_id`` is
+#: compared to the caller), so each entry is exempt from the sweep and carries
+#: a behavioural pin that evaluates the filter row by row. Not stale-checked:
+#: the fixed query may also compare ``user_id`` to the caller (to show the
+#: caller their own rank), which makes the sweep call it scoped.
+SWEEP_OPT_IN_CROSS_USER = {
     "GET /api/gamification/leaderboard": (
-        "xp_service.get_leaderboard selects every user's user_xp joined to "
-        "users.username with no opt-in, and returns user_id, username, total_xp "
-        "and level of the top N to any authenticated caller (PRD_v2 lists the "
-        "endpoint as 'optional'; no privacy rule is stated)"
+        "ruled 2026-10-04 (R-007): opt-in, hidden by default; floor 1 stands. "
+        "Lists only users with user_settings.leaderboard_opt_in = true (plus the "
+        "caller). Pinned by test_floor1_leaderboard_lists_only_opted_in_users"
     ),
 }
+
+SWEEP_EXEMPT = frozenset(SWEEP_PENDING_RULING) | frozenset(SWEEP_OPT_IN_CROSS_USER)
 
 #: Prefix of the admin surface. Admin routes are cross-user by design and are
 #: authorised by role (tests/unit/api/test_admin_*.py), not by ownership.
@@ -398,7 +407,7 @@ async def test_floor1_route_sweep_every_owned_query_filters_on_caller(
     violations, reached, statuses = await _run_sweep(
         async_client, mock_session, default_test_user.id
     )
-    unruled = {k: v for k, v in violations.items() if k not in SWEEP_PENDING_RULING}
+    unruled = {k: v for k, v in violations.items() if k not in SWEEP_EXEMPT}
     assert not unruled, (
         "Floor 1: route(s) issued a query on a user-owned table without "
         "filtering on the caller's user_id:\n" + _format(unruled)
@@ -427,7 +436,7 @@ async def test_floor1_route_sweep_owned_parent_never_unlocks_foreign_rows(
     violations, _reached, statuses = await _run_sweep(
         async_client, mock_session, default_test_user.id, owned_parent=True
     )
-    unruled = {k: v for k, v in violations.items() if k not in SWEEP_PENDING_RULING}
+    unruled = {k: v for k, v in violations.items() if k not in SWEEP_EXEMPT}
     assert not unruled, (
         "Floor 1: behind a caller-scoped lookup, route(s) queried a user-owned table "
         "keyed on request input with no user_id filter and no caller-owned parent id:\n"
@@ -555,21 +564,104 @@ async def test_floor1_route_sweep_reaches_every_handler(
     assert not stale, f"SWEEP_UNREACHED_BY_DESIGN routes now reach the handler: {stale}"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="VETO-relevant, awaiting user ruling: leaderboard returns other users' "
-    "user_id/username/XP to every user (see SWEEP_PENDING_RULING)",
-)
 def test_floor1_no_cross_user_route_awaits_a_ruling():
     """Every deliberate cross-user read has been ruled on by the user.
 
-    Strict: once the ruling lands (route scoped, made opt-in, or the floor
-    amended by ADR), emptying ``SWEEP_PENDING_RULING`` turns this into an
-    XPASS, which fails — forcing the marker off with the entry.
+    The leaderboard, the only entry, was ruled opt-in on 2026-10-04 and moved
+    to ``SWEEP_OPT_IN_CROSS_USER`` with its own behavioural pin. A new entry
+    here is a floor question for the user, and the floor is not green while
+    one is open.
     """
     assert not SWEEP_PENDING_RULING, "\n".join(
         f"  {k}: {v}" for k, v in SWEEP_PENDING_RULING.items()
+    )
+    assert not set(SWEEP_PENDING_RULING) & set(SWEEP_OPT_IN_CROSS_USER)
+
+
+#: The tables a leaderboard row is made of. A query that reads any other
+#: column fails as Unreadable rather than being guessed at.
+LEADERBOARD_TABLES = ("users", "user_xp", "user_settings")
+
+
+def _leaderboard_row(user_id: str, *, opted_in: bool | None) -> dict[tuple[str, str], object]:
+    """One user's joined row. ``opted_in=None`` means the user has no settings row."""
+    from sqlalchemy import Boolean, Integer
+
+    tables = all_tables()
+    row: dict[tuple[str, str], object] = {}
+    for name in LEADERBOARD_TABLES:
+        for column in tables[name].c:
+            if isinstance(column.type, Boolean):
+                default: object = False
+            elif isinstance(column.type, Integer):
+                default = 100
+            else:
+                default = f"{name}.{column.name}:{user_id}"
+            row[(name, column.name)] = default
+    row[("users", "id")] = user_id
+    row[("user_xp", "user_id")] = user_id
+    row[("user_settings", "user_id")] = user_id
+    row[("user_settings", "leaderboard_opt_in")] = bool(opted_in)
+    if opted_in is None:  # no settings row: every user_settings column is NULL
+        row = {k: (None if k[0] == "user_settings" else v) for k, v in row.items()}
+    return row
+
+
+@pytest.mark.asyncio
+async def test_floor1_leaderboard_lists_only_opted_in_users(
+    async_client, mock_session, default_test_user
+):
+    """GET /leaderboard returns no other user who has not opted in.
+
+    Ruled 2026-10-04 (R-007): the leaderboard is opt-in and hidden by
+    default; floor 1 stands. Each statement the route runs on ``user_xp`` is
+    evaluated row by row (``_predicate.admits``) against three other users:
+    one opted in, one opted out, and one with no settings row at all. Only the
+    first may come back, and it must, or "hidden" was implemented as "empty".
+    The caller's own row is unconstrained. RED until M31-S2-BACKEND-019 adds
+    the filter.
+    """
+    from tests.safety._predicate import Unreadable, admits
+
+    captured: list = []
+
+    def record(statement, *_a, **_k):
+        captured.append(statement)
+        result = MagicMock()
+        result.all.return_value = []
+        result.scalars.return_value.all.return_value = []
+        result.scalar_one_or_none.return_value = None
+        result.scalar.return_value = None
+        return result
+
+    mock_session.execute = AsyncMock(side_effect=record)
+    mock_session.scalar = AsyncMock(side_effect=lambda s, *a, **k: record(s).scalar())
+
+    await async_client.get("/api/gamification/leaderboard")
+
+    reads = [s for s in captured if "user_xp" in tables_in(s)]
+    assert reads, "control: the leaderboard ran no query on user_xp"
+
+    others = {
+        "opted-in": _leaderboard_row("user-opted-in", opted_in=True),
+        "opted-out": _leaderboard_row("user-opted-out", opted_in=False),
+        "no-settings-row": _leaderboard_row("user-no-settings", opted_in=None),
+    }
+    try:
+        shown = {label: [str(s) for s in reads if admits(s, row)] for label, row in others.items()}
+    except Unreadable as exc:
+        pytest.fail(
+            f"The leaderboard query uses a construct tests/safety/_predicate.py does not "
+            f"model ({exc}). Teach the evaluator; do not weaken this pin."
+        )
+    leaked = {k: v for k, v in shown.items() if k != "opted-in" and v}
+    assert not leaked, (
+        "Floor 1 VIOLATION: the leaderboard returns users who did not opt in:\n"
+        + "\n".join(f"  {k}: {v[0]}" for k, v in leaked.items())
+    )
+    assert shown["opted-in"], (
+        "The leaderboard hides an opted-in user too: the filter is not "
+        "leaderboard_opt_in, it is something stricter or broken."
     )
 
 
