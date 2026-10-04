@@ -351,6 +351,8 @@ async def make_user(db_session):
     from app.core.utils import generate_id
     from app.models.user import User
 
+    hashes: dict[str, str] = {}  # Argon2 is deliberately slow; hash each distinct password once
+
     async def _make(
         *,
         email: str | None = None,
@@ -366,7 +368,7 @@ async def make_user(db_session):
             id=uid,
             email=email or f"u-{uid[-12:]}@example.com",
             username=username or f"user_{uid[-12:]}",
-            hashed_password=hash_password(password),
+            hashed_password=hashes.setdefault(password, hash_password(password)),
             role=role,
             tier=tier,
             is_active=is_active,
