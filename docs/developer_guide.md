@@ -367,6 +367,7 @@ make test               # Unit + golden + contracts, using the .venv interpreter
 make test-unit          # Unit tests only
 make test-integration   # Integration tests (starts Postgres + Redis for you)
 make test-golden        # Golden structural tests
+make test-floor         # Floor tier: tests/safety, gated at the floor threshold (95)
 make coverage           # Unit tests with coverage report
 ```
 
@@ -376,6 +377,26 @@ on PATH, builds `services/app/.venv` (CPU torch, constrained by
 `tests/contracts`. It does **not** run integration tests, which need Postgres and
 Redis: use `make test-integration`. An empty collection (pytest exit 5) fails the
 target. Override the paths with `make test TEST_PATHS=tests/unit`.
+
+### Coverage Tiers
+
+Three thresholds, defined once in `services/app/pyproject.toml` under
+`[tool.studyaio.coverage-tiers]` and read by `scripts/coverage-tier.py <tier>`
+(prints the number, so callers use `--cov-fail-under=$(python scripts/coverage-tier.py floor)`):
+
+| Tier | Threshold | Suite | Measures | Where it gates |
+|---|---|---|---|---|
+| unit | 75 | `tests/unit` | `app` | `make test`, CI job `backend-tests` |
+| integration | 70 | `tests/integration` | `app` | `make test-integration`, CI job `integration-tests` |
+| floor | 95 | `tests/safety` | `tests/safety` (the guard code itself) | `make test-floor`, CI job `test-floor` |
+
+`make test-floor` runs the floor suite (tenant isolation, no secrets, AI only via
+the adapter, user data never lost) as its own pytest process. The floor tier
+measures the guard code, not `app`, because the checks are mostly static AST
+walks. `build-api` needs `backend-tests`, `test-floor` and `integration-tests`,
+so a red floor blocks the image build. `tests/contracts` also runs in
+`backend-tests`. Change a threshold only in `pyproject.toml`; the Makefile and
+CI both read it from there.
 
 ### Integration Tests
 
