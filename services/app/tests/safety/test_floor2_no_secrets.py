@@ -21,6 +21,7 @@ Two halves:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import pathlib
@@ -409,14 +410,126 @@ async def _site_chat_stream(agent, async_client, mock_session) -> str:
     return repr(events)
 
 
-#: Every request-time ``get_agent`` call site that turns a provider failure
-#: into a response or a log line (floor 3's ADR 0003 allowlist, minus
-#: ``concept_service``, whose failure propagates unhandled to a generic 500).
+class _ProviderEcho:
+    """Make every provider SDK fail with an error that quotes the credential it was sent.
+
+    It patches the SDKs themselves rather than the adapters: the OpenAI chat
+    ``create`` (OpenAI and Z.ai), the Anthropic messages ``create``, and the
+    ``claude`` CLI subprocess, which prints the OAuth token it found back on
+    stdout. The adapter, its ``AgentError`` wrapping and every layer above run
+    for real, so a fix anywhere (the adapter boundary, a call site, the global
+    handler) turns these tests green, and an echo nothing redacts keeps them red.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def _openai(self):
+        echo = self
+
+        async def create(resource, *_a, **_k):
+            echo.calls.append("openai")
+            raise RuntimeError(
+                f"Error code: 401 - Incorrect API key provided: {resource._client.api_key}"
+            )
+
+        return create
+
+    def _anthropic(self):
+        echo = self
+
+        async def create(resource, *_a, **_k):
+            echo.calls.append("anthropic")
+            raise RuntimeError(
+                f"authentication_error: invalid x-api-key {resource._client.api_key}"
+            )
+
+        return create
+
+    def _subprocess(self):
+        echo = self
+
+        async def create_subprocess_exec(*_cmd, env=None, **_k):
+            echo.calls.append("claude_cli")
+            token = ""
+            config_dir = (env or {}).get("CLAUDE_CONFIG_DIR")
+            if config_dir:
+                creds = json.loads((pathlib.Path(config_dir) / ".credentials.json").read_text())
+                token = creds.get("claudeAiOauth", {}).get("accessToken", "")
+            process = MagicMock()
+            process.returncode = 1
+            process.communicate = AsyncMock(
+                return_value=(
+                    f"401 OAuth access token {token} has been revoked".encode(),
+                    b"",
+                )
+            )
+            return process
+
+        return create_subprocess_exec
+
+    def __enter__(self) -> _ProviderEcho:
+        import asyncio
+
+        from anthropic.resources.messages.messages import AsyncMessages
+        from openai.resources.chat.completions.completions import AsyncCompletions
+
+        self._stack = contextlib.ExitStack()
+        self._stack.enter_context(patch.object(AsyncCompletions, "create", self._openai()))
+        self._stack.enter_context(patch.object(AsyncMessages, "create", self._anthropic()))
+        self._stack.enter_context(
+            patch.object(asyncio, "create_subprocess_exec", self._subprocess())
+        )
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._stack.__exit__(*exc)
+
+
+def _real_agent_config(backend: str) -> dict:
+    """The agent config a user on ``backend`` with every credential stored gets."""
+    from app.services.settings_service import _agent_config_from_overrides
+
+    config = _agent_config_from_overrides({"agent_backend": backend, **_stored_credentials()})
+    assert config is not None
+    return config
+
+
+async def _site_concepts_extract(agent, async_client, mock_session) -> str:
+    """ADR 0003 site #5. Runs the real adapter (``_ProviderEcho`` makes it fail).
+
+    ``agent`` is unused: this site has no call-site handling to bypass, so the
+    error must be the one a real adapter builds from a real SDK failure.
+    """
+    del agent
+    artifact = SimpleNamespace(id="a1", user_id="u1", course_id="c1", week=1)
+    extraction = SimpleNamespace(artifact_id="a1", manifest_json={"pages": []})
+    mock_session.execute = _db_with_stored_credentials(
+        {"lecture_artifacts": artifact, "extractions": extraction}
+    )
+    with (
+        patch("app.api.concepts.quota_service.check_ai_quota", new=AsyncMock()),
+        patch("app.agents.parsing.build_extraction_text", return_value="lecture text"),
+        patch(
+            "app.services.settings_service.get_user_agent_config",
+            new=AsyncMock(return_value=_real_agent_config("openai")),
+        ),
+    ):
+        response = await async_client.post("/api/concepts/extract/a1")
+    assert response.status_code >= 400, response.text
+    return response.text
+
+
+#: Every request-time ``get_agent`` call site (floor 3's ADR 0003 allowlist).
+#: ``concept_service`` (site #5) was left out until M31-S2 on the assumption
+#: that its failure "propagates unhandled to a generic 500"; the M31 gate
+#: showed the global ``StudyAIOError`` handler echoes ``str(exc)`` instead.
 REQUEST_TIME_AI_ERROR_SITES = {
     "POST /api/settings/test-ai": _site_test_ai,
     "POST /api/qa/ask": _site_qa_ask,
     "chat_service.send_message": _site_chat_send,
     "chat_service.stream_message": _site_chat_stream,
+    "POST /api/concepts/extract/{artifact_id}": _site_concepts_extract,
 }
 
 
@@ -427,21 +540,244 @@ async def test_floor2_provider_error_never_echoes_a_stored_credential(
 ):
     """A provider error quoting the user's key is neither returned nor logged.
 
-    Covers R-008. ``test-ai`` was fixed in M31-S1-BACKEND-008 (7eecbac); the
-    other request-time AI call sites share the same ``str(e)`` handling.
+    Covers R-008: ``test-ai`` fixed in 7eecbac, ``qa/ask`` and chat in
+    718faa0. The concepts site (#5) runs the real adapter, see
+    ``_site_concepts_extract``.
     """
     agent = _echoing_agent()
     caplog.set_level(logging.DEBUG)
-    with structlog.testing.capture_logs() as events:
+    with _ProviderEcho() as echo, structlog.testing.capture_logs() as events:
         returned = await REQUEST_TIME_AI_ERROR_SITES[site](agent, async_client, mock_session)
 
-    assert agent.mock_calls, (
+    assert agent.mock_calls or echo.calls, (
         f"{site}: the adapter was never called, so no provider error was raised and "
         "this test proves nothing"
     )
     _assert_no_sentinel(returned, f"{site} response")
     _assert_no_sentinel(repr(events), f"{site} structlog events")
     _assert_no_sentinel(caplog.text, f"{site} stdlib log records")
+
+
+# ── provider errors in the worker (R-012) ──────────────────────────────
+#
+# The worker has no request to answer, but it writes the failure twice:
+# ``pipeline_runs.error_message`` (``pipeline/failures.py``, shown to the user
+# in the upload status view) and its logs (``*_task_error``,
+# ``courseops_document_failed``, and Celery's own "Task ... raised" line,
+# which renders the exception the task ends with). Each test drives a real
+# Celery task, eagerly, with a real adapter whose SDK echoes the key.
+
+#: Backends that send a stored per-user credential to a provider.
+CREDENTIALED_BACKENDS = ("anthropic_api", "openai", "zai", "claude_code")
+
+
+class _WorkerSession:
+    """Just enough of an ``AsyncSession`` for one task to run and fail."""
+
+    def __init__(self, rows: dict[str, object], by_pk: dict[type, object]):
+        from tests.safety._tenant import tables_in
+
+        self.added: list[object] = []
+        self._by_pk = by_pk
+        settings_row = SimpleNamespace(settings_json=_stored_credentials())
+
+        def execute(statement, *_a, **_k):
+            tables = tables_in(statement)
+            row = settings_row if "user_settings" in tables else None
+            for table, value in rows.items():
+                if table in tables:
+                    row = value
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = row
+            result.scalars.return_value.first.return_value = row
+            result.scalars.return_value.all.return_value = []
+            result.all.return_value = []
+            result.first.return_value = row
+            return result
+
+        self.execute = AsyncMock(side_effect=execute)
+        self.commit = AsyncMock()
+        self.flush = AsyncMock()
+        self.rollback = AsyncMock()
+        self.refresh = AsyncMock()
+        self.close = AsyncMock()
+
+    def add(self, obj) -> None:
+        self.added.append(obj)
+
+    async def get(self, model, ident, *_a, **_k):
+        return self._by_pk.get(model)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def _run_task(task, *args):
+    """Run a Celery task eagerly; return the exception it ended with (or None)."""
+    result = task.apply(args=args)
+    return result.result if isinstance(result.result, BaseException) else None
+
+
+def _worker_classify(backend: str) -> tuple[str, list[str]]:
+    from app.models.artifact import LectureArtifact
+    from app.models.pipeline_run import PipelineRun
+    from app.pipeline import classify
+
+    artifact = SimpleNamespace(
+        id="a1",
+        user_id="u1",
+        file_path="uploads/u1/a1.pdf",
+        file_type="pdf",
+        original_filename="CSIT302_week1.pdf",
+        status="ingested",
+        course_id=None,
+        week=None,
+    )
+    session = _WorkerSession({"lecture_artifacts": artifact}, {LectureArtifact: artifact})
+    with (
+        patch.object(classify, "async_session_factory", return_value=session),
+        patch.object(classify, "publish_pipeline_event_sync", MagicMock()),
+        patch.object(classify, "_extract_text_preview", return_value="CSIT302 week 1"),
+        patch.object(classify, "_get_known_courses", new=AsyncMock(return_value=[])),
+        patch(
+            "app.services.settings_service.get_user_agent_config",
+            new=AsyncMock(return_value=_real_agent_config(backend)),
+        ),
+    ):
+        raised = _run_task(classify.classify_artifact, {"artifact_id": "a1", "user_id": "u1"})
+    runs = [o for o in session.added if isinstance(o, PipelineRun) and o.status == "failed"]
+    assert runs, "classify recorded no failed pipeline_runs row, so this test proves nothing"
+    stored = [f"pipeline_runs.error_message={r.error_message!r}" for r in runs]
+    return repr(raised), stored
+
+
+def _worker_courseops(backend: str) -> tuple[str, list[str]]:
+    from app.core.storage import LocalStorageBackend
+    from app.models.course import Course
+    from app.models.course_document import CourseDocument
+    from app.pipeline import courseops_task
+
+    doc = SimpleNamespace(
+        id="d1",
+        user_id="u1",
+        course_id="c1",
+        file_path="courseops/u1/d1/outline.pdf",
+        file_type="pdf",
+        document_type="outline",
+        status="uploaded",
+    )
+    course = SimpleNamespace(id="c1", code="CSIT302", user_id="u1")
+    session = _WorkerSession({}, {CourseDocument: doc, Course: course})
+    storage = MagicMock(spec=LocalStorageBackend)
+    file_path = MagicMock()
+    file_path.exists.return_value = True
+    storage.resolve_path.return_value = file_path
+    extractor = MagicMock()
+    extractor.extract.return_value = SimpleNamespace(
+        pages=[SimpleNamespace(text="Assignment 1 due week 5")]
+    )
+    with (
+        patch.object(courseops_task, "async_session_factory", return_value=session),
+        patch.object(courseops_task, "get_storage", return_value=storage),
+        patch.object(courseops_task, "get_extractor", return_value=extractor),
+        patch(
+            "app.services.settings_service.get_user_agent_config",
+            new=AsyncMock(return_value=_real_agent_config(backend)),
+        ),
+    ):
+        raised = _run_task(courseops_task.process_course_document, "d1")
+    assert doc.status == "failed", "courseops did not record the failure; this proves nothing"
+    return repr(raised), []
+
+
+WORKER_AI_ERROR_SITES = {
+    "pipeline.classify.classify_artifact": _worker_classify,
+    "pipeline.courseops_task.process_course_document": _worker_courseops,
+}
+
+
+@pytest.mark.parametrize("backend", CREDENTIALED_BACKENDS)
+@pytest.mark.parametrize("site", sorted(WORKER_AI_ERROR_SITES))
+def test_floor2_worker_provider_error_never_stores_or_logs_a_credential(site, backend, caplog):
+    """A provider error quoting the user's key reaches no pipeline_runs row and no log.
+
+    Covers R-012 and, through the same adapters, ADR 0003 site #5. A fix at
+    the adapter boundary (redact at ``AgentError`` construction) covers both
+    processes at once; per-site redaction would have to repeat in every stage.
+    """
+    caplog.set_level(logging.DEBUG)
+    with _ProviderEcho() as echo, structlog.testing.capture_logs() as events:
+        raised, stored = WORKER_AI_ERROR_SITES[site](backend)
+
+    assert echo.calls, f"{site}[{backend}]: no provider call was made; this proves nothing"
+    _assert_no_sentinel("\n".join(stored), f"{site}[{backend}] pipeline_runs.error_message")
+    _assert_no_sentinel(repr(events), f"{site}[{backend}] structlog events")
+    _assert_no_sentinel(caplog.text, f"{site}[{backend}] stdlib log records")
+    _assert_no_sentinel(raised, f"{site}[{backend}] the exception the task ended with")
+
+
+# ── the global StudyAIOError handler ───────────────────────────────────
+
+#: Distinctive text inside a provider error, so the test can tell whether the
+#: handler passed the raw message through at all.
+RAW_PROVIDER_TEXT = "floor2-raw-provider-text-4b1d"
+INSTANCE_SENTINEL = "floor2-sentinel-instance-key-7f3a9c"
+
+
+@pytest.mark.asyncio
+async def test_floor2_global_handler_never_returns_or_logs_raw_agent_error(
+    async_client, mock_session, caplog
+):
+    """An ``AgentError`` that escapes a route is answered generically and logged redacted.
+
+    ``main.studyaio_error_handler`` used to log ``error=str(exc)`` and return
+    ``{"detail": str(exc)}`` for every application error, so any ``AgentError``
+    that escaped a route (site #5) went to the client verbatim. This pins the
+    handler itself: the response carries none of the provider's text, and
+    neither the response nor the log carries the instance credential the
+    message quotes, which is the one credential the handler can know without
+    a user.
+    """
+    from pydantic import SecretStr
+
+    from app.config import settings
+    from app.core.exceptions import AgentError
+
+    error = AgentError(
+        f"OpenAI API call failed: {RAW_PROVIDER_TEXT} Incorrect API key provided: "
+        f"{INSTANCE_SENTINEL}"
+    )
+    artifact = SimpleNamespace(id="a1", user_id="u1", course_id="c1", week=1)
+    extraction = SimpleNamespace(artifact_id="a1", manifest_json={"pages": []})
+    mock_session.execute = _db_with_stored_credentials(
+        {"lecture_artifacts": artifact, "extractions": extraction}
+    )
+    caplog.set_level(logging.DEBUG)
+    with (
+        structlog.testing.capture_logs() as events,
+        patch.object(settings, "openai_api_key", SecretStr(INSTANCE_SENTINEL)),
+        patch("app.api.concepts.quota_service.check_ai_quota", new=AsyncMock()),
+        patch("app.agents.parsing.build_extraction_text", return_value="lecture text"),
+        patch(
+            "app.services.concept_service.extract_and_save_concepts",
+            new=AsyncMock(side_effect=error),
+        ) as service,
+    ):
+        response = await async_client.post("/api/concepts/extract/a1")
+
+    assert service.await_count == 1, "the route never reached the failing call"
+    assert response.status_code >= 500, response.text
+    assert RAW_PROVIDER_TEXT not in response.text, (
+        f"Floor 2: the global handler returned raw AgentError text: {response.text}"
+    )
+    assert INSTANCE_SENTINEL not in response.text
+    assert INSTANCE_SENTINEL not in repr(events), (
+        "Floor 2: the global handler logged a credential from AgentError text"
+    )
+    assert INSTANCE_SENTINEL not in caplog.text
 
 
 # ── committed ──────────────────────────────────────────────────────────
