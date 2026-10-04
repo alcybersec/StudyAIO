@@ -55,8 +55,8 @@ async def owner():
         session.add(
             User(
                 id=uid,
-                email=f"pipe-{uid[:10]}@example.com",
-                username=f"pipe_{uid[:10]}",
+                email=f"pipe-{uid[-10:]}@example.com",
+                username=f"pipe_{uid[-10:]}",
                 role="user",
                 tier="pro",
                 is_active=True,
@@ -333,8 +333,8 @@ async def test_classify_does_not_leak_other_users_course_codes(owner, agent):
         session.add(
             User(
                 id=other,
-                email=f"other-{other[:10]}@example.com",
-                username=f"other_{other[:10]}",
+                email=f"other-{other[-10:]}@example.com",
+                username=f"other_{other[-10:]}",
                 role="user",
                 tier="free",
                 is_active=True,

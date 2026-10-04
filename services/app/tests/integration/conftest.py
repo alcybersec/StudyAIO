@@ -346,8 +346,8 @@ async def make_user(db_session):
         uid = generate_id()
         user = User(
             id=uid,
-            email=email or f"u-{uid[:12]}@example.com",
-            username=username or f"user_{uid[:12]}",
+            email=email or f"u-{uid[-12:]}@example.com",
+            username=username or f"user_{uid[-12:]}",
             hashed_password=hash_password(password),
             role=role,
             tier=tier,
