@@ -290,6 +290,73 @@ async def _get_or_create_user_settings(session: AsyncSession, user_id: str) -> U
     return user_settings
 
 
+REDACTED = "[redacted]"
+_MIN_SECRET_LEN = 6
+
+
+def strip_secret_keys(settings_json: dict[str, Any] | None) -> dict[str, Any]:
+    """Return a copy of a ``settings_json`` blob without any credential key.
+
+    Args:
+        settings_json: Stored per-user overrides.
+
+    Returns:
+        The blob minus every key in ``SECRET_KEYS``.
+    """
+    return {k: v for k, v in (settings_json or {}).items() if k not in SECRET_KEYS}
+
+
+def _string_leaves(value: Any) -> list[str]:
+    """Collect every string inside a (possibly JSON-encoded) credential value."""
+    if isinstance(value, str):
+        leaves = [value]
+        try:
+            decoded = json.loads(value)
+        except ValueError:
+            return leaves
+        if isinstance(decoded, (dict, list)):
+            leaves.extend(_string_leaves(decoded))
+        return leaves
+    if isinstance(value, dict):
+        return [leaf for v in value.values() for leaf in _string_leaves(v)]
+    if isinstance(value, list):
+        return [leaf for v in value for leaf in _string_leaves(v)]
+    return []
+
+
+async def redact_user_secrets(session: AsyncSession, user_id: str, text: str) -> str:
+    """Remove this user's stored credential values (and the instance's) from ``text``.
+
+    Provider SDK errors can echo the key that was sent. Anything about to be
+    logged or returned from a provider failure goes through here first.
+
+    Args:
+        session: Database session.
+        user_id: The user whose stored credentials to scrub.
+        text: Message to scrub.
+
+    Returns:
+        ``text`` with each credential value, and each string inside a JSON
+        credential, replaced by ``[redacted]``.
+    """
+    result = await session.execute(select(UserSettings).where(UserSettings.user_id == user_id))
+    row = result.scalar_one_or_none()
+    stored = (row.settings_json or {}) if row else {}
+    values: list[str] = []
+    for key in SECRET_KEYS:
+        values.extend(_string_leaves(stored.get(key)))
+    for env_secret in (
+        settings.anthropic_api_key,
+        settings.openai_api_key,
+        settings.zai_api_key,
+    ):
+        values.append(env_secret.get_secret_value())
+    # Longest first so a value containing another is fully removed.
+    for value in sorted({v for v in values if len(v) >= _MIN_SECRET_LEN}, key=len, reverse=True):
+        text = text.replace(value, REDACTED)
+    return text
+
+
 def _public_view(overrides: dict[str, Any]) -> dict[str, Any]:
     """Build the credential-free settings view for a set of user overrides.
 
