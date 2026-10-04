@@ -219,10 +219,12 @@ class TestAccessorAndKeys:
         reset_storage()
 
     async def test_normalize_strips_the_data_dir_only(self):
-        with patch("app.config.settings.data_dir", "/srv/data/"):
-            assert normalize_storage_key("/srv/data/uploads/x.pdf") == "uploads/x.pdf"
-            assert normalize_storage_key("uploads/x.pdf") == "uploads/x.pdf"
-            assert normalize_storage_key("/elsewhere/uploads/x.pdf") == "/elsewhere/uploads/x.pdf"
+        from app.config import settings
+
+        data_dir = settings.data_dir.rstrip("/")
+        assert normalize_storage_key(f"{data_dir}/uploads/x.pdf") == "uploads/x.pdf"
+        assert normalize_storage_key("uploads/x.pdf") == "uploads/x.pdf"
+        assert normalize_storage_key("/elsewhere/uploads/x.pdf") == "/elsewhere/uploads/x.pdf"
         assert storage.StorageBackend.__abstractmethods__  # the contract stays abstract
 
 
