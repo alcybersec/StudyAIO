@@ -101,7 +101,7 @@ class TestInstanceKeys:
 
     async def test_own_key_is_redacted_too(self):
         adapter = OpenAIAdapter(api_key="sk-user-own-key-000000", model="m")
-        assert "sk-user-own-key-000000" not in str(adapter.agent_error("x sk-user-own-key-000000"))
+        assert "sk-user-own-key-000000" not in str(adapter._agent_error("x sk-user-own-key-000000"))
 
 
 class TestClaudeCode:
@@ -122,7 +122,7 @@ class TestClaudeCode:
     def test_json_string_credentials_are_scrubbed(self):
         adapter = ClaudeCodeAdapter(cli_path="claude", credentials_json=None)
         adapter._credentials_json = json.dumps({"a": {"t": CLI_TOKEN}})  # type: ignore[assignment]
-        assert CLI_TOKEN not in str(adapter.agent_error(f"x {CLI_TOKEN}"))
+        assert CLI_TOKEN not in str(adapter._agent_error(f"x {CLI_TOKEN}"))
 
 
 class TestPipelineFailurePath:

@@ -240,7 +240,7 @@ class AgentAdapter(ABC):
             values.append(secret.get_secret_value())
         return values
 
-    def redact(self, text: str) -> str:
+    def _redact(self, text: str) -> str:
         """Remove every credential value this adapter can see from ``text``.
 
         Provider SDKs and the CLI can echo the key they were given. Everything
@@ -254,9 +254,9 @@ class AgentAdapter(ABC):
         except Exception:
             return "(details withheld)"
 
-    def agent_error(self, message: str) -> AgentError:
+    def _agent_error(self, message: str) -> AgentError:
         """Build an ``AgentError`` whose message carries no credential value."""
-        return AgentError(self.redact(message))
+        return AgentError(self._redact(message))
 
     #: Set lazily so subclasses need no cooperating __init__.
     _usage: "TokenUsage | None" = None

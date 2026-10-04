@@ -194,7 +194,7 @@ class ClaudeCodeAdapter(AgentAdapter):
             # stdout first: `claude -p` writes its answer, and its refusal to
             # produce one, there. stderr is where warnings go.
             error_text = _describe_failure(stdout, stderr)
-            raise self.agent_error(f"Claude Code failed (exit {process.returncode}): {error_text}")
+            raise self._agent_error(f"Claude Code failed (exit {process.returncode}): {error_text}")
 
         result = stdout.decode().strip()
         # The CLI runs with --output-format text and reports no token usage, so

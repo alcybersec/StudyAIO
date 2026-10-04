@@ -59,7 +59,7 @@ class OllamaAdapter(AgentAdapter):
                 options={"num_predict": num_predict},
             )
         except Exception as e:
-            raise self.agent_error(f"Ollama API call failed: {e}") from None
+            raise self._agent_error(f"Ollama API call failed: {e}") from None
 
         result = (response.message.content or "").strip()
         # Local inference costs no API spend, but the call is still counted so
