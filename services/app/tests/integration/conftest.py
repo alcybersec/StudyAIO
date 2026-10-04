@@ -448,3 +448,60 @@ async def two_tenants(make_user, db_session):
     b.flashcards[0].front = "BOB card"
     await db_session.flush()
     return alice, bob, a, b
+
+
+# ── Committed users (for code that opens its own sessions) ─────────────
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def committed_user():
+    """Factory for users that really exist in the database (committed).
+
+    Celery tasks and scheduled jobs open their own sessions, so they cannot see
+    rows living inside the `db_session` SAVEPOINT. Everything created here is
+    deleted, with all data the user owns, when the test ends.
+    """
+    from app.core.database import async_session_factory
+    from app.core.utils import generate_id
+    from app.models.user import User
+    from app.services import account_service
+
+    created: list[str] = []
+
+    async def _make(*, tier: str = "free", role: str = "user") -> User:
+        uid = generate_id()
+        async with async_session_factory() as session:
+            user = User(
+                id=uid,
+                email=f"c-{uid[-12:]}@example.com",
+                username=f"c_{uid[-12:]}",
+                role=role,
+                tier=tier,
+                is_active=True,
+                email_verified=True,
+                mfa_enabled=False,
+            )
+            session.add(user)
+            await session.commit()
+        created.append(uid)
+        return user
+
+    yield _make
+
+    for uid in created:
+        async with async_session_factory() as session:
+            # delete_user_account cannot yet cope with course documents/assessments
+            # (see test_account_deletion_courseops.py); clear them first.
+            from sqlalchemy import text
+
+            for table in ("deadlines", "assessments", "course_documents"):
+                await session.execute(
+                    text(
+                        f"DELETE FROM {table} WHERE course_id IN "
+                        "(SELECT id FROM courses WHERE user_id = :u)"
+                    ),
+                    {"u": uid},
+                )
+            await session.commit()
+            await account_service.delete_user_account(session, uid)
+            await session.commit()
