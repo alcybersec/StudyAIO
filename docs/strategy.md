@@ -60,8 +60,8 @@ carried silently.
 
 1. tenant isolation: an authenticated endpoint never returns or mutates another user's rows; every user-owned query filters on user_id
 2. no secrets in the tree: no plaintext credentials, tokens or keys committed, and per-user AI credentials are never logged or returned by the API
-3. AI only via the adapter: every AI call goes through AgentAdapter, obtained via `get_agent`; `get_agent` is called only in `app/pipeline/**` (the Celery worker) and at the request-time call sites enumerated in ADR 0003, and a new request-time call site requires amending that ADR *(amended 2026-10-04, ADR 0003; weakening agreed by the user)*
-4. user data is never lost: nothing deletes uploads or generated content under data/ except explicit account deletion, and dedup/re-summarize never destroys prior versions
+3. AI only via the adapter: every AI call goes through a sanctioned gateway, either AgentAdapter obtained via `get_agent`, or, for embeddings, EmbeddingProvider obtained via `get_embedding_provider`; outside `app/agents/**` and `app/pipeline/**` (the Celery worker), each gateway is called only at the call sites enumerated in ADR 0003 (`get_agent`) and ADR 0005 (`get_embedding_provider`), and a new such call site requires amending the ADR that lists it *(amended 2026-10-04, ADR 0003, weakening agreed by the user; amended 2026-10-04, ADR 0005, embeddings in scope per the user's R-004 ruling. ADR 0005 is Proposed until the user accepts its text)*
+4. user data is never lost: nothing deletes uploads or generated content under data/ except explicit account deletion and the explicit user-initiated deletes of the user's own items enumerated in ADR 0004, and dedup/re-summarize/asset regeneration never destroys prior versions or study history *(amended 2026-10-04, ADR 0004, per the user's R-007 ruling. Item deletes are admitted; re-summarize and regeneration are not relaxed, and the code is to be fixed. ADR 0004 is Proposed until the user accepts its text)*
 
 Floors are append-only. Removing or weakening one requires an ADR and the user's explicit agreement.
 
