@@ -277,18 +277,25 @@ class TestSettings:
         assert bad.status_code == 502
         assert bad.json()["detail"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG (floor 2, for safety to triage): /settings/test-ai returns and logs the raw "
-        "provider exception text; providers can echo back credential fragments in auth errors",
-    )
     async def test_test_ai_failure_does_not_echo_provider_error_text(
         self, client_factory, make_user
     ):
+        # The scrub can only remove values it knows: the caller's stored credential
+        # (and the instance's). A provider that echoes the key it was sent must not
+        # get it back out through the response.
+        stored = "sk-LEAKME-0123456789"
+
         class Broken(FakeAgent):
             async def classify_lecture(self, *a, **k):
-                raise RuntimeError("Incorrect API key provided: sk-LEAKME")
+                raise RuntimeError(f"Incorrect API key provided: {stored}")
 
+        client = client_factory(await make_user())
+        put = await client.put(
+            "/api/settings", json={"agent_backend": "openai", "openai_api_key": stored}
+        )
+        assert put.status_code == 200, put.text
         with patch("app.agents.factory.get_agent", return_value=Broken()):
-            bad = await client_factory(await make_user()).post("/api/settings/test-ai")
-        assert "sk-LEAKME" not in bad.text
+            bad = await client.post("/api/settings/test-ai")
+        assert bad.status_code == 502
+        assert stored not in bad.text
+        assert "[redacted]" in bad.json()["detail"]

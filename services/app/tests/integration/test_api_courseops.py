@@ -169,12 +169,6 @@ class TestDocuments:
         )
         assert bad_ext.status_code == 400
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG (floor 1): courseops_service.attach_assessment_document loads the assessment "
-        "with an unscoped session.get(), so any user can attach a document to another user's "
-        "assessment (and the foreign row then blocks the owner's account deletion by FK)",
-    )
     async def test_stranger_cannot_attach_document_to_anothers_assessment(
         self, client_factory, make_user, db_session
     ):
@@ -191,6 +185,12 @@ class TestDocuments:
             files={"file": ("rubric.docx", make_docx(["different"]), "application/octet-stream")},
         )
         assert denied.status_code == 404
+        # Nothing was written against the owner's assessment (a foreign row there
+        # would also block the owner's account deletion by FK).
+        rows = await db_session.execute(
+            select(CourseDocument).where(CourseDocument.assessment_id == assessment.id)
+        )
+        assert rows.scalars().all() == []
 
 
 class TestAssessmentsAndDeadlines:

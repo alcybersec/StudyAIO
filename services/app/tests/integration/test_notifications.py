@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from app.core.database import async_session_factory
 from app.core.utils import generate_id
+from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.deadline import Deadline
 from app.models.notification import Notification
@@ -530,6 +531,23 @@ class TestScheduledJobs:
                     enabled=True,
                 )
             )
+            artifact_id = generate_id()
+            session.add(
+                LectureArtifact(
+                    id=artifact_id,
+                    user_id=owner.id,
+                    course_id=course_id,
+                    week=1,
+                    title="JOB2 week 1",
+                    original_filename="job2.pdf",
+                    file_path=f"uploads/{artifact_id}_job2.pdf",
+                    file_type="pdf",
+                    sha256=generate_id().replace("-", "") * 2,
+                    file_size_bytes=1,
+                    status="processed",
+                )
+            )
+            await session.flush()
             session.add(
                 Flashcard(
                     id=generate_id(),
@@ -538,7 +556,7 @@ class TestScheduledJobs:
                     front="f",
                     back="b",
                     tags=[],
-                    source_artifact_id=None,
+                    source_artifact_id=artifact_id,
                     source_page_ref=1,
                 )
             )

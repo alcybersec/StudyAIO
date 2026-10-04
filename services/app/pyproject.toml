@@ -36,6 +36,9 @@ floor = 95
 
 [tool.coverage.run]
 source = ["app"]
+# SQLAlchemy async runs coroutines on greenlets; without this the C tracer drops every
+# line after the first awaited DB call (integration read 73% vs 88% measured).
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 # Unit tier; matches the --cov-fail-under=75 in .gitlab-ci.yml.
