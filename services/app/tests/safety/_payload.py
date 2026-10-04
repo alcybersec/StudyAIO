@@ -16,12 +16,14 @@ slot a caller controls:
 * optional fields are filled too, because the optional ``course_code`` /
   ``exam_id`` is exactly where body-borne ids hide.
 
-:func:`planted_values` lists those values, so the sweep can tell a lookup keyed
-on caller input from FK traversal of a row it already resolved.
+``_tenant.is_planted`` recognises those values in a bound parameter, so the
+sweep can tell a lookup keyed on caller input from FK traversal of a row it
+already resolved.
 """
 
 from __future__ import annotations
 
+import copy
 import datetime as dt
 import enum
 import types
@@ -31,6 +33,7 @@ from typing import Any
 
 from annotated_types import Ge, Gt, Le, Lt, MaxLen, MinLen
 from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic.fields import FieldInfo
 
 FOREIGN_ID = "id-owned-by-someone-else"
 #: Rare enough that a bind carrying it is almost surely the planted value, and
@@ -49,11 +52,6 @@ STR_FALLBACKS = (
     "en",
     "a",
 )
-
-
-def planted_values() -> tuple[object, ...]:
-    """The values a sweep request plants in caller-controlled slots."""
-    return (FOREIGN_ID, FOREIGN_INT, FOREIGN_UUID, str(FOREIGN_UUID))
 
 
 def _int_for(metadata: list[Any]) -> int:
@@ -90,7 +88,8 @@ def _str_for(annotation: Any, metadata: list[Any]) -> str:
             value = value[:max_len]
         try:
             target = typing.Annotated[annotation, *metadata] if metadata else annotation
-            return TypeAdapter(target).validate_python(value)
+            TypeAdapter(target).validate_python(value)
+            return value
         except (ValidationError, TypeError):
             continue
     return FOREIGN_ID
@@ -105,7 +104,10 @@ def value_for(annotation: Any, metadata: list[Any] | None = None, depth: int = 0
     args = typing.get_args(annotation)
 
     if origin is typing.Annotated:
-        return value_for(args[0], [*metadata, *args[1:]], depth)
+        # ``Annotated[int, Field(lt=5)]`` carries a FieldInfo, whose own
+        # metadata holds the constraints.
+        extra = [m for a in args[1:] for m in (a.metadata if isinstance(a, FieldInfo) else [a])]
+        return value_for(args[0], [*metadata, *extra], depth)
     if origin in (typing.Union, types.UnionType):
         non_none = [a for a in args if a is not type(None)]
         return value_for(non_none[0], metadata, depth) if non_none else None
@@ -137,8 +139,6 @@ def value_for(annotation: Any, metadata: list[Any] | None = None, depth: int = 0
             return "08:00:00"
         if issubclass(annotation, str):
             return _str_for(annotation, metadata)
-    if annotation is Any:
-        return FOREIGN_ID
     return FOREIGN_ID
 
 
@@ -146,8 +146,19 @@ def model_payload(model: type[BaseModel], depth: int = 0) -> dict[str, Any]:
     """Every field of ``model`` filled, validated; fields that refuse are dropped.
 
     A required field that still refuses is kept, so the 422 shows up in the
-    sweep's statuses instead of silently shrinking the body.
+    sweep's statuses instead of silently shrinking the body. Cached per model:
+    the sweep runs three times over ~150 routes, and building a validator per
+    ``str`` slot is the slow part.
     """
+    if model not in _PAYLOADS:
+        _PAYLOADS[model] = _build_payload(model, depth)
+    return copy.deepcopy(_PAYLOADS[model])
+
+
+_PAYLOADS: dict[type[BaseModel], dict[str, Any]] = {}
+
+
+def _build_payload(model: type[BaseModel], depth: int) -> dict[str, Any]:
     body: dict[str, Any] = {}
     for name, field in model.model_fields.items():
         key = field.alias or name

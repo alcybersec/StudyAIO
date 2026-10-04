@@ -435,6 +435,87 @@ async def test_floor1_route_sweep_owned_parent_never_unlocks_foreign_rows(
     )
 
 
+def test_floor1_payload_builder_plants_type_valid_foreign_values():
+    """The request builder satisfies each declared type and still plants foreign values.
+
+    The sweep is only as wide as this builder: a type it cannot satisfy is a
+    route whose handler never runs.
+    """
+    import datetime as dt
+    import enum
+    import uuid
+    from typing import Annotated, Literal
+
+    from pydantic import Field, model_validator
+
+    from tests.safety._payload import FOREIGN_INT, model_payload, value_for
+    from tests.safety._tenant import is_planted
+
+    class Colour(enum.Enum):
+        RED = "red"
+
+    class Inner(BaseModel):
+        exam_id: str
+
+    class Everything(BaseModel):
+        course_code: str | None = None
+        week: Annotated[int, Field(gt=0, lt=10)]
+        big: Annotated[int, Field(ge=100)] = 100
+        ratio: Annotated[float, Field(le=1.0)] = 0.5
+        colour: Colour = Colour.RED
+        mode: Literal["a", "b"] = "a"
+        when: dt.datetime | None = None
+        day: dt.date | None = None
+        at: dt.time | None = None
+        ref: uuid.UUID | None = None
+        extra: dict = {}
+        inner: Inner | None = None
+        ids: list[str] = []
+        email: Annotated[str, Field(pattern=r"^[^@]+@[^@]+$")] = "x@y"
+        code: Annotated[str, Field(min_length=40)] = "x" * 40
+        anything: object = None
+
+    body = model_payload(Everything)
+    Everything.model_validate(body)
+    assert is_planted(body["course_code"]) and is_planted(body["inner"]["exam_id"])
+    assert body["ids"] and is_planted(body["ids"][0])
+    assert body["week"] == 9 and body["big"] == 100 and body["ratio"] == 1.0
+    assert body["email"] == "someone-else@example.com"
+    assert value_for(int) == FOREIGN_INT and is_planted(value_for(uuid.UUID))
+    assert value_for(Annotated[int, Field(lt=5)]) == 4
+    assert value_for(Everything, depth=99) is None
+    assert model_payload(Everything) is not model_payload(Everything), "cache must hand out copies"
+
+    class OneOf(BaseModel):
+        text: str | None = None
+        url: str | None = None
+
+        @model_validator(mode="after")
+        def exactly_one(self):
+            if (self.text is None) == (self.url is None):
+                raise ValueError("text or url, not both")
+            return self
+
+    assert model_payload(OneOf) == {"text": value_for(str)}
+
+    class Impossible(BaseModel):
+        broken: Annotated[str, Field(pattern=r"^\d{3}$")] | None = None
+        required: Annotated[str, Field(pattern=r"^\d{3}$")]
+
+    impossible = model_payload(Impossible)
+    assert "broken" not in impossible and "required" in impossible
+
+    class NeverValid(BaseModel):
+        a: str | None = None
+
+        @model_validator(mode="after")
+        def refuse(self):
+            raise ValueError("never")
+
+    assert model_payload(NeverValid) == {"a": value_for(str)}
+    assert not is_planted(True) and not is_planted(1.5) and not is_planted("id")
+
+
 #: Routes the typed sweep still cannot get past validation, each with why.
 #: Any other route that 422s is invisible to both passes, which is the gap the
 #: M31 gate found; ``test_floor1_route_sweep_reaches_every_handler`` pins it.
