@@ -31,6 +31,7 @@ confirmed by the user.
 | M31-S2-AI-014 (redact at `AgentError` construction / R-012; `_get_known_courses` scope; quick-capture `txt`) | `ai` | 2026-10-04 | isolated |
 | M31-S2-ARCH-015 (ADR 0004 floor-4 item deletes; floor 3 covers embeddings) | `architect` | 2026-10-04 | isolated |
 | M31-S2-DEVOPS-016 (pipeline red-proof, push authorised by user; contracts in CI; runbook) | `devops` | 2026-10-04 | isolated |
+| M31-S2-DATA-017 (summary version retention; soft-retire flashcards/quiz questions; leaderboard opt-in) | `data` | 2026-10-04 | isolated |
 
 ## Completed
 
