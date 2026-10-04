@@ -314,3 +314,88 @@ async def integration_client(db_session, test_user_id):
     ) as client:
         yield client
     app.dependency_overrides.clear()
+
+
+# ── Real-auth clients and user factories ──────────────────────────────
+#
+# `integration_client` above short-circuits authentication with a fixed user.
+# The fixtures below do the opposite: requests carry a real signed access-token
+# cookie, so the whole `get_current_user` chain (JWT decode, user lookup,
+# role/tier checks) runs, and a test can hold several users at once. That is
+# what tenant-isolation tests need, and the only way to reach role-gated routes
+# such as /api/admin/*, which depend on `get_current_user` directly.
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def make_user(db_session):
+    """Factory: insert a real user row (inside the test's SAVEPOINT) and return it."""
+    from app.core.auth import hash_password
+    from app.core.utils import generate_id
+    from app.models.user import User
+
+    async def _make(
+        *,
+        email: str | None = None,
+        username: str | None = None,
+        password: str = "correct-horse-battery",
+        role: str = "user",
+        tier: str = "free",
+        email_verified: bool = True,
+        is_active: bool = True,
+    ) -> User:
+        uid = generate_id()
+        user = User(
+            id=uid,
+            email=email or f"u-{uid[:12]}@example.com",
+            username=username or f"user_{uid[:12]}",
+            hashed_password=hash_password(password),
+            role=role,
+            tier=tier,
+            is_active=is_active,
+            email_verified=email_verified,
+            mfa_enabled=False,
+        )
+        db_session.add(user)
+        await db_session.flush()
+        return user
+
+    return _make
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def client_factory(db_session):
+    """Factory for HTTP clients on the real auth path.
+
+    `client_factory(user)` returns a client holding that user's access-token
+    cookie; `client_factory()` returns an anonymous one. Only `get_session` is
+    overridden (to share the test SAVEPOINT); the auth dependencies are real.
+    The per-IP rate limiter is reset so tests do not trip each other's limits.
+    """
+    import httpx
+
+    from app.core.auth import ACCESS_TOKEN_COOKIE, create_access_token
+    from app.core.database import get_session
+    from app.core.rate_limit import limiter
+    from app.main import app
+
+    async def override_session():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_session
+    limiter.reset()
+    clients: list[httpx.AsyncClient] = []
+
+    def _make(user=None) -> httpx.AsyncClient:
+        client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+        if user is not None:
+            client.cookies.set(
+                ACCESS_TOKEN_COOKIE, create_access_token(user.id, user.role, user.tier)
+            )
+        clients.append(client)
+        return client
+
+    yield _make
+    for client in clients:
+        await client.aclose()
+    app.dependency_overrides.clear()
+    limiter.reset()
