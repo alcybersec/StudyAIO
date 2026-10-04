@@ -5,10 +5,10 @@ without Postgres, Redis or Docker: AST checks over `app/**`, FastAPI's test clie
 with dependency overrides, and mock sessions that record the SQL a handler builds.
 
 Floors are quoted from `docs/strategy.md` §6. A floor is **green** only when every
-test listed for it passes. An `xfail(strict=True)` test is a floor question that
-is **waiting on the user's ruling**. It is not a pass. Each one says what the
-ruling is about, and it turns red (XPASS) once the ruling lands, so the marker
-has to come off at the same time.
+test listed for it passes. A floor question that only the user can decide is held
+in a `*_PENDING_RULING` dict, and a test per floor is red while that dict is not
+empty. The 2026-10-04 rulings emptied every one of them, and no `xfail` is left in
+the tier. A test marked **RED until** names the task whose code change it waits on.
 
 Run:
 
@@ -33,7 +33,9 @@ cd services/app && .venv/bin/python -m pytest tests/safety -v
 | `…::test_floor1_unscoped_query_detector_is_not_vacuous` | The detector stops seeing two known worker-side unscoped reads. |
 | `…::test_floor1_pipeline_only_fetch_is_pipeline_only` | The one allowlisted worker-only unscoped fetch gains a caller outside `app/pipeline/`. |
 | `…::test_floor1_cannot_attach_document_to_another_users_assessment` | `attach_assessment_document` lets user B attach a document to user A's assessment. The fake session answers like a database: only a lookup filtered on the caller's `user_id` comes back empty, so an unscoped `select` fails too, and a control call as the owner must find the row. Fixed in M31-S1-BACKEND-008 (`a2cd687`). |
-| `…::test_floor1_no_cross_user_route_awaits_a_ruling` | xfail(strict). The leaderboard is a cross-user read, pending a ruling. |
+| `…::test_floor1_no_cross_user_route_awaits_a_ruling` | `SWEEP_PENDING_RULING` is not empty: some route reads across users and the user has not ruled on it. Empty since the 2026-10-04 rulings; the leaderboard moved to `SWEEP_OPT_IN_CROSS_USER`. |
+| `…::test_floor1_leaderboard_lists_only_opted_in_users` | `GET /api/gamification/leaderboard` runs a `user_xp` statement that, evaluated row by row (`_predicate.admits`), keeps another user who opted out or has no `user_settings` row, or drops one who opted in. The caller's own row is unconstrained. It also fails if the route runs no `user_xp` query, or uses SQL the evaluator does not model. The leaderboard is exempt from the sweep (`SWEEP_OPT_IN_CROSS_USER`) because the sweep asks whether `user_id` is compared to the caller, which cannot judge an opt-in filter. Ruled 2026-10-04 (R-007): opt-in, hidden by default. **RED until M31-S2-BACKEND-019** adds the `leaderboard_opt_in` filter. |
+| `…::test_floor1_predicate_evaluator_models_sql_semantics` | `_predicate.admits` stops keeping exactly the rows Postgres would: three-valued logic, outer joins that null the unmatched side, IN over lists and subqueries. It also fails if an unmodelled construct stops raising `Unreadable`. |
 
 The deeper layers live in other tiers: `tests/integration/test_idor_row_level.py`
 runs against a real database, and `tests/unit/api/test_endpoint_scoping_guard.py`
@@ -60,56 +62,72 @@ plus `test_idor_scoping.py` cover endpoint wiring.
 | `…::test_floor2_detect_secrets_baseline_is_wired_and_clean` | The pre-commit hook loses detect-secrets with `--baseline .secrets.baseline`, or loses `detect-private-key`. It also fails if a baseline entry is audited `is_secret: true`. |
 | `…::test_floor2_sentinels_are_not_secret_shaped` | This tier's own sentinels would trip the scanner. |
 
-## 3. AI only via the adapter (amended by ADR 0003)
+## 3. AI only via the adapter (amended by ADR 0003 and ADR 0005)
 
-> every AI call goes through AgentAdapter, obtained via `get_agent`; `get_agent` is
-> called only in `app/pipeline/**` (the Celery worker) and at the request-time call
-> sites enumerated in ADR 0003, and a new request-time call site requires amending
-> that ADR
+> every AI call goes through a sanctioned gateway, either AgentAdapter obtained via
+> `get_agent`, or, for embeddings, EmbeddingProvider obtained via
+> `get_embedding_provider`; outside `app/agents/**` and `app/pipeline/**` (the
+> Celery worker), each gateway is called only at the call sites enumerated in ADR
+> 0003 (`get_agent`) and ADR 0005 (`get_embedding_provider`), and a new such call
+> site requires amending the ADR that lists it
 
-These are the checks from ADR 0003's Consequences section, in its order.
+The first six are the checks from ADR 0003's Consequences section, in its order.
+The rest are ADR 0005's "What safety adds", items 1 to 7.
 
 | Test | Fails when |
 |---|---|
 | `test_floor3_ai_via_adapter.py::test_floor3_request_time_get_agent_sites_equal_adr_0003_allowlist` | The set of `(module, enclosing function)` pairs that call `get_agent` outside `agents/` and `pipeline/` is not exactly `REQUEST_TIME_GET_AGENT_CALL_SITES`. Either direction fails: a site missing from the list, or a listed site that is gone. |
-| `…::test_floor3_no_provider_sdk_import_outside_agents` | `anthropic`, `openai` or `ollama` is imported outside `app/agents/**`. That includes imports inside a function and `importlib` imports. |
+| `…::test_floor3_no_provider_sdk_import_outside_agents` | `anthropic`, `openai`, `ollama` or (ADR 0005) `sentence_transformers` is imported outside `app/agents/**`. That includes imports inside a function and `importlib` imports. |
 | `…::test_floor3_no_adapter_class_reference_outside_agents` | An adapter class name is used outside `app/agents/**` as a name, an attribute, an import, or an exact string. Docstrings and comments do not count. |
 | `…::test_floor3_no_claude_cli_spawn_outside_agents` | A subprocess or exec call outside `app/agents/**` has `claude` or `claude_code_path` as its program. |
 | `…::test_floor3_pipeline_get_agent_only_in_celery_task_modules` | A `get_agent` call under `app/pipeline/` is in a module that registers no Celery task. |
 | `…::test_floor3_detectors_are_not_vacuous` | The collectors stop finding the known pipeline call sites and SDK imports. |
+| `…::test_floor3_get_embedding_provider_sites_equal_adr_0005_allowlist` | The `(module, enclosing function)` pairs that reference `get_embedding_provider` outside `agents/` and `pipeline/` are not exactly `GET_EMBEDDING_PROVIDER_CALL_SITES`, in either direction. A reference counts, not only a call (`Depends(get_embedding_provider)` reaches the gateway too), and import aliases are followed. |
+| `…::test_floor3_embed_texts_sites_equal_adr_0005_allowlist` | The pairs that reference `.embed_texts`, or the string `"embed_texts"` (a `getattr`), outside `agents/` and `pipeline/` are not exactly `EMBED_TEXTS_CALL_SITES`. |
+| `…::test_floor3_startup_embedding_sites_never_embed` | `main.py:warn_if_embedding_provider_unavailable`, the startup probe, calls `embed_texts`. |
+| `…::test_floor3_injected_provider_sites_have_only_worker_callers` | `index_service.index_artifact_chunks`, which embeds with a provider it is handed, is referenced from anywhere but `pipeline/index.py:_index`. |
+| `…::test_floor3_pipeline_get_embedding_provider_only_in_celery_task_modules` | A `get_embedding_provider` reference under `app/pipeline/` is in a module that registers no Celery task. |
+| `…::test_floor3_no_embedding_backend_reference_outside_agents` | `SentenceTransformerProvider`, `OpenAIEmbeddingProvider`, `OllamaEmbeddingProvider` or `reset_embedding_provider` is referenced outside `app/agents/**` as a name, attribute, import or exact string (docstrings and comments do not count), or a class there subclasses `EmbeddingProvider`. |
+| `…::test_floor3_embedding_detectors_are_not_vacuous` | The collectors stop finding `pipeline/index.py:_index`, the `openai`, `sentence_transformers` and `ollama` imports in `agents/embeddings.py`, or `qa.ask_question`'s `embed_texts`. It also fails if a banned name is no longer defined in `agents/embeddings.py`, so a rename cannot leave the ban guarding nothing. |
 
-**Embeddings (R-004) are not covered.** That gap is deliberate until the user rules
-on R-004. Whichever way the ruling goes, it would add the following:
+The embedding checks were each shown red on an injected violation in a scratch copy
+(M31-S2-SAFETY-021): a new request-side factory call, an aliased factory, a removed
+listed site, a new `embed_texts`, a `getattr` string, the startup probe embedding, a
+request-side caller of `index_artifact_chunks`, a factory call in a non-task pipeline
+module, a `sentence_transformers` import, a backend class, `reset_embedding_provider`,
+an `EmbeddingProvider` subclass, and the worker site removed.
 
-- **If embeddings are AI calls:** add `get_embedding_provider` to the floor-3 tests,
-  checked the same way as `get_agent`. Its request-time call sites must equal an
-  ADR-listed allowlist: `api/qa.py:ask_question`, `chat_service.send_message` and
-  `stream_message`, and `concept_service`'s embedding helper. Then extend the SDK
-  and class checks so that `OpenAIEmbeddingProvider` and `OllamaEmbeddingProvider`
-  are built only through that factory.
-- **If they are not AI calls:** pin that decision as well. Add a test that every
-  `EmbeddingProvider` remote call still sits under `app/agents/**`, so that
-  embeddings cannot become a way around floor 3 for generative calls.
-
-## 4. User data is never lost
+## 4. User data is never lost (amended by ADR 0004)
 
 > nothing deletes uploads or generated content under data/ except explicit account
-> deletion, and dedup/re-summarize never destroys prior versions
+> deletion and the explicit user-initiated deletes of the user's own items
+> enumerated in ADR 0004, and dedup/re-summarize/asset regeneration never destroys
+> prior versions or study history
 
 | Test | Fails when |
 |---|---|
-| `test_floor4_user_data_never_lost.py::test_floor4_every_blob_delete_is_classified` | A storage `delete`/`delete_prefix`, `unlink`, `os.remove` or `shutil.rmtree` under `app/` is not listed in `BLOB_SANCTIONED`, `BLOB_PENDING_RULING` or `BLOB_VIOLATIONS`. It also fails if a listed site no longer exists. |
-| `…::test_floor4_every_content_row_delete_is_classified` | The same check for DB deletes of uploaded or generated-content models, and for every `session.delete`. |
+| `test_floor4_user_data_never_lost.py::test_floor4_every_blob_delete_is_classified` | A storage `delete`/`delete_prefix`, `unlink`, `os.remove` or `shutil.rmtree` under `app/` is not listed in `BLOB_SANCTIONED`, `BLOB_PENDING_RULING` or `BLOB_VIOLATIONS`. It also fails if a sanctioned or pending site no longer exists. A violation that has been fixed away is not called stale, so the code fix can land without editing this tier. |
+| `…::test_floor4_every_content_row_delete_is_classified` | The same check for DB deletes of uploaded or generated-content models (`summary_versions` included), and for every `session.delete`. |
+| `…::test_floor4_no_delete_site_awaits_a_ruling` | `BLOB_PENDING_RULING` or `DB_PENDING_RULING` is not empty. Empty since the 2026-10-04 rulings. |
+| `…::test_floor4_no_violation_site_remains` | A site in `DB_VIOLATIONS` or `BLOB_VIOLATIONS` is still in the code. Today these are `asset_service.save_flashcards` and `save_quiz_questions` (regeneration deletes; ruled "fix the code"). **RED until M31-S2-BACKEND-019** archives instead of deleting. Once it is green, `safety` unlists the entries. |
+| `…::test_floor4_user_item_allowlist_is_exactly_adr_0004` | The sanctioned sites that cite ADR 0004 are not exactly `USER_ITEM_DB_DELETE_SITES` and `USER_ITEM_BLOB_DELETE_SITES` (ADR 0004 Decision 3, verbatim), or one of them is gone from the code. |
+| `…::test_floor4_user_item_deletes_reachable_only_from_their_routes` | A sanctioned user-item delete (`delete_course`, `merge_courses`, `_discard_summary`, `delete_course_document`, `delete_deadline`, `delete_session`) is referenced from anywhere but the callers listed in `USER_ITEM_DELETE_CALLERS`. This is ADR 0004 condition 1, "explicit". Callers are matched by name, so a same-named function elsewhere fails here instead of hiding a caller. |
 | `…::test_floor4_account_purge_reachable_only_from_account_deletion` | `purge_user_storage` or `delete_user_account` gains a caller outside account deletion. |
 | `…::test_floor4_lecture_upload_dedup_writes_and_deletes_nothing` | A duplicate lecture upload stores, deletes or dispatches anything. |
-| `…::test_floor4_reference_checked_delete_has_only_classified_callers` | `_delete_blob_if_unreferenced` gains a caller not in `REFERENCE_CHECKED_DELETE_CALLERS`, or `discard_failed_upload_blob` is called from anywhere but the two courseops upload routes. The shared `store.delete` site is pending a ruling for the single-document delete and sanctioned for failed-upload cleanup, so its callers are pinned. |
+| `…::test_floor4_reference_checked_delete_has_only_classified_callers` | `_delete_blob_if_unreferenced` gains a caller not in `REFERENCE_CHECKED_DELETE_CALLERS`, or `discard_failed_upload_blob` is called from anywhere but the two courseops upload routes. The shared `store.delete` site serves the single-document delete (ADR 0004 #2) and the failed-upload cleanup, both sanctioned for different reasons, so its callers are pinned. |
 | `…::test_floor4_duplicate_course_document_upload_keeps_original_blob` | Re-uploading the same course document deletes the blob the existing document's row points at. The fake session answers the reference count from real rows, so cleanup that skips the count fails. Fixed in M31-S1-BACKEND-008 (`a2cd687`). |
 | `…::test_floor4_failed_assessment_attach_keeps_existing_blob` | A 404 on attach deletes a blob that an existing document uses (same fake). Fixed in `a2cd687`. |
 | `…::test_floor4_failed_upload_never_deletes_another_users_blob` | User B's failed upload of user A's exact file deletes A's blob, or `discard_failed_upload_blob` deletes a key outside the caller's own `courseops/<user_id>/` prefix. |
 | `…::test_floor4_resummarize_increments_version` | Re-summarizing a course and week does not increment `version`. |
-| `…::test_floor4_resummarize_preserves_prior_version` | xfail(strict). Re-summarize overwrites version N-1, pending a ruling. |
-| `…::test_floor4_asset_regeneration_keeps_study_history` | xfail(strict). Regeneration cascades away flashcard reviews and quiz attempts, pending a ruling. |
-| `…::test_floor4_no_delete_site_awaits_a_ruling` | xfail(strict). Single-item user deletes and merge discards, pending a ruling. |
+| `…::test_floor4_resummarize_preserves_prior_version` | After a re-summarize, there is no `summary_versions` row (handed to `session.add`/`add_all`, or an `INSERT`) carrying version 1's text and version number, or that row's `file_path` no longer holds version 1's bytes. The caller has already written version 2 to the key it hands the service, as the summarize stage does, so a snapshot pointing at that key fails. **RED until M31-S2-BACKEND-019.** |
+| `…::test_floor4_merge_keep_source_snapshots_target_summary` | Merge with `on_conflict=keep_source` overwrites the target summary without a `summary_versions` row carrying the target's prior text and version, writes that row only after the overwrite, or leaves the row pointing at a key that no longer holds the prior bytes. A control checks that `keep_source` actually ran. This is ADR 0004 § Amendment 2026-10-04: the overwritten target is not merge-discard. **RED until M31-S2-BACKEND-019.** |
+| `…::test_floor4_asset_regeneration_keeps_study_history` | Regeneration issues a `DELETE` on `flashcards` or `quiz_questions` that is not conditioned on `flashcard_reviews` or `quiz_attempts`. A control checks that new items were saved. **RED until M31-S2-BACKEND-019.** |
+
+The three retention pins were run in a scratch copy against a fix shaped like
+BACKEND-019: a snapshot row plus the prior blob under a versioned key, and
+`archived_at` instead of `DELETE`. With that fix, all of them go green. Three
+wrong fixes each stay red: a snapshot pointing at the overwritten key, a merge
+snapshot written after the overwrite, and regeneration that saves nothing.
 
 ## Coverage
 
