@@ -85,6 +85,9 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
                     texts.append(para.text)
             return "\n".join(texts[:50])
 
+        elif file_type == "txt":
+            return path.read_bytes()[:20_000].decode("utf-8", errors="replace").strip()
+
         elif file_type == "pptx":
             from pptx import Presentation
 
@@ -106,9 +109,13 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
     return ""
 
 
-async def _get_known_courses(session) -> list[str]:
-    """Get all existing course codes."""
-    result = await session.execute(select(Course.code))
+async def _get_known_courses(session, user_id: str) -> list[str]:
+    """Get the course codes owned by ``user_id``.
+
+    Scoped to the artifact's owner: the codes are sent to the AI provider, so
+    another user's courses must never be included (R-015, floor 1).
+    """
+    result = await session.execute(select(Course.code).where(Course.user_id == user_id))
     return [row[0] for row in result.all()]
 
 
@@ -177,7 +184,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
                 )
 
             # Get known courses
-            known_courses = await _get_known_courses(session)
+            known_courses = await _get_known_courses(session, user_id or artifact.user_id)
 
             # Call AI agent with per-user settings
             from app.services.settings_service import get_user_agent_config
