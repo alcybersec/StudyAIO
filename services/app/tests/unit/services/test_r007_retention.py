@@ -7,6 +7,7 @@
 * the leaderboard shows only opted-in users (plus the caller).
 """
 
+import contextlib
 import re
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -168,7 +169,7 @@ class TestMergeKeepSourceSnapshotsTarget:
         storage = AsyncMock()
         calls: list[str] = []
 
-        async def snapshot(sess, summary, **kw):
+        async def snapshot(sess, summary, *a, **kw):
             # at snapshot time the target must still hold its own text
             calls.append(summary.content_md)
 
@@ -266,6 +267,16 @@ class TestRegenerationArchivesInsteadOfDeleting:
 # ── read paths ──────────────────────────────────────────────────────────
 
 
+class _Row(tuple):
+    """A row readable by index and by attribute."""
+
+    total = 0
+    correct = 0
+
+    def __new__(cls):
+        return super().__new__(cls, (0, 0, 0))
+
+
 class _Result:
     """Permissive stand-in for a SQLAlchemy result."""
 
@@ -285,7 +296,7 @@ class _Result:
         return []
 
     def one(self):
-        return SimpleNamespace(total=0, correct=0)
+        return _Row()
 
     def first(self):
         return None
@@ -318,10 +329,9 @@ async def _statements(fn, *args, **kwargs) -> list:
     session = AsyncMock()
     session.execute = execute
     session.scalar = AsyncMock(return_value=None)
-    try:
+    # the stand-in result is not a real one; only the SQL matters
+    with contextlib.suppress(Exception):
         await fn(session, *args, **kwargs)
-    except Exception:  # the stand-in result is not a real one; only the SQL matters
-        pass
     return captured
 
 

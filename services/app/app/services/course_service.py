@@ -12,6 +12,7 @@ from app.models.course import Course
 from app.models.flashcard import Flashcard
 from app.models.quiz import QuizQuestion
 from app.models.summary import Summary
+from app.models.summary_version import SummaryVersion
 from app.services import summary_service
 
 logger = structlog.get_logger()
@@ -189,7 +190,7 @@ async def get_course_weeks(session: AsyncSession, course_id: str) -> list[dict]:
             Flashcard.week,
             func.count(Flashcard.id).label("fc_count"),
         )
-        .where(Flashcard.course_id == course_id)
+        .where(Flashcard.course_id == course_id, Flashcard.archived_at.is_(None))
         .group_by(Flashcard.week)
     )
     flashcard_data = {row.week: row.fc_count for row in fc_rows}
@@ -200,7 +201,7 @@ async def get_course_weeks(session: AsyncSession, course_id: str) -> list[dict]:
             QuizQuestion.week,
             func.count(QuizQuestion.id).label("qq_count"),
         )
-        .where(QuizQuestion.course_id == course_id)
+        .where(QuizQuestion.course_id == course_id, QuizQuestion.archived_at.is_(None))
         .group_by(QuizQuestion.week)
     )
     quiz_data = {row.week: row.qq_count for row in qq_rows}
@@ -385,6 +386,8 @@ async def delete_course(session: AsyncSession, user_id: str, code: str) -> dict:
     counts["quiz_questions"] = (
         await session.execute(delete(QuizQuestion).where(QuizQuestion.course_id == course.id))
     ).rowcount or 0
+    # Retained summary versions go with an explicit course delete (ADR 0004).
+    await session.execute(delete(SummaryVersion).where(SummaryVersion.course_id == course.id))
     counts["summaries"] = (
         await session.execute(delete(Summary).where(Summary.course_id == course.id))
     ).rowcount or 0
@@ -423,7 +426,14 @@ async def delete_course(session: AsyncSession, user_id: str, code: str) -> dict:
 MERGE_CONFLICT_POLICIES = frozenset({"regenerate", "keep_target", "keep_source"})
 
 
-async def _sync_summary_blob(storage, summary: Summary, course_id: str) -> None:
+async def _sync_summary_blob(
+    storage,
+    summary: Summary,
+    course_id: str,
+    *,
+    version: int | None = None,
+    delete_old: bool = True,
+) -> None:
     """Make the stored markdown match the row, under the key its course implies.
 
     Called after either half of a summary changes: its course (a moved week) or
@@ -456,13 +466,17 @@ async def _sync_summary_blob(storage, summary: Summary, course_id: str) -> None:
         storage: Storage backend.
         summary: The summary row, already carrying its final course and content.
         course_id: The course the summary now belongs to.
+        version: Write to that version's own key instead of the unversioned
+            one, so no existing blob is put over (``keep_source``).
+        delete_old: Delete the previous key afterwards. False when the previous
+            key is a retained version's blob.
     """
     old_key = normalize_storage_key(summary.file_path or "")
-    new_key = summary_service.build_summary_storage_key(course_id, summary.week)
+    new_key = summary_service.build_summary_storage_key(course_id, summary.week, version=version)
     summary.file_path = new_key
     try:
         await storage.put(new_key, summary.content_md.encode("utf-8"))
-        if old_key and old_key != new_key:
+        if delete_old and old_key and old_key != new_key:
             await storage.delete(old_key)
     except Exception:
         logger.warning(
@@ -532,8 +546,8 @@ async def merge_courses(
       Spends nothing.
     * ``keep_source`` — the source summary's content replaces the target's
       (version bumped, ``source_artifacts`` merged). Spends nothing. The
-      target's previous text is lost, but every artifact behind it survives the
-      merge, so a later ``regenerate`` can rebuild it.
+      target's previous text is retained first as a ``SummaryVersion`` (row and
+      its own blob key), exactly as a re-summarize retains it.
 
     A discarded source summary is deleted outright — both the row and its
     stored markdown. Its artifacts are *not* deleted; they move to the target
@@ -621,13 +635,18 @@ async def merge_courses(
         conflict_weeks.append(summary.week)
 
         if on_conflict == "keep_source":
+            # Floor 4 (R-007): the target's text is about to be replaced, so
+            # retain it as a version first.
+            await summary_service.snapshot_summary(session, existing, storage)
             existing.content_md = summary.content_md
             existing.version = existing.version + 1
             existing.source_artifacts = list(
                 set((existing.source_artifacts or []) + (summary.source_artifacts or []))
             )
             existing.updated_at = datetime.now(UTC)
-            await _sync_summary_blob(storage, existing, target.id)
+            await _sync_summary_blob(
+                storage, existing, target.id, version=existing.version, delete_old=False
+            )
         elif on_conflict == "regenerate":
             regenerated_weeks.append(summary.week)
 

@@ -76,6 +76,7 @@ async def generate_study_schedule(
         .where(
             Flashcard.course_id == exam.course_id,
             Flashcard.week.in_(exam.weeks_scope),
+            Flashcard.archived_at.is_(None),
             (FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at <= now),
         )
     )

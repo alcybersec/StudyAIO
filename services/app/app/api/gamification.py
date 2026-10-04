@@ -85,7 +85,7 @@ async def get_daily_challenge(
     "/gamification/leaderboard",
     response_model=LeaderboardResponse,
     summary="Get XP leaderboard",
-    description="Returns top users ranked by total XP.",
+    description="Returns opted-in users ranked by total XP, plus the caller.",
 )
 @limiter.limit("30/minute")
 async def get_leaderboard(
@@ -94,7 +94,7 @@ async def get_leaderboard(
     session: AsyncSession = Depends(get_session),
 ) -> LeaderboardResponse:
     """Get global XP leaderboard."""
-    entries = await xp_service.get_leaderboard(session)
+    entries = await xp_service.get_leaderboard(session, user_id=user.id)
     return LeaderboardResponse(
         entries=[LeaderboardEntry(**e) for e in entries],
     )

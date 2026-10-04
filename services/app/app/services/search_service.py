@@ -160,6 +160,7 @@ async def search_all(
         .join(Course, Flashcard.course_id == Course.id)
         .where(
             Course.user_id == user_id,
+            Flashcard.archived_at.is_(None),
             Flashcard.front.ilike(pattern, escape=_LIKE_ESCAPE_CHAR),
         )
         .order_by(Course.code, Flashcard.week)

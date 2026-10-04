@@ -227,7 +227,9 @@ async def generate_obsidian_vault(
     summaries = {s.week: s for s in summary_result.scalars().all()}
 
     # Fetch flashcards
-    fc_query = select(Flashcard).where(Flashcard.course_id == course.id)
+    fc_query = select(Flashcard).where(
+        Flashcard.course_id == course.id, Flashcard.archived_at.is_(None)
+    )
     if weeks:
         fc_query = fc_query.where(Flashcard.week.in_(weeks))
     fc_result = await session.execute(fc_query)
@@ -236,7 +238,9 @@ async def generate_obsidian_vault(
         flashcards_by_week.setdefault(fc.week, []).append(fc)
 
     # Fetch quiz questions
-    qq_query = select(QuizQuestion).where(QuizQuestion.course_id == course.id)
+    qq_query = select(QuizQuestion).where(
+        QuizQuestion.course_id == course.id, QuizQuestion.archived_at.is_(None)
+    )
     if weeks:
         qq_query = qq_query.where(QuizQuestion.week.in_(weeks))
     qq_result = await session.execute(qq_query)

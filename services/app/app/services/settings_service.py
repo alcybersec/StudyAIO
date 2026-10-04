@@ -426,6 +426,7 @@ async def get_user_settings(session: AsyncSession, user_id: str) -> dict[str, An
     merged["theme"] = user_settings.theme
     merged["language"] = user_settings.language
     merged["content_language"] = user_settings.content_language
+    merged["leaderboard_opt_in"] = bool(user_settings.leaderboard_opt_in)
     merged["dashboard_layout"] = user_settings.dashboard_layout
     return merged
 
@@ -452,6 +453,7 @@ async def update_user_settings(
     theme = updates.pop("theme", None)
     language = updates.pop("language", None)
     content_language = updates.pop("content_language", None)
+    leaderboard_opt_in = updates.pop("leaderboard_opt_in", None)
     dashboard_layout = updates.pop("dashboard_layout", None)
     clear_secrets = updates.pop("clear_secrets", None) or []
 
@@ -500,6 +502,11 @@ async def update_user_settings(
         if not isinstance(content_language, bool):
             raise ValueError("content_language must be a boolean")
         user_settings.content_language = content_language
+
+    if leaderboard_opt_in is not None:
+        if not isinstance(leaderboard_opt_in, bool):
+            raise ValueError("leaderboard_opt_in must be a boolean")
+        user_settings.leaderboard_opt_in = leaderboard_opt_in
 
     # Update dashboard layout
     if dashboard_layout is not None:

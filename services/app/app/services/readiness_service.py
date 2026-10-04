@@ -84,6 +84,7 @@ async def collect_week_stats(
         .where(
             QuizQuestion.course_id == course_id,
             QuizQuestion.week.in_(weeks_scope),
+            QuizQuestion.archived_at.is_(None),
         )
         .group_by(QuizQuestion.week)
     )
@@ -101,6 +102,7 @@ async def collect_week_stats(
         .where(
             Flashcard.course_id == course_id,
             Flashcard.week.in_(weeks_scope),
+            Flashcard.archived_at.is_(None),
         )
         .group_by(Flashcard.week)
     )
@@ -149,6 +151,7 @@ async def compute_readiness_detail(
         .where(
             Flashcard.course_id == exam.course_id,
             Flashcard.week.in_(weeks_scope),
+            Flashcard.archived_at.is_(None),
         )
         .group_by(Flashcard.week)
     )

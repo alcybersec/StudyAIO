@@ -47,7 +47,7 @@ async def get_overview(session: AsyncSession, user_id: str) -> dict:
     total_fc_result = await session.execute(
         select(func.count(Flashcard.id))
         .join(Course, Flashcard.course_id == Course.id)
-        .where(Course.user_id == user_id)
+        .where(Course.user_id == user_id, Flashcard.archived_at.is_(None))
     )
     total_fc = total_fc_result.scalar() or 0
 
@@ -55,7 +55,11 @@ async def get_overview(session: AsyncSession, user_id: str) -> dict:
         select(func.count(FlashcardReview.id))
         .join(Flashcard, FlashcardReview.flashcard_id == Flashcard.id)
         .join(Course, Flashcard.course_id == Course.id)
-        .where(Course.user_id == user_id, FlashcardReview.interval_days > 21)
+        .where(
+            Course.user_id == user_id,
+            Flashcard.archived_at.is_(None),
+            FlashcardReview.interval_days > 21,
+        )
     )
     mastered = mastered_result.scalar() or 0
     mastery_pct = round(mastered / total_fc * 100, 1) if total_fc > 0 else 0.0
@@ -246,7 +250,7 @@ async def get_mastery_breakdown(
         )
         .join(Course, Flashcard.course_id == Course.id)
         .outerjoin(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
-        .where(Course.user_id == user_id)
+        .where(Course.user_id == user_id, Flashcard.archived_at.is_(None))
     )
     if course_code:
         query = query.where(Course.code == course_code)

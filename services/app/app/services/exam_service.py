@@ -330,6 +330,7 @@ async def get_exam_progress(
         .where(
             QuizQuestion.course_id == exam.course_id,
             QuizQuestion.week.in_(exam.weeks_scope),
+            QuizQuestion.archived_at.is_(None),
         )
     )
     quiz_row = quiz_result.one()
@@ -344,6 +345,7 @@ async def get_exam_progress(
         ).where(
             Flashcard.course_id == exam.course_id,
             Flashcard.week.in_(exam.weeks_scope),
+            Flashcard.archived_at.is_(None),
         )
     )
     fc_total = fc_result.scalar() or 0
@@ -354,6 +356,7 @@ async def get_exam_progress(
         .where(
             Flashcard.course_id == exam.course_id,
             Flashcard.week.in_(exam.weeks_scope),
+            Flashcard.archived_at.is_(None),
             FlashcardReview.interval_days > 21,
         )
     )

@@ -105,7 +105,10 @@ async def get_due_cards(
         select(Flashcard)
         .outerjoin(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
         .join(Course, Flashcard.course_id == Course.id)
-        .where((FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at <= now))
+        .where(
+            Flashcard.archived_at.is_(None),
+            (FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at <= now),
+        )
         .order_by(
             # New cards (no review) first, then most overdue
             FlashcardReview.next_review_at.asc().nulls_first()
@@ -232,7 +235,11 @@ async def get_study_stats(
     now = datetime.now(UTC)
 
     # Base query for total flashcards in scope
-    base = select(Flashcard).join(Course, Flashcard.course_id == Course.id)
+    base = (
+        select(Flashcard)
+        .join(Course, Flashcard.course_id == Course.id)
+        .where(Flashcard.archived_at.is_(None))
+    )
     if user_id:
         base = base.where(Course.user_id == user_id)
     if course_code:
@@ -249,6 +256,7 @@ async def get_study_stats(
         select(Flashcard.id, FlashcardReview.interval_days, FlashcardReview.next_review_at)
         .join(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
         .join(Course, Flashcard.course_id == Course.id)
+        .where(Flashcard.archived_at.is_(None))
     )
     if user_id:
         reviewed_base = reviewed_base.where(Course.user_id == user_id)
@@ -310,7 +318,7 @@ async def get_per_course_due_counts(
         select(Course.code, func.count(Flashcard.id))
         .join(Flashcard, Course.id == Flashcard.course_id)
         .outerjoin(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
-        .where(FlashcardReview.id.is_(None))
+        .where(FlashcardReview.id.is_(None), Flashcard.archived_at.is_(None))
     )
     if user_id:
         new_query = new_query.where(Course.user_id == user_id)
@@ -323,7 +331,7 @@ async def get_per_course_due_counts(
         select(Course.code, func.count(Flashcard.id))
         .join(Flashcard, Course.id == Flashcard.course_id)
         .join(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
-        .where(FlashcardReview.next_review_at <= now)
+        .where(FlashcardReview.next_review_at <= now, Flashcard.archived_at.is_(None))
     )
     if user_id:
         overdue_query = overdue_query.where(Course.user_id == user_id)

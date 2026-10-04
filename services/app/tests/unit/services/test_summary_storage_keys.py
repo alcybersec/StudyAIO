@@ -101,7 +101,7 @@ class TestBuildSummaryStorageKey:
         can be handed one again by a future caller.
         """
         params = list(inspect.signature(summary_service.build_summary_storage_key).parameters)
-        assert params == ["course_id", "week"]
+        assert params == ["course_id", "week", "version"]
 
 
 class TestBuildSummaryFilePath:

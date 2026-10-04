@@ -93,6 +93,7 @@ async def generate_timed_plan(
 
     # Fetch quiz questions
     quiz_query = select(QuizQuestion).join(Course, QuizQuestion.course_id == Course.id)
+    quiz_query = quiz_query.where(QuizQuestion.archived_at.is_(None))
     if user_id is not None:
         quiz_query = quiz_query.where(Course.user_id == user_id)
     if course_code:
