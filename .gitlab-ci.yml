@@ -94,7 +94,7 @@ backend-tests:
     - pip install -r requirements.txt
   script:
     - python -m pytest tests/unit -x -v -n auto --cov=app --cov-report=term-missing
-      --cov-report=xml:coverage.xml --cov-fail-under=75
+      --cov-report=xml:coverage.xml
     - python -m pytest tests/golden -x -v
   artifacts:
     when: always

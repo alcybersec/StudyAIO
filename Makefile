@@ -73,6 +73,14 @@ db:
 PYTHON := $(CURDIR)/services/app/.venv/bin/python
 VENV_STAMP := services/app/.venv/.bootstrap-stamp
 TEST_PATHS ?= tests/unit tests/golden tests/contracts
+# The unit-tier coverage gate (75, from pyproject's fail_under) applies only to the
+# default full run. Coverage of a hand-picked subset is meaningless and would fail
+# every targeted run, so overriding TEST_PATHS turns it off. Pass COV_ARGS
+# explicitly to keep it: make test TEST_PATHS=... COV_ARGS="--cov=app".
+# A test failure still wins: pytest reports it and exits 1 before any coverage check.
+ifeq ($(origin TEST_PATHS),file)
+COV_ARGS ?= --cov=app --cov-report=term-missing
+endif
 
 bootstrap: $(VENV_STAMP)
 
@@ -80,7 +88,7 @@ $(VENV_STAMP): services/app/requirements.txt services/app/requirements.lock.txt 
 	bash scripts/bootstrap.sh
 
 test: bootstrap
-	cd services/app && $(PYTHON) -m pytest $(TEST_PATHS) -x -v
+	cd services/app && $(PYTHON) -m pytest $(TEST_PATHS) -x -v $(COV_ARGS)
 
 test-unit: bootstrap
 	cd services/app && $(PYTHON) -m pytest tests/unit -x -v
@@ -102,7 +110,7 @@ test-e2e:
 	cd services/ui && npm run test:e2e
 
 coverage: bootstrap
-	cd services/app && $(PYTHON) -m pytest tests/unit --cov=app --cov-report=term-missing --cov-fail-under=70
+	cd services/app && $(PYTHON) -m pytest tests/unit --cov=app --cov-report=term-missing
 
 # === Linting ===
 lint-python:
