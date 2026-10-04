@@ -14,7 +14,7 @@ from app.core.database import get_session
 from app.core.rate_limit import limiter
 from app.models.course import Course
 from app.models.user import User
-from app.services import billing_service, quota_service, search_service
+from app.services import billing_service, quota_service, search_service, settings_service
 
 logger = structlog.get_logger()
 
@@ -55,7 +55,12 @@ async def ask_question(
 
     # Embed the question
     provider = get_embedding_provider()
-    query_embeddings = provider.embed_texts([body.question])
+    try:
+        query_embeddings = provider.embed_texts([body.question])
+    except Exception as e:
+        safe_error = await settings_service.redacted_error(session, user.id, e)
+        logger.error("qa_embedding_error", error=safe_error)
+        raise HTTPException(status_code=500, detail="Failed to embed question") from None
     if not query_embeddings:
         raise HTTPException(status_code=500, detail="Failed to embed question")
     query_embedding = query_embeddings[0]
@@ -91,8 +96,11 @@ async def ask_question(
             detail="Q&A agent not yet configured. Ensure Claude Code CLI is available.",
         ) from None
     except Exception as e:
-        logger.error("qa_agent_error", error=str(e), question=body.question[:100])
-        raise HTTPException(status_code=500, detail=f"Failed to generate answer: {e}") from e
+        safe_error = await settings_service.redacted_error(session, user.id, e)
+        logger.error("qa_agent_error", error=safe_error, question=body.question[:100])
+        raise HTTPException(
+            status_code=500, detail=f"Failed to generate answer: {safe_error}"
+        ) from None
 
     # Record AI usage (best-effort)
     try:

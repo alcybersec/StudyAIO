@@ -105,7 +105,7 @@ async def test_ai_connection(
             message=f"Connection successful (confidence: {result.confidence})",
         )
     except Exception as e:
-        safe_error = await settings_service.redact_user_secrets(session, user.id, str(e))
+        safe_error = await settings_service.redacted_error(session, user.id, e)
         logger.warning("test_ai_failed", error=safe_error, backend=backend)
         raise HTTPException(
             status_code=502,

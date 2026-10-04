@@ -357,6 +357,24 @@ async def redact_user_secrets(session: AsyncSession, user_id: str, text: str) ->
     return text
 
 
+async def redacted_error(session: AsyncSession, user_id: str, exc: BaseException) -> str:
+    """Render ``exc`` as text that is safe to log or return.
+
+    Args:
+        session: Database session.
+        user_id: The user whose stored credentials to scrub.
+        exc: The provider failure.
+
+    Returns:
+        ``str(exc)`` with credential values removed. If the scrub itself
+        fails the text is withheld entirely rather than risk echoing a key.
+    """
+    try:
+        return await redact_user_secrets(session, user_id, str(exc))
+    except Exception:
+        return f"{type(exc).__name__} (details withheld)"
+
+
 def _public_view(overrides: dict[str, Any]) -> dict[str, Any]:
     """Build the credential-free settings view for a set of user overrides.
 
