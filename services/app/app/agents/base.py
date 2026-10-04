@@ -1,8 +1,35 @@
 """Abstract agent adapter interface for all AI operations."""
 
+import json
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from typing import Any
+
+from app.config import settings
+from app.core.exceptions import AgentError
+
+_REDACTED = "[redacted]"
+_MIN_SECRET_LEN = 6
+
+
+def _string_leaves(value: Any) -> list[str]:
+    """Every string inside a credential value, decoding JSON-encoded strings."""
+    if isinstance(value, str):
+        leaves = [value]
+        try:
+            decoded = json.loads(value)
+        except ValueError:
+            return leaves
+        if isinstance(decoded, (dict, list)):
+            leaves.extend(_string_leaves(decoded))
+        return leaves
+    if isinstance(value, dict):
+        return [leaf for v in value.values() for leaf in _string_leaves(v)]
+    if isinstance(value, list):
+        return [leaf for v in value for leaf in _string_leaves(v)]
+    return []
+
 
 #: System prompt that establishes the trust boundary for every adapter call.
 #:
@@ -203,6 +230,33 @@ class AgentAdapter(ABC):
     afterwards to meter the work — the same post-call attribute pattern the
     pipeline already uses for `refreshed_credentials`.
     """
+
+    def _credential_values(self) -> list[str]:
+        """Credential strings this adapter holds, plus the instance's own keys."""
+        values: list[str] = []
+        for attr in ("_api_key", "_credentials_json"):
+            values.extend(_string_leaves(getattr(self, attr, None)))
+        for secret in (settings.anthropic_api_key, settings.openai_api_key, settings.zai_api_key):
+            values.append(secret.get_secret_value())
+        return values
+
+    def redact(self, text: str) -> str:
+        """Remove every credential value this adapter can see from ``text``.
+
+        Provider SDKs and the CLI can echo the key they were given. Everything
+        that becomes an exception message goes through here first.
+        """
+        try:
+            values = {v for v in self._credential_values() if len(v) >= _MIN_SECRET_LEN}
+            for value in sorted(values, key=len, reverse=True):
+                text = text.replace(value, _REDACTED)
+            return text
+        except Exception:
+            return "(details withheld)"
+
+    def agent_error(self, message: str) -> AgentError:
+        """Build an ``AgentError`` whose message carries no credential value."""
+        return AgentError(self.redact(message))
 
     #: Set lazily so subclasses need no cooperating __init__.
     _usage: "TokenUsage | None" = None
