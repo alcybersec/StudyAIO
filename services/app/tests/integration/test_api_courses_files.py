@@ -68,13 +68,6 @@ class TestCourseViews:
             "CV202"
         ]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG (floor 1): GET /courses/{code}/weeks/{n} loads the summary with "
-        "summary_service.get_summary_for_week(), which matches on course code alone. Two users "
-        "sharing a code hit MultipleResultsFound (500); when only the other user has a summary "
-        "for that week it is returned to the wrong user",
-    )
     async def test_week_detail_never_returns_another_users_summary(
         self, client_factory, make_user, db_session
     ):

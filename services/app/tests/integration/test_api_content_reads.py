@@ -158,11 +158,6 @@ class TestQA:
             resp = await client_factory(alice).post("/api/qa/ask", json={"question": "q"})
         assert resp.status_code == 500
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: /api/qa/ask resolves course_code with an unscoped select, so two users who "
-        "share a course code (legal: unique per user) get MultipleResultsFound -> 500",
-    )
     async def test_shared_course_code_between_users_still_answers(
         self, client_factory, two_tenants
     ):
@@ -173,12 +168,6 @@ class TestQA:
             )
         assert resp.status_code == 200
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG (floor 1): /api/qa/ask resolves course_code with an unscoped "
-        "select(Course).where(code == ...), so asking about another user's course code does not "
-        "404 (existence oracle) and two users sharing a code can hit MultipleResultsFound",
-    )
     async def test_course_code_of_another_user_is_404(self, client_factory, make_user, db_session):
         owner, stranger = await make_user(), await make_user()
         await seed_course(db_session, owner.id, code="PRIVATE77")

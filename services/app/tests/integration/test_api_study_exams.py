@@ -89,12 +89,6 @@ class TestFlashcardReview:
         stats = (await client_factory(bob).get("/api/study/stats")).json()
         assert stats["total"] == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG (floor 1): POST /study/review looks the flashcard up without an owner filter "
-        "and record_review finds the schedule row by flashcard_id alone, so any user can review "
-        "(and rewrite the SM-2 state of) another user's card",
-    )
     async def test_cannot_review_another_users_flashcard(
         self, client_factory, two_tenants, db_session
     ):
@@ -143,12 +137,6 @@ class TestQuizAttempts:
         )
         assert missing.status_code == 404
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG (floor 1): POST /study/quiz-attempt only checks the question exists; it never "
-        "checks the question (or the optional exam_id) belongs to the caller, so a user can write "
-        "attempts into another user's quiz and exam statistics",
-    )
     async def test_cannot_attempt_another_users_quiz_question(self, client_factory, two_tenants):
         alice, bob, a, b = two_tenants
         resp = await client_factory(bob).post(
@@ -179,11 +167,6 @@ class TestTimedPlanAndWeekPlan:
             await client_factory(user).post("/api/study/timed-plan", json={"minutes": 1})
         ).status_code == 422
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG (floor 1): generate_timed_plan takes no user_id; get_due_cards and the quiz "
-        "query run unscoped, so POST /study/timed-plan returns other users' card and quiz ids",
-    )
     async def test_timed_plan_contains_only_callers_ids(self, client_factory, two_tenants):
         alice, bob, a, b = two_tenants
         body = (

@@ -322,11 +322,6 @@ async def test_index_without_extraction_fails_cleanly(owner, agent):
         await _index(artifact_id, user_id=owner)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG (floor 1): classify._get_known_courses selects every user's course codes and passes "
-    "them to the agent; the query has no user_id filter",
-)
 async def test_classify_does_not_leak_other_users_course_codes(owner, agent):
     other = generate_id()
     async with async_session_factory() as session:

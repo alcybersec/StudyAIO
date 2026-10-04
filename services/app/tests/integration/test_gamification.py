@@ -178,12 +178,6 @@ class TestAchievements:
             )
         ).status_code == 204
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG (floor 1): achievement_service.mark_notified selects UserAchievement rows by "
-        "id alone, so POST /gamification/achievements/mark-notified lets any user flip another "
-        "user's achievements to notified (they never see the unlock toast)",
-    )
     async def test_cannot_mark_another_users_achievements_notified(
         self, client_factory, make_user, db_session
     ):

@@ -324,12 +324,6 @@ class TestQuickCapture:
             )
         assert resp.status_code == 502
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: quick capture stores file_type='txt' and resumes at classify, but classify "
-        "can only preview pdf/docx/pptx (and extract has no txt extractor), so every capture "
-        "fails with 'Could not extract text preview'",
-    )
     async def test_captured_text_can_be_classified(self, make_user, db_session):
         from app.core.database import async_session_factory
         from app.pipeline.classify import _classify
