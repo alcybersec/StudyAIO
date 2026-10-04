@@ -34,10 +34,12 @@ from __future__ import annotations
 
 import ast
 import hashlib
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.conftest import isolated_storage
 from tests.safety._source import app_modules, dotted, parse, rel, walk_with_scope
 
 # ── inventory 1: blob and file deletes ─────────────────────────────────
@@ -347,6 +349,22 @@ def test_floor4_no_delete_site_awaits_a_ruling():
     assert not pending, "\n".join(f"  {k}: {v}" for k, v in pending.items())
 
 
+def test_floor4_no_violation_site_remains():
+    """No delete site ruled a violation is still in the code.
+
+    RED until M31-S2-BACKEND-019 removes the regeneration deletes
+    (``asset_service.save_flashcards`` / ``save_quiz_questions``). Once it is
+    green, safety unlists the entries; the inventory tests do not force that,
+    so the code fix can land without editing this file.
+    """
+    live = {k: v for k, v in db_content_delete_sites().items() if k in DB_VIOLATIONS}
+    live |= {k: v for k, v in blob_delete_sites().items() if k in BLOB_VIOLATIONS}
+    assert not live, "Floor 4 VIOLATION: ruled delete site(s) still present:\n" + "\n".join(
+        f"  {loc}  {key}: {(DB_VIOLATIONS | BLOB_VIOLATIONS).get(key)}"
+        for key, loc in sorted(live.items())
+    )
+
+
 def test_floor4_user_item_allowlist_is_exactly_adr_0004():
     """The sanctioned user-item sites are ADR 0004's, and every one is still in the code.
 
@@ -597,16 +615,93 @@ async def test_floor4_failed_upload_never_deletes_another_users_blob(
     )
 
 
-# ── re-summarize ───────────────────────────────────────────────────────
+# ── re-summarize and merge keep_source: the superseded version survives ─
+#
+# Ruled 2026-10-04: "fix the code" for re-summarize, and merge keep_source
+# "keeps as a version" (ADR 0004 § Amendment). Both pins are
+# implementation-agnostic about *how* the snapshot is written (an ORM object
+# handed to session.add/add_all, or an INSERT into summary_versions), and
+# strict about *what* survives: a summary_versions row carrying the old text
+# and version, and a blob at that row's file_path still holding the old bytes.
+# RED until M31-S2-BACKEND-019 lands.
+
+OWNER = "00000000-0000-0000-0000-0000000000a1"
 
 
-def _session_with_existing(existing) -> AsyncMock:
+def _recording_session(on_execute=None):
+    """An AsyncMock session that records every add, add_all and execute.
+
+    ``log`` gets ``("add", obj)`` and ``("execute", statement)`` in call order,
+    each with a ``probe()`` value captured at that moment, so a test can ask
+    what the target row held when the snapshot was written.
+    """
+    log: list[tuple[str, object, object]] = []
+    probe = {"fn": lambda: None}
     session = AsyncMock()
-    session.add = MagicMock()
-    result = MagicMock()
-    result.scalar_one_or_none.return_value = existing
-    session.execute = AsyncMock(return_value=result)
-    return session
+
+    def add(obj, *_a, **_k):
+        log.append(("add", obj, probe["fn"]()))
+
+    def add_all(objs, *_a, **_k):
+        for obj in objs:
+            add(obj)
+
+    def execute(statement, *_a, **_k):
+        log.append(("execute", statement, probe["fn"]()))
+        if on_execute is not None:
+            return on_execute(statement)
+        return MagicMock()
+
+    session.add = MagicMock(side_effect=add)
+    session.add_all = MagicMock(side_effect=add_all)
+    session.execute = AsyncMock(side_effect=execute)
+    session.scalar = AsyncMock(return_value=OWNER)  # e.g. the course owner's id
+    return session, log, probe
+
+
+def _snapshots(log) -> list[tuple[SimpleNamespace, object]]:
+    """Every summary_versions row written, as (row, probe value at write time)."""
+    from sqlalchemy.sql.dml import Insert
+
+    from app.models.summary_version import SummaryVersion
+
+    rows = []
+    for kind, obj, seen in log:
+        if kind == "add" and isinstance(obj, SummaryVersion):
+            rows.append(
+                (
+                    SimpleNamespace(
+                        content_md=obj.content_md,
+                        version=obj.version,
+                        file_path=obj.file_path,
+                    ),
+                    seen,
+                )
+            )
+        elif kind == "execute" and isinstance(obj, Insert) and obj.table.name == "summary_versions":
+            params = obj.compile().params
+            rows.append(
+                (
+                    SimpleNamespace(
+                        content_md=params.get("content_md"),
+                        version=params.get("version"),
+                        file_path=params.get("file_path"),
+                    ),
+                    seen,
+                )
+            )
+    return rows
+
+
+async def _blob(storage, key: str | None) -> bytes | None:
+    from app.core.storage import normalize_storage_key
+
+    if not key:
+        return None
+    try:
+        return await storage.get(normalize_storage_key(key))
+    except Exception:
+        return None
 
 
 def _existing_summary():
@@ -623,91 +718,185 @@ def _existing_summary():
     )
 
 
+def _found(existing):
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = existing
+    return lambda _statement: result
+
+
 @pytest.mark.asyncio
 async def test_floor4_resummarize_increments_version():
     """Same course+week summarized again is a version increment, not a duplicate row."""
     from app.services import summary_service
 
     existing = _existing_summary()
-    session = _session_with_existing(existing)
-    result = await summary_service.create_or_update_summary(
-        session=session,
-        course_id="course-1",
-        week=3,
-        content_md="# v2 content",
-        file_path="summaries/course-1/Week3.md",
-        source_artifact_ids=["artifact-2"],
-    )
+    session, _log, _probe = _recording_session(_found(existing))
+    with isolated_storage():
+        result = await summary_service.create_or_update_summary(
+            session=session,
+            course_id="course-1",
+            week=3,
+            content_md="# v2 content",
+            file_path="summaries/course-1/Week3.md",
+            source_artifact_ids=["artifact-2"],
+        )
     assert result.version == 2
     assert result.content_md == "# v2 content"
     assert set(result.source_artifacts) == {"artifact-1", "artifact-2"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="VETO-relevant, awaiting user ruling: create_or_update_summary overwrites "
-    "content_md in place and summarize.py rewrites the same Week<N>.md key, so "
-    "version N-1 is destroyed; PRD.md specifies update-with-increment, floor 4 "
-    "says re-summarize never destroys prior versions",
-)
 @pytest.mark.asyncio
 async def test_floor4_resummarize_preserves_prior_version():
-    """After re-summarizing, version 1's text still exists somewhere persistent.
+    """After re-summarizing, version 1 survives as a row and as a blob.
 
-    Implementation-agnostic: a fix may snapshot the old row into a history
-    table (an object passed to ``session.add``) or insert a new row and leave
-    the old one untouched. Either way ``# v1 content`` must survive.
+    The summarize stage writes the new markdown to the key it hands the service
+    *before* calling it, so the test does the same. Version 1's snapshot must
+    therefore point at a key that still holds version 1's bytes, which rules
+    out pointing it at the key version 2 was just written to.
     """
+    from app.core.storage import get_storage
     from app.services import summary_service
 
     existing = _existing_summary()
-    session = _session_with_existing(existing)
-    await summary_service.create_or_update_summary(
-        session=session,
-        course_id="course-1",
+    key = existing.file_path
+    session, log, _probe = _recording_session(_found(existing))
+    with isolated_storage():
+        storage = get_storage()
+        await storage.put(key, b"# v1 content")  # what the first run stored
+        await storage.put(key, b"# v2 content")  # what the second run stores first
+        await summary_service.create_or_update_summary(
+            session=session,
+            course_id="course-1",
+            week=3,
+            content_md="# v2 content",
+            file_path=key,
+            source_artifact_ids=["artifact-2"],
+        )
+        assert existing.version == 2, "control: the re-summarize did not run"
+        kept = [row for row, _seen in _snapshots(log) if row.content_md == "# v1 content"]
+        assert kept, (
+            "Floor 4 VIOLATION: re-summarize wrote no summary_versions row holding "
+            "version 1, so version 1 of the summary is destroyed."
+        )
+        assert kept[0].version == 1, f"snapshot carries version {kept[0].version}, not 1"
+        assert await _blob(storage, kept[0].file_path) == b"# v1 content", (
+            "Floor 4 VIOLATION: version 1's summary_versions row points at "
+            f"{kept[0].file_path!r}, which no longer holds version 1's markdown."
+        )
+
+
+def _merge_session(source, target, target_summary, source_summary):
+    """Answer merge_courses' lookups the way the database would for one owner."""
+    from tests.safety._tenant import bind_values, tables_in
+
+    def execute(statement):
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        result.scalars.return_value.all.return_value = []
+        tables = tables_in(statement)
+        binds = set(bind_values(statement))
+        if statement.is_select and tables == {"courses"} and OWNER in binds:
+            course = source if "SRC" in binds else target if "TGT" in binds else None
+            result.scalar_one_or_none.return_value = course
+        elif statement.is_select and "summaries" in tables:
+            if target.id in binds:
+                result.scalars.return_value.all.return_value = [target_summary]
+            elif source.id in binds:
+                result.scalars.return_value.all.return_value = [source_summary]
+        return result
+
+    return execute
+
+
+@pytest.mark.asyncio
+async def test_floor4_merge_keep_source_snapshots_target_summary():
+    """Merge keep_source writes a summary_versions row for the target before overwriting it.
+
+    ADR 0004 § Amendment 2026-10-04: the overwritten target is not
+    merge-discard; it is under the same retention rule as re-summarize.
+    """
+    from app.core.storage import get_storage
+    from app.models.summary import Summary
+    from app.services import course_service
+
+    source = SimpleNamespace(id="course-src", user_id=OWNER, code="SRC", archived_at=None)
+    target = SimpleNamespace(id="course-tgt", user_id=OWNER, code="TGT", archived_at=None)
+    target_summary = Summary(
+        id="sum-t",
+        course_id=target.id,
         week=3,
-        content_md="# v2 content",
-        file_path="summaries/course-1/Week3.md",
-        source_artifact_ids=["artifact-2"],
+        content_md="# target text",
+        file_path=f"summaries/{target.id}/Week3.md",
+        version=1,
+        source_artifacts=["a-t"],
     )
-    survivors = [existing] + [c.args[0] for c in session.add.call_args_list]
-    assert any(getattr(o, "content_md", None) == "# v1 content" for o in survivors), (
-        "Floor 4: re-summarize destroyed version 1 of the summary."
+    source_summary = Summary(
+        id="sum-s",
+        course_id=source.id,
+        week=3,
+        content_md="# source text",
+        file_path=f"summaries/{source.id}/Week3.md",
+        version=1,
+        source_artifacts=["a-s"],
     )
+    session, log, probe = _recording_session(
+        _merge_session(source, target, target_summary, source_summary)
+    )
+    session.delete = AsyncMock()
+    probe["fn"] = lambda: target_summary.content_md
+
+    with isolated_storage():
+        storage = get_storage()
+        await storage.put(target_summary.file_path, b"# target text")
+        await storage.put(source_summary.file_path, b"# source text")
+        await course_service.merge_courses(session, OWNER, "SRC", "TGT", "keep_source")
+
+        assert target_summary.content_md == "# source text", "control: keep_source did not run"
+        assert target_summary.version == 2, "control: keep_source did not bump the version"
+        kept = [(row, seen) for row, seen in _snapshots(log) if row.content_md == "# target text"]
+        assert kept, (
+            "Floor 4 VIOLATION: merge keep_source overwrote the target summary without "
+            "writing a summary_versions row, so the target's version 1 is destroyed."
+        )
+        row, seen = kept[0]
+        assert row.version == 1, f"snapshot carries version {row.version}, not 1"
+        assert seen == "# target text", (
+            "Floor 4: the summary_versions row was written after the target was overwritten."
+        )
+        assert await _blob(storage, row.file_path) == b"# target text", (
+            "Floor 4 VIOLATION: the target's prior version row points at "
+            f"{row.file_path!r}, which no longer holds its markdown."
+        )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="VETO-relevant, awaiting user ruling: asset regeneration deletes the "
-    "artifact's flashcards/quiz questions and their reviews/attempts cascade "
-    "(see DB_PENDING_RULING)",
-)
+# ── asset regeneration ─────────────────────────────────────────────────
+
+
 @pytest.mark.asyncio
 async def test_floor4_asset_regeneration_keeps_study_history():
     """Regenerating assets never deletes a card or question a user has studied.
 
     Any DELETE on flashcards / quiz_questions must be conditioned on the
     absence of reviews / attempts; an unconditional one destroys history.
+    Ruled "fix the code" (R-007, ADR 0004 §4). RED until M31-S2-BACKEND-019
+    archives instead of deleting.
     """
     from sqlalchemy.sql.dml import Delete
 
     from app.agents.base import FlashcardData, QuizQuestionData
+    from app.models.flashcard import Flashcard
+    from app.models.quiz import QuizQuestion
     from app.services import asset_service
     from tests.safety._tenant import tables_in
 
-    captured = []
-
-    def record(statement, *_a, **_k):
-        captured.append(statement)
+    def answer(_statement):
         result = MagicMock()
         result.scalar.return_value = 0
+        result.scalar_one_or_none.return_value = None
+        result.scalars.return_value.all.return_value = []
         return result
 
-    session = AsyncMock()
-    session.add = MagicMock()
-    session.execute = AsyncMock(side_effect=record)
+    session, log, _probe = _recording_session(answer)
 
     await asset_service.save_flashcards(
         session, "course-1", 3, "artifact-1", [FlashcardData(front="q", back="a")]
@@ -720,11 +909,15 @@ async def test_floor4_asset_regeneration_keeps_study_history():
         [QuizQuestionData(question_type="short_answer", question="q", correct_answer="a")],
     )
 
+    added = {type(obj) for kind, obj, _seen in log if kind == "add"}
+    assert {Flashcard, QuizQuestion} <= added, "control: regeneration saved nothing"
+
     history_of = {"flashcards": "flashcard_reviews", "quiz_questions": "quiz_attempts"}
     unconditional = [
         str(s)
-        for s in captured
-        if isinstance(s, Delete)
+        for kind, s, _seen in log
+        if kind == "execute"
+        and isinstance(s, Delete)
         and s.table.name in history_of
         and history_of[s.table.name] not in tables_in(s)
     ]
