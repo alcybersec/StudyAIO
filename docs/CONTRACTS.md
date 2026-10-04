@@ -224,13 +224,13 @@ Indirect consumers, reaching the adapter through a service above:
 `services/app/app/api/chat.py` (via `chat_service`), `services/app/app/api/concepts.py` and
 `services/app/app/pipeline/concepts_task.py` (via `concept_service`).
 
-**Open question against floor 3.** Floor 3 says no AI call is made from an API route, only from the
-Celery worker. As built, four request paths call the adapter in the API process: `POST /api/qa/ask`
-(`api/qa.py`), `POST /api/settings/test-ai` (`api/settings.py`), chat send and stream
-(`api/chat.py` → `chat_service`) and `POST /api/concepts/extract/{artifact_id}`
-(`api/concepts.py` → `concept_service`). Every one of them still goes through `get_agent`, so the
-first clause of the floor holds; the second does not describe the code. This entry records the code
-as it is. Whether the floor or the code changes is for `safety` and the user, not this contract.
+**Floor 3.** Resolved by [ADR 0003](adr/0003-floor3-request-time-ai-calls.md) (Accepted
+2026-10-04): every AI call goes through this contract via `get_agent`, and `get_agent` is called
+only in `app/pipeline/**` and at five request-time call sites the ADR enumerates —
+`api/qa.py` `ask_question`, `api/settings.py` `test_ai_connection`, `services/chat_service.py`
+`send_message` and `stream_message`, and `services/concept_service.py`
+`extract_and_save_concepts`. A new request-time call site amends that ADR; it is not a change to
+this contract.
 
 ## Change log
 
@@ -239,3 +239,4 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | Date | Contract | Version | Change | Task |
 |---|---|---|---|---|
 | 2026-10-04 | agents.AgentAdapter | v1 | Recorded as-built: 7 abstract methods, `stream_answer`, metering and output-language members, `get_agent`, 13 data types, 5 backends, 12 direct consumers. No code changed. | M31-S1-ARCH-001 |
+| 2026-10-04 | agents.AgentAdapter | v1 | Floor-3 open question closed by reference to ADR 0003, which enumerates the five request-time `get_agent` call sites. Interface unchanged, so no version bump. | M31-S1-ARCH-006 |
