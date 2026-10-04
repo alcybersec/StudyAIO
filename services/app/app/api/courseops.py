@@ -96,8 +96,8 @@ async def upload_course_document(
             user_id=user.id,
         )
     except CourseOpsError as e:
-        # Clean up file on error
-        await storage.delete(storage_key)
+        # Clean up the blob only if no existing document references it
+        await courseops_service.discard_failed_upload_blob(session, user.id, storage_key, storage)
         raise HTTPException(status_code=409, detail=str(e)) from e
 
     # Dispatch Celery task for AI extraction
@@ -242,7 +242,7 @@ async def upload_assessment_document(
         user_id=user.id,
     )
     if not doc:
-        await storage.delete(storage_key)
+        await courseops_service.discard_failed_upload_blob(session, user.id, storage_key, storage)
         raise HTTPException(status_code=404, detail="Assessment not found")
 
     return CourseDocumentResponse.model_validate(doc)

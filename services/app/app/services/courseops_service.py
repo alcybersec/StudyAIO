@@ -499,9 +499,10 @@ async def attach_assessment_document(
     reference file linked to the assessment.
 
     Returns:
-        The created CourseDocument, or None if the assessment does not exist.
+        The created CourseDocument, or None if the assessment does not exist
+        or, when ``user_id`` is given, belongs to another user's course.
     """
-    assessment = await session.get(Assessment, assessment_id)
+    assessment = await _get_course_owned(session, Assessment, assessment_id, user_id)
     if not assessment:
         return None
 
@@ -595,6 +596,31 @@ async def _delete_blob_if_unreferenced(
         # delete into a 500. The account purge sweeps the prefix regardless.
         logger.warning("courseops_blob_delete_failed", key=storage_key, exc_info=True)
     return False
+
+
+async def discard_failed_upload_blob(
+    session: AsyncSession,
+    owner_id: str,
+    storage_key: str,
+    storage: StorageBackend | None = None,
+) -> bool:
+    """Clean up the blob of an upload that failed, without destroying existing data.
+
+    The key is content-addressed per user, so a rejected re-upload of a file the
+    user already has writes to the *same* key as the existing document. Deleting
+    it unconditionally would destroy that document's file. This only removes the
+    blob when no row of this owner references it.
+
+    Args:
+        session: Database session.
+        owner_id: The uploading user.
+        storage_key: Key the failed request wrote.
+        storage: Storage backend, defaulting to the configured singleton.
+
+    Returns:
+        True if the blob was deleted.
+    """
+    return await _delete_blob_if_unreferenced(session, owner_id, storage_key, storage)
 
 
 async def delete_course_document(
