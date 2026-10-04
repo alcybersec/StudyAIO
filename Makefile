@@ -1,4 +1,4 @@
-.PHONY: bootstrap up down logs test test-unit test-integration test-golden test-e2e migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup restore preflight ensure-admin
+.PHONY: bootstrap up down logs test test-unit test-floor test-integration test-golden test-e2e migrate shell db status build clean ingest import-v0 seed seed-demo lint-python lint-python-fix coverage up-prod down-prod build-prod up-selfhosted down-selfhosted backup restore preflight ensure-admin
 
 # === Docker ===
 up:
@@ -87,11 +87,28 @@ bootstrap: $(VENV_STAMP)
 $(VENV_STAMP): services/app/requirements.txt services/app/requirements.lock.txt scripts/bootstrap.sh
 	bash scripts/bootstrap.sh
 
+# `make test` = the unit/golden/contracts run above, then (default full run only) the
+# floor tier via `make test-floor`. The floor tier is a SEPARATE pytest process with
+# its own coverage settings: it is mostly static (AST) checks, so `--cov=app` would be
+# meaningless for it, while folding it into the unit run would let its numbers leak
+# into the unit gate. A targeted TEST_PATHS run skips it, like the unit gate.
 test: bootstrap
 	cd services/app && $(PYTHON) -m pytest $(TEST_PATHS) -x -v $(COV_ARGS)
+ifeq ($(origin TEST_PATHS),file)
+	$(MAKE) test-floor
+endif
 
 test-unit: bootstrap
 	cd services/app && $(PYTHON) -m pytest tests/unit -x -v
+
+# Floor tier (tests/safety, the four floors in docs/strategy.md). It measures its OWN
+# guard code (--cov=tests/safety), not `app`, and the 95 comes from pyproject's
+# [tool.studyaio.coverage-tiers].floor via scripts/coverage-tier.py. The explicit
+# --cov-fail-under overrides pyproject's [tool.coverage.report] fail_under = 75.
+# Do not use dotted --cov=app.x sources: they import `app` before the root conftest
+# pins DATA_DIR.
+test-floor: bootstrap
+	cd services/app && $(PYTHON) -m pytest tests/safety -v --cov=tests/safety --cov-report=term-missing --cov-fail-under=$$($(PYTHON) ../../scripts/coverage-tier.py floor)
 
 # Integration tests need a real Postgres + Redis, addressed by DATABASE_URL /
 # DATABASE_URL_SYNC / REDIS_URL. Those must be exported before pytest starts —

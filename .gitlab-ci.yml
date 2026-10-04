@@ -104,6 +104,25 @@ backend-tests:
         coverage_format: cobertura
         path: services/app/coverage.xml
 
+# Floor tier (M31-S1-SAFETY-003): tenant isolation, secrets, AI-via-adapter and
+# data-never-lost. Mostly static AST checks, so it measures its own guard code
+# (--cov=tests/safety), never `app`. The gate is the `floor` tier in pyproject's
+# [tool.studyaio.coverage-tiers], read by scripts/coverage-tier.py; the explicit
+# --cov-fail-under overrides pyproject's fail_under = 75. A red here blocks build-api.
+test-floor:
+  stage: test
+  image: python:3.12-slim
+  needs: [python-lint]
+  cache: *pip-cache
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends build-essential libpq-dev
+    - cd services/app
+    - pip install -r requirements.txt
+  script:
+    - python -m pytest tests/safety -v --cov=tests/safety --cov-report=term-missing
+      --cov-fail-under=$(python ../../scripts/coverage-tier.py floor)
+
 integration-tests:
   stage: test
   image: python:3.12-slim
@@ -131,7 +150,9 @@ integration-tests:
     - cd services/app
     - pip install -r requirements.txt
   script:
-    - python -m pytest tests/integration -x -v
+    # Gate = the `integration` tier in pyproject's [tool.studyaio.coverage-tiers].
+    - python -m pytest tests/integration -x -v --cov=app --cov-report=term-missing
+      --cov-fail-under=$(python ../../scripts/coverage-tier.py integration)
 
 frontend-checks:
   stage: test
@@ -287,7 +308,7 @@ e2e-tests:
 
 build-api:
   extends: .ghcr-build
-  needs: [backend-tests, integration-tests]
+  needs: [backend-tests, test-floor, integration-tests]
   variables:
     IMAGE_NAME: studyaio-api
     BUILD_CONTEXT: services/app
