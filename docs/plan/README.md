@@ -28,6 +28,7 @@ confirmed by the user.
 |---|---|---|---|
 | M31-S2-AI-014 (redact at `AgentError` construction / R-012; `_get_known_courses` scope; quick-capture `txt`) | `ai` | 2026-10-04 | isolated |
 | M31-S2-BACKEND-019 (R-007 fix-the-code: summary version snapshots, archive-not-delete assets + read filters, leaderboard opt-in API) | `backend` | 2026-10-04 | isolated |
+| M31-S2-SAFETY-021 (pins for ADR 0004 + 0005 + leaderboard/retention rulings; `keep_source` version pin) | `safety` | 2026-10-04 | isolated |
 
 ## Completed
 
