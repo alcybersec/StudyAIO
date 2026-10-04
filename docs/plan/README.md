@@ -14,7 +14,7 @@ confirmed by the user.
 
 ## Next task
 
-**M31 gate: `safety` VETO** — floor tier is now green (`718faa0`: 33 passed, 4 xfailed); the VETO now rests only on the user's 4 strict-xfail rulings + R-004 (embeddings), and `safety` confirming BACKEND-010 at the gate.
+**M31 gate run 2026-10-04: BLOCK** (`docs/gates/M31/summary.md`). Floors VETO (`floors.md`): R-015 floor-1 fixes, floor-1 sweep gap, F2 leak via global `StudyAIOError` handler (concepts site) + R-012, 4 R-007 rulings, R-004. Functional: DEVOPS-005 pipeline red-proof needs an authorised throwaway push. `kit/retrofit` @ `2da6f17` is pushed; pipeline #523 green.
 
 **Proposed next wave (awaiting user go-ahead):** `backend` fixes the R-015 floor-1 leaks + R-016 functional bugs; `ai` fixes classify known-courses leak + quick-capture `txt`; `safety` closes its floor-1 sweep gap for join-scoped tables and re-reviews.
 
@@ -57,4 +57,6 @@ Keep the current milestone's tasks here; roll earlier milestones into `docs/plan
 
 ## Open gates
 
-_none. A gate's verdict is written to `docs/gates/<id>/summary.md`._
+| Gate | Verdict | Summary | Date |
+|---|---|---|---|
+| M31 | **BLOCK** — `safety` VETO + DEVOPS-005 pipeline red-proof missing | [`docs/gates/M31/summary.md`](../gates/M31/summary.md) · floors: [`floors.md`](../gates/M31/floors.md) | 2026-10-04 |
