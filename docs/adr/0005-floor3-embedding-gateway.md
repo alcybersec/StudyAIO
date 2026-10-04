@@ -1,11 +1,11 @@
 # ADR 0005 — Floor 3 covers embeddings through a second gateway, `get_embedding_provider`
 
-**Status** Proposed · **Date** 2026-10-04 · **Kit version** 1.10.3 · **Amends** ADR 0003
+**Status** Accepted (2026-10-04, by the user) · **Date** 2026-10-04 · **Kit version** 1.10.3 · **Amends** ADR 0003
 
 **Ruling implemented:** `docs/decisions.md` § Rulings, 2026-10-04, "R-004 embeddings: **in scope of
 floor 3** — `EmbeddingProvider` is a second sanctioned gateway with its own enumerated allowlist"
-(by: user). That ruling settles the substance. This ADR adds the wording and the allowlist, and it
-stays Proposed until the user accepts that text.
+(by: user). That ruling settles the substance. This ADR adds the wording and the allowlist. The user
+accepted that text as written on 2026-10-04.
 
 ## Context
 

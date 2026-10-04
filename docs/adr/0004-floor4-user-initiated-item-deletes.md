@@ -1,11 +1,13 @@
 # ADR 0004 — Floor 4 admits explicit user-initiated deletes of the user's own items
 
-**Status** Proposed · **Date** 2026-10-04 · **Kit version** 1.10.3
+**Status** Accepted (2026-10-04, by the user, with one amendment; see § Amendment 2026-10-04) ·
+**Date** 2026-10-04 · **Kit version** 1.10.3
 
 **Ruling implemented:** `docs/decisions.md` § Rulings, 2026-10-04, "R-007 single-item deletes:
 **amend floor 4**" (by: user). The ruling settles the substance. This ADR adds the exact wording
-and the allowlist, and stays Proposed until the user accepts that text. The status changes to
-Accepted only on the user's word.
+and the allowlist. The user accepted the text on 2026-10-04 with one amendment: merge
+`on_conflict=keep_source` keeps the overwritten target summary as a version (Rulings,
+2026-10-04, "Merge `keep_source`: **keep as a version**").
 
 ## Context
 
@@ -75,7 +77,7 @@ same keys as the floor-4 inventories. Every pair was re-derived on 2026-10-04 at
 | 2 | Course document or assessment attachment | `DELETE /api/courseops/documents/{document_id}`, `app/api/courseops.py:delete_document` | `app/services/courseops_service.py:delete_course_document` (DB), then `app/services/courseops_service.py:_delete_blob_if_unreferenced` (`store.delete`, blob) | The `course_documents` row. The blob goes only when no other row of the same user references the key, and only under that user's own `courseops/<user_id>/` prefix. |
 | 3 | Deadline | `DELETE /api/courseops/deadlines/{deadline_id}`, `app/api/courseops.py:delete_deadline` | `app/services/courseops_service.py:delete_deadline` (DB) | One `deadlines` row, whether AI-extracted or manual. |
 | 4 | Chat session | `DELETE /api/chat/sessions/{session_id}`, `app/api/chat.py:delete_session` | `app/services/chat_service.py:delete_session` (DB) | One `chat_sessions` row and its `chat_messages`, by ORM `delete-orphan` cascade and FK `ON DELETE CASCADE`. |
-| 5 | Merge-discard | `POST /api/courses/{course_code}/merge`, `app/api/courses.py:merge_course` → `app/services/course_service.py:merge_courses` | `app/services/course_service.py:_discard_summary` (DB `session.delete` and blob `storage.delete`) | For each week summarized in both courses, the source course's summary row and its markdown blob. This applies under every `on_conflict` policy (`keep_target`, `keep_source`, `regenerate`), because each one ends in `_discard_summary`. |
+| 5 | Merge-discard | `POST /api/courses/{course_code}/merge`, `app/api/courses.py:merge_course` → `app/services/course_service.py:merge_courses` | `app/services/course_service.py:_discard_summary` (DB `session.delete` and blob `storage.delete`) | For each week summarized in both courses, the source course's summary row and its markdown blob. The call site is reached under every `on_conflict` policy (`keep_target`, `keep_source`, `regenerate`), because each one ends in `_discard_summary`. The exemption covers **only the source-side summary**. The target summary that `keep_source` overwrites is not merge-discard; it is under the version-retention rule (§ 4 and § Amendment 2026-10-04). |
 
 In the shape the floor-4 test uses:
 
@@ -129,6 +131,9 @@ pending-ruling to sanctioned under this ADR.
 
 - **Re-summarize.** `summary_service` must retain version N-1, both the row and the blob, when it
   writes version N. This includes the target-side re-summarize that a `regenerate` merge enqueues.
+- **Merge `keep_source` overwrite of the target.** `merge_courses` must snapshot the target
+  summary into `summary_versions` before it overwrites `content_md` and bumps `version`. This is
+  the same version-retention rule as re-summarize, not merge-discard (§ Amendment 2026-10-04).
 - **Asset regeneration.** `asset_service.save_flashcards` and `save_quiz_questions` must not delete
   a flashcard that has reviews or a quiz question that has attempts.
 - **Dedup.** It still writes and deletes nothing.
@@ -142,11 +147,9 @@ the `data` and `ai` follow-up tasks land.
   ruling of 2026-10-04. Before this ADR, five shipped routes breached floor 4. After it, they are
   inside the floor, and the set can grow only by amending this ADR.
 - **Merge `keep_source` also overwrites the target's summary in place**
-  (`existing.content_md = summary.content_md; version + 1`). The user chose that side, so this ADR
-  treats the overwritten target content as the discarded side of the merge, and it is covered by
-  item 5. If the user would rather have the target's prior version retained, the re-summarize fix
-  can cover this path too, since the version-retention mechanism will be the same. Raised here so
-  nobody finds it later as a surprise.
+  (`existing.content_md = summary.content_md; version + 1`). The proposed text treated the
+  overwritten target as the discarded side of the merge, under item 5. The user rejected that on
+  acceptance: the prior target version is retained (§ Amendment 2026-10-04).
 - **Course delete keeps blobs, on purpose.** The route says "Uploaded files remain in storage". The
   orphaned blobs are not data loss, and they are swept by account deletion. This ADR sanctions the
   row deletes only. A future change that also deletes blobs on course delete needs this ADR amended.
@@ -169,6 +172,30 @@ the `data` and `ai` follow-up tasks land.
 - **Reversal** means restoring the old floor text and reclassifying the sites as violations. The
   routes would then need soft-delete or tombstones: a `deleted_at` column on each of the five
   tables, plus a filter on every read. That is the cost this ADR avoids.
+
+## Amendment 2026-10-04 (on acceptance)
+
+The user accepted this ADR on 2026-10-04 with one change, recorded here rather than in a new ADR
+because it was part of the acceptance itself. Ruling: `docs/decisions.md` § Rulings, 2026-10-04,
+"Merge `keep_source`: **keep as a version**" (by: user).
+
+- **Merge `on_conflict=keep_source` is not merge-discard.** Before it overwrites the target
+  summary's `content_md` and bumps `version`, `merge_courses` must snapshot the target's prior
+  content into `summary_versions`, which is the same mechanism the re-summarize fix uses. The
+  overwritten target content is covered by floor 4's "re-summarize never destroys prior
+  versions" clause, not by the item-5 exemption. Until that snapshot lands
+  (`M31-S2-BACKEND-019`), the in-place overwrite is a floor-4 violation, not a sanctioned site.
+- **Item 5 is narrowed** to the source-side summary that `_discard_summary` removes. Under
+  `keep_source` the source content survives as the target's new version, and under `keep_target`
+  and `regenerate` the user chose to drop it. This is the only content the exemption covers.
+- **The allowlist is unchanged.** `_discard_summary` still deletes exactly the source summary row
+  and blob, and its only caller is still `merge_courses`. The snapshot adds a write, not a
+  delete, so no `(module, function)` key moves. If the backend implementation routes the
+  overwrite through a helper that deletes anything, or gives `_discard_summary` a second caller
+  or a target-side use, this ADR must be amended before that lands.
+- **What `safety` changes:** the floor-4 test should pin that the `keep_source` branch writes a
+  `summary_versions` row before it overwrites the target. That is the same retention check as
+  re-summarize, and it stays red until `M31-S2-BACKEND-019` lands.
 
 ## Alternatives considered
 
