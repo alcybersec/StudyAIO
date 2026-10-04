@@ -12,7 +12,7 @@ from app.agents.factory import get_agent
 from app.core.utils import generate_id
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
-from app.services import search_service
+from app.services import search_service, settings_service
 
 logger = structlog.get_logger()
 
@@ -205,7 +205,10 @@ async def send_message(
                 user_id=user_id,
             )
     except Exception as e:
-        logger.warning("chat_rag_search_failed", error=str(e))
+        logger.warning(
+            "chat_rag_search_failed",
+            error=await settings_service.redacted_error(session, user_id, e),
+        )
         # Continue without RAG context — still useful for general conversation
 
     # 4. Call agent with per-user settings
@@ -219,7 +222,9 @@ async def send_message(
         answer_text = answer_result.answer
         answer_citations = answer_result.citations
     except Exception as e:
-        logger.error("chat_agent_error", error=str(e))
+        logger.error(
+            "chat_agent_error", error=await settings_service.redacted_error(session, user_id, e)
+        )
         answer_text = (
             "I'm sorry, I encountered an error while processing your question. Please try again."
         )
@@ -334,7 +339,10 @@ async def stream_message(
                 user_id=user_id,
             )
     except Exception as e:
-        logger.warning("chat_stream_rag_failed", error=str(e))
+        logger.warning(
+            "chat_stream_rag_failed",
+            error=await settings_service.redacted_error(session, user_id, e),
+        )
 
     # Yield user message ID
     yield {
@@ -354,7 +362,9 @@ async def stream_message(
             full_text += token
             yield {"event": "token", "data": token}
     except Exception as e:
-        logger.error("chat_stream_error", error=str(e))
+        logger.error(
+            "chat_stream_error", error=await settings_service.redacted_error(session, user_id, e)
+        )
         error_msg = (
             "I'm sorry, I encountered an error while processing your question. Please try again."
         )
