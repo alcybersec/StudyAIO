@@ -91,3 +91,57 @@ def filters_on_user(statement: Any, user_id: str) -> bool:
             if isinstance(value, list | tuple | set | frozenset) and user_id in value:
                 return True
     return False
+
+
+def bind_values(statement: Any) -> list[Any]:
+    """Every bound value in a statement, ``IN`` lists flattened."""
+    values: list[Any] = []
+    for element in visitors.iterate(statement):
+        if isinstance(element, BindParameter):
+            value = element.effective_value
+            if isinstance(value, list | tuple | set | frozenset):
+                values.extend(value)
+            else:
+                values.append(value)
+    return values
+
+
+def primary_key_values(statement: Any) -> set[Any]:
+    """Values a statement pins a primary-key column to (``= :p`` or ``IN (...)``).
+
+    Only a primary key identifies one row. A caller-scoped lookup by
+    ``courses.code`` proves the caller has *a* course with that code, not that
+    every row carrying the code is theirs, so codes are never vetted.
+    """
+    found: set[Any] = set()
+    for element in visitors.iterate(statement):
+        if not isinstance(element, BinaryExpression):
+            continue
+        for column, other in ((element.left, element.right), (element.right, element.left)):
+            if not getattr(column, "primary_key", False) or not isinstance(other, BindParameter):
+                continue
+            value = other.effective_value
+            if isinstance(value, list | tuple | set | frozenset):
+                found.update(value)
+            elif value is not None:
+                found.add(value)
+    return found
+
+
+def is_planted(value: Any) -> bool:
+    """True if ``value`` is one the sweep planted in a request (see ``_payload``).
+
+    A ``str`` slot with a ``max_length`` holds a truncated FOREIGN_ID, so any
+    prefix of four characters or more counts.
+    """
+    from tests.safety._payload import FOREIGN_ID, FOREIGN_INT, FOREIGN_UUID
+
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value == FOREIGN_INT
+    if value == FOREIGN_UUID:
+        return True
+    if isinstance(value, str):
+        return value == str(FOREIGN_UUID) or (len(value) >= 4 and FOREIGN_ID.startswith(value))
+    return False

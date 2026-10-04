@@ -6,18 +6,28 @@
 Three layers, each catching what the one before cannot:
 
 1. **Route sweep** (``test_floor1_route_sweep_*``). Every authenticated,
-   non-admin route is called with a caller-supplied foreign id and a mock
-   session that records each SQL statement. Every statement that touches a
+   non-admin route is called with a type-valid request built from its own
+   declared types (``tests/safety/_payload.py``): a foreign id in every path
+   parameter (an ``int`` for ``week: int``) and every body field. A mock
+   session records each SQL statement. Every statement that touches a
    user-owned table must compare some ``user_id`` column to *the caller's* id.
    This is the floor's own wording, checked on the SQL the handler actually
-   built, not on what its source mentions. It sees only the statements a
-   handler reaches against empty results: follow-up queries behind a found row
-   are covered by layer 2 and by ``tests/integration/test_idor_row_level.py``.
+   built, not on what its source mentions. A second pass lets the caller's own
+   scoped lookups succeed, so the handler gets past its ownership check; there
+   a statement keyed on request input alone (not on a primary key the caller
+   was shown to own) fails. ``…_reaches_every_handler`` fails if a route still
+   422s at validation, since the sweep is blind to a handler that never runs.
+   (Until M31-S2 the sweep sent ``json={}`` and string path ids, and missed
+   the four body-borne R-015 ids and the typed ``/weeks/{week}`` route.)
 2. **Unscoped primary-key fetch** (``test_floor1_no_unscoped_session_get``).
    ``session.get(Model, id)`` builds no WHERE clause at all, so no SQL check can
    scope it. Statically, no ``api``/``services`` function may fetch a
    user-owned model by a caller-supplied id this way except the classified
-   entries below.
+   entries below. **Unscoped query function**
+   (``test_floor1_no_unscoped_query_function_outside_classification``): no
+   ``services``/``pipeline`` function may query an owned model with no caller
+   parameter and no ``user_id`` predicate unless classified. This reaches code
+   no route sweep can, such as the worker's ``classify._get_known_courses``.
 3. **Behaviour** for each known violation, so the fix is pinned by a test that
    does not care how it was fixed.
 
@@ -30,23 +40,33 @@ for the lookup.
 from __future__ import annotations
 
 import ast
+import contextlib
 import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.routing import APIRoute
+from pydantic import BaseModel
 
+from tests.safety._payload import (
+    FOREIGN_ID,
+    FOREIGN_INT,
+    FOREIGN_UUID,
+    model_payload,
+    value_for,
+)
 from tests.safety._source import app_modules, dotted, parse, rel, walk_with_scope
 from tests.safety._tenant import (
     UNOWNED_TABLES,
     all_tables,
+    bind_values,
     filters_by_id_list,
     filters_on_user,
+    is_planted,
+    primary_key_values,
     tables_in,
     user_owned_tables,
 )
-
-FOREIGN_ID = "id-owned-by-someone-else"
 
 #: Paths left out of the sweep, each with its reason.
 SWEEP_EXCLUDED = {
@@ -141,12 +161,122 @@ def _required_query_params(route: APIRoute) -> dict[str, object]:
     params: dict[str, object] = {}
     for qp in route.dependant.query_params:
         if qp.required:
-            params[qp.alias] = 1 if qp.field_info.annotation is int else FOREIGN_ID
+            params[qp.alias] = value_for(qp.field_info.annotation, list(qp.field_info.metadata))
     return params
 
 
-async def _run_sweep(async_client, mock_session, caller_id: str):
-    """Call every swept route; return (violations, routes reaching owned tables, statuses)."""
+def _path_value(annotation: object) -> object:
+    """A type-valid foreign value: ``week: int`` gets an int, not a string that 422s."""
+    if annotation is int:
+        return FOREIGN_INT
+    if getattr(annotation, "__name__", "") == "UUID":
+        return FOREIGN_UUID
+    return FOREIGN_ID
+
+
+def _url(route: APIRoute) -> str:
+    types = {p.alias: p.field_info.annotation for p in route.dependant.path_params}
+    return re.sub(
+        r"\{(\w+)(:\w+)?\}", lambda m: str(_path_value(types.get(m.group(1), str))), route.path
+    )
+
+
+def _json_body(route: APIRoute, method: str) -> object:
+    """The route's JSON body built from its own schema, foreign ids in every slot.
+
+    File/form routes keep ``{}``: they 422 before the handler, and are listed in
+    ``SWEEP_UNREACHED_BY_DESIGN``.
+    """
+    from fastapi.params import Body
+
+    params = [b for b in route.dependant.body_params if type(b.field_info) is Body]
+    if not params:
+        return {} if method in {"POST", "PUT", "PATCH"} else None
+
+    def build(field) -> object:
+        annotation = field.field_info.annotation
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            return model_payload(annotation)
+        return value_for(annotation, list(field.field_info.metadata))
+
+    if len(params) == 1 and not getattr(params[0].field_info, "embed", False):
+        return build(params[0])
+    return {p.alias: build(p) for p in params}
+
+
+#: Stand-in id for a row the *caller* owns, returned in the owned-parent pass.
+OWNED_ROW_ID = "row-owned-by-the-caller"
+
+
+def _owned_row(caller_id: str) -> MagicMock:
+    """A row the caller owns: its own ids are OWNED_ROW_ID, its owner the caller."""
+    row = MagicMock()
+    for attr in (
+        "id",
+        "course_id",
+        "artifact_id",
+        "exam_id",
+        "session_id",
+        "assessment_id",
+    ):
+        setattr(row, attr, OWNED_ROW_ID)
+    row.user_id = caller_id
+    return row
+
+
+def _owned_result(row: MagicMock) -> MagicMock:
+    result = _empty_result()
+    result.scalar_one_or_none.return_value = row
+    result.scalars.return_value.first.return_value = row
+    result.first.return_value = row
+    result.one_or_none.return_value = row
+    return result
+
+
+@contextlib.contextmanager
+def _no_live_ai():
+    """Every ``get_agent`` / ``get_embedding_provider`` binding refuses at once.
+
+    With a body that validates, ``POST /api/settings/test-ai`` and friends reach
+    the factory, and on a host with the ``claude`` CLI the default backend
+    would make a real provider call from the floor tier.
+    """
+    import sys
+
+    from app.agents import embeddings, factory
+    from app.core.exceptions import AgentError
+
+    def refuse(*_a, **_k):
+        raise AgentError("floor-1 sweep: no live AI provider")
+
+    originals = {factory.get_agent, embeddings.get_embedding_provider}
+    with contextlib.ExitStack() as stack:
+        for name, module in list(sys.modules.items()):
+            if not (name == "app" or name.startswith("app.")) or module is None:
+                continue
+            for attr in ("get_agent", "get_embedding_provider"):
+                if getattr(module, attr, None) in originals:
+                    stack.enter_context(patch.object(module, attr, refuse))
+        yield
+
+
+async def _run_sweep(async_client, mock_session, caller_id: str, *, owned_parent: bool = False):
+    """Call every swept route; return (violations, routes reaching owned tables, statuses).
+
+    Two passes, two questions:
+
+    * ``owned_parent=False`` — the database is empty. Every statement on a
+      user-owned table must compare ``user_id`` to the caller.
+    * ``owned_parent=True`` — every lookup that *is* scoped to the caller finds
+      a row the caller owns (``OWNED_ROW_ID``); everything else is empty. That
+      gets a handler past its ownership check (``get_course_by_code(...,
+      user_id=)``), to the queries behind it. Those are judged by taint, not by
+      table: a statement on an owned table that binds a value the *request*
+      supplied (``is_planted``), without binding the caller-owned row's id and
+      without filtering on the caller, is keyed on caller input alone. FK
+      traversal from the caller's own row (``WHERE course_id = OWNED_ROW_ID``)
+      is not flagged.
+    """
     from app.api.deps import get_current_user
     from app.config import settings
     from app.core.rate_limit import limiter
@@ -155,9 +285,12 @@ async def _run_sweep(async_client, mock_session, caller_id: str):
     owned = user_owned_tables()
     captured: list = []
     fetched: list = []
+    row = _owned_row(caller_id)
 
     def record(statement, *_a, **_k):
         captured.append(statement)
+        if owned_parent and filters_on_user(statement, caller_id):
+            return _owned_result(row)
         return _empty_result()
 
     async def record_get(model, ident, *_a, **_k):
@@ -176,6 +309,7 @@ async def _run_sweep(async_client, mock_session, caller_id: str):
     statuses: dict[str, object] = {}
     reached = 0
     with (
+        _no_live_ai(),
         # Unreachable Redis that refuses at once instead of timing out.
         patch.object(settings, "redis_url", "redis://127.0.0.1:1/0"),
         # ~150 requests from one client address would trip the per-route limits.
@@ -184,38 +318,47 @@ async def _run_sweep(async_client, mock_session, caller_id: str):
         patch("celery.app.task.Task.delay", MagicMock()),
     ):
         for method, path, route in _sweep_routes():
-            url = re.sub(r"\{\w+(:\w+)?\}", FOREIGN_ID, path)
             captured.clear()
             fetched.clear()
             try:
                 response = await async_client.request(
                     method,
-                    url,
+                    _url(route),
                     params=_required_query_params(route),
-                    json={} if method in {"POST", "PUT", "PATCH"} else None,
+                    json=_json_body(route, method),
                     timeout=5,
                 )
-                statuses[f"{method} {path}"] = response.status_code
+                statuses[f"{method} {path}"] = _status(response)
             except Exception as exc:  # a handler crash on a mock row is not the subject
                 statuses[f"{method} {path}"] = type(exc).__name__
             bad = []
             touched_owned = False
             two_step = f"{method} {path}" in TWO_STEP_SCOPED
             anchored = any(filters_on_user(s, caller_id) for s in captured)
+            vetted: set = set()  # request values a caller-scoped PK lookup has proven
             for statement in captured:
                 hit = tables_in(statement) & owned
                 if not hit:
                     continue
                 touched_owned = True
-                if two_step and anchored and filters_by_id_list(statement):
+                if filters_on_user(statement, caller_id):
+                    vetted |= primary_key_values(statement)
                     continue
-                if not filters_on_user(statement, caller_id):
-                    flat = " ".join(str(statement).split())
-                    bad.append(f"{sorted(hit)}: {flat[:220]}")
+                if owned_parent:
+                    values = bind_values(statement)
+                    unvetted = [v for v in values if is_planted(v) and v not in vetted]
+                    if not unvetted or OWNED_ROW_ID in values:
+                        continue
+                elif two_step and anchored and filters_by_id_list(statement):
+                    continue
+                flat = " ".join(str(statement).split())
+                bad.append(f"{sorted(hit)}: {flat[:220]}")
             for model, ident in fetched:
                 table = getattr(model, "__tablename__", "")
                 if table in owned:
                     touched_owned = True
+                    if owned_parent and (ident == OWNED_ROW_ID or ident in vetted):
+                        continue  # FK traversal from a row the caller was shown to own
                     bad.append(f"session.get({model.__name__}, {ident!r}) — no WHERE at all")
             reached += touched_owned
             if bad:
@@ -223,19 +366,42 @@ async def _run_sweep(async_client, mock_session, caller_id: str):
     return violations, reached, statuses
 
 
+def _status(response) -> object:
+    """The status, or ``"rejected"`` for FastAPI's own request-validation 422.
+
+    A 422 a handler raises itself (``detail`` is a string) means the handler ran;
+    FastAPI's (``detail`` is a list of field errors) means it never did.
+    """
+    if response.status_code == 422:
+        try:
+            if isinstance(response.json().get("detail"), list):
+                return "rejected"
+        except ValueError:
+            pass
+    return response.status_code
+
+
+def _format(violations: dict[str, list[str]]) -> str:
+    return "\n".join(f"  {route}\n    " + "\n    ".join(v) for route, v in violations.items())
+
+
 @pytest.mark.asyncio
 async def test_floor1_route_sweep_every_owned_query_filters_on_caller(
     async_client, mock_session, default_test_user
 ):
-    """Every user-owned query a handler issues compares user_id to the caller."""
+    """Every user-owned query a handler issues compares user_id to the caller.
+
+    Each route gets a type-valid request with a foreign id in every path
+    parameter and every body field, so handlers whose id arrives in the body
+    (``/study/review``) or behind a typed path parameter run instead of 422ing.
+    """
     violations, reached, statuses = await _run_sweep(
         async_client, mock_session, default_test_user.id
     )
     unruled = {k: v for k, v in violations.items() if k not in SWEEP_PENDING_RULING}
     assert not unruled, (
         "Floor 1: route(s) issued a query on a user-owned table without "
-        "filtering on the caller's user_id:\n"
-        + "\n".join(f"  {route}\n    " + "\n    ".join(v) for route, v in unruled.items())
+        "filtering on the caller's user_id:\n" + _format(unruled)
     )
     stale = sorted(set(SWEEP_PENDING_RULING) - set(violations))
     assert not stale, f"SWEEP_PENDING_RULING entries no longer cross users — remove them: {stale}"
@@ -245,6 +411,67 @@ async def test_floor1_route_sweep_every_owned_query_filters_on_caller(
         "exercising handlers; the scoping assertion above is vacuous until fixed.\n"
         + "\n".join(f"  {k}: {v}" for k, v in sorted(statuses.items()))
     )
+
+
+@pytest.mark.asyncio
+async def test_floor1_route_sweep_owned_parent_never_unlocks_foreign_rows(
+    async_client, mock_session, default_test_user
+):
+    """Past a scoped parent lookup, no query is keyed on request input alone.
+
+    ``GET /courses/{code}/weeks/{n}`` scopes the course to the caller, then
+    looked the summary up by ``code`` + ``week`` only. On an empty database the
+    handler 404s at the course, so only a pass where the caller's own lookups
+    succeed reaches it.
+    """
+    violations, _reached, statuses = await _run_sweep(
+        async_client, mock_session, default_test_user.id, owned_parent=True
+    )
+    unruled = {k: v for k, v in violations.items() if k not in SWEEP_PENDING_RULING}
+    assert not unruled, (
+        "Floor 1: behind a caller-scoped lookup, route(s) queried a user-owned table "
+        "keyed on request input with no user_id filter and no caller-owned parent id:\n"
+        + _format(unruled)
+    )
+
+
+#: Routes the typed sweep still cannot get past validation, each with why.
+#: Any other route that 422s is invisible to both passes, which is the gap the
+#: M31 gate found; ``test_floor1_route_sweep_reaches_every_handler`` pins it.
+SWEEP_UNREACHED_BY_DESIGN = {
+    "POST /api/uploads": "multipart file upload; covered by tests/unit/api upload scoping tests",
+    "POST /api/uploads/batch": "multipart file upload",
+    "POST /api/courseops/documents": "multipart file upload",
+    "POST /api/courseops/assessments/{assessment_id}/documents": (
+        "multipart file upload; V1 pinned by "
+        "test_floor1_cannot_attach_document_to_another_users_assessment"
+    ),
+}
+
+
+@pytest.mark.asyncio
+async def test_floor1_route_sweep_reaches_every_handler(
+    async_client, mock_session, default_test_user
+):
+    """No swept route is rejected at validation (422) except the listed file routes.
+
+    A 422 means the handler never ran, so the sweep saw no SQL and reported the
+    route clean. That is how the first sweep missed four body-borne R-015 ids.
+    """
+    _violations, _reached, statuses = await _run_sweep(
+        async_client, mock_session, default_test_user.id
+    )
+    unreached = sorted(
+        k for k, v in statuses.items() if v == "rejected" and k not in SWEEP_UNREACHED_BY_DESIGN
+    )
+    assert not unreached, (
+        "Floor-1 sweep is blind to these routes: their typed request still fails "
+        "validation, so the handler never runs. Teach tests/safety/_payload.py the "
+        "missing type, or list the route in SWEEP_UNREACHED_BY_DESIGN with a reason:\n"
+        + "\n".join(f"  {k}" for k in unreached)
+    )
+    stale = sorted(k for k in SWEEP_UNREACHED_BY_DESIGN if statuses.get(k) != "rejected")
+    assert not stale, f"SWEEP_UNREACHED_BY_DESIGN routes now reach the handler: {stale}"
 
 
 @pytest.mark.xfail(
@@ -391,6 +618,193 @@ def test_floor1_pipeline_only_fetch_is_pipeline_only():
     assert callers, "detector found no caller at all — it has gone blind"
     outside = sorted(c for c in callers if not c[0].startswith("app/pipeline/"))
     assert not outside, f"process_course_document called outside the worker: {outside}"
+
+
+# ── layer 2b: functions that query owned rows with no caller to scope by ──
+#
+# The route sweep reaches only what an HTTP handler reaches, and only against
+# empty or caller-owned results. A service or pipeline function that builds a
+# query on a user-owned model, takes no caller identity at all, and puts no
+# ``user_id`` predicate in the query can only be safe if every caller hands it
+# something already proven to be the caller's (or it is deliberately
+# cross-user). R-015 had four of these: ``classify._get_known_courses`` sent
+# every user's course codes to the AI, ``achievement_service.mark_notified``
+# flipped anyone's achievements, ``timed_session_service.generate_timed_plan``
+# and ``summary_service.get_summary_for_week`` matched on a course *code*,
+# which is unique per user, not globally.
+#
+# So each such function must be classified below with the reason it is safe.
+# A fix that threads the caller through (a ``user_id`` parameter the body uses,
+# or a ``Model.user_id`` predicate) takes the function off the list by itself.
+
+#: Statement builders whose first arguments name the model being queried.
+QUERY_BUILDERS = frozenset({"select", "update", "delete", "insert", "sa_delete", "sa_update"})
+
+#: Parameter names that carry the caller's identity into a function.
+CALLER_PARAMS = frozenset({"user_id", "user", "owner_id", "current_user"})
+
+FUNCTION_SCOPE_SCANNED = ("app/services/", "app/pipeline/")
+
+#: (module, function) -> why a query with no caller in it is safe.
+UNSCOPED_FUNCTION_ALLOWED = {
+    ("app/pipeline/calendar_task.py", "_sync_all"): (
+        "beat task: syncs every user's calendar by design; each sync then runs as its owner"
+    ),
+    ("app/services/asset_service.py", "save_flashcards"): (
+        "pipeline write path (pipeline/assets.py) with ids the worker resolved from its artifact"
+    ),
+    ("app/services/asset_service.py", "save_quiz_questions"): ("same as save_flashcards"),
+    ("app/services/billing_service.py", "_handle_subscription_update"): (
+        "Stripe webhook, signature-verified; the subscription row is found by Stripe's id"
+    ),
+    ("app/services/billing_service.py", "_handle_subscription_deleted"): (
+        "Stripe webhook, signature-verified"
+    ),
+    ("app/services/course_service.py", "get_course_weeks"): (
+        "FK traversal: api/courses.py passes course.id of a course resolved with user_id"
+    ),
+    ("app/services/feedback_service.py", "list_feedback"): (
+        "admin triage, behind require_role('admin'); cross-user by design"
+    ),
+    ("app/services/feedback_service.py", "count_by_status"): ("admin triage, as list_feedback"),
+    ("app/services/gcal_service.py", "handle_gcal_webhook"): (
+        "Google push webhook: the sync row is found by the channel/resource ids Google holds"
+    ),
+    ("app/services/index_service.py", "index_artifact_chunks"): (
+        "pipeline index stage, with the worker's own artifact id"
+    ),
+    ("app/services/pipeline_service.py", "get_artifact_pipeline_runs"): (
+        "FK traversal: api/uploads.py resolves the artifact with user_id first (comment at "
+        "the call site); the owned-parent sweep pins the route"
+    ),
+    ("app/services/readiness_service.py", "collect_week_stats"): (
+        "FK traversal: called with exam.course_id of an exam already resolved for the caller"
+    ),
+    ("app/services/review_service.py", "create_review_item"): (
+        "pipeline write path (classify stage) with the worker's own artifact id"
+    ),
+    ("app/services/summary_service.py", "get_week_extractions"): (
+        "pipeline summarize stage, with the course id of the worker's own artifact"
+    ),
+    ("app/services/summary_service.py", "get_existing_summary"): (
+        "pipeline summarize stage / save_summary, keyed on the artifact's course id"
+    ),
+    ("app/services/summary_service.py", "list_course_summaries"): (
+        "FK traversal on a course id the caller has already resolved"
+    ),
+    ("app/services/summary_service.py", "backfill_summary_storage_keys"): (
+        "operator backfill script over every row; not reachable from a request"
+    ),
+    ("app/services/telegram_service.py", "verify_link"): (
+        "bot webhook: the link row is found by the one-time token the user was issued"
+    ),
+    ("app/services/user_service.py", "reset_password_with_token"): (
+        "pre-auth: the magic link is found by its hashed one-time token"
+    ),
+    ("app/services/user_service.py", "verify_email_token"): (
+        "pre-auth: the magic link is found by its hashed one-time token"
+    ),
+    ("app/services/user_service.py", "create_or_link_oauth"): (
+        "OAuth callback: the account is found by (provider, provider_user_id) the provider vouched for"
+    ),
+}
+
+
+def _model_aliases(tree: ast.Module, owned_models: set[str]) -> dict[str, str]:
+    """Local name -> owned model class, through ``import ... as`` anywhere in the module."""
+    aliases = {name: name for name in owned_models}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("app.models"):
+            for alias in node.names:
+                if alias.name in owned_models:
+                    aliases[alias.asname or alias.name] = alias.name
+    return aliases
+
+
+def _base_name(node: ast.AST) -> str:
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else ""
+
+
+def unscoped_query_functions() -> dict[tuple[str, str], list[str]]:
+    """Functions that query an owned model with no caller param and no user_id predicate."""
+    owned_models = _owned_model_names()
+    found: dict[tuple[str, str], list[str]] = {}
+    for path in app_modules():
+        module = rel(path)
+        if not module.startswith(FUNCTION_SCOPE_SCANNED):
+            continue
+        tree = parse(path)
+        aliases = _model_aliases(tree, owned_models)
+        for node, scope in walk_with_scope(tree):
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            queried: set[str] = set()
+            predicate = False
+            used_names = set()
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Name):
+                    used_names.add(sub.id)
+                if (
+                    isinstance(sub, ast.Call)
+                    and isinstance(sub.func, ast.Name)
+                    and sub.func.id in QUERY_BUILDERS
+                ):
+                    queried |= {aliases[b] for a in sub.args if (b := _base_name(a)) in aliases}
+                if (
+                    isinstance(sub, ast.Attribute)
+                    and sub.attr == "user_id"
+                    and _base_name(sub) in aliases
+                ):
+                    predicate = True
+                if (
+                    isinstance(sub, ast.Call)
+                    and isinstance(sub.func, ast.Attribute)
+                    and sub.func.attr == "filter_by"
+                    and any(k.arg == "user_id" for k in sub.keywords)
+                ):
+                    predicate = True
+            if not queried or predicate:
+                continue
+            args = node.args
+            params = {a.arg for a in args.args + args.kwonlyargs + args.posonlyargs}
+            if params & CALLER_PARAMS & used_names:
+                continue  # takes the caller and uses it; the route tiers judge how
+            name = f"{scope}.{node.name}" if scope != "<module>" else node.name
+            found[(module, name)] = sorted(queried)
+    return found
+
+
+def test_floor1_no_unscoped_query_function_outside_classification():
+    """No service/pipeline function queries owned rows with no caller to scope by.
+
+    Unlike the route sweep, this reaches functions no handler calls with a
+    foreign id (``classify._get_known_courses`` runs in the worker and puts
+    its result in an AI prompt).
+    """
+    found = unscoped_query_functions()
+    new = {k: v for k, v in found.items() if k not in UNSCOPED_FUNCTION_ALLOWED}
+    stale = sorted(set(UNSCOPED_FUNCTION_ALLOWED) - set(found))
+    assert not new, (
+        "Floor 1: function(s) query a user-owned table with no user_id predicate and no "
+        "caller parameter, so nothing ties the rows to the caller:\n"
+        + "\n".join(f"  {m}::{f}  queries {models}" for (m, f), models in sorted(new.items()))
+        + "\nThread the caller's user_id into the query, or classify the function in "
+        "UNSCOPED_FUNCTION_ALLOWED (tests/safety/test_floor1_tenant_isolation.py) with "
+        "the reason every caller is safe."
+    )
+    assert not stale, (
+        "UNSCOPED_FUNCTION_ALLOWED entries no longer match an unscoped query function — "
+        f"remove them: {stale}"
+    )
+
+
+def test_floor1_unscoped_query_detector_is_not_vacuous():
+    """The detector still sees the pipeline's own unscoped worker reads."""
+    found = unscoped_query_functions()
+    assert ("app/services/summary_service.py", "get_week_extractions") in found
+    assert ("app/pipeline/calendar_task.py", "_sync_all") in found
 
 
 # ── layer 3: behaviour of each known violation ─────────────────────────
