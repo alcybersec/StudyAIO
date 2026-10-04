@@ -4,6 +4,9 @@ This module defines the EmbeddingProvider ABC and implementations using
 sentence-transformers (local), OpenAI API, and Ollama. The provider is
 separate from AgentAdapter because embeddings are deterministic and
 don't require generative AI.
+
+Embeddings are AI calls under floor 3; see
+docs/adr/0005-floor3-embedding-gateway.md for the gateway and its allowlist.
 """
 
 from abc import ABC, abstractmethod
