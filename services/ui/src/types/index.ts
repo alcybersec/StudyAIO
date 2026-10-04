@@ -198,6 +198,8 @@ export interface Settings {
   /** Whether `language` also applies to AI-generated study material. */
   content_language: boolean
   dashboard_layout: Record<string, unknown> | null
+  /** Appear on other users' leaderboard. Opt-in; false by default. */
+  leaderboard_opt_in: boolean
 }
 
 /** Credentials travel one way only — up. Empty means "leave unchanged". */

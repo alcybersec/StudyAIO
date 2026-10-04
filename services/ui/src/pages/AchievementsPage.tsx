@@ -1,4 +1,5 @@
-import { useAchievements, useLeaderboard, useXPSummary } from '../hooks/useApi'
+import { Link } from 'react-router-dom'
+import { useAchievements, useLeaderboard, useSettings, useXPSummary } from '../hooks/useApi'
 import { useTranslation } from 'react-i18next'
 import { useTabRouting } from '../hooks/useTabRouting'
 import {
@@ -151,8 +152,20 @@ function LeaderboardTab() {
   const { t } = useTranslation()
 
   const { data, isLoading, isError, refetch } = useLeaderboard()
+  const { data: settings } = useSettings()
+  // Claim "hidden" only once settings have actually loaded.
+  const hidden = settings != null && settings.leaderboard_opt_in !== true
 
   return (
+    <>
+    {hidden && (
+      <p role="note" className="mb-3 text-xs text-text-muted">
+        {t("You're hidden from the leaderboard.")}{' '}
+        <Link to="/settings/privacy" className="underline text-text hover:text-text-muted">
+          {t('Change in Settings')}
+        </Link>
+      </p>
+    )}
     <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
       {isLoading && !data ? (
         <LeaderboardSkeleton />
@@ -199,6 +212,7 @@ function LeaderboardTab() {
         </div>
       )}
     </div>
+    </>
   )
 }
 

@@ -3,16 +3,18 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AchievementsPage } from './AchievementsPage'
-import { useAchievements, useLeaderboard, useXPSummary } from '../hooks/useApi'
+import { useAchievements, useLeaderboard, useSettings, useXPSummary } from '../hooks/useApi'
 
 vi.mock('../hooks/useApi', () => ({
   useAchievements: vi.fn(),
   useLeaderboard: vi.fn(),
+  useSettings: vi.fn(),
   useXPSummary: vi.fn(),
 }))
 
 const mockAchievements = vi.mocked(useAchievements)
 const mockLeaderboard = vi.mocked(useLeaderboard)
+const mockSettings = vi.mocked(useSettings)
 const mockXP = vi.mocked(useXPSummary)
 
 const asResult = (q: object) => q as never
@@ -42,6 +44,7 @@ const xpData = {
 beforeEach(() => {
   vi.clearAllMocks()
   mockLeaderboard.mockReturnValue(asResult({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() }))
+  mockSettings.mockReturnValue(asResult({ data: { leaderboard_opt_in: true } }))
 })
 
 function renderPage(initialEntries: string[] = ['/achievements']) {
@@ -173,5 +176,24 @@ describe('AchievementsPage leaderboard tab', () => {
     const table = screen.getByRole('table')
     expect(within(table).getByText('alice')).toBeInTheDocument()
     expect(within(table).getByText('1,200')).toBeInTheDocument()
+  })
+
+  it('shows a hidden note linking to the privacy setting when not opted in', () => {
+    mockSettings.mockReturnValue(asResult({ data: { leaderboard_opt_in: false } }))
+    renderPage(['/achievements?tab=leaderboard'])
+
+    expect(screen.getByRole('note')).toHaveTextContent(/hidden from the leaderboard/i)
+    expect(screen.getByRole('link', { name: /change in settings/i })).toHaveAttribute('href', '/settings/privacy')
+  })
+
+  it('shows no note when opted in', () => {
+    renderPage(['/achievements?tab=leaderboard'])
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+
+  it('shows no note while settings are still loading', () => {
+    mockSettings.mockReturnValue(asResult({ data: undefined }))
+    renderPage(['/achievements?tab=leaderboard'])
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
   })
 })
