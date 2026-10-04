@@ -26,7 +26,6 @@ confirmed by the user.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M31-S2-SAFETY-012 (floor-1 sweep gap; F2 pins: concepts site, worker, global handler) | `safety` | 2026-10-04 | isolated |
 | M31-S2-AI-014 (redact at `AgentError` construction / R-012; `_get_known_courses` scope; quick-capture `txt`) | `ai` | 2026-10-04 | isolated |
 | M31-S2-BACKEND-019 (R-007 fix-the-code: summary version snapshots, archive-not-delete assets + read filters, leaderboard opt-in API) | `backend` | 2026-10-04 | isolated |
 
@@ -57,6 +56,8 @@ Keep the current milestone's tasks here; roll earlier milestones into `docs/plan
 | M31-S2-FRONTEND-018 (leaderboard opt-in toggle + hidden note) | `frontend` | worktree `6d65dff` → `kit/retrofit` `7e620df` | Orchestrator re-run: `vitest run src/components/settings src/pages/AchievementsPage.test.tsx` → `Tests 28 passed (28)`; agent full suite `614 passed (614)`, lint 0 errors, `tsc -b` clean. Diff = 9 `services/ui/src` files. **Depends on** `backend` exposing `leaderboard_opt_in` on GET/PUT `/settings` (always present) and filtering the leaderboard | 2026-10-04 |
 | M31-S2-ARCH-015 (ADR 0004 floor-4 item deletes; ADR 0005 embeddings under floor 3) | `architect` | worktree `cf083e6`/`06ec545`/`be5c34a` → `kit/retrofit` `0cd620c`/`23ecaf2`/`a6191df` | Orchestrator re-run: `pytest tests/contracts -q` → `25 passed`; agent `make test` → `2630 passed`, floor `33 passed, 4 xfailed`; contract red-checked (2 failed on a planted surface change). Diff = docs/adr, strategy §6, decisions index, one contract test. **Both ADRs Proposed** — user acceptance of wording/allowlists outstanding | 2026-10-04 |
 | M31-S2-BACKEND-013 (R-015 × 6 backend sites; `AgentError` never echoed) | `backend` | worktree `96f1e5e`/`6e8963d`/`05fbc75`/`28feec0` → `kit/retrofit` `339000e`/`2efb9b6`/`17c231c`/`0187396` | Orchestrator re-run: new + adapted unit tests + `tests/safety` → `68 passed, 4 xfailed`. Agent: `make test` `2639 passed`, 86.09%; floor `33 passed, 4 xfailed`; integration `7 failed, 510 passed` = exactly the 7 R-015 `XPASS(strict)` (marker removal → `qa`). Wiring revert-checked per site. Diff = backend paths + `main.py` (authorised) + unit tests. Floors 1+2 → `safety` re-review | 2026-10-04 |
+| M31-S2-ARCH-020 (record user acceptance of ADRs 0004/0005; `keep_source` merge keeps a version) | `architect` | `kit/retrofit` `3d6a833` (main tree) | Orchestrator: both ADR Status lines read Accepted; `pytest tests/contracts -q` → `25 passed` (agent) | 2026-10-04 |
+| M31-S2-SAFETY-012 (floor-1 sweep: typed bodies, typed path params, unscoped functions; floor-2 pins: concepts site, worker, global handler, git-less scan) | `safety` | `5fbbad1`..`76aab67` → `kit/retrofit` `b010691`..`ff09c81` | Diff = `tests/safety/**` only. Agent on pre-fix tree: `13 failed, 38 passed, 4 xfailed` (each red = named R-015/R-012 finding). **Orchestrator on integrated `kit/retrofit` (with BACKEND-013): `9 failed, 42 passed, 4 xfailed`** — remaining 9 all `ai`-owned: `_get_known_courses` unscoped + 8 worker provider-error echoes (`from e` chains, claude_code stdout). Floor tier is red on `kit/retrofit` by design until AI-014 lands | 2026-10-04 |
 
 ## Blocked
 
