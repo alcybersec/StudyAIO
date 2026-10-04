@@ -30,6 +30,7 @@ confirmed by the user.
 | M31-S2-BACKEND-013 (R-015 × 6 backend sites; `studyaio_error_handler` stops echoing `AgentError`) | `backend` | 2026-10-04 | isolated |
 | M31-S2-AI-014 (redact at `AgentError` construction / R-012; `_get_known_courses` scope; quick-capture `txt`) | `ai` | 2026-10-04 | isolated |
 | M31-S2-ARCH-015 (ADR 0004 floor-4 item deletes; floor 3 covers embeddings) | `architect` | 2026-10-04 | isolated |
+| M31-S2-FRONTEND-018 (leaderboard opt-in toggle + hidden-state note) | `frontend` | 2026-10-04 | isolated |
 
 ## Completed
 
