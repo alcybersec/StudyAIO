@@ -47,6 +47,7 @@ from app.api import (
 from app.config import settings
 from app.core.demo_middleware import DemoAccountMiddleware
 from app.core.exceptions import (
+    AgentError,
     AuthenticationError,
     AuthorizationError,
     DemoRestrictionError,
@@ -515,7 +516,20 @@ async def duplicate_file_handler(request: Request, exc: DuplicateFileError) -> J
 
 @app.exception_handler(StudyAIOError)
 async def studyaio_error_handler(request: Request, exc: StudyAIOError) -> JSONResponse:
-    """Handle application errors with 500."""
+    """Handle application errors with 500.
+
+    ``AgentError`` text comes from a provider SDK and can echo the credential
+    that was sent, so it is neither returned nor logged here: the handler has
+    no caller to redact against. Call sites that need the detail catch the error
+    themselves and redact with ``settings_service.redacted_error``. Every other
+    ``StudyAIOError`` is raised by our own code with a deliberate message.
+    """
+    if isinstance(exc, AgentError):
+        logger.error("unhandled_studyaio_error", type=type(exc).__name__, detail="withheld")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "The AI provider request failed. Please try again later."},
+        )
     logger.error("unhandled_studyaio_error", error=str(exc), type=type(exc).__name__)
     return JSONResponse(
         status_code=500,

@@ -16,10 +16,11 @@ from app.api.concept_schemas import (
 )
 from app.api.deps import get_current_user_or_default
 from app.core.database import get_session
+from app.core.exceptions import AgentError
 from app.core.rate_limit import limiter
 from app.models.course import Course
 from app.models.user import User
-from app.services import billing_service, concept_service, quota_service
+from app.services import billing_service, concept_service, quota_service, settings_service
 
 logger = structlog.get_logger()
 
@@ -204,14 +205,22 @@ async def extract_concepts(
     extraction_data = merge_extractions([extraction])
     extraction_text = parsing.build_extraction_text(extraction_data)
 
-    result = await concept_service.extract_and_save_concepts(
-        session=session,
-        artifact_id=artifact_id,
-        user_id=user.id,
-        course_id=artifact.course_id,
-        week=artifact.week,
-        extraction_text=extraction_text,
-    )
+    try:
+        result = await concept_service.extract_and_save_concepts(
+            session=session,
+            artifact_id=artifact_id,
+            user_id=user.id,
+            course_id=artifact.course_id,
+            week=artifact.week,
+            extraction_text=extraction_text,
+        )
+    except AgentError as exc:
+        # Provider text can echo the user's key: redact before logging, never return it.
+        safe_error = await settings_service.redacted_error(session, user.id, exc)
+        logger.error("concept_extraction_agent_error", artifact_id=artifact_id, error=safe_error)
+        raise HTTPException(
+            status_code=502, detail="Concept extraction failed: the AI provider request failed"
+        ) from None
 
     # Record AI usage (best-effort)
     try:
