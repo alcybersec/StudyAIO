@@ -48,7 +48,7 @@ from app.models.course import Course
 from app.models.exam import Exam
 from app.models.quiz import QuizQuestion
 from app.models.user import User
-from app.services import courseops_service, preview_service, summary_service
+from app.services import courseops_service, preview_service, settings_service, summary_service
 
 logger = structlog.get_logger()
 
@@ -393,6 +393,18 @@ EXPORT_EXCLUDED_COLUMNS = frozenset(
 )
 
 
+def _export_value(column: str, value: Any) -> Any:
+    """Scrub credentials nested inside a JSON column before export.
+
+    ``EXPORT_EXCLUDED_COLUMNS`` filters by column name, but the per-user AI
+    credentials live as keys inside ``user_settings.settings_json``. The set of
+    credential keys is owned by ``settings_service.SECRET_KEYS``.
+    """
+    if column == "settings_json" and isinstance(value, dict):
+        return settings_service.strip_secret_keys(value)
+    return value
+
+
 async def export_user_data(session: AsyncSession, user_id: str) -> dict[str, Any]:
     """Export everything a user owns as a JSON-serializable dict.
 
@@ -418,7 +430,7 @@ async def export_user_data(session: AsyncSession, user_id: str) -> dict[str, Any
         result = await session.execute(select(table).where(predicate))
         rows = [
             {
-                key: _serialize(value)
+                key: _serialize(_export_value(key, value))
                 for key, value in row._mapping.items()
                 if key not in EXPORT_EXCLUDED_COLUMNS
             }
