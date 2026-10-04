@@ -428,3 +428,23 @@ def _fixed_embeddings():
     finally:
         for p in patches:
             p.stop()
+
+
+# ── Shared two-tenant world ───────────────────────────────────────────
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def two_tenants(make_user, db_session):
+    """Two users who each own a 'NET101' course with distinct content."""
+    from tests.integration._support import seed_course
+
+    alice, bob = await make_user(), await make_user()
+    a = await seed_course(db_session, alice.id, code="NET101", week=3)
+    b = await seed_course(db_session, bob.id, code="NET101", week=3, flashcards=1, quizzes=1)
+    # Make the content distinguishable by owner.
+    a.summary.content_md = "# ALICE-ONLY summary of sockets"
+    b.summary.content_md = "# BOB-ONLY summary of sockets"
+    a.flashcards[0].front = "ALICE card"
+    b.flashcards[0].front = "BOB card"
+    await db_session.flush()
+    return alice, bob, a, b

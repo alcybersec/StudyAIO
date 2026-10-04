@@ -193,3 +193,140 @@ class FakeAgent(AgentAdapter):
             ],
             relations=[ConceptRelationData(source="TCP", target="UDP", relation_type="contrasts")],
         )
+
+
+# ── Seeded study content ──────────────────────────────────────────────
+
+
+async def seed_course(
+    session,
+    user_id: str,
+    *,
+    code: str = "NET101",
+    week: int = 3,
+    flashcards: int = 2,
+    quizzes: int = 2,
+    with_chunks: bool = True,
+):
+    """A course with one processed artifact, a summary, chunks, flashcards and quizzes.
+
+    Rows are flushed (not committed) so they roll back with the test's SAVEPOINT.
+    Returns a namespace with the created ORM objects.
+    """
+    from types import SimpleNamespace
+
+    from app.core.utils import generate_id
+    from app.models.artifact import LectureArtifact
+    from app.models.chunk import Chunk
+    from app.models.course import Course
+    from app.models.extraction import Extraction
+    from app.models.flashcard import Flashcard
+    from app.models.quiz import QuizQuestion
+    from app.models.summary import Summary
+
+    course = Course(id=generate_id(), code=code, name=f"{code} course", user_id=user_id)
+    session.add(course)
+    await session.flush()
+
+    artifact = LectureArtifact(
+        id=generate_id(),
+        user_id=user_id,
+        course_id=course.id,
+        week=week,
+        title=f"{code} week {week}",
+        original_filename=f"{code}-w{week}.pdf",
+        file_path=f"uploads/{generate_id()}_{code}-w{week}.pdf",
+        file_type="pdf",
+        sha256=generate_id().replace("-", "") * 2,
+        file_size_bytes=100,
+        status="processed",
+    )
+    session.add(artifact)
+    await session.flush()
+
+    session.add(
+        Extraction(
+            id=generate_id(),
+            artifact_id=artifact.id,
+            manifest_json={
+                "pages": [
+                    {"page_number": i + 1, "text": text, "slide_title": f"Slide {i + 1}"}
+                    for i, text in enumerate(LECTURE_PAGES)
+                ]
+            },
+            extraction_path=f"extractions/{artifact.id}",
+            page_count=len(LECTURE_PAGES),
+            image_count=0,
+        )
+    )
+
+    summary = Summary(
+        id=generate_id(),
+        course_id=course.id,
+        week=week,
+        content_md=f"# {code} - Week {week}\n\n## Overview\n\nTransport protocols and TCP.\n",
+        file_path=f"summaries/{course.id}/Week{week}.md",
+        version=1,
+        source_artifacts=[artifact.id],
+    )
+    session.add(summary)
+
+    chunks = []
+    if with_chunks:
+        provider = FixedEmbeddings()
+        vectors = provider.embed_texts(LECTURE_PAGES)
+        for i, (text, vec) in enumerate(zip(LECTURE_PAGES, vectors, strict=True)):
+            chunk = Chunk(
+                id=generate_id(),
+                artifact_id=artifact.id,
+                stable_id=f"{artifact.id}:{i}",
+                text=text,
+                page_ref=i + 1,
+                slide_title=f"Slide {i + 1}",
+                embedding=vec,
+            )
+            session.add(chunk)
+            chunks.append(chunk)
+
+    cards = []
+    for i in range(flashcards):
+        card = Flashcard(
+            id=generate_id(),
+            course_id=course.id,
+            week=week,
+            front=f"{code} question {i}?",
+            back=f"{code} answer {i}",
+            tags=["tcp"],
+            source_artifact_id=artifact.id,
+            source_page_ref=1,
+        )
+        session.add(card)
+        cards.append(card)
+
+    questions = []
+    for i in range(quizzes):
+        mcq = i % 2 == 0
+        question = QuizQuestion(
+            id=generate_id(),
+            course_id=course.id,
+            week=week,
+            question_type="multiple_choice" if mcq else "short_answer",
+            question=f"{code} quiz {i}?",
+            options_json=["A", "B", "C", "D"] if mcq else None,
+            correct_answer="A" if mcq else "an answer",
+            explanation="because",
+            source_artifact_id=artifact.id,
+            source_page_ref=1,
+        )
+        session.add(question)
+        questions.append(question)
+
+    await session.flush()
+    return SimpleNamespace(
+        course=course,
+        artifact=artifact,
+        summary=summary,
+        chunks=chunks,
+        flashcards=cards,
+        questions=questions,
+    )
