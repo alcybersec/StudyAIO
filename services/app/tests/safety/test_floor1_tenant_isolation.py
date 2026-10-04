@@ -665,6 +665,90 @@ async def test_floor1_leaderboard_lists_only_opted_in_users(
     )
 
 
+def test_floor1_predicate_evaluator_models_sql_semantics():
+    """``_predicate.admits`` keeps exactly the rows Postgres would, or refuses.
+
+    The leaderboard pin is only as good as this evaluator, so its semantics are
+    pinned here: three-valued logic (NULL is neither true nor false), outer
+    joins that null the unmatched side, IN over lists and subqueries, and a
+    loud ``Unreadable`` for anything it does not model.
+    """
+    import sqlalchemy as sa
+
+    from app.models.user import User
+    from app.models.user_settings import UserSettings
+    from app.models.user_xp import UserXP
+    from tests.safety._predicate import Unreadable, admits, value
+
+    opted, hidden, bare = (
+        _leaderboard_row("u-in", opted_in=True),
+        _leaderboard_row("u-out", opted_in=False),
+        _leaderboard_row("u-none", opted_in=None),
+    )
+    base = sa.select(UserXP).join(User, UserXP.user_id == User.id)
+    outer = base.outerjoin(UserSettings, UserSettings.user_id == UserXP.user_id)
+    opt = UserSettings.leaderboard_opt_in
+
+    def keeps(stmt) -> tuple[bool, bool, bool]:
+        return admits(stmt, opted), admits(stmt, hidden), admits(stmt, bare)
+
+    assert keeps(base) == (True, True, True)
+    assert keeps(outer.where(opt.is_(True))) == (True, False, False)
+    assert keeps(outer.where(opt == sa.true())) == (True, False, False)
+    assert keeps(outer.where(opt)) == (True, False, False)
+    assert keeps(outer.where(~opt)) == (False, True, False)  # NOT NULL is NULL
+    assert keeps(outer.where(sa.not_(opt.is_(False)))) == (True, False, True)
+    assert keeps(outer.where(opt.is_not(None))) == (True, True, False)
+    assert keeps(outer.where(opt != sa.false())) == (True, False, False)
+    assert keeps(outer.where(sa.func.coalesce(opt, sa.false()).is_(False))) == (False, True, True)
+    assert keeps(outer.where(sa.cast(opt, sa.Boolean).is_(True))) == (True, False, False)
+    assert keeps(outer.where(sa.or_(opt.is_(True), UserXP.user_id == "u-out"))) == (
+        True,
+        True,
+        False,
+    )
+    assert keeps(outer.where(sa.and_(opt.is_(True), UserXP.total_xp >= 100))) == (
+        True,
+        False,
+        False,
+    )
+    assert keeps(outer.where(sa.or_(UserXP.total_xp > 100, UserXP.total_xp < 100))) == (
+        False,
+        False,
+        False,
+    )
+    assert keeps(base.where(UserXP.user_id.in_(["u-in", "u-none"]))) == (True, False, True)
+    assert keeps(base.where(UserXP.user_id.not_in(["u-in"]))) == (False, True, True)
+    sub = sa.select(UserSettings.user_id).where(opt.is_(True))
+    assert keeps(base.where(UserXP.user_id.in_(sub))) == (True, False, False)
+    assert keeps(base.where(UserXP.user_id.in_(sub.scalar_subquery()))) == (True, False, False)
+    gated = base.outerjoin(UserSettings, sa.and_(UserSettings.user_id == UserXP.user_id, opt))
+    assert keeps(gated) == (True, True, True)  # an outer ON never filters the left side
+    assert keeps(gated.where(UserSettings.user_id.is_not(None))) == (True, False, False)
+    inner = base.join(UserSettings, sa.and_(UserSettings.user_id == UserXP.user_id, opt))
+    assert keeps(inner) == (True, False, False)
+    assert keeps(outer.where(sa.or_(UserXP.total_xp > 100, opt))) == (True, False, False)
+    assert keeps(outer.where(sa.not_(sa.or_(UserXP.total_xp > 100, opt)))) == (False, True, False)
+    assert keeps(outer.where(UserSettings.user_id.not_in(["u-in"]))) == (False, True, False)
+    assert keeps(outer.where(sa.func.coalesce(opt, sa.null()).is_(None))) == (False, False, True)
+    assert value(sa.null(), opted) is None
+    assert value(sa.literal(3).label("x"), opted) == 3
+
+    for unreadable in (
+        base.where(User.email.like("%x%")),
+        base.where(sa.func.lower(User.username) == "x"),
+        base.where(UserXP.user_id.in_(sa.select(UserSettings.user_id, UserSettings.id))),
+        base.where(sa.exists(sa.select(UserSettings.id))),
+        base.where(UserXP.total_xp.desc()),
+        base.where(sa.column("loose") == 1),
+        base.where(sa.table("courses", sa.column("code")).c.code == "x"),
+        sa.update(UserXP).values(total_xp=0),
+        base.outerjoin(sa.select(UserSettings).subquery(), sa.false()),
+    ):
+        with pytest.raises(Unreadable):
+            admits(unreadable, opted)
+
+
 def test_floor1_every_table_is_classified():
     """Each table is user-owned or explicitly unowned — nothing in between."""
     tables = set(all_tables())
