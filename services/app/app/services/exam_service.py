@@ -200,6 +200,8 @@ async def get_owned_quiz_question(
 ) -> QuizQuestion | None:
     """Fetch a quiz question only if its course belongs to ``user_id``.
 
+    Archived questions are treated as absent (not answerable as active study).
+
     Args:
         session: Database session.
         quiz_question_id: Quiz question UUID (caller supplied).
@@ -211,7 +213,11 @@ async def get_owned_quiz_question(
     result = await session.execute(
         select(QuizQuestion)
         .join(Course, QuizQuestion.course_id == Course.id)
-        .where(QuizQuestion.id == quiz_question_id, Course.user_id == user_id)
+        .where(
+            QuizQuestion.id == quiz_question_id,
+            Course.user_id == user_id,
+            QuizQuestion.archived_at.is_(None),
+        )
     )
     return result.scalar_one_or_none()
 

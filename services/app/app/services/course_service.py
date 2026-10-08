@@ -628,6 +628,18 @@ async def merge_courses(
         existing = target_summaries.get(summary.week)
         if existing is None:
             summary.course_id = target.id
+            # Floor 4: the week's retained versions move with it, or a later
+            # delete of the archived source would destroy them. Scoped to this
+            # week so a keep_source conflict week cannot collide on
+            # uq_summary_versions_course_week_ver.
+            await session.execute(
+                update(SummaryVersion)
+                .where(
+                    SummaryVersion.course_id == source.id,
+                    SummaryVersion.week == summary.week,
+                )
+                .values(course_id=target.id)
+            )
             await _sync_summary_blob(storage, summary, target.id)
             moved_summaries += 1
             continue

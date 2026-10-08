@@ -133,6 +133,8 @@ async def get_owned_flashcard(
     """Fetch a flashcard only if its course belongs to ``user_id``.
 
     Flashcards carry no user_id of their own; ownership is the course's.
+    Archived cards are treated as absent: they are not reviewable as active
+    study (their history stays readable through the list/stat queries).
 
     Args:
         session: Database session.
@@ -145,7 +147,11 @@ async def get_owned_flashcard(
     result = await session.execute(
         select(Flashcard)
         .join(Course, Flashcard.course_id == Course.id)
-        .where(Flashcard.id == flashcard_id, Course.user_id == user_id)
+        .where(
+            Flashcard.id == flashcard_id,
+            Course.user_id == user_id,
+            Flashcard.archived_at.is_(None),
+        )
     )
     return result.scalar_one_or_none()
 
