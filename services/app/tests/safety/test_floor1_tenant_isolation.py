@@ -28,6 +28,9 @@ Three layers, each catching what the one before cannot:
    ``services``/``pipeline`` function may query an owned model with no caller
    parameter and no ``user_id`` predicate unless classified. This reaches code
    no route sweep can, such as the worker's ``classify._get_known_courses``.
+   **Optional caller** (``test_floor1_caller_parameter_is_never_optional``,
+   R-021): nor may one take the caller as an optional parameter, scoped only
+   when a caller remembers to pass it.
 3. **Behaviour** for each known violation, so the fix is pinned by a test that
    does not care how it was fixed.
 
@@ -1193,6 +1196,187 @@ def test_floor1_caller_filter_detector_rejects_widened_predicates():
     }
     accepted = sorted(label for label, stmt in widened.items() if filters_on_user(stmt, caller))
     assert not accepted, f"Floor 1 detector blind spot: read as caller-scoped: {accepted}"
+
+
+# ── layer 2c: a caller parameter that may be left out (R-021, C6) ──────
+#
+# Layer 2b accepts any function that takes a caller parameter and uses it. It
+# cannot see the shape ``def f(session, ..., user_id: str | None = None)`` with
+# ``if user_id is not None: query = query.where(Model.user_id == user_id)``:
+# the function is scoped when a route hands it the caller and unscoped when
+# anyone else forgets to. The route sweep pins today's route callers; nothing
+# pins the next worker, CLI or service caller that omits the argument and gets
+# every user's rows. M31's gate re-run found this on the five functions the
+# R-015 fix had just scoped (F-4), and on the pre-existing ADR 0004 deletes.
+#
+# So a ``services``/``pipeline`` function whose caller parameter is used in its
+# body must fail closed: the parameter is required (no ``None`` default), and no
+# ``user_id`` filter sits behind a ``None``/truthiness check on it. A function
+# that genuinely serves an owner-less caller is classified below with the
+# reason that caller is safe; a fix that makes the parameter required removes
+# the function from the failure list by itself.
+
+#: (module, function) -> why its caller parameter may be omitted.
+OPTIONAL_CALLER_ALLOWED: dict[tuple[str, str], str] = {}
+
+
+def _is_none(node: ast.AST | None) -> bool:
+    return isinstance(node, ast.Constant) and node.value is None
+
+
+def _caller_defaults(args: ast.arguments) -> dict[str, ast.AST]:
+    """Caller parameter -> its default expression, for the parameters that have one."""
+    positional = args.posonlyargs + args.args
+    tail = positional[len(positional) - len(args.defaults) :]
+    out = {a.arg: d for a, d in zip(tail, args.defaults, strict=True)}
+    out |= {a.arg: d for a, d in zip(args.kwonlyargs, args.kw_defaults, strict=True) if d}
+    return {k: v for k, v in out.items() if k in CALLER_PARAMS}
+
+
+def _none_check_on(test: ast.AST, params: set[str]) -> bool:
+    """``p``, ``not p``, ``p is None``, ``p is not None``, ``p == None`` (also inside and/or)."""
+    if isinstance(test, ast.BoolOp):
+        return any(_none_check_on(v, params) for v in test.values)
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        return _none_check_on(test.operand, params)
+    if isinstance(test, ast.Name):
+        return test.id in params
+    if isinstance(test, ast.Compare) and len(test.comparators) == 1:
+        sides = [test.left, test.comparators[0]]
+        return any(isinstance(s, ast.Name) and s.id in params for s in sides) and any(
+            _is_none(s) for s in sides
+        )
+    return False
+
+
+def _has_user_id_filter(nodes: list[ast.AST], owned: dict[str, str], models: dict[str, str]):
+    for root in nodes:
+        for sub in ast.walk(root):
+            if _user_id_predicate(sub, owned, models):
+                return True
+            if (
+                isinstance(sub, ast.Call)
+                and isinstance(sub.func, ast.Attribute)
+                and sub.func.attr == "filter_by"
+                and any(k.arg == "user_id" for k in sub.keywords)
+            ):
+                return True
+    return False
+
+
+def optional_caller_in_tree(
+    tree: ast.Module, module: str, owned_models: set[str]
+) -> dict[tuple[str, str], list[str]]:
+    """Functions of one parsed module whose caller parameter can be left out."""
+    found: dict[tuple[str, str], list[str]] = {}
+    aliases = _model_aliases(tree, owned_models)
+    model_aliases = _model_aliases(tree, _all_model_names())
+    for node, scope in walk_with_scope(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        args = node.args
+        params = {a.arg for a in args.args + args.kwonlyargs + args.posonlyargs} & CALLER_PARAMS
+        body_names = {
+            sub.id for stmt in node.body for sub in ast.walk(stmt) if isinstance(sub, ast.Name)
+        }
+        used = params & body_names
+        if not used:
+            continue
+        reasons = [
+            f"`{p}` defaults to None"
+            for p, default in sorted(_caller_defaults(args).items())
+            if p in used and _is_none(default)
+        ]
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.If | ast.IfExp) and _none_check_on(sub.test, used):
+                branches = (
+                    sub.body + sub.orelse if isinstance(sub, ast.If) else [sub.body, sub.orelse]
+                )
+                if _has_user_id_filter(branches, aliases, model_aliases):
+                    reasons.append(f"user_id filter is conditional (line {sub.lineno})")
+                    break
+        if reasons:
+            name = f"{scope}.{node.name}" if scope != "<module>" else node.name
+            found[(module, name)] = reasons
+    return found
+
+
+def optional_caller_functions() -> dict[tuple[str, str], list[str]]:
+    """Every ``services``/``pipeline`` function that is scoped only if its caller remembers."""
+    owned_models = _owned_model_names()
+    found: dict[tuple[str, str], list[str]] = {}
+    for path in app_modules():
+        module = rel(path)
+        if module.startswith(FUNCTION_SCOPE_SCANNED):
+            found |= optional_caller_in_tree(parse(path), module, owned_models)
+    return found
+
+
+def test_floor1_caller_parameter_is_never_optional():
+    """A scoped function fails closed: its caller parameter cannot be omitted.
+
+    R-021 (M31 follow-up F-4, M32 condition C6). Red until
+    M32-S1-BACKEND-006 makes the parameter required, or classifies a function
+    in ``OPTIONAL_CALLER_ALLOWED`` with the reason its owner-less caller is safe.
+    """
+    found = optional_caller_functions()
+    new = {k: v for k, v in found.items() if k not in OPTIONAL_CALLER_ALLOWED}
+    stale = sorted(set(OPTIONAL_CALLER_ALLOWED) - set(found))
+    assert not new, (
+        f"Floor 1: {len(new)} function(s) are tenant-scoped only when the caller remembers "
+        "to pass its identity; a caller that omits it runs unscoped:\n"
+        + "\n".join(f"  {m}::{f}  {'; '.join(r)}" for (m, f), r in sorted(new.items()))
+        + "\nMake the caller parameter required (no None default, no `if user_id` around "
+        "the filter), or classify the function in OPTIONAL_CALLER_ALLOWED "
+        "(tests/safety/test_floor1_tenant_isolation.py) with the reason it is safe."
+    )
+    assert not stale, f"OPTIONAL_CALLER_ALLOWED entries no longer match — remove them: {stale}"
+
+
+_OPTIONAL_CALLER_SOURCE = """
+from sqlalchemy import select
+from app.models.course import Course
+
+async def required(session, code, *, user_id):
+    return await session.execute(select(Course).where(Course.code == code, Course.user_id == user_id))
+
+async def fail_closed(session, code, user_id):
+    if user_id is None:
+        raise ValueError("no caller")
+    return await session.execute(select(Course).where(Course.user_id == user_id))
+
+async def defaults_none(session, code, user_id=None):
+    return await session.execute(select(Course).where(Course.user_id == user_id))
+
+async def kw_defaults_none(session, code, *, user_id: str | None = None):
+    return await session.execute(select(Course).where(Course.user_id == user_id))
+
+async def skips_filter(session, code, user_id: str):
+    query = select(Course).where(Course.code == code)
+    if user_id:
+        query = query.where(Course.user_id == user_id)
+    return await session.execute(query)
+
+async def forwards_none(session, code, user_id=None):
+    return await required(session, code, user_id=user_id)
+
+async def unused(session, code, user_id=None):
+    return code
+"""
+
+
+def test_floor1_optional_caller_detector_is_not_vacuous():
+    """The R-021 detector flags each fail-open shape and passes the fail-closed ones."""
+    found = optional_caller_in_tree(
+        ast.parse(_OPTIONAL_CALLER_SOURCE), "synthetic.py", _owned_model_names()
+    )
+    names = {name for _module, name in found}
+    assert not names & {"required", "fail_closed", "unused"}, (
+        f"control: a fail-closed or caller-free function was flagged: {sorted(names)}"
+    )
+    assert {"defaults_none", "kw_defaults_none", "skips_filter", "forwards_none"} <= names, (
+        f"Floor 1 detector blind spot: optional caller not flagged. Flagged only: {sorted(names)}"
+    )
 
 
 # ── layer 3: behaviour of each known violation ─────────────────────────
