@@ -984,52 +984,59 @@ def _base_name(node: ast.AST) -> str:
     return node.id if isinstance(node, ast.Name) else ""
 
 
+def unscoped_in_tree(
+    tree: ast.Module, module: str, owned_models: set[str]
+) -> dict[tuple[str, str], list[str]]:
+    """The unscoped query functions of one parsed module (see ``unscoped_query_functions``)."""
+    found: dict[tuple[str, str], list[str]] = {}
+    aliases = _model_aliases(tree, owned_models)
+    for node, scope in walk_with_scope(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        queried: set[str] = set()
+        predicate = False
+        used_names = set()
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Name):
+                used_names.add(sub.id)
+            if (
+                isinstance(sub, ast.Call)
+                and isinstance(sub.func, ast.Name)
+                and sub.func.id in QUERY_BUILDERS
+            ):
+                queried |= {aliases[b] for a in sub.args if (b := _base_name(a)) in aliases}
+            if (
+                isinstance(sub, ast.Attribute)
+                and sub.attr == "user_id"
+                and _base_name(sub) in aliases
+            ):
+                predicate = True
+            if (
+                isinstance(sub, ast.Call)
+                and isinstance(sub.func, ast.Attribute)
+                and sub.func.attr == "filter_by"
+                and any(k.arg == "user_id" for k in sub.keywords)
+            ):
+                predicate = True
+        if not queried or predicate:
+            continue
+        args = node.args
+        params = {a.arg for a in args.args + args.kwonlyargs + args.posonlyargs}
+        if params & CALLER_PARAMS & used_names:
+            continue  # takes the caller and uses it; the route tiers judge how
+        name = f"{scope}.{node.name}" if scope != "<module>" else node.name
+        found[(module, name)] = sorted(queried)
+    return found
+
+
 def unscoped_query_functions() -> dict[tuple[str, str], list[str]]:
     """Functions that query an owned model with no caller param and no user_id predicate."""
     owned_models = _owned_model_names()
     found: dict[tuple[str, str], list[str]] = {}
     for path in app_modules():
         module = rel(path)
-        if not module.startswith(FUNCTION_SCOPE_SCANNED):
-            continue
-        tree = parse(path)
-        aliases = _model_aliases(tree, owned_models)
-        for node, scope in walk_with_scope(tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            queried: set[str] = set()
-            predicate = False
-            used_names = set()
-            for sub in ast.walk(node):
-                if isinstance(sub, ast.Name):
-                    used_names.add(sub.id)
-                if (
-                    isinstance(sub, ast.Call)
-                    and isinstance(sub.func, ast.Name)
-                    and sub.func.id in QUERY_BUILDERS
-                ):
-                    queried |= {aliases[b] for a in sub.args if (b := _base_name(a)) in aliases}
-                if (
-                    isinstance(sub, ast.Attribute)
-                    and sub.attr == "user_id"
-                    and _base_name(sub) in aliases
-                ):
-                    predicate = True
-                if (
-                    isinstance(sub, ast.Call)
-                    and isinstance(sub.func, ast.Attribute)
-                    and sub.func.attr == "filter_by"
-                    and any(k.arg == "user_id" for k in sub.keywords)
-                ):
-                    predicate = True
-            if not queried or predicate:
-                continue
-            args = node.args
-            params = {a.arg for a in args.args + args.kwonlyargs + args.posonlyargs}
-            if params & CALLER_PARAMS & used_names:
-                continue  # takes the caller and uses it; the route tiers judge how
-            name = f"{scope}.{node.name}" if scope != "<module>" else node.name
-            found[(module, name)] = sorted(queried)
+        if module.startswith(FUNCTION_SCOPE_SCANNED):
+            found |= unscoped_in_tree(parse(path), module, owned_models)
     return found
 
 
@@ -1062,6 +1069,84 @@ def test_floor1_unscoped_query_detector_is_not_vacuous():
     found = unscoped_query_functions()
     assert ("app/services/summary_service.py", "get_week_extractions") in found
     assert ("app/pipeline/calendar_task.py", "_sync_all") in found
+
+
+_JOIN_ONLY_SOURCE = """
+from sqlalchemy import select
+from app.models.course import Course
+from app.models.user import User
+from app.models.user_xp import UserXP
+
+async def board(session):
+    return await session.execute(select(UserXP).join(User, UserXP.user_id == User.id))
+
+async def owner_of(session, course_id):
+    return await session.scalar(select(Course.user_id).where(Course.id == course_id))
+
+async def by_owner(session, owner):
+    return await session.execute(select(UserXP).where(UserXP.user_id == owner))
+
+async def by_owners(session, owners):
+    return await session.execute(select(UserXP).where(UserXP.user_id.in_(owners)))
+"""
+
+
+def test_floor1_unscoped_query_detector_needs_a_predicate_not_a_mention():
+    """A join on ``Model.user_id``, or selecting it, is not a ``user_id`` predicate.
+
+    SAFETY-021 blind spot 2: any ``Model.user_id`` attribute in the function
+    counted as scoping, so ``select(UserXP).join(User, UserXP.user_id ==
+    User.id)`` (the old global leaderboard) and ``select(Course.user_id)``
+    (reading an owner, filtering on nothing) were never flagged.
+    """
+    found = unscoped_in_tree(ast.parse(_JOIN_ONLY_SOURCE), "synthetic.py", _owned_model_names())
+    names = {name for _module, name in found}
+    assert "by_owner" not in names and "by_owners" not in names, (
+        f"control: a real user_id predicate was flagged as unscoped: {sorted(names)}"
+    )
+    assert {"board", "owner_of"} <= names, (
+        "Floor 1 detector blind spot: a join on / select of Model.user_id counted as a "
+        f"user_id predicate. Flagged only: {sorted(names)}"
+    )
+
+
+def test_floor1_caller_filter_detector_rejects_widened_predicates():
+    """``filters_on_user`` accepts a caller comparison only when it constrains every row.
+
+    SAFETY-021 blind spot 1: ``user_id = :caller OR <anything>`` was read as
+    scoped, though it returns every row ``<anything>`` admits. So were
+    ``user_id != :caller`` (``NOT (user_id = :caller)``) and ``user_id IN
+    (:caller, :victim)``. Each of those must count as unscoped; an OR whose
+    every branch is caller-scoped still counts as scoped.
+    """
+    import sqlalchemy as sa
+
+    from app.models.course import Course
+
+    caller = "caller-0001"
+    by_code = Course.code == "CSIT302"
+    assert filters_on_user(sa.select(Course).where(Course.user_id == caller, by_code), caller)
+    assert filters_on_user(sa.select(Course).where(Course.user_id.in_([caller])), caller), (
+        "control: IN (:caller) is scoped"
+    )
+    assert filters_on_user(
+        sa.select(Course).where(
+            sa.or_(
+                sa.and_(Course.user_id == caller, by_code),
+                sa.and_(Course.user_id == caller, Course.archived_at.is_(None)),
+            )
+        ),
+        caller,
+    ), "control: an OR whose every branch is caller-scoped is scoped"
+
+    widened = {
+        "OR other": sa.select(Course).where(sa.or_(Course.user_id == caller, by_code)),
+        "NOT": sa.select(Course).where(sa.not_(Course.user_id == caller)),
+        "!=": sa.select(Course).where(Course.user_id != caller),
+        "IN with a victim": sa.select(Course).where(Course.user_id.in_([caller, "victim-0002"])),
+    }
+    accepted = sorted(label for label, stmt in widened.items() if filters_on_user(stmt, caller))
+    assert not accepted, f"Floor 1 detector blind spot: read as caller-scoped: {accepted}"
 
 
 # ── layer 3: behaviour of each known violation ─────────────────────────

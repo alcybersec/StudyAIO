@@ -869,6 +869,153 @@ async def test_floor4_merge_keep_source_snapshots_target_summary():
         )
 
 
+def _version_row(sv) -> dict[tuple[str, str], object]:
+    cols = ("id", "user_id", "course_id", "week", "version", "file_path")
+    return {("summary_versions", c): getattr(sv, c) for c in cols}
+
+
+def _set_values(statement) -> dict[str, object]:
+    """Column name -> value an UPDATE sets."""
+    out = {}
+    for key, bind in (statement._values or {}).items():  # noqa: SLF001
+        name = getattr(key, "key", None) or getattr(key, "name", None) or str(key)
+        out[name] = getattr(bind, "effective_value", bind)
+    return out
+
+
+@pytest.mark.asyncio
+async def test_floor4_merge_carries_moved_summarys_versions_to_target():
+    """A summary that merge moves to the target takes its retained versions with it.
+
+    ``merge_courses`` moves a week summarized only in the source to the target
+    and archives the emptied source. If the moved summary's ``summary_versions``
+    rows stay keyed to the source, the user's later, sanctioned delete of that
+    archived husk (ADR 0004 #1 deletes the course's ``summary_versions``)
+    destroys the prior versions of a summary that lives on in the target:
+    re-summarize history lost through a delete the user aimed at an empty
+    course. ADR 0004 § 3 condition 3 ("bounded") does not stretch to that.
+
+    Implementation-agnostic: the rows may be re-homed by an UPDATE on
+    ``summary_versions`` or by loading and mutating them. Either way the moved
+    week's versions must end on the target, and the re-home must not collide
+    with the target's own versions (``uq_summary_versions_course_week_ver``).
+    Week 3 (a ``keep_source`` conflict) is the collision probe: the target's
+    snapshot of its own v1 and the source's v1 of week 3 cannot both be
+    ``(target, 3, 1)``. Where the conflict week's source history goes is
+    ADR 0004 #5's business (the source-side summary), not this pin's.
+
+    RED until the merge re-homes the moved week's versions (M31-S2 follow-up).
+    """
+    from sqlalchemy.sql.dml import Update
+
+    from app.core.storage import get_storage
+    from app.models.summary import Summary
+    from app.models.summary_version import SummaryVersion
+    from app.services import course_service
+    from tests.safety._predicate import Unreadable, admits, value
+    from tests.safety._tenant import bind_values, tables_in
+
+    source = SimpleNamespace(id="course-src", user_id=OWNER, code="SRC", archived_at=None)
+    target = SimpleNamespace(id="course-tgt", user_id=OWNER, code="TGT", archived_at=None)
+
+    def summary(sid, course, week, version, text):
+        return Summary(
+            id=sid,
+            course_id=course.id,
+            week=week,
+            content_md=text,
+            file_path=f"summaries/{course.id}/Week{week}.md",
+            version=version,
+            source_artifacts=[f"a-{sid}"],
+        )
+
+    def kept(vid, course, week, version):
+        return SummaryVersion(
+            id=vid,
+            user_id=OWNER,
+            course_id=course.id,
+            week=week,
+            version=version,
+            content_md=f"# {course.code} week {week} v{version}",
+            file_path=f"summaries/{course.id}/Week{week}.v{version}.md",
+            source_artifacts=[],
+        )
+
+    target_w3 = summary("sum-t3", target, 3, 1, "# target w3 v1")
+    source_w3 = summary("sum-s3", source, 3, 2, "# source w3 v2")
+    source_w4 = summary("sum-s4", source, 4, 3, "# source w4 v3")
+    moved = [kept("sv-s4-1", source, 4, 1), kept("sv-s4-2", source, 4, 2)]
+    conflict_history = [kept("sv-s3-1", source, 3, 1)]
+    versions = moved + conflict_history
+
+    def execute(statement):
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        result.scalars.return_value.all.return_value = []
+        result.all.return_value = []
+        tables = tables_in(statement)
+        binds = set(bind_values(statement))
+        if statement.is_select and tables == {"courses"} and OWNER in binds:
+            course = source if "SRC" in binds else target if "TGT" in binds else None
+            result.scalar_one_or_none.return_value = course
+        elif statement.is_select and tables == {"summaries"}:
+            if target.id in binds:
+                result.scalars.return_value.all.return_value = [target_w3]
+            elif source.id in binds:
+                result.scalars.return_value.all.return_value = [source_w3, source_w4]
+        elif statement.is_select and "summary_versions" in tables:
+            hits = [sv for sv in versions if admits(statement, _version_row(sv))]
+            result.scalars.return_value.all.return_value = hits
+            result.all.return_value = [(sv,) for sv in hits]
+        return result
+
+    session, log, _probe = _recording_session(execute)
+    session.delete = AsyncMock()
+
+    with isolated_storage():
+        storage = get_storage()
+        for s in (target_w3, source_w3, source_w4):
+            await storage.put(s.file_path, s.content_md.encode())
+        await course_service.merge_courses(session, OWNER, "SRC", "TGT", "keep_source")
+
+    assert source_w4.course_id == target.id, "control: the non-conflict week did not move"
+    assert target_w3.version == 2, "control: keep_source did not run"
+
+    # Final (course_id, week, version) of every version row, whichever way it moved.
+    try:
+        for kind, statement, _seen in log:
+            if (
+                kind == "execute"
+                and isinstance(statement, Update)
+                and statement.table.name == "summary_versions"
+            ):
+                sets = _set_values(statement)
+                for sv in versions:
+                    where = statement.whereclause
+                    if where is None or value(where, _version_row(sv)) is True:
+                        for column, new in sets.items():
+                            setattr(sv, column, new)
+    except Unreadable as exc:
+        pytest.fail(f"The summary_versions re-home uses a construct _predicate cannot read: {exc}")
+
+    stranded = sorted(sv.id for sv in moved if sv.course_id != target.id)
+    assert not stranded, (
+        "Floor 4 VIOLATION: merge moved week 4's summary to the target but left its "
+        f"retained versions {stranded} on the archived source; deleting that emptied "
+        "course (ADR 0004 #1) would destroy them."
+    )
+
+    snapshots = [
+        obj for kind, obj, _seen in log if kind == "add" and isinstance(obj, SummaryVersion)
+    ]
+    keys = [(sv.course_id, sv.week, sv.version) for sv in versions + snapshots]
+    clashes = sorted({k for k in keys if keys.count(k) > 1})
+    assert not clashes, (
+        f"The re-home collides with the target's own versions on {clashes} "
+        "(uq_summary_versions_course_week_ver): the merge would fail on commit."
+    )
+
+
 # ── asset regeneration ─────────────────────────────────────────────────
 
 
