@@ -1,17 +1,21 @@
-import { test, expect } from './fixtures'
+import { test, expect, seedCourseRow, deleteCourse } from './fixtures'
 
-const API_URL = process.env.E2E_API_URL || 'http://localhost:8000'
+const courseCode = 'E2EMGT'
+
+test.describe.configure({ mode: 'serial' })
 
 test.describe('Course management', () => {
-  test('manage menu opens and delete modal gates the danger button', async ({ page }) => {
-    const resp = await page.request.get(`${API_URL}/api/courses`)
-    const courses = await resp.json()
-    if (!Array.isArray(courses) || courses.length === 0) {
-      test.skip()
-      return
-    }
+  test.beforeAll(() => {
+    seedCourseRow(courseCode)
+  })
 
-    const courseCode: string = courses[0].code
+  test.afterAll(async ({ playwright }) => {
+    const request = await playwright.request.newContext()
+    await deleteCourse(request, courseCode)
+    await request.dispose()
+  })
+
+  test('manage menu opens and delete modal gates the danger button', async ({ page }) => {
     await page.goto(`/courses/${courseCode}`)
     await page.waitForLoadState('networkidle')
 

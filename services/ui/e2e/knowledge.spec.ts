@@ -1,6 +1,22 @@
-import { test, expect } from './fixtures'
+import { test, expect, seedCourseRow, deleteCourse } from './fixtures'
+
+const courseCode = 'E2EKG'
+
+test.describe.configure({ mode: 'serial' })
 
 test.describe('Knowledge', () => {
+  // The concept graph is fed by the AI extraction task, which CI does not run,
+  // so the keyboard-navigation test seeds the concepts it navigates.
+  test.beforeAll(() => {
+    seedCourseRow(courseCode, 3)
+  })
+
+  test.afterAll(async ({ playwright }) => {
+    const request = await playwright.request.newContext()
+    await deleteCourse(request, courseCode)
+    await request.dispose()
+  })
+
   test('page loads with heading and view toggle', async ({ page }) => {
     await page.goto('/knowledge')
     await expect(page.getByRole('heading', { name: /knowledge/i })).toBeVisible({ timeout: 10_000 })
@@ -34,19 +50,11 @@ test.describe('Knowledge', () => {
     await page.getByRole('group', { name: /view/i }).getByRole('button', { name: /list/i }).click()
 
     const listbox = page.getByRole('listbox', { name: /concepts/i })
-    const hasList = await listbox.isVisible().catch(() => false)
-    if (!hasList) {
-      // No concepts extracted in this environment — nothing to navigate
-      test.skip()
-      return
-    }
+    await expect(listbox).toBeVisible({ timeout: 10_000 })
 
     const options = listbox.getByRole('option')
-    const count = await options.count()
-    if (count < 2) {
-      test.skip()
-      return
-    }
+    // At least the three seeded concepts (a dev database may hold more)
+    await expect.poll(() => options.count()).toBeGreaterThanOrEqual(3)
 
     await options.first().focus()
     await expect(options.first()).toBeFocused()

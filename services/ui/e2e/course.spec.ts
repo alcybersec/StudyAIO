@@ -1,37 +1,31 @@
-import { test, expect } from './fixtures'
+import { test, expect, seedCourseRow, deleteCourse } from './fixtures'
 
-const API_URL = process.env.E2E_API_URL || 'http://localhost:8000'
+const COURSE_CODE = 'E2ECRS'
+
+// Serial: the course is seeded once and removed once, so parallel workers must
+// not each run the hooks while another is mid-test.
+test.describe.configure({ mode: 'serial' })
 
 test.describe('Course', () => {
-  test('course page shows course details or 404', async ({ page }) => {
-    // First get available courses
-    const resp = await page.request.get(`${API_URL}/api/courses`)
-    const courses = await resp.json()
+  test.beforeAll(() => {
+    seedCourseRow(COURSE_CODE)
+  })
 
-    if (courses.length === 0) {
-      // No courses — skip
-      test.skip()
-      return
-    }
+  test.afterAll(async ({ playwright }) => {
+    const request = await playwright.request.newContext()
+    await deleteCourse(request, COURSE_CODE)
+    await request.dispose()
+  })
 
-    const courseCode = courses[0].code
-    await page.goto(`/courses/${courseCode}`)
+  test('course page shows course details', async ({ page }) => {
+    await page.goto(`/courses/${COURSE_CODE}`)
     await expect(
-      page.getByRole('heading').filter({ hasText: new RegExp(courseCode, 'i') }),
+      page.getByRole('heading').filter({ hasText: new RegExp(COURSE_CODE, 'i') }),
     ).toBeVisible({ timeout: 10_000 })
   })
 
   test('course page displays week rows', async ({ page }) => {
-    const resp = await page.request.get(`${API_URL}/api/courses`)
-    const courses = await resp.json()
-
-    if (courses.length === 0) {
-      test.skip()
-      return
-    }
-
-    const courseCode = courses[0].code
-    await page.goto(`/courses/${courseCode}`)
+    await page.goto(`/courses/${COURSE_CODE}`)
     await page.waitForLoadState('networkidle')
 
     // Should show week entries or empty state
@@ -41,16 +35,7 @@ test.describe('Course', () => {
   })
 
   test('week view page shows summary tab', async ({ page }) => {
-    const resp = await page.request.get(`${API_URL}/api/courses`)
-    const courses = await resp.json()
-
-    if (courses.length === 0) {
-      test.skip()
-      return
-    }
-
-    const courseCode = courses[0].code
-    await page.goto(`/courses/${courseCode}/weeks/1`)
+    await page.goto(`/courses/${COURSE_CODE}/weeks/1`)
     await page.waitForLoadState('networkidle')
 
     // Should show tabs or content
@@ -59,16 +44,7 @@ test.describe('Course', () => {
   })
 
   test('course ops page loads', async ({ page }) => {
-    const resp = await page.request.get(`${API_URL}/api/courses`)
-    const courses = await resp.json()
-
-    if (courses.length === 0) {
-      test.skip()
-      return
-    }
-
-    const courseCode = courses[0].code
-    await page.goto(`/courses/${courseCode}/ops`)
+    await page.goto(`/courses/${COURSE_CODE}/ops`)
     await page.waitForLoadState('networkidle')
     const pageContent = await page.textContent('body')
     expect(pageContent).toBeTruthy()

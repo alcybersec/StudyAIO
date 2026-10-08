@@ -5,13 +5,14 @@ test.describe('Pipeline console', () => {
     await page.goto('/upload')
     await expect(page.getByRole('heading', { name: /upload/i })).toBeVisible({ timeout: 10_000 })
 
-    // Demo accounts have uploads disabled — different surface, still valid
+    // Demo accounts have uploads disabled -- a different surface with its own
+    // contract: no dropzone. Asserted, not skipped.
     const demoDisabled = await page
       .getByText(/uploads disabled in demo/i)
       .isVisible()
       .catch(() => false)
     if (demoDisabled) {
-      test.skip()
+      await expect(page.locator('input[type="file"]')).toHaveCount(0)
       return
     }
 
