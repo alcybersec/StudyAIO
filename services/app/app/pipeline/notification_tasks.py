@@ -1,6 +1,6 @@
 """Celery Beat scheduled notification tasks."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import func, select
@@ -29,7 +29,7 @@ async def _send_deadline_reminders() -> int:
     from app.services import notification_service
 
     notified = 0
-    today = date.today()
+    today = datetime.now(UTC).date()
     window_end = today + timedelta(days=DEADLINE_REMINDER_WINDOW_DAYS)
     start_of_today = datetime.combine(today, datetime.min.time(), tzinfo=UTC)
 
@@ -215,7 +215,7 @@ async def _send_weekly_digest() -> int:
                 session_result = await session.execute(
                     select(func.count(StudySession.id)).where(
                         StudySession.user_id == user_id,
-                        StudySession.session_date >= date.today() - timedelta(days=7),
+                        StudySession.session_date >= datetime.now(UTC).date() - timedelta(days=7),
                     )
                 )
                 study_sessions = session_result.scalar() or 0

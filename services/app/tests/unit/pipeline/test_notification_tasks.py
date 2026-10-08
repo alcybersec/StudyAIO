@@ -133,7 +133,7 @@ class TestDeadlineReminderUtcWindow:
 
         with (
             patch.object(notification_tasks, "datetime", FakeDatetime),
-            patch.object(notification_tasks, "date", FakeDate),
+            patch.object(notification_tasks, "date", FakeDate, create=True),
             patch.object(
                 notification_tasks,
                 "async_session_factory",
