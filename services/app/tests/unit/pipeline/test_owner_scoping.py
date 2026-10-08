@@ -72,8 +72,12 @@ class TestRowOwnerWins:
         get_agent.return_value = agent
 
         with (
-            patch("app.services.settings_service.get_user_agent_config", new_callable=AsyncMock) as cfg,
-            patch("app.services.billing_service.record_agent_usage", new_callable=AsyncMock) as usage,
+            patch(
+                "app.services.settings_service.get_user_agent_config", new_callable=AsyncMock
+            ) as cfg,
+            patch(
+                "app.services.billing_service.record_agent_usage", new_callable=AsyncMock
+            ) as usage,
         ):
             result = await _classify("art-001", user_id=PAYLOAD_OWNER)
 
