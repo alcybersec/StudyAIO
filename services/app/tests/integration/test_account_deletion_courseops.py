@@ -23,6 +23,7 @@ from app.services import account_service
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
+
 async def _owner_with(db_session, make_user, *, document=False, assessment=False, deadline=False):
     user = await make_user()
     course = Course(id=generate_id(), code="DEL101", name="Del", user_id=user.id)

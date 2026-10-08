@@ -116,7 +116,9 @@ class TestReviewService:
         )
         await db_session.commit()
 
-        dismissed = await review_service.dismiss_review_item(db_session, item.id, user_id=test_user_id)
+        dismissed = await review_service.dismiss_review_item(
+            db_session, item.id, user_id=test_user_id
+        )
         await db_session.commit()
 
         assert dismissed.status == "dismissed"
