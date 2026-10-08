@@ -12,6 +12,7 @@ from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.extraction import Extraction
 from app.models.pipeline_run import PipelineRun
+from app.pipeline._owner import warn_on_owner_mismatch
 from app.pipeline.failures import record_stage_failure
 from app.services import index_service
 from app.services.event_service import publish_pipeline_event_sync
@@ -41,6 +42,8 @@ async def _index(artifact_id: str, user_id: str | None = None) -> dict:
         artifact = result.scalar_one_or_none()
         if not artifact:
             raise IndexingError(f"Artifact {artifact_id} not found")
+
+        warn_on_owner_mismatch("index", artifact_id, artifact.user_id, user_id or artifact.user_id)
 
         # Load extraction manifest
         ext_result = await session.execute(
@@ -103,7 +106,7 @@ async def _index(artifact_id: str, user_id: str | None = None) -> dict:
 
             return {
                 "artifact_id": artifact_id,
-                "user_id": user_id or artifact.user_id,
+                "user_id": artifact.user_id,
                 "status": "indexed",
                 "chunk_count": len(chunks),
             }

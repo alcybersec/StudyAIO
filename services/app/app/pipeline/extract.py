@@ -15,6 +15,7 @@ from app.extractors import get_extractor
 from app.models.artifact import LectureArtifact
 from app.models.extraction import Extraction
 from app.models.pipeline_run import PipelineRun
+from app.pipeline._owner import warn_on_owner_mismatch
 from app.pipeline.failures import record_stage_failure
 from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
@@ -33,6 +34,10 @@ async def _extract(artifact_id: str, user_id: str | None = None) -> dict:
         if not artifact:
             raise ExtractionError(f"Artifact {artifact_id} not found")
 
+        warn_on_owner_mismatch(
+            "extract", artifact_id, artifact.user_id, user_id or artifact.user_id
+        )
+
         # Check for existing extraction (idempotency)
         existing = await session.execute(
             select(Extraction).where(Extraction.artifact_id == artifact_id)
@@ -43,7 +48,7 @@ async def _extract(artifact_id: str, user_id: str | None = None) -> dict:
             await session.commit()
             return {
                 "artifact_id": artifact_id,
-                "user_id": user_id or artifact.user_id,
+                "user_id": artifact.user_id,
                 "status": "already_extracted",
             }
 
@@ -137,7 +142,7 @@ async def _extract(artifact_id: str, user_id: str | None = None) -> dict:
 
             return {
                 "artifact_id": artifact_id,
-                "user_id": user_id or artifact.user_id,
+                "user_id": artifact.user_id,
                 "status": "extracted",
                 "page_count": extraction_result.page_count,
                 "image_count": extraction_result.image_count,

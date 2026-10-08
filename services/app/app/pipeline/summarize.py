@@ -14,6 +14,7 @@ from app.core.storage import get_storage
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.pipeline_run import PipelineRun
+from app.pipeline._owner import warn_on_owner_mismatch
 from app.pipeline.failures import record_stage_failure
 from app.services import summary_service
 from app.services.event_service import publish_pipeline_event_sync
@@ -45,6 +46,10 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
         artifact = result.unique().scalar_one_or_none()
         if not artifact:
             raise SummarizationError(f"Artifact {artifact_id} not found")
+
+        warn_on_owner_mismatch(
+            "summarize", artifact_id, artifact.user_id, user_id or artifact.user_id
+        )
 
         # Verify artifact is classified
         if not artifact.course_id or artifact.week is None:
@@ -97,7 +102,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
             # Call AI agent with per-user settings
             from app.services.settings_service import get_user_ai_context
 
-            owner_id = user_id or artifact.user_id
+            owner_id = artifact.user_id
             user_agent_config, output_language = await get_user_ai_context(session, owner_id)
             agent = get_agent(user_settings=user_agent_config, output_language=output_language)
             summary_result = await agent.generate_summary(extraction_data, existing_md)
@@ -106,7 +111,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
             # here records every request this stage made.
             from app.services.billing_service import record_agent_usage
 
-            await record_agent_usage(session, user_id or artifact.user_id, agent)
+            await record_agent_usage(session, artifact.user_id, agent)
 
             # Persist refreshed CLI credentials if applicable
             if hasattr(agent, "refreshed_credentials") and agent.refreshed_credentials:
@@ -115,7 +120,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
 
                     await update_user_settings(
                         session,
-                        user_id or artifact.user_id,
+                        artifact.user_id,
                         {"claude_cli_credentials": json.dumps(agent.refreshed_credentials)},
                     )
                 except Exception:
@@ -175,7 +180,7 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
 
             return {
                 "artifact_id": artifact_id,
-                "user_id": user_id or artifact.user_id,
+                "user_id": artifact.user_id,
                 "status": "summarized",
                 "summary_id": summary.id,
                 "version": summary.version,
