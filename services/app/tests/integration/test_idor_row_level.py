@@ -216,10 +216,10 @@ class TestPendingReviewsAreScopedByRow:
             }
             assert orphan.id not in listed
 
-        # ...and it is not hidden by being absent: an unscoped internal caller
-        # still sees it, so the row really is in the table.
-        unscoped = {i.id for i in await review_service.list_pending_reviews(db_session)}
-        assert orphan.id in unscoped
+        # ...and it is not hidden by being absent: the row really is in the
+        # table, pending (the service has no unscoped path left to prove it).
+        row = await db_session.get(ReviewItem, orphan.id)
+        assert row is not None and row.status == "pending"
 
     async def test_empty_user_id_returns_nothing_rather_than_everything(
         self, db_session, test_user_id
@@ -301,14 +301,21 @@ class TestArtifactLookupIsScopedByRow:
         mine_view = await artifact_service.get_artifact(db_session, theirs.id, user_id=stranger_id)
         assert mine_view is not None and mine_view.id == theirs.id
 
-    async def test_omitting_user_id_stays_unscoped_for_internal_callers(
-        self, db_session, test_user_id
-    ):
-        """The pipeline calls this without a user; that path must keep working."""
+    async def test_omitting_user_id_raises_type_error(self, db_session, test_user_id):
+        """No unscoped path remains (BACKEND-006, ruling C6): `user_id` is required.
+
+        The pipeline used to call this without a user; internal callers now pass
+        the artifact's owner explicitly. Omitting it must fail loudly rather
+        than fall through to an unscoped lookup.
+        """
         stranger_id = await _stranger(db_session)
         theirs = await _artifact(db_session, stranger_id, "pipeline.pdf")
 
-        found = await artifact_service.get_artifact(db_session, theirs.id)
+        with pytest.raises(TypeError):
+            await artifact_service.get_artifact(db_session, theirs.id)  # type: ignore[call-arg]
+
+        # The explicit owner still resolves it.
+        found = await artifact_service.get_artifact(db_session, theirs.id, user_id=stranger_id)
         assert found is not None and found.id == theirs.id
 
 
