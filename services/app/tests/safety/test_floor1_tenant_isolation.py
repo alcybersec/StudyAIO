@@ -1217,7 +1217,58 @@ def test_floor1_caller_filter_detector_rejects_widened_predicates():
 # the function from the failure list by itself.
 
 #: (module, function) -> why its caller parameter may be omitted.
-OPTIONAL_CALLER_ALLOWED: dict[tuple[str, str], str] = {}
+#:
+#: Pipeline stages (C6 ruling, decisions.md 2026-10-08; classified in
+#: M32-S1-SAFETY-009). Every stage runs in the worker on an artifact id a
+#: scoped route enqueued, loads that one ``lecture_artifacts`` row by its id,
+#: and resolves every owner-dependent use as ``user_id or artifact.user_id``,
+#: a NOT NULL column. Omitting ``user_id`` therefore means "the row's owner",
+#: never "every user". ``classify._get_or_create_course`` is deliberately NOT
+#: here: it receives the owner instead of deriving it, and with ``""`` its
+#: ``if user_id:`` drops the filter and matches any user's course by code.
+_ROW_OWNER = (
+    "stage loads its artifact by id and falls back to artifact.user_id (NOT NULL) "
+    "for every owner-dependent use; None never widens a query"
+)
+OPTIONAL_CALLER_ALLOWED: dict[tuple[str, str], str] = {
+    ("app/pipeline/classify.py", "_classify"): (
+        f"{_ROW_OWNER}: known courses, AI credentials, usage, course resolution"
+    ),
+    ("app/pipeline/extract.py", "_extract"): (
+        f"{_ROW_OWNER}; user_id is only echoed into the next stage's payload"
+    ),
+    ("app/pipeline/summarize.py", "_summarize"): (
+        f"{_ROW_OWNER}: AI credentials and usage (owner_id = user_id or artifact.user_id)"
+    ),
+    ("app/pipeline/index.py", "_index"): (
+        f"{_ROW_OWNER}; user_id is only echoed into the next stage's payload"
+    ),
+    ("app/pipeline/assets.py", "_generate_assets"): (
+        f"{_ROW_OWNER}: AI credentials, usage, refreshed CLI credentials, concepts, notification"
+    ),
+    ("app/pipeline/concepts_task.py", "_extract_concepts_for_artifact"): (
+        f"{_ROW_OWNER} (effective_user_id = user_id or artifact.user_id)"
+    ),
+    ("app/pipeline/concepts_task.py", "extract_concepts"): (
+        "Celery task signature: user_id is optional for queued-message back-compat "
+        "and is passed straight to _extract_concepts_for_artifact (above); nothing in "
+        "app/ enqueues it today (the route extracts inline, scoped)"
+    ),
+    ("app/pipeline/ingest.py", "_ingest"): (
+        "None becomes '' for artifact_service.ingest_file: with an artifact_id it adopts "
+        "that one pre-created row (owner from the row, later stages fall back to it); "
+        "without one, dedup against owner '' matches nothing and the INSERT fails the "
+        "NOT NULL users FK, so an owner-less ingest fails closed"
+    ),
+    ("app/pipeline/orchestrator.py", "run_pipeline"): (
+        "dispatcher, no query: user_id only rides in the chain payload; None ends in "
+        "_ingest's fail-closed branch or the adopted row's owner"
+    ),
+    ("app/pipeline/orchestrator.py", "resume_pipeline"): (
+        "dispatcher, no query: user_id only rides in the chain payload; None means each "
+        "stage falls back to artifact.user_id"
+    ),
+}
 
 
 def _is_none(node: ast.AST | None) -> bool:
@@ -1331,6 +1382,67 @@ def test_floor1_caller_parameter_is_never_optional():
         "(tests/safety/test_floor1_tenant_isolation.py) with the reason it is safe."
     )
     assert not stale, f"OPTIONAL_CALLER_ALLOWED entries no longer match — remove them: {stale}"
+
+
+def _row_owner_fallback(node: ast.AST) -> bool:
+    """``user_id or <row>.user_id``: the payload owner, else the loaded row's."""
+    return (
+        isinstance(node, ast.BoolOp)
+        and isinstance(node.op, ast.Or)
+        and len(node.values) == 2
+        and isinstance(node.values[0], ast.Name)
+        and node.values[0].id == "user_id"
+        and isinstance(node.values[1], ast.Attribute)
+        and node.values[1].attr == "user_id"
+        and isinstance(node.values[1].value, ast.Name)
+    )
+
+
+def test_floor1_row_owner_stages_never_use_a_bare_optional_caller():
+    """The ``_ROW_OWNER`` classification stays true: no bare ``user_id`` in those stages.
+
+    ``OPTIONAL_CALLER_ALLOWED`` is keyed on the function, so on its own it would
+    wave through a later edit that hands the possibly-``None`` payload owner to
+    a scoped service (``list_courses(session, user_id=user_id)``). Every read
+    of ``user_id`` in a stage classified as ``_ROW_OWNER`` must be the
+    ``user_id or artifact.user_id`` fallback.
+    """
+    import pathlib
+
+    import app
+
+    root = pathlib.Path(app.__file__).resolve().parent.parent
+    entries = [k for k, v in OPTIONAL_CALLER_ALLOWED.items() if v.startswith(_ROW_OWNER)]
+    assert len(entries) >= 6, f"control: the _ROW_OWNER entries went missing: {entries}"
+    bare: list[str] = []
+    for module, name in entries:
+        tree = parse(root / module)
+        fn = next(
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef) and n.name == name
+        )
+        inside = {
+            id(sub)
+            for node in ast.walk(fn)
+            if _row_owner_fallback(node)
+            for sub in ast.walk(node.values[0])
+        }
+        bare += [
+            f"{module}::{name} line {n.lineno}"
+            for stmt in fn.body
+            for n in ast.walk(stmt)
+            if isinstance(n, ast.Name)
+            and n.id == "user_id"
+            and isinstance(n.ctx, ast.Load)
+            and id(n) not in inside
+        ]
+    assert not bare, (
+        "Floor 1: a pipeline stage classified as deriving its owner from the artifact row "
+        "uses the optional payload `user_id` bare, so an omitted caller reaches it as None:\n  "
+        + "\n  ".join(bare)
+        + "\nUse `user_id or artifact.user_id`, or reclassify the stage."
+    )
 
 
 _OPTIONAL_CALLER_SOURCE = """
