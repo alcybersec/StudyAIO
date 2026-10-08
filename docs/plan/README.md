@@ -25,7 +25,6 @@ not merged to `main`; no MR opened.
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
 | M32-S1-BACKEND-006 (C6: `user_id` required + unconditional filter in services) | `backend` | 2026-10-08 | isolated |
-| M32-S1-AI-012 (C6 pipeline: `_get_or_create_course` required owner; row owner wins over payload) | `ai` | 2026-10-08 | isolated |
 
 ## Completed
 
@@ -36,6 +35,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-AI-012 (C6 pipeline: `_get_or_create_course` owner required; artifact row owner wins, mismatch logged) | `ai` | `03c2ff9`/`68092b8`/`a59fd27` → `kit/retrofit` head `f72a928` | Diff = 7 pipeline files + 1 unit test. **Orchestrator red-check** (agent not red-first): pre-fix pipeline → `5 failed, 1 passed`; fixed → pipeline unit `75 passed`. Floor `2 failed, 78 passed` — both BACKEND-006's (services/ C6 entries; ledger segment) | 2026-10-08 |
 | M32-S1-SAFETY-009 (review BACKEND-001/005; classify pipeline under C6) | `safety` | `dc749bd`/`7aebc43` → `kit/retrofit` head `a8dc819` | Diff = `tests/safety/**`. Agent floor: `2 failed, 78 passed`, 97.53% — both intended: C6 pin (services/ + `classify._get_or_create_course`) and new floor-4 pin (purge must skip empty/non-id ledger segment — an S3 folder placeholder would sweep all of `summaries/`). BACKEND-001/005 otherwise APPROVE (mutation-checked; added cross-user ledger pin). 10/11 pipeline stages classified. Fixes routed: ledger segment + S3 list failure → BACKEND-006; `_get_or_create_course` + row-owner-wins → AI-012 | 2026-10-08 |
 | M32-S1-QA-010 (retire 6 R-016 xfails) | `qa` | `f8624c8` → `kit/retrofit` (see log) | Diff = 32 pure deletions, 5 integration files. Agent: fixes reverted → exactly those `6 failed`; restored → `529 passed`, 0 xfailed, coverage gate exit 0. **Integration tier now has 0 xfails (C2 met)** | 2026-10-08 |
 | M32-S1-ARCH-011 (ADR 0004 § Correction: ledger purge mechanism, placeholder filled) | `architect` | `128b37d` → `kit/retrofit` (see log) | Diff = ADR 0004 only; checked against `a3ab6ce`. `pytest tests/contracts` → `25 passed`. Wording under SAFETY-009 review | 2026-10-08 |
