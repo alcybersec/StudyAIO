@@ -219,9 +219,9 @@ async def create_or_update_summary(
 
 
 async def get_summary_by_id(
-    session: AsyncSession, summary_id: str, user_id: str | None = None
+    session: AsyncSession, summary_id: str, *, user_id: str
 ) -> Summary | None:
-    """Get a summary by its ID, optionally scoped by owner.
+    """Get a summary by its ID, scoped to its owner.
 
     Summary has no user_id column of its own; ownership runs through the
     course it belongs to.
@@ -229,23 +229,23 @@ async def get_summary_by_id(
     Args:
         session: Database session.
         summary_id: Summary UUID.
-        user_id: If provided, only return the summary when its course belongs
-            to this user. Endpoints exposing summaries by id MUST pass this;
-            omitting it returns the summary regardless of owner and is only
-            appropriate for trusted internal callers.
+        user_id: Owner user UUID (required). Only a summary whose course
+            belongs to this user is returned.
 
     Returns:
         Summary if found, None otherwise.
     """
-    query = select(Summary).where(Summary.id == summary_id)
-    if user_id is not None:
-        query = query.join(Course, Summary.course_id == Course.id).where(Course.user_id == user_id)
+    query = (
+        select(Summary)
+        .join(Course, Summary.course_id == Course.id)
+        .where(Summary.id == summary_id, Course.user_id == user_id)
+    )
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
 
 async def get_summary_for_week(
-    session: AsyncSession, course_code: str, week: int, user_id: str | None = None
+    session: AsyncSession, course_code: str, week: int, *, user_id: str
 ) -> Summary | None:
     """Get the summary for a specific course code + week.
 
@@ -264,10 +264,12 @@ async def get_summary_for_week(
     query = (
         select(Summary)
         .join(CourseModel, Summary.course_id == CourseModel.id)
-        .where(CourseModel.code == course_code, Summary.week == week)
+        .where(
+            CourseModel.code == course_code,
+            Summary.week == week,
+            CourseModel.user_id == user_id,
+        )
     )
-    if user_id is not None:
-        query = query.where(CourseModel.user_id == user_id)
     result = await session.execute(query)
     return result.scalar_one_or_none()
 

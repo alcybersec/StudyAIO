@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import false, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.utils import generate_id
@@ -204,9 +204,7 @@ async def get_xp_summary(session: AsyncSession, user_id: str) -> dict:
     }
 
 
-async def get_leaderboard(
-    session: AsyncSession, limit: int = 10, user_id: str | None = None
-) -> list[dict]:
+async def get_leaderboard(session: AsyncSession, limit: int = 10, *, user_id: str) -> list[dict]:
     """Get top users by XP who have opted in to the leaderboard.
 
     Hidden by default (R-007, floor 1): a user appears only when
@@ -225,10 +223,7 @@ async def get_leaderboard(
         select(UserXP, User.username)
         .join(User, UserXP.user_id == User.id)
         .outerjoin(UserSettings, UserSettings.user_id == UserXP.user_id)
-        .where(
-            (UserSettings.leaderboard_opt_in.is_(True))
-            | (UserXP.user_id == user_id if user_id is not None else false())
-        )
+        .where((UserSettings.leaderboard_opt_in.is_(True)) | (UserXP.user_id == user_id))
         .order_by(UserXP.total_xp.desc())
         .limit(limit)
     )

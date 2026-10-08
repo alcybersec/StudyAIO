@@ -127,6 +127,7 @@ async def resolve_review_item(
             course_code=resolution.get("course_code"),
             week=resolution.get("week"),
             title=resolution.get("title"),
+            user_id=user.id,
         )
 
         artifact.status = "classified"

@@ -153,20 +153,18 @@ async def save_quiz_questions(
     return records
 
 
-def _course_scope(*conditions, user_id: str | None):
+def _course_scope(*conditions, user_id: str):
     """Append the course-owner filter to a set of where() conditions.
 
     Course codes are unique per user, not globally, so any query that
     resolves a course by code must also pin the owner or it will match
     another user's course of the same code.
     """
-    if user_id is not None:
-        return (*conditions, Course.user_id == user_id)
-    return conditions
+    return (*conditions, Course.user_id == user_id)
 
 
 async def get_flashcards_for_week(
-    session: AsyncSession, course_code: str, week: int, user_id: str | None = None
+    session: AsyncSession, course_code: str, week: int, *, user_id: str
 ) -> list[Flashcard]:
     """Get all flashcards for a specific course week.
 
@@ -174,7 +172,7 @@ async def get_flashcards_for_week(
         session: Database session.
         course_code: Course code (e.g., "CSIT302").
         week: Week number.
-        user_id: If provided, only match the course owned by this user.
+        user_id: Owner user UUID; only the course this user owns matches.
             Course codes are unique *per user* (uq_courses_code_user), so a
             code like "CSIT302" resolves to a different course for every
             user. Endpoints reaching assets by a caller-supplied code MUST
@@ -196,7 +194,7 @@ async def get_flashcards_for_week(
 
 
 async def get_quiz_questions_for_week(
-    session: AsyncSession, course_code: str, week: int, user_id: str | None = None
+    session: AsyncSession, course_code: str, week: int, *, user_id: str
 ) -> list[QuizQuestion]:
     """Get all quiz questions for a specific course week.
 
@@ -204,7 +202,7 @@ async def get_quiz_questions_for_week(
         session: Database session.
         course_code: Course code (e.g., "CSIT302").
         week: Week number.
-        user_id: If provided, only match the course owned by this user.
+        user_id: Owner user UUID; only the course this user owns matches.
             Course codes are unique *per user* (uq_courses_code_user), so a
             code like "CSIT302" resolves to a different course for every
             user. Endpoints reaching assets by a caller-supplied code MUST
@@ -226,14 +224,14 @@ async def get_quiz_questions_for_week(
 
 
 async def get_flashcards_for_course(
-    session: AsyncSession, course_code: str, user_id: str | None = None
+    session: AsyncSession, course_code: str, *, user_id: str
 ) -> list[Flashcard]:
     """Get all flashcards for a course (all weeks).
 
     Args:
         session: Database session.
         course_code: Course code (e.g., "CSIT302").
-        user_id: If provided, only match the course owned by this user.
+        user_id: Owner user UUID; only the course this user owns matches.
             Course codes are unique *per user* (uq_courses_code_user), so a
             code like "CSIT302" resolves to a different course for every
             user. Endpoints reaching assets by a caller-supplied code MUST
@@ -255,14 +253,14 @@ async def get_flashcards_for_course(
 
 
 async def get_quiz_questions_for_course(
-    session: AsyncSession, course_code: str, user_id: str | None = None
+    session: AsyncSession, course_code: str, *, user_id: str
 ) -> list[QuizQuestion]:
     """Get all quiz questions for a course (all weeks).
 
     Args:
         session: Database session.
         course_code: Course code (e.g., "CSIT302").
-        user_id: If provided, only match the course owned by this user.
+        user_id: Owner user UUID; only the course this user owns matches.
             Course codes are unique *per user* (uq_courses_code_user), so a
             code like "CSIT302" resolves to a different course for every
             user. Endpoints reaching assets by a caller-supplied code MUST

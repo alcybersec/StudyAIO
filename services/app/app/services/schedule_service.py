@@ -36,7 +36,8 @@ async def generate_study_schedule(
     session: AsyncSession,
     exam_id: str,
     days_ahead: int = 7,
-    user_id: str | None = None,
+    *,
+    user_id: str,
 ) -> list[dict] | None:
     """Generate an adaptive daily study plan for the next N days.
 
@@ -50,17 +51,12 @@ async def generate_study_schedule(
         session: Database session.
         exam_id: Exam UUID.
         days_ahead: Number of days to plan (default 7).
-        user_id: If provided, only build a schedule for an exam owned by this
-            user. Endpoints reaching an exam by a caller-supplied id MUST
-            pass this; omitting it plans against the exam regardless of owner
-            and is only appropriate for trusted internal callers.
+        user_id: Owner user UUID; only an exam this user owns is planned.
 
     Returns:
         List of daily plan dicts, or None if exam not found (or not owned).
     """
-    query = select(Exam).where(Exam.id == exam_id)
-    if user_id is not None:
-        query = query.where(Exam.user_id == user_id)
+    query = select(Exam).where(Exam.id == exam_id, Exam.user_id == user_id)
     result = await session.execute(query)
     exam = result.scalar_one_or_none()
     if not exam:
@@ -135,15 +131,15 @@ async def generate_study_schedule(
 async def get_daily_study_plan(
     session: AsyncSession,
     exam_id: str,
-    user_id: str | None = None,
+    *,
+    user_id: str,
 ) -> dict | None:
     """Get today's study plan for an exam.
 
     Args:
         session: Database session.
         exam_id: Exam UUID.
-        user_id: If provided, only build a plan for an exam owned by this
-            user. Endpoints exposing this by id MUST pass it.
+        user_id: Owner user UUID; only an exam this user owns is planned.
 
     Returns:
         Today's plan dict, or None if exam not found (or not owned).

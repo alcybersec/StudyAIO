@@ -293,7 +293,7 @@ async def get_exam_readiness(session: AsyncSession, exam_id: str, user_id: str) 
     if not exam:
         return None
 
-    progress = await get_exam_progress(session, exam_id)
+    progress = await get_exam_progress(session, exam_id, user_id=user_id)
     if not progress:
         return None
 

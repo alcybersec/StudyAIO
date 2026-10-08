@@ -20,22 +20,21 @@ logger = structlog.get_logger()
 
 async def list_courses(
     session: AsyncSession,
-    user_id: str | None = None,
+    *,
+    user_id: str,
     include_archived: bool = False,
 ) -> list[Course]:
-    """Get all courses, optionally filtered by user, ordered by code.
+    """Get the user's courses, ordered by code.
 
     Args:
         session: Database session.
-        user_id: Filter by owner user UUID.
+        user_id: Owner user UUID (required; the query is always scoped to it).
         include_archived: If False (default), archived courses are excluded.
 
     Returns:
         List of courses ordered alphabetically by code.
     """
-    query = select(Course)
-    if user_id is not None:
-        query = query.where(Course.user_id == user_id)
+    query = select(Course).where(Course.user_id == user_id)
     if not include_archived:
         query = query.where(Course.archived_at.is_(None))
     query = query.order_by(Course.code)
@@ -43,30 +42,24 @@ async def list_courses(
     return list(result.scalars().all())
 
 
-async def get_course_by_code(
-    session: AsyncSession, code: str, user_id: str | None = None
-) -> Course | None:
-    """Get a course by its code, optionally scoped by user.
+async def get_course_by_code(session: AsyncSession, code: str, *, user_id: str) -> Course | None:
+    """Get a course by its code, scoped to its owner.
 
     Args:
         session: Database session.
         code: Course code (e.g., "CSIT302").
-        user_id: If provided, only return course owned by this user.
+        user_id: Owner user UUID; only a course this user owns is returned.
 
     Returns:
         Course if found, None otherwise.
     """
-    query = select(Course).where(Course.code == code)
-    if user_id is not None:
-        query = query.where(Course.user_id == user_id)
+    query = select(Course).where(Course.code == code, Course.user_id == user_id)
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
 
-async def get_course_by_id(
-    session: AsyncSession, course_id: str, user_id: str | None = None
-) -> Course | None:
-    """Get a course by its id, optionally scoped by user.
+async def get_course_by_id(session: AsyncSession, course_id: str, *, user_id: str) -> Course | None:
+    """Get a course by its id, scoped to its owner.
 
     Course *codes* are unique only per user (``uq_courses_code_user``), so
     anything that has to be unique across the whole instance -- a storage key,
@@ -76,28 +69,27 @@ async def get_course_by_id(
     Args:
         session: Database session.
         course_id: Course UUID.
-        user_id: If provided, only return the course if this user owns it.
+        user_id: Owner user UUID; only a course this user owns is returned.
 
     Returns:
-        Course if found (and owned, when ``user_id`` is given), None otherwise.
+        Course if found (and owned by ``user_id``), None otherwise.
     """
-    query = select(Course).where(Course.id == course_id)
-    if user_id is not None:
-        query = query.where(Course.user_id == user_id)
+    query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
 
 async def list_courses_with_stats(
     session: AsyncSession,
-    user_id: str | None = None,
+    *,
+    user_id: str,
     include_archived: bool = False,
 ) -> list[dict]:
     """Get all courses with aggregate stats in O(1) queries.
 
     Args:
         session: Database session.
-        user_id: Filter by owner user UUID.
+        user_id: Owner user UUID (required; the query is always scoped to it).
         include_archived: If False (default), archived courses are excluded.
 
     Returns:
