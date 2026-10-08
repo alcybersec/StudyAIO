@@ -14,6 +14,7 @@ from app.core.utils import generate_id
 from app.models.achievement import Achievement
 from app.models.notification import Notification
 from app.models.user_achievement import UserAchievement
+from app.models.user_settings import UserSettings
 from app.models.user_xp import UserXP
 from app.models.xp_event import XPEvent
 from app.services import challenge_service, xp_service
@@ -281,6 +282,9 @@ class TestLeaderboard:
         self, client_factory, make_user, db_session
     ):
         low, high = await make_user(), await make_user()
+        for u in (low, high):
+            db_session.add(UserSettings(id=generate_id(), user_id=u.id, leaderboard_opt_in=True))
+        await db_session.flush()
         await xp_service.award_xp(db_session, low.id, "card_reviewed")
         await xp_service.award_xp(db_session, high.id, "streak_day")
         entries = (await client_factory(low).get("/api/gamification/leaderboard")).json()["entries"]
@@ -288,6 +292,25 @@ class TestLeaderboard:
         assert ranks[high.id] < ranks[low.id]
         assert all(set(e) == {"user_id", "username", "total_xp", "level", "rank"} for e in entries)
         assert "@" not in str(entries)  # never an email address
+
+    async def test_opted_out_other_user_absent_but_caller_sees_self(
+        self, client_factory, make_user, db_session
+    ):
+        caller, hidden, shown = await make_user(), await make_user(), await make_user()
+        # `hidden` has an explicit opt-out row; `caller` has no settings row at all.
+        db_session.add(UserSettings(id=generate_id(), user_id=hidden.id, leaderboard_opt_in=False))
+        db_session.add(UserSettings(id=generate_id(), user_id=shown.id, leaderboard_opt_in=True))
+        await db_session.flush()
+        await xp_service.award_xp(db_session, hidden.id, "streak_day")
+        await xp_service.award_xp(db_session, shown.id, "streak_day")
+        await xp_service.award_xp(db_session, caller.id, "card_reviewed")
+        entries = (await client_factory(caller).get("/api/gamification/leaderboard")).json()[
+            "entries"
+        ]
+        ids = {e["user_id"] for e in entries}
+        assert hidden.id not in ids
+        assert shown.id in ids
+        assert caller.id in ids  # the caller always sees themselves
 
     async def test_xp_amount_table_covers_known_events(self, db_session):
         assert xp_service.XP_AMOUNTS["upload"] > 0

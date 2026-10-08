@@ -34,6 +34,7 @@ from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.review_item import ReviewItem
 from app.models.summary import Summary
+from app.models.summary_version import SummaryVersion
 from app.models.user import User
 from app.services import course_service, summary_service
 
@@ -263,9 +264,9 @@ class TestKeepTargetPolicy:
 
 @pytest.mark.asyncio(loop_scope="session")
 class TestKeepSourcePolicy:
-    """Spend nothing: the source's content replaces the target's."""
+    """Spend nothing: the source replaces the target, whose text is retained (R-007)."""
 
-    async def test_source_content_overwrites_target_row_and_blob(self, db_session):
+    async def test_source_content_replaces_target_and_prior_version_is_retained(self, db_session):
         user_id, _, target, _, src_conflict, tgt_conflict = await _fixture(db_session)
         src_id = src_conflict.id
 
@@ -281,13 +282,32 @@ class TestKeepSourcePolicy:
         assert tgt_conflict.content_md == "# source week 2\n"
         assert tgt_conflict.version == 2
 
-        # The key does not move here -- the row was already the target's -- so
-        # the blob is only correct if the content is written unconditionally.
-        # Skipping the write when the key is unchanged left the source's text in
-        # the row and the target's on disk.
-        key = summary_service.build_summary_storage_key(target.id, CONFLICT_WEEK)
-        assert tgt_conflict.file_path == key
-        assert (await get_storage().get(key)).decode() == "# source week 2\n"
+        # The live blob is written to the new version's own key, so the old
+        # blob is never put over (floor 4).
+        live_key = summary_service.build_summary_storage_key(target.id, CONFLICT_WEEK, version=2)
+        assert tgt_conflict.file_path == live_key
+        assert (await get_storage().get(live_key)).decode() == "# source week 2\n"
+
+        # The target's prior text survives as a summary_versions row ...
+        retained = (
+            (
+                await db_session.execute(
+                    select(SummaryVersion).where(
+                        SummaryVersion.course_id == target.id,
+                        SummaryVersion.week == CONFLICT_WEEK,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert [(v.version, v.content_md, v.user_id) for v in retained] == [
+            (1, "# target week 2\n", user_id)
+        ]
+        # ... and its blob is still on disk at the v1 key.
+        v1_key = summary_service.build_summary_storage_key(target.id, CONFLICT_WEEK, version=1)
+        assert retained[0].file_path == v1_key
+        assert (await get_storage().get(v1_key)).decode() == "# target week 2\n"
 
         rows = (
             (

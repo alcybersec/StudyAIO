@@ -285,12 +285,6 @@ async def test_second_lecture_same_week_increments_summary_version(owner, agent)
         assert set(summaries[0].source_artifacts) == {first_id, second_id}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG (floor 4): re-summarizing overwrites the prior summary in place (DB content_md and "
-    "the storage file at the same key); only the version integer is kept, so the prior version's "
-    "content is destroyed",
-)
 async def test_resummarize_retains_prior_version_content(owner, agent):
     first_id = await _upload(owner, "net-w3-a.pdf", make_pdf())
     await _run_all(owner, first_id)
