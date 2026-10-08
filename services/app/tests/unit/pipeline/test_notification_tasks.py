@@ -98,3 +98,51 @@ class TestSendDeadlineReminders:
             notified = await _send_deadline_reminders()
 
         assert notified == 0
+
+
+@pytest.mark.asyncio
+class TestDeadlineReminderUtcWindow:
+    """The dedup window and due-date range use the UTC date, not the host's."""
+
+    async def test_window_uses_utc_date_when_local_date_differs(self):
+        """At 22:00 UTC on Oct 9 a UTC+4 host reads Oct 10; the window must stay Oct 9."""
+        import datetime as real_dt
+
+        from app.pipeline import notification_tasks
+
+        utc_now = real_dt.datetime(2026, 10, 9, 22, 0, tzinfo=real_dt.UTC)
+        local_today = real_dt.date(2026, 10, 10)  # what date.today() says on UTC+4
+
+        class FakeDatetime(real_dt.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return utc_now.astimezone(tz) if tz else utc_now.replace(tzinfo=None)
+
+        class FakeDate(real_dt.date):
+            @classmethod
+            def today(cls):
+                return local_today
+
+        session = AsyncMock()
+        session.add = MagicMock()
+        deadlines_result = MagicMock()
+        deadlines_result.all.return_value = [_deadline_row("dl-001", days_ahead=3)]
+        existing_result = MagicMock()
+        existing_result.scalar_one_or_none.return_value = "already"
+        session.execute = AsyncMock(side_effect=[deadlines_result, existing_result])
+
+        with (
+            patch.object(notification_tasks, "datetime", FakeDatetime),
+            patch.object(notification_tasks, "date", FakeDate),
+            patch.object(
+                notification_tasks,
+                "async_session_factory",
+                _session_factory_for(session),
+            ),
+        ):
+            await notification_tasks._send_deadline_reminders()
+
+        range_params = session.execute.call_args_list[0].args[0].compile().params
+        assert real_dt.date(2026, 10, 9) in range_params.values()
+        dedup_params = session.execute.call_args_list[1].args[0].compile().params
+        assert real_dt.datetime(2026, 10, 9, tzinfo=real_dt.UTC) in dedup_params.values()
