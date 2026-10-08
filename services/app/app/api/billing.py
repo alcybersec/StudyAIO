@@ -101,11 +101,11 @@ async def get_billing_overview(
 
     usage = UsageSummaryResponse(
         ai_calls_today=usage_today.ai_calls_count if usage_today else 0,
-        ai_calls_limit=_limit_or_none(user.tier, 'ai_calls_per_day') if is_limited else None,
+        ai_calls_limit=_limit_or_none(user.tier, "ai_calls_per_day") if is_limited else None,
         uploads_this_month=monthly_uploads,
-        uploads_limit=_limit_or_none(user.tier, 'uploads_per_month') if is_limited else None,
+        uploads_limit=_limit_or_none(user.tier, "uploads_per_month") if is_limited else None,
         courses_count=course_count,
-        courses_limit=_limit_or_none(user.tier, 'courses') if is_limited else None,
+        courses_limit=_limit_or_none(user.tier, "courses") if is_limited else None,
     )
 
     return BillingOverviewResponse(subscription=subscription, usage=usage)
