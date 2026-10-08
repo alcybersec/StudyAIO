@@ -219,9 +219,9 @@ class TestGetBillingOverview:
         mock_quota.get_usage_today = AsyncMock(return_value=usage)
         mock_quota.get_monthly_upload_count = AsyncMock(return_value=2)
         mock_quota.get_course_count = AsyncMock(return_value=1)
-        mock_quota.FREE_MAX_AI_CALLS_PER_DAY = 20
-        mock_quota.FREE_MAX_UPLOADS_PER_MONTH = 5
-        mock_quota.FREE_MAX_COURSES = 1
+        # Limits come from settings via _limit_for; the old FREE_MAX_* constants no longer exist.
+        limits = {"ai_calls_per_day": 20, "uploads_per_month": 5, "courses": 1}
+        mock_quota._limit_for = MagicMock(side_effect=lambda _tier, res: limits[res])
 
         resp = await billing_client.get("/api/billing/subscription")
         assert resp.status_code == 200
