@@ -1,6 +1,6 @@
 # ADR 0004 — Floor 4 admits explicit user-initiated deletes of the user's own items
 
-**Status** Accepted (2026-10-04, by the user, with one amendment; see § Amendment 2026-10-04) ·
+**Status** Accepted (2026-10-04, by the user, with one amendment; see § Amendment 2026-10-04; clarified 2026-10-08, see § Clarification 2026-10-08) ·
 **Date** 2026-10-04 · **Kit version** 1.10.3
 
 **Ruling implemented:** `docs/decisions.md` § Rulings, 2026-10-04, "R-007 single-item deletes:
@@ -73,7 +73,7 @@ same keys as the floor-4 inventories. Every pair was re-derived on 2026-10-04 at
 
 | # | Item | Route (handler, `services/app/`) | Delete site (`services/app/`) | What goes |
 |---|---|---|---|---|
-| 1 | Course | `DELETE /api/courses/{course_code}`, `app/api/courses.py:delete_course`. Requires `X-Confirm: <course_code>`, otherwise 428. | `app/services/course_service.py:delete_course` (DB) | The course and every DB child: artifacts, extractions, chunks, summaries, flashcards plus reviews, quiz questions plus attempts, concepts plus relations, exams, study sessions, review items, pipeline runs, course documents, assessments, deadlines. **No blob is deleted.** The account purge sweeps the user's prefix later. |
+| 1 | Course | `DELETE /api/courses/{course_code}`, `app/api/courses.py:delete_course`. Requires `X-Confirm: <course_code>`, otherwise 428. | `app/services/course_service.py:delete_course` (DB) | The course and every DB child: artifacts, extractions, chunks, summaries, `summary_versions` (the retained prior versions of that course's own summaries; § Clarification 2026-10-08), flashcards plus reviews, quiz questions plus attempts, concepts plus relations, exams, study sessions, review items, pipeline runs, course documents, assessments, deadlines. **No blob is deleted.** The account purge sweeps the user's prefix later. |
 | 2 | Course document or assessment attachment | `DELETE /api/courseops/documents/{document_id}`, `app/api/courseops.py:delete_document` | `app/services/courseops_service.py:delete_course_document` (DB), then `app/services/courseops_service.py:_delete_blob_if_unreferenced` (`store.delete`, blob) | The `course_documents` row. The blob goes only when no other row of the same user references the key, and only under that user's own `courseops/<user_id>/` prefix. |
 | 3 | Deadline | `DELETE /api/courseops/deadlines/{deadline_id}`, `app/api/courseops.py:delete_deadline` | `app/services/courseops_service.py:delete_deadline` (DB) | One `deadlines` row, whether AI-extracted or manual. |
 | 4 | Chat session | `DELETE /api/chat/sessions/{session_id}`, `app/api/chat.py:delete_session` | `app/services/chat_service.py:delete_session` (DB) | One `chat_sessions` row and its `chat_messages`, by ORM `delete-orphan` cascade and FK `ON DELETE CASCADE`. |
@@ -196,6 +196,37 @@ because it was part of the acceptance itself. Ruling: `docs/decisions.md` § Rul
 - **What `safety` changes:** the floor-4 test should pin that the `keep_source` branch writes a
   `summary_versions` row before it overwrites the target. That is the same retention check as
   re-summarize, and it stays red until `M31-S2-BACKEND-019` lands.
+
+## Clarification 2026-10-08 (`summary_versions` on course delete and merge)
+
+This note clarifies the accepted decision. It does not change a rule, so it is a dated note
+here, not a new ADR. Requested by `safety` in SAFETY-025.
+
+- **Row #1 names `summary_versions`.** `M31-S2-BACKEND-019` added the `summary_versions` table
+  for re-summarize retention, and `course_service.delete_course` now also runs
+  `delete(SummaryVersion).where(SummaryVersion.course_id == course.id)`. These rows are the
+  retained prior versions of *that course's own* summaries. They were already inside "the course
+  and every DB child". Row #1 now names them verbatim so the list matches the code exactly.
+  `safety` pins this in `COURSE_DELETE_MODELS` in
+  `services/app/tests/safety/test_floor4_user_data_never_lost.py`. Floor 4's version-retention
+  clause covers dedup, re-summarize and asset regeneration. It does not cover an explicit course
+  delete, and the user asked for that delete.
+- **`merge_courses` must re-home a moved summary's versions.** When a source summary moves to
+  the target (`summary.course_id = target.id`), its `summary_versions` rows must move with it to
+  `target.id` in the same transaction. Versions carry no summary FK. They are keyed on
+  `(course_id, week, version)`, so "its versions" means the rows with `course_id == source.id` and
+  the moved summary's `week`. If they stay keyed on the source course, a later
+  `DELETE /api/courses/{source}` would delete the versions of a summary that now lives in the
+  target course. That fails condition 3 (Bounded) for row #1, and it is the destruction of prior
+  versions that floor 4 forbids. Owner: `M31-S2-BACKEND-026`. Until it lands, the moved
+  summary's stranded versions are a floor-4 violation, not a sanctioned delete.
+- **Unchanged.** The allowlist, `USER_ITEM_DELETE_CALLERS` and item 5 are unchanged. Re-homing
+  is an update, not a delete, so no `(module, function)` key moves. `_discard_summary` removes
+  only the source-side summary row and blob. The discarded source summary's own
+  `summary_versions` rows stay on the source course, which `merge_courses` archives and does not
+  delete. They go only through a later explicit delete of that course, under row #1. If
+  `M31-S2-BACKEND-026` deletes them during the merge, or `_discard_summary` gains any further
+  delete, this ADR must be amended with the user first.
 
 ## Alternatives considered
 
