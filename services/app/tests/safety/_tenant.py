@@ -17,7 +17,12 @@ from typing import Any
 
 from sqlalchemy import Table
 from sqlalchemy.sql import operators, visitors
-from sqlalchemy.sql.elements import BinaryExpression, BindParameter
+from sqlalchemy.sql.elements import (
+    BinaryExpression,
+    BindParameter,
+    BooleanClauseList,
+    UnaryExpression,
+)
 
 #: Shared catalogues and the accounts table itself.
 UNOWNED_TABLES = frozenset({"users", "invite_codes", "achievements", "daily_challenges"})
@@ -71,26 +76,54 @@ def filters_by_id_list(statement: Any) -> bool:
     return False
 
 
-def filters_on_user(statement: Any, user_id: str) -> bool:
-    """True if some ``<table>.user_id`` is compared to a bind carrying ``user_id``.
-
-    Accepts ``= :p`` and ``IN (:p, ...)`` whose value includes the caller. A
-    comparison to some *other* user's id does not count — that is the bug.
-    """
-    for element in visitors.iterate(statement):
-        if not isinstance(element, BinaryExpression):
+def _compares_to_caller(element: Any, user_id: str) -> bool:
+    """``<table>.user_id = :caller`` or ``<table>.user_id IN (:caller)``, nothing looser."""
+    if not isinstance(element, BinaryExpression):
+        return False
+    if element.operator not in (operators.eq, operators.in_op):
+        return False  # !=, NOT IN, <, ...: the caller's id excluded, or not pinned
+    for column, other in ((element.left, element.right), (element.right, element.left)):
+        if getattr(column, "name", None) != "user_id" or not isinstance(other, BindParameter):
             continue
-        for column, other in ((element.left, element.right), (element.right, element.left)):
-            if getattr(column, "name", None) != "user_id":
-                continue
-            if not isinstance(other, BindParameter):
-                continue
-            value = other.effective_value
-            if value == user_id:
-                return True
-            if isinstance(value, list | tuple | set | frozenset) and user_id in value:
-                return True
+        value = other.effective_value
+        if value == user_id:
+            return True
+        if isinstance(value, list | tuple | set | frozenset):
+            # IN (:caller, :victim) admits the victim's rows too.
+            return bool(value) and all(v == user_id for v in value)
     return False
+
+
+def _widening(element: Any) -> bool:
+    """An OR, or a NOT, under which a caller comparison no longer constrains the rows."""
+    if isinstance(element, BooleanClauseList):
+        return element.operator is operators.or_
+    return isinstance(element, UnaryExpression) and element.operator is operators.inv
+
+
+def filters_on_user(statement: Any, user_id: str) -> bool:
+    """True if some ``<table>.user_id = :caller`` constrains the rows the statement touches.
+
+    Accepts ``= :p`` and ``IN (:p)`` where every value is the caller. A
+    comparison to some *other* user's id does not count — that is the bug. Nor
+    does one that only *widens*: under an ``OR`` (``user_id = :caller OR
+    public``) or a ``NOT`` it constrains nothing, unless every branch of the
+    ``OR`` is itself caller-scoped. Subqueries are searched too, as before:
+    ``course_id IN (SELECT id FROM courses WHERE user_id = :caller)`` counts.
+    """
+    shadowed: set[int] = set()
+    for element in visitors.iterate(statement):
+        if not _widening(element):
+            continue
+        if isinstance(element, BooleanClauseList) and all(
+            filters_on_user(clause, user_id) for clause in element.clauses
+        ):
+            return True
+        shadowed |= {id(inner) for inner in visitors.iterate(element)}
+    return any(
+        id(element) not in shadowed and _compares_to_caller(element, user_id)
+        for element in visitors.iterate(statement)
+    )
 
 
 def bind_values(statement: Any) -> list[Any]:

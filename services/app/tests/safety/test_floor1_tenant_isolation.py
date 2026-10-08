@@ -618,7 +618,7 @@ async def test_floor1_leaderboard_lists_only_opted_in_users(
     evaluated row by row (``_predicate.admits``) against three other users:
     one opted in, one opted out, and one with no settings row at all. Only the
     first may come back, and it must, or "hidden" was implemented as "empty".
-    The caller's own row is unconstrained. RED until M31-S2-BACKEND-019 adds
+    The caller's own row is unconstrained. Green since M31-S2-BACKEND-019 added
     the filter.
     """
     from tests.safety._predicate import Unreadable, admits
@@ -917,6 +917,10 @@ UNSCOPED_FUNCTION_ALLOWED = {
     ("app/services/billing_service.py", "_handle_subscription_deleted"): (
         "Stripe webhook, signature-verified"
     ),
+    ("app/services/courseops_service.py", "backfill_courseops_storage_keys"): (
+        "operator backfill (app/cli.py) over every row; not reachable from a request. "
+        "Surfaced when the detector stopped counting a selected user_id column (SAFETY-025)"
+    ),
     ("app/services/course_service.py", "get_course_weeks"): (
         "FK traversal: api/courses.py passes course.id of a course resolved with user_id"
     ),
@@ -924,6 +928,10 @@ UNSCOPED_FUNCTION_ALLOWED = {
         "admin triage, behind require_role('admin'); cross-user by design"
     ),
     ("app/services/feedback_service.py", "count_by_status"): ("admin triage, as list_feedback"),
+    ("app/services/feedback_service.py", "notify_admins"): (
+        "reads the admins' Telegram links (User.role == 'admin') to deliver a report; "
+        "returns a count, never a row, to the reporter. Surfaced by SAFETY-025's join fix"
+    ),
     ("app/services/gcal_service.py", "handle_gcal_webhook"): (
         "Google push webhook: the sync row is found by the channel/resource ids Google holds"
     ),
@@ -945,6 +953,11 @@ UNSCOPED_FUNCTION_ALLOWED = {
     ),
     ("app/services/summary_service.py", "get_existing_summary"): (
         "pipeline summarize stage / save_summary, keyed on the artifact's course id"
+    ),
+    ("app/services/summary_service.py", "snapshot_summary"): (
+        "FK traversal: reads the owner of the summary it is handed, to stamp the "
+        "summary_versions row; callers hold a summary from the worker's own artifact "
+        "(create_or_update_summary) or a target course resolved with user_id (merge_courses)"
     ),
     ("app/services/summary_service.py", "list_course_summaries"): (
         "FK traversal on a course id the caller has already resolved"
@@ -984,12 +997,49 @@ def _base_name(node: ast.AST) -> str:
     return node.id if isinstance(node, ast.Name) else ""
 
 
+def _all_model_names() -> set[str]:
+    from app.core.database import Base
+
+    _owned_model_names()  # registers every model
+    return {mapper.class_.__name__ for mapper in Base.registry.mappers}
+
+
+def _user_id_predicate(sub: ast.AST, owned: dict[str, str], models: dict[str, str]) -> bool:
+    """``Owned.user_id`` compared to a *value*, or ``Owned.user_id.in_(...)``.
+
+    A comparison whose other side is another model's column is a join
+    condition (``UserXP.user_id == User.id``), and a bare ``Owned.user_id`` is
+    a selected column or an ``ON`` operand: neither filters any row.
+    """
+
+    def owned_user_id(node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Attribute) and node.attr == "user_id" and _base_name(node) in owned
+        )
+
+    def model_column(node: ast.AST) -> bool:
+        return isinstance(node, ast.Attribute) and _base_name(node) in models
+
+    if isinstance(sub, ast.Compare):
+        operands = [sub.left, *sub.comparators]
+        return any(owned_user_id(o) for o in operands) and not all(
+            model_column(o) for o in operands
+        )
+    return (
+        isinstance(sub, ast.Call)
+        and isinstance(sub.func, ast.Attribute)
+        and sub.func.attr == "in_"
+        and owned_user_id(sub.func.value)
+    )
+
+
 def unscoped_in_tree(
     tree: ast.Module, module: str, owned_models: set[str]
 ) -> dict[tuple[str, str], list[str]]:
     """The unscoped query functions of one parsed module (see ``unscoped_query_functions``)."""
     found: dict[tuple[str, str], list[str]] = {}
     aliases = _model_aliases(tree, owned_models)
+    model_aliases = _model_aliases(tree, _all_model_names())
     for node, scope in walk_with_scope(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
@@ -1005,11 +1055,7 @@ def unscoped_in_tree(
                 and sub.func.id in QUERY_BUILDERS
             ):
                 queried |= {aliases[b] for a in sub.args if (b := _base_name(a)) in aliases}
-            if (
-                isinstance(sub, ast.Attribute)
-                and sub.attr == "user_id"
-                and _base_name(sub) in aliases
-            ):
+            if _user_id_predicate(sub, aliases, model_aliases):
                 predicate = True
             if (
                 isinstance(sub, ast.Call)
