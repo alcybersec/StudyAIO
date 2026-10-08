@@ -26,7 +26,6 @@ confirmed by the user.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M31-S2-QA-023 (integration tier vs BACKEND-019: resummarize XPASS, merge keep_source, leaderboard opt-in) | `qa` | 2026-10-08 | isolated |
 | M31-S2-AI-024 (versioned summary key in `pipeline/summarize.py`; `notification_tasks` `Flashcard.user_id` + `archived_at`) | `ai` | 2026-10-08 | isolated |
 | M31-S2-SAFETY-025 (review BACKEND-019 vs floors 1+4; close two detector blind spots) | `safety` | 2026-10-08 | isolated |
 
@@ -63,6 +62,7 @@ Keep the current milestone's tasks here; roll earlier milestones into `docs/plan
 | M31-S2-QA-022 (retire 9 strict xfails now fixed) | `qa` | `6d5631c` → `kit/retrofit` (cherry-pick, see log) | Orchestrator: diff = 52 pure deletions across 6 `tests/integration` files, no `+` lines. Agent: with fixes reverted (`17c231c~1`, `96babbf~1` app files) → `9 failed`; restored → full tier `Required test coverage of 70% reached. Total coverage: 87.51%`, `519 passed, 9 xfailed` | 2026-10-04 |
 | M31-S2-SAFETY-021 (floor 3 embedding allowlists per ADR 0005; floor 4 user-item deletes per ADR 0004; retention + leaderboard pins) | `safety` | `d7d4854`..`deb6204` → `kit/retrofit` (6 cherry-picks, head `691af59`) | Diff = `tests/safety/**` only. **Orchestrator on `kit/retrofit`: `pytest tests/safety -q` → `5 failed, 63 passed`, 0 xfail left in the tier** — the 5 reds are exactly the BACKEND-019 pins (leaderboard opt-in; resummarize, merge keep_source, regeneration retention; violation-site removal). Floor 3 green, 13 scratch injections red. Agent `make test` main `2652 passed`, 86.12% | 2026-10-04 |
 | M31-S2-BACKEND-019 (summary snapshots + versioned keys, archive-not-delete, leaderboard opt-in API) | `backend` | `7a4e2f1`/`57f44da`/`c0cba0a` → `kit/retrofit` (head `6d1ed13`) | Diff = backend services/api + unit tests. Agent: `make test` `2704 passed`, floor `68 passed`; integration `3 failed, 517 passed` = 1 XPASS (`test_resummarize_retains_prior_version_content`) + 2 stale tests (merge keep_source key, leaderboard opt-in) → `qa`. **Next:** `qa` fixes those 3; `ai` versions the key in `pipeline/summarize.py:129` and fixes `notification_tasks.py:130` `Flashcard.user_id`; `safety` re-reviews the new `SummaryVersion` delete in `delete_course`; then gate re-run (ask user) | 2026-10-04 |
+| M31-S2-QA-023 (integration aligned with R-007 retention + opt-in leaderboard) | `qa` | `b4cbe3f` → `kit/retrofit` `cf94a2c` | Diff = 3 `tests/integration` files. Agent: BACKEND-019 scratch-reverted → `2 failed` (`no stored copy of the version-1 summary remains`); full tier `Required test coverage of 70% reached. Total coverage: 87.50%`, `521 passed, 8 xfailed` (0 failed) | 2026-10-08 |
 
 ## Blocked
 
