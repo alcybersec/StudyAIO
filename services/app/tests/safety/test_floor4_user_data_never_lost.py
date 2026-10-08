@@ -252,18 +252,10 @@ DB_SANCTIONED = {
 #: (DB_SANCTIONED), regeneration to DB_VIOLATIONS ("fix the code").
 DB_PENDING_RULING: dict[tuple[str, str], str] = {}
 
-#: Live breaches. Ruled "fix the code" on 2026-10-04 (R-007, ADR 0004 §4);
-#: M31-S2-BACKEND-019 archives (``archived_at``) instead of deleting.
-DB_VIOLATIONS = {
-    ("app/services/asset_service.py", "save_flashcards"): (
-        "regeneration deletes the artifact's flashcards; flashcard_reviews "
-        "cascade, so SRS history is lost. "
-        "Behaviour: test_floor4_asset_regeneration_keeps_study_history"
-    ),
-    ("app/services/asset_service.py", "save_quiz_questions"): (
-        "regeneration deletes the artifact's quiz questions; quiz_attempts cascade"
-    ),
-}
+#: Live breaches. Empty since M31-S2-BACKEND-019: asset regeneration archives
+#: (``archived_at``) instead of deleting, unlisted by SAFETY-025.
+#: test_floor4_asset_regeneration_keeps_study_history pins the behaviour.
+DB_VIOLATIONS: dict[tuple[str, str], str] = {}
 
 
 def db_content_delete_sites() -> dict[tuple[str, str], str]:
@@ -352,9 +344,9 @@ def test_floor4_no_delete_site_awaits_a_ruling():
 def test_floor4_no_violation_site_remains():
     """No delete site ruled a violation is still in the code.
 
-    RED until M31-S2-BACKEND-019 removes the regeneration deletes
-    (``asset_service.save_flashcards`` / ``save_quiz_questions``). Once it is
-    green, safety unlists the entries; the inventory tests do not force that,
+    Empty, and green, since M31-S2-BACKEND-019 removed the regeneration deletes
+    (``asset_service.save_flashcards`` / ``save_quiz_questions``). A new entry
+    is red until fixed; safety unlists it then. The inventory tests do not force that,
     so the code fix can land without editing this file.
     """
     live = {k: v for k, v in db_content_delete_sites().items() if k in DB_VIOLATIONS}
@@ -384,6 +376,66 @@ def test_floor4_user_item_allowlist_is_exactly_adr_0004():
     assert {k[:2] for k in USER_ITEM_BLOB_DELETE_SITES} | USER_ITEM_DB_DELETE_SITES <= set(
         _ADR_0004_ITEM
     )
+
+
+#: ADR 0004 #1 "What goes", as the models ``course_service.delete_course`` may
+#: ``delete()``. The inventory above is keyed on the enclosing function, so once
+#: ``delete_course`` is sanctioned it would wave through a delete of *any* model
+#: added to it; this pins condition 3 ("bounded") model by model.
+COURSE_DELETE_MODELS = {
+    "Course": "the course itself",
+    "LectureArtifact": "artifacts",
+    "Extraction": "extractions",
+    "Chunk": "chunks",
+    "Summary": "summaries",
+    "SummaryVersion": (
+        "summaries: the retained prior versions of the course's own summaries "
+        "(BACKEND-019). Inside 'the course and every DB child'; SAFETY-025 asks "
+        "architect to name summary_versions in ADR 0004 #1 verbatim"
+    ),
+    "Flashcard": "flashcards",
+    "FlashcardReview": "plus reviews",
+    "QuizQuestion": "quiz questions",
+    "QuizAttempt": "plus attempts",
+    "Concept": "concepts",
+    "ConceptRelation": "plus relations",
+    "Exam": "exams",
+    "StudySession": "study sessions",
+    "ReviewItem": "review items",
+    "PipelineRun": "pipeline runs",
+    "CourseDocument": "course documents",
+    "Assessment": "assessments",
+    "Deadline": "deadlines",
+}
+
+
+def test_floor4_course_delete_is_bounded_to_adr_0004_item_1():
+    """``delete_course`` deletes exactly the models ADR 0004 #1 lists, no blob, nothing wider."""
+    module = "app/services/course_service.py"
+    deleted: set[str] = set()
+    session_deletes = []
+    for path in app_modules():
+        if rel(path) != module:
+            continue
+        for node, scope in walk_with_scope(parse(path)):
+            if scope != "delete_course" or not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Name) and node.func.id == "delete" and node.args:
+                deleted.add(dotted(node.args[0]))
+            elif isinstance(node.func, ast.Attribute) and node.func.attr == "delete":
+                session_deletes.append(f"{dotted(node.func)}:{node.lineno}")
+    assert deleted, "detector found no delete() in course_service.delete_course; it has gone blind"
+    assert not session_deletes, (
+        f"delete_course gained a .delete() call {session_deletes}: ADR 0004 #1 deletes "
+        "rows by model and no blob."
+    )
+    wider = sorted(deleted - set(COURSE_DELETE_MODELS))
+    assert not wider, (
+        f"Floor 4: delete_course now deletes {wider}, which ADR 0004 #1 does not list. "
+        "Amend the ADR (with the user) before widening a sanctioned delete."
+    )
+    gone = sorted(set(COURSE_DELETE_MODELS) - deleted)
+    assert not gone, f"COURSE_DELETE_MODELS lists models delete_course no longer deletes: {gone}"
 
 
 # ── account purge reachability ─────────────────────────────────────────
@@ -623,7 +675,7 @@ async def test_floor4_failed_upload_never_deletes_another_users_blob(
 # handed to session.add/add_all, or an INSERT into summary_versions), and
 # strict about *what* survives: a summary_versions row carrying the old text
 # and version, and a blob at that row's file_path still holding the old bytes.
-# RED until M31-S2-BACKEND-019 lands.
+# Green since M31-S2-BACKEND-019.
 
 OWNER = "00000000-0000-0000-0000-0000000000a1"
 
@@ -1025,8 +1077,8 @@ async def test_floor4_asset_regeneration_keeps_study_history():
 
     Any DELETE on flashcards / quiz_questions must be conditioned on the
     absence of reviews / attempts; an unconditional one destroys history.
-    Ruled "fix the code" (R-007, ADR 0004 §4). RED until M31-S2-BACKEND-019
-    archives instead of deleting.
+    Ruled "fix the code" (R-007, ADR 0004 §4). Green since M31-S2-BACKEND-019
+    archived instead of deleting.
     """
     from sqlalchemy.sql.dml import Delete
 
