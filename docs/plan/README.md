@@ -28,7 +28,6 @@ not merged to `main`; no MR opened.
 | M32-S1-BACKEND-002 (C2b billing free tier, MFA disable, achievement `title`, gcal `timeMin`) | `backend` | 2026-10-08 | isolated |
 | M32-S1-SAFETY-004 (C4 handler pin; F-2; red pins for C5 and C6) | `safety` | 2026-10-08 | isolated |
 | M32-S1-QA-003 (C3 e2e: 0 skipped in CI) | `qa` | 2026-10-08 | isolated |
-| M32-S1-ARCH-008 (ADR 0004 #1 purge wording; ADR 0003 header drift) | `architect` | 2026-10-08 | isolated |
 
 ## Completed
 
@@ -39,6 +38,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-ARCH-008 (ADR 0004 #1 purge wording corrected; ADR 0003 header) | `architect` | `128abec` → `kit/retrofit` `948353a` | Diff = 2 ADRs. `pytest tests/contracts` → `25 passed`. ADR 0004 § Correction 2026-10-08 has a placeholder for BACKEND-005's final purge mechanism (Orchestrator fills) | 2026-10-08 |
 
 ## Blocked
 
