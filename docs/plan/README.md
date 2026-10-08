@@ -24,7 +24,6 @@ not merged to `main`; no MR opened.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S1-SAFETY-013 (review BACKEND-006 + AI-012; drop stale `_get_course_owned` classification) | `safety` | 2026-10-09 | isolated |
 | M32-S1-AI-015 (deadline-reminder dedup uses local date, not UTC) | `ai` | 2026-10-09 | isolated |
 
 ## Completed
@@ -36,6 +35,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-SAFETY-013 (review BACKEND-006 + AI-012; stale classification removed; row-owner pin tightened) | `safety` | `d41e674` → `kit/retrofit` (see log) | Diff = `tests/safety/**`. Agent: `pytest tests/safety` → `80 passed`, floor coverage 97.57%. 9 mutants each red on the intended pin. **APPROVE floors 1 + 4.** New low risk R-022 (SSE events use payload owner) | 2026-10-09 |
 | M32-S1-QA-014 (golden + integration tests pass the real owner) | `qa` | `ab38778` → `kit/retrofit` (see log) | Diff = 3 test files. Agent: golden+contracts `342 passed`; integration with the AI-015 test deselected `528 passed, 1 deselected`. Renamed `…stays_unscoped_for_internal_callers` → `test_omitting_user_id_raises_type_error` | 2026-10-09 |
 | M32-S1-BACKEND-006 (C6: required keyword-only `user_id`, unconditional filters, ~60 service fns; purge: uuid-only ledger segments, S3 `list_keys` raises, failed listing keeps ledger) | `backend` | `2eecad7`/`f5e0546`/`ea5e6a4`/`cf55d1b` → `kit/retrofit` head `d6b5816` | Diff = services/api/core + unit tests. Found+fixed a real cross-tenant bug: `api/review_items.py` resolve called `apply_classification` unscoped (wiring test revert-checked). **Orchestrator on `kit/retrofit`: floor `1 failed, 79 passed`** (only a stale safety classification → SAFETY-013; C6 + ledger pins green); unit `2394 passed`. Agent: golden 11 + integration 7 qa-owned tests call old signatures → QA-014; 1 pre-existing UTC bug → AI-015 | 2026-10-09 |
 | M32-S1-AI-012 (C6 pipeline: `_get_or_create_course` owner required; artifact row owner wins, mismatch logged) | `ai` | `03c2ff9`/`68092b8`/`a59fd27` → `kit/retrofit` head `f72a928` | Diff = 7 pipeline files + 1 unit test. **Orchestrator red-check** (agent not red-first): pre-fix pipeline → `5 failed, 1 passed`; fixed → pipeline unit `75 passed`. Floor `2 failed, 78 passed` — both BACKEND-006's (services/ C6 entries; ledger segment) | 2026-10-08 |
