@@ -510,12 +510,6 @@ class TestScheduledJobs:
             )
         assert len(again) == 2
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: notification_tasks._send_daily_reminders counts due cards with "
-        "Flashcard.user_id, a column that does not exist (flashcards belong to a course); the "
-        "AttributeError is swallowed per user, so no daily reminder is ever sent",
-    )
     async def test_daily_reminder_reaches_opted_in_user_with_due_cards(self, committed_user):
         from app.models.flashcard import Flashcard
 
@@ -567,12 +561,6 @@ class TestScheduledJobs:
             await notification_tasks._send_daily_reminders()
         assert any(c.args[1] == owner.id and c.args[2] == 1 for c in notify.await_args_list)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: notification_tasks._send_weekly_digest filters QuizAttempt by user_id, a "
-        "column that does not exist, so the digest query raises for every opted-in user and the "
-        "swallowed error means no weekly digest is ever sent",
-    )
     async def test_weekly_digest_reaches_opted_in_user(self, committed_user):
         owner = await committed_user()
         async with async_session_factory() as session:
