@@ -1356,3 +1356,122 @@ async def test_floor4_account_deletion_purges_every_summary_blob_of_the_user():
             "the DB, so a course deleted earlier (ADR 0004 #1 keeps its blobs) and the "
             "versions merge re-homed from it are never reached."
         )
+
+
+# ── the deleted-course ledger is the purge's input: it must stay one user's ─
+#
+# BACKEND-005 closed R-020 with a ledger (decisions.md 2026-10-08 C5):
+# ``delete_course`` writes a zero-byte ``ledger/deleted-courses/<user_id>/<course_id>``
+# and the account purge turns every listed key's last segment into a
+# ``summaries/<course_id>`` sweep. The pin above proves the deleted user's
+# blobs go. These two prove nobody else's do: the ledger a purge reads is the
+# purged user's alone, and a listing entry that names no course widens no sweep.
+
+
+async def _ledger_scenario(storage, session, db):
+    """Two users, each with a live and a deleted course carrying summaries."""
+    from app.core.utils import generate_id
+    from app.models.course import Course
+    from app.models.user import User
+    from app.services import course_service
+
+    for uid in (R020_USER, R020_OTHER):
+        db.add(User(id=uid, email=f"{uid}@example.test", username=f"user-{uid[-2:]}"))
+    written: dict[str, set[str]] = {R020_USER: set(), R020_OTHER: set()}
+    for owner in (R020_USER, R020_OTHER):
+        for code in ("KEEP101", "GONE201"):
+            # The real id generator: a deleted row's id is never handed out again.
+            row = Course(id=generate_id(), user_id=owner, code=code)
+            db.add(row)
+            for _ in range(2):  # v1 retained as a version, v2 current
+                written[owner].add(await _r020_summarize(session, storage, row, 3))
+        await course_service.delete_course(session, owner, "GONE201")
+    return written
+
+
+@pytest.mark.asyncio
+async def test_floor4_account_purge_spares_other_users_deleted_course_blobs():
+    """Purging one account leaves another user's deleted-course summaries in place.
+
+    Both users delete a course, so both have ledger markers. The other user's
+    deleted-course blobs are retained by ADR 0004 #1 until *their* account is
+    deleted; a ledger read across users (an unkeyed ``ledger/deleted-courses``
+    prefix, or a listing that is not the purged user's own) sweeps them early.
+    The R-020 pin cannot see this: its other user never deletes a course.
+    """
+    from app.core.storage import get_storage
+    from app.services import account_service
+    from tests.safety._minidb import MiniDB, MiniSession
+
+    db = MiniDB()
+    session = MiniSession(db)
+    with isolated_storage() as root:
+        storage = get_storage()
+        written = await _ledger_scenario(storage, session, db)
+        assert _markers_on_disk(root) == written[R020_USER] | written[R020_OTHER], (
+            "control: the summarize writes did not land, or delete_course removed blobs"
+        )
+
+        await account_service.delete_user_account(session, R020_USER, storage)
+
+        left = _markers_on_disk(root)
+        assert not left & written[R020_USER], (
+            f"control: the purge did not erase the deleted user's blobs: {sorted(left)}"
+        )
+        lost = sorted(written[R020_OTHER] - left)
+        assert not lost, (
+            "Floor 4: deleting one account destroyed another user's summaries, including "
+            f"blobs of a course that user deleted (retained by ADR 0004 #1): {lost}. "
+            "The purge must read only the purged user's deleted-course ledger."
+        )
+
+
+@pytest.mark.asyncio
+async def test_floor4_account_purge_ignores_ledger_entries_that_name_no_course():
+    """A ledger listing entry with no course id in it never widens the summary sweep.
+
+    The purge takes the last ``/`` segment of every key ``list_keys`` returns
+    under the user's ledger prefix and sweeps ``summaries/<segment>``. On S3,
+    ``list_objects_v2`` also returns zero-byte "folder" objects whose key ends
+    in ``/`` (the console's *Create folder*, s3fs, rclone and some sync tools
+    write them). Such a key's last segment is empty, the sweep becomes
+    ``summaries/`` and every user's summaries go. The storage listing is input
+    the purge does not control, so the purge must refuse an entry that does not
+    end in a course id, not trust it.
+
+    Simulated over a local root by appending what S3 would list for such
+    placeholders; the real markers are listed as before. Fixes that skip an
+    empty segment, or accept only id-shaped segments, both go green.
+    """
+    from app.core.storage import LocalStorageBackend
+    from app.services import account_service
+    from tests.safety._minidb import MiniDB, MiniSession
+
+    class S3ShapedListing(LocalStorageBackend):
+        async def list_keys(self, prefix: str) -> list[str]:
+            real = await super().list_keys(prefix)
+            base = prefix.rstrip("/")
+            return [*real, f"{base}/", f"{base}/imported/"]
+
+    db = MiniDB()
+    session = MiniSession(db)
+    with isolated_storage() as root:
+        storage = S3ShapedListing(base_dir=root)
+        written = await _ledger_scenario(storage, session, db)
+        assert _markers_on_disk(root) == written[R020_USER] | written[R020_OTHER], (
+            "control: the summarize writes did not land"
+        )
+
+        await account_service.delete_user_account(session, R020_USER, storage)
+
+        left = _markers_on_disk(root)
+        assert not left & written[R020_USER], (
+            f"control: the purge did not erase the deleted user's blobs: {sorted(left)}"
+        )
+        lost = sorted(written[R020_OTHER] - left)
+        assert not lost, (
+            "Floor 4: a ledger listing entry with an empty last segment (an S3 folder "
+            "placeholder such as 'ledger/deleted-courses/<user_id>/') turned the purge's "
+            "summaries/<course_id> sweep into summaries/ and destroyed another user's "
+            f"summaries: {lost}. Skip any ledger key whose last segment is not a course id."
+        )
