@@ -2,7 +2,7 @@
 
 **Status** Accepted · **Date** 2026-10-04 · **Kit version** 1.10.3
 
-**Amended by** [ADR 0005](0005-floor3-embedding-gateway.md) (proposed): embeddings are in scope of floor 3 through a second gateway, `get_embedding_provider`, with its own allowlist. This ADR's `get_agent` decision is unchanged. The open embeddings question under Consequences is answered there.
+**Amended by** [ADR 0005](0005-floor3-embedding-gateway.md) (Accepted 2026-10-04; header corrected 2026-10-08, it previously said "proposed"): embeddings are in scope of floor 3 through a second gateway, `get_embedding_provider`, with its own allowlist. This ADR's `get_agent` decision is unchanged. The open embeddings question under Consequences is answered there.
 
 Accepted: the user agreed in session on 2026-10-04 to amend floor 3 rather than move these calls
 into the worker. This ADR weakens a floor, so it is the record `docs/strategy.md` §6 requires —

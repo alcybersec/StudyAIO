@@ -1,6 +1,6 @@
 # ADR 0004 — Floor 4 admits explicit user-initiated deletes of the user's own items
 
-**Status** Accepted (2026-10-04, by the user, with one amendment; see § Amendment 2026-10-04; clarified 2026-10-08, see § Clarification 2026-10-08) ·
+**Status** Accepted (2026-10-04, by the user, with one amendment; see § Amendment 2026-10-04; clarified 2026-10-08, see § Clarification 2026-10-08; corrected 2026-10-08, see § Correction 2026-10-08) ·
 **Date** 2026-10-04 · **Kit version** 1.10.3
 
 **Ruling implemented:** `docs/decisions.md` § Rulings, 2026-10-04, "R-007 single-item deletes:
@@ -73,7 +73,7 @@ same keys as the floor-4 inventories. Every pair was re-derived on 2026-10-04 at
 
 | # | Item | Route (handler, `services/app/`) | Delete site (`services/app/`) | What goes |
 |---|---|---|---|---|
-| 1 | Course | `DELETE /api/courses/{course_code}`, `app/api/courses.py:delete_course`. Requires `X-Confirm: <course_code>`, otherwise 428. | `app/services/course_service.py:delete_course` (DB) | The course and every DB child: artifacts, extractions, chunks, summaries, `summary_versions` (the retained prior versions of that course's own summaries; § Clarification 2026-10-08), flashcards plus reviews, quiz questions plus attempts, concepts plus relations, exams, study sessions, review items, pipeline runs, course documents, assessments, deadlines. **No blob is deleted.** The account purge sweeps the user's prefix later. |
+| 1 | Course | `DELETE /api/courses/{course_code}`, `app/api/courses.py:delete_course`. Requires `X-Confirm: <course_code>`, otherwise 428. | `app/services/course_service.py:delete_course` (DB) | The course and every DB child: artifacts, extractions, chunks, summaries, `summary_versions` (the retained prior versions of that course's own summaries; § Clarification 2026-10-08), flashcards plus reviews, quiz questions plus attempts, concepts plus relations, exams, study sessions, review items, pipeline runs, course documents, assessments, deadlines. **No blob is deleted.** The summary and summary-version blobs under `summaries/<course_id>/` are left on disk, and today no later step removes them; see § Correction 2026-10-08. |
 | 2 | Course document or assessment attachment | `DELETE /api/courseops/documents/{document_id}`, `app/api/courseops.py:delete_document` | `app/services/courseops_service.py:delete_course_document` (DB), then `app/services/courseops_service.py:_delete_blob_if_unreferenced` (`store.delete`, blob) | The `course_documents` row. The blob goes only when no other row of the same user references the key, and only under that user's own `courseops/<user_id>/` prefix. |
 | 3 | Deadline | `DELETE /api/courseops/deadlines/{deadline_id}`, `app/api/courseops.py:delete_deadline` | `app/services/courseops_service.py:delete_deadline` (DB) | One `deadlines` row, whether AI-extracted or manual. |
 | 4 | Chat session | `DELETE /api/chat/sessions/{session_id}`, `app/api/chat.py:delete_session` | `app/services/chat_service.py:delete_session` (DB) | One `chat_sessions` row and its `chat_messages`, by ORM `delete-orphan` cascade and FK `ON DELETE CASCADE`. |
@@ -227,6 +227,35 @@ here, not a new ADR. Requested by `safety` in SAFETY-025.
   delete. They go only through a later explicit delete of that course, under row #1. If
   `M31-S2-BACKEND-026` deletes them during the merge, or `_discard_summary` gains any further
   delete, this ADR must be amended with the user first.
+
+## Correction 2026-10-08 (row #1: the account purge does not reach a deleted course's blobs)
+
+This note corrects a factual statement in the accepted decision. It does not change a rule, so it
+is a dated note here, not a new ADR. Found by `safety` in the M31 floors re-run
+(`docs/gates/M31/floors-rerun-2026-10-08.md`, F-3); tracked as risk R-020.
+
+- **What row #1 said.** "The account purge sweeps the user's prefix later." That is wrong. There is
+  no per-user prefix for summaries.
+- **The real mechanism today.** Summary blobs are keyed per **course**, not per user:
+  `summaries/<course_id>/Week<N>.md`, with retained versions as `summaries/<course_id>/Week<N>.v<M>.md`
+  (`app/services/summary_service.py`). `app/services/account_service.py:purge_user_storage` derives
+  every key from rows the user still owns when the account is deleted. For summaries it selects
+  `Course.id` where `Course.user_id == user_id`, and for each one calls `store.delete_prefix` on
+  `summary_service.summary_key_prefix_for_course(course_id)`. Only `courseops/<user_id>/` is a
+  per-user prefix. A course removed earlier under row #1 has no `courses` row left, so the purge
+  never builds its prefix. Its summary blobs, and since `M31-S2-BACKEND-019` its retained
+  summary-version blobs, outlive both the course and the account.
+- **Effect on floor 4.** None. The blobs are kept, not lost. It is a retention and privacy gap:
+  account deletion does not remove everything the user generated.
+- **In flight.** `M32-S1-BACKEND-005` is changing the purge to cover deleted courses' summary and
+  summary-version blobs. Final mechanism: **[PLACEHOLDER: to be filled from the
+  `M32-S1-BACKEND-005` handoff. State how the purge reaches a deleted course's
+  `summaries/<course_id>/` keys, for example by sweeping the `file_path` values of `summaries` and
+  `summary_versions` at course-delete time, or by keying summaries per user.]** Until it lands,
+  row #1 stands as corrected above.
+- **Unchanged.** Row #1 still deletes no blob. The allowlist and `USER_ITEM_DELETE_CALLERS` are
+  unchanged. If the fix makes `delete_course` delete blobs, that is a new blob delete under floor 4,
+  and this ADR must be amended with the user first.
 
 ## Alternatives considered
 
