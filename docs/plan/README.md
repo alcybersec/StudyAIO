@@ -15,9 +15,7 @@ Orchestrator updates here.
 
 ## Next task
 
-**M32-S1-BACKEND-001** — R-016 account-deletion FK (condition C2, first: it blocks floor 4's
-sanctioned erasure path). Then the rest of C2–C6 in `docs/strategy.md` §11 M32. C1 (ADR 0002) waits
-on the user's review.
+Wave 1 dispatched 2026-10-08 (see Active). **Queued:** M32-S1-BACKEND-006 (C6) after BACKEND-002 lands (overlapping services). C1 (ADR 0002) waits on the user's review.
 
 **Integration branch.** `kit/retrofit` @ `2f3296d`+ (code `8d9de14`, pipeline #537 green) — pushed,
 not merged to `main`; no MR opened.
@@ -26,6 +24,11 @@ not merged to `main`; no MR opened.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S1-BACKEND-001 + 005 (C2a account-deletion FK; C5/R-020 purge covers deleted courses' summary blobs) | `backend` | 2026-10-08 | isolated |
+| M32-S1-BACKEND-002 (C2b billing free tier, MFA disable, achievement `title`, gcal `timeMin`) | `backend` | 2026-10-08 | isolated |
+| M32-S1-SAFETY-004 (C4 handler pin; F-2; red pins for C5 and C6) | `safety` | 2026-10-08 | isolated |
+| M32-S1-QA-003 (C3 e2e: 0 skipped in CI) | `qa` | 2026-10-08 | isolated |
+| M32-S1-ARCH-008 (ADR 0004 #1 purge wording; ADR 0003 header drift) | `architect` | 2026-10-08 | isolated |
 
 ## Completed
 
