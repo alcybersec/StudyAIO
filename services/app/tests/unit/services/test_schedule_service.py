@@ -52,7 +52,7 @@ class TestGenerateStudySchedule:
         mock_result.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await generate_study_schedule(session, "nonexistent")
+        result = await generate_study_schedule(session, "nonexistent", user_id="user-1")
         assert result is None
 
     @pytest.mark.asyncio
@@ -76,7 +76,7 @@ class TestGenerateStudySchedule:
 
         session.execute = AsyncMock(side_effect=[mock_exam_result, mock_due_result])
 
-        schedule = await generate_study_schedule(session, "exam-001")
+        schedule = await generate_study_schedule(session, "exam-001", user_id="user-1")
 
         assert schedule is not None
         assert len(schedule) == 7
@@ -110,7 +110,9 @@ class TestGenerateStudySchedule:
 
         session.execute = AsyncMock(side_effect=[mock_exam_result, mock_due_result])
 
-        schedule = await generate_study_schedule(session, "exam-001", days_ahead=1)
+        schedule = await generate_study_schedule(
+            session, "exam-001", days_ahead=1, user_id="user-1"
+        )
 
         assert schedule is not None
         assert schedule[0]["priority"] in ("critical", "high")
@@ -125,7 +127,7 @@ class TestGetDailyStudyPlan:
         """Returns only today's plan."""
         mock_gen.return_value = [{"date": date.today().isoformat(), "priority": "medium"}]
 
-        result = await get_daily_study_plan(AsyncMock(), "exam-001")
+        result = await get_daily_study_plan(AsyncMock(), "exam-001", user_id="user-1")
 
         assert result is not None
         assert result["date"] == date.today().isoformat()
@@ -136,5 +138,5 @@ class TestGetDailyStudyPlan:
         """Returns None when exam doesn't exist."""
         mock_gen.return_value = None
 
-        result = await get_daily_study_plan(AsyncMock(), "nonexistent")
+        result = await get_daily_study_plan(AsyncMock(), "nonexistent", user_id="user-1")
         assert result is None

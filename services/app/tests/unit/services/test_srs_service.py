@@ -123,7 +123,7 @@ class TestRecordReview:
         session.add = MagicMock()
         session.flush = AsyncMock()
 
-        review = await record_review(session, "fc-001", quality=4)
+        review = await record_review(session, "fc-001", quality=4, user_id="user-1")
 
         session.add.assert_called_once()
         assert review.flashcard_id == "fc-001"
@@ -147,7 +147,7 @@ class TestRecordReview:
         session.execute = AsyncMock(return_value=mock_result)
         session.flush = AsyncMock()
 
-        review = await record_review(session, "fc-001", quality=4)
+        review = await record_review(session, "fc-001", quality=4, user_id="user-1")
 
         assert review.interval_days == 6  # second review → 6 days
         assert review.repetition_count == 2
@@ -177,7 +177,7 @@ class TestGetStudyStats:
 
         session.execute = AsyncMock(side_effect=[mock_total, mock_reviewed])
 
-        stats = await get_study_stats(session, course_code="TEST")
+        stats = await get_study_stats(session, course_code="TEST", user_id="user-1")
 
         assert stats.total == 5
         assert stats.new == 2  # 5 total - 3 reviewed

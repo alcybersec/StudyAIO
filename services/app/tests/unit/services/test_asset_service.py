@@ -179,7 +179,7 @@ class TestGetFlashcards:
         mock_result.scalars.return_value.all.return_value = [mock_fc]
         mock_session.execute.return_value = mock_result
 
-        result = await get_flashcards_for_week(mock_session, "CSIT302", 5)
+        result = await get_flashcards_for_week(mock_session, "CSIT302", 5, user_id="user-1")
 
         assert len(result) == 1
         mock_session.execute.assert_awaited_once()
@@ -192,7 +192,7 @@ class TestGetFlashcards:
         mock_result.scalars.return_value.all.return_value = []
         mock_session.execute.return_value = mock_result
 
-        result = await get_flashcards_for_course(mock_session, "CSIT302")
+        result = await get_flashcards_for_course(mock_session, "CSIT302", user_id="user-1")
 
         assert result == []
 
@@ -210,7 +210,7 @@ class TestGetQuizQuestions:
         mock_result.scalars.return_value.all.return_value = [mock_q]
         mock_session.execute.return_value = mock_result
 
-        result = await get_quiz_questions_for_week(mock_session, "CSIT302", 5)
+        result = await get_quiz_questions_for_week(mock_session, "CSIT302", 5, user_id="user-1")
 
         assert len(result) == 1
 
@@ -222,6 +222,6 @@ class TestGetQuizQuestions:
         mock_result.scalars.return_value.all.return_value = []
         mock_session.execute.return_value = mock_result
 
-        result = await get_quiz_questions_for_course(mock_session, "CSIT302")
+        result = await get_quiz_questions_for_course(mock_session, "CSIT302", user_id="user-1")
 
         assert result == []

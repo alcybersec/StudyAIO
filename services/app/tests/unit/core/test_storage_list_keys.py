@@ -32,7 +32,7 @@ async def test_list_keys_refuses_to_walk_outside_root(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_s3_list_keys_failure_raises_not_empty() -> None:
-    """"Could not look" must not read as "nothing there" (a purge deletes on [])."""
+    """Not being able to look must not read as nothing being there (a purge deletes on [])."""
     from unittest.mock import MagicMock, patch
 
     from app.core.storage import S3StorageBackend

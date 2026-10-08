@@ -35,6 +35,7 @@ class TestCreateExam:
             title="Midterm",
             exam_date=datetime.now(UTC) + timedelta(days=14),
             weeks_scope=[1, 2, 3, 4],
+            user_id="user-1",
         )
 
         session.add.assert_called_once()
@@ -59,6 +60,7 @@ class TestCreateExam:
                 title="Test",
                 exam_date=datetime.now(UTC) + timedelta(days=7),
                 weeks_scope=[1],
+                user_id="user-1",
             )
 
     @pytest.mark.asyncio
@@ -78,6 +80,7 @@ class TestCreateExam:
                 title="Past Exam",
                 exam_date=datetime.now(UTC) - timedelta(days=1),
                 weeks_scope=[1],
+                user_id="user-1",
             )
 
     @pytest.mark.asyncio
@@ -99,6 +102,7 @@ class TestCreateExam:
             exam_date=datetime.now(UTC) + timedelta(days=30),
             weeks_scope=[1, 2, 3],
             target_mastery_pct=90,
+            user_id="user-1",
         )
 
         assert exam.target_mastery_pct == 90
@@ -118,7 +122,7 @@ class TestGetExam:
         mock_result.scalar_one_or_none.return_value = mock_exam
         session.execute = AsyncMock(return_value=mock_result)
 
-        exam = await get_exam(session, "exam-001")
+        exam = await get_exam(session, "exam-001", user_id="user-1")
         assert exam == mock_exam
         assert exam.status == "active"
 
@@ -134,7 +138,7 @@ class TestGetExam:
         session.execute = AsyncMock(return_value=mock_result)
         session.flush = AsyncMock()
 
-        exam = await get_exam(session, "exam-001")
+        exam = await get_exam(session, "exam-001", user_id="user-1")
         assert exam.status == "completed"
 
     @pytest.mark.asyncio
@@ -145,7 +149,7 @@ class TestGetExam:
         mock_result.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await get_exam(session, "nonexistent")
+        result = await get_exam(session, "nonexistent", user_id="user-1")
         assert result is None
 
 
@@ -164,7 +168,7 @@ class TestDeleteExam:
         session.execute = AsyncMock(return_value=mock_result)
         session.flush = AsyncMock()
 
-        result = await delete_exam(session, "exam-001")
+        result = await delete_exam(session, "exam-001", user_id="user-1")
         assert result is True
         assert mock_exam.status == "archived"
 
@@ -176,7 +180,7 @@ class TestDeleteExam:
         mock_result.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await delete_exam(session, "nonexistent")
+        result = await delete_exam(session, "nonexistent", user_id="user-1")
         assert result is False
 
 

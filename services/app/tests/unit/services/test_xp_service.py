@@ -234,7 +234,7 @@ class TestGetLeaderboard:
         ]
         session.execute = AsyncMock(return_value=mock_result)
 
-        board = await get_leaderboard(session)
+        board = await get_leaderboard(session, user_id="user-1")
 
         assert len(board) == 2
         assert board[0]["rank"] == 1
@@ -250,5 +250,5 @@ class TestGetLeaderboard:
         mock_result.all.return_value = []
         session.execute = AsyncMock(return_value=mock_result)
 
-        board = await get_leaderboard(session)
+        board = await get_leaderboard(session, user_id="user-1")
         assert board == []

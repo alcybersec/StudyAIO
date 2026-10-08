@@ -17,7 +17,7 @@ class TestListCourses:
         mock_result.scalars.return_value.all.return_value = []
         mock_session.execute.return_value = mock_result
 
-        result = await course_service.list_courses(mock_session)
+        result = await course_service.list_courses(mock_session, user_id="user-1")
         assert result == []
         mock_session.execute.assert_called_once()
 
@@ -34,7 +34,7 @@ class TestGetCourseByCode:
         mock_result.scalar_one_or_none.return_value = mock_course
         mock_session.execute.return_value = mock_result
 
-        result = await course_service.get_course_by_code(mock_session, "CSIT302")
+        result = await course_service.get_course_by_code(mock_session, "CSIT302", user_id="user-1")
         assert result is mock_course
 
     async def test_get_course_not_found(self, mock_session):
@@ -43,7 +43,7 @@ class TestGetCourseByCode:
         mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        result = await course_service.get_course_by_code(mock_session, "UNKNOWN")
+        result = await course_service.get_course_by_code(mock_session, "UNKNOWN", user_id="user-1")
         assert result is None
 
 
@@ -72,7 +72,7 @@ class TestListCoursesWithStats:
         mock_result.scalars.return_value.all.return_value = []
         mock_session.execute.return_value = mock_result
 
-        result = await course_service.list_courses_with_stats(mock_session)
+        result = await course_service.list_courses_with_stats(mock_session, user_id="user-1")
         assert result == []
 
     async def test_returns_stats_for_courses(self, mock_session):
@@ -102,7 +102,7 @@ class TestListCoursesWithStats:
 
         mock_session.execute = AsyncMock(side_effect=[courses_result, stats_result])
 
-        result = await course_service.list_courses_with_stats(mock_session)
+        result = await course_service.list_courses_with_stats(mock_session, user_id="user-1")
         assert len(result) == 1
         assert result[0]["code"] == "CSIT302"
         assert result[0]["weeks_covered"] == 5

@@ -1,5 +1,7 @@
 """Tests for review_service."""
 
+import pytest
+
 from app.services import review_service
 
 
@@ -247,9 +249,10 @@ class TestPendingReviewsCoverEveryEntityType:
         assert "EXISTS" in sql, f"empty user_id fell through to an unscoped listing:\n{sql}"
         assert "user_id = ''" in sql
 
-    async def test_no_user_id_stays_unscoped_for_internal_callers(self):
-        """Omitting user_id keeps the trusted-caller behaviour (pipeline, CLI)."""
-        sql = await _executed_sql(review_service.list_pending_reviews, user_id=None)
+    async def test_caller_is_required_so_no_unscoped_listing_exists(self):
+        """R-021: omitting user_id is a TypeError, not an unscoped listing."""
+        session = _capturing_session()
 
-        assert "EXISTS" not in sql
-        assert "lecture_artifacts" not in sql
+        with pytest.raises(TypeError):
+            await review_service.list_pending_reviews(session)
+        session.execute.assert_not_awaited()

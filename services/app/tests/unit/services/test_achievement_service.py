@@ -169,14 +169,14 @@ class TestMarkNotified:
         session.execute = AsyncMock(return_value=mock_result)
         session.flush = AsyncMock()
 
-        await mark_notified(session, ["ua-001"])
+        await mark_notified(session, ["ua-001"], user_id="user-1")
         assert mock_ua.notified is True
 
     @pytest.mark.asyncio
     async def test_empty_list_does_nothing(self):
         """Empty list is a no-op."""
         session = AsyncMock()
-        await mark_notified(session, [])
+        await mark_notified(session, [], user_id="user-1")
         session.execute.assert_not_called()
 
 

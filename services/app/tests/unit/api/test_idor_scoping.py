@@ -173,6 +173,38 @@ class TestReviewItemsIdorScoping:
         mock_resolve.assert_not_awaited()
         mock_resume.assert_not_called()
 
+    async def test_resolve_review_item_scopes_the_course_lookup(
+        self, async_client, mock_session, default_test_user
+    ):
+        """WRITE: the classification applied on resolve must look the course up
+        among the caller's courses -- course codes repeat across users, so an
+        unscoped code lookup can attach the artifact to another user's course."""
+        item = MagicMock(entity_type="lecture_artifact", entity_id="art-1", status="pending")
+        artifact_result = MagicMock()
+        artifact_result.scalar_one_or_none.return_value = MagicMock()
+        mock_session.execute = AsyncMock(return_value=artifact_result)
+
+        with (
+            patch(
+                "app.api.review_items.review_service.get_review_item",
+                new=AsyncMock(return_value=item),
+            ),
+            patch(
+                "app.api.review_items.artifact_service.apply_classification",
+                new_callable=AsyncMock,
+            ) as mock_apply,
+            patch(
+                "app.api.review_items.review_service.resolve_review_item",
+                new=AsyncMock(side_effect=ValueError("stop here")),
+            ),
+        ):
+            await async_client.post(
+                "/api/review-items/r1/resolve",
+                json={"resolution": {"course_code": "CSIT302", "week": 5}},
+            )
+
+        assert mock_apply.await_args.kwargs.get("user_id") == default_test_user.id
+
     async def test_dismiss_review_item_scopes_by_user(self, async_client, default_test_user):
         """WRITE: POST .../dismiss must thread user.id so a foreign item is
         rejected.

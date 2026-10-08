@@ -240,7 +240,7 @@ class TestGenerateObsidianVault:
         qq = _make_quiz(1, "What?", "short_answer", None, "Answer.", "Explanation.")
 
         session = _mock_session_for_vault(course, [summary], [fc], [qq])
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id="user-1")
 
         assert result is not None
         buf, filename = result
@@ -257,7 +257,7 @@ class TestGenerateObsidianVault:
         course_result.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=course_result)
 
-        result = await generate_obsidian_vault(session, "NONEXIST")
+        result = await generate_obsidian_vault(session, "NONEXIST", user_id="user-1")
         assert result is None
 
     async def test_vault_contains_index(self):
@@ -266,7 +266,7 @@ class TestGenerateObsidianVault:
         summary = _make_summary(1)
         session = _mock_session_for_vault(course, [summary])
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, _ = result
 
@@ -279,7 +279,7 @@ class TestGenerateObsidianVault:
         summary = _make_summary(3, "# Week 3")
         session = _mock_session_for_vault(course, [summary])
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, _ = result
 
@@ -292,7 +292,7 @@ class TestGenerateObsidianVault:
         fc = _make_flashcard(2, "Q?", "A.")
         session = _mock_session_for_vault(course, [], [fc])
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, _ = result
 
@@ -305,7 +305,7 @@ class TestGenerateObsidianVault:
         qq = _make_quiz(4, "What?", "short_answer", None, "Answer.", "Expl.")
         session = _mock_session_for_vault(course, [], [], [qq])
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, _ = result
 
@@ -318,7 +318,7 @@ class TestGenerateObsidianVault:
         summary = _make_summary(1)
         session = _mock_session_for_vault(course, [summary])
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, _ = result
 
@@ -332,7 +332,7 @@ class TestGenerateObsidianVault:
         summary = _make_summary(5, "# Week 5")
         session = _mock_session_for_vault(course, [summary])
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, _ = result
 
@@ -347,7 +347,7 @@ class TestGenerateObsidianVault:
         fc = _make_flashcard(1, "What is TCP?", "Transmission Control Protocol")
         session = _mock_session_for_vault(course, [], [fc])
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, _ = result
 
@@ -368,7 +368,7 @@ class TestGenerateObsidianVault:
         )
         session = _mock_session_for_vault(course, [], [], [qq])
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, _ = result
 
@@ -383,7 +383,7 @@ class TestGenerateObsidianVault:
         s3 = _make_summary(3, "# Week 3")
         session = _mock_session_for_vault(course, [s1, s3])
 
-        result = await generate_obsidian_vault(session, "CSIT302", weeks=[1, 3])
+        result = await generate_obsidian_vault(session, "CSIT302", weeks=[1, 3], user_id="user-1")
         assert result is not None
         buf, _ = result
 
@@ -399,7 +399,7 @@ class TestGenerateObsidianVault:
         course = _make_course()
         session = _mock_session_for_vault(course)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, _ = result
 
