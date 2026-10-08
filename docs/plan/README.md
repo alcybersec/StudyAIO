@@ -15,7 +15,7 @@ Orchestrator updates here.
 
 ## Next task
 
-**M32-S1 C2–C6 complete (2026-10-09)**; all tiers green locally on `kit/retrofit` @ `6de73a1`. Next: push for pipeline evidence (incl. QA-003 e2e), then M32 gate (awaiting user). C1 (ADR 0002) waits on the user's review.
+**M32-S1 C2–C6 complete (2026-10-09).** Pipeline **#543** on `43e69f1`, all 6 jobs success by name: `backend-tests` 87.63% / `2395 passed` + golden `317` + contracts `25`; `test-floor` 97.57% / `80 passed`; `integration-tests` 87.36% / `529 passed`; `e2e-tests` **`64 passed`, 0 skipped (C3 confirmed in CI)**; `frontend-checks` `614 passed`; `python-lint` success. (#542 on `2233edc` failed `python-lint` — fixed by QA-017/BACKEND-018.) **Open:** C1 (ADR 0002, user review); M32's feature not yet named by the user.
 
 **Integration branch.** `kit/retrofit` @ `2f3296d`+ (code `8d9de14`, pipeline #537 green) — pushed,
 not merged to `main`; no MR opened.
