@@ -326,12 +326,17 @@ class S3StorageBackend(StorageBackend):
         keys: list[str] = []
         root = settings.s3_prefix.strip("/")
         strip = len(root) + 1 if root else 0
-        with contextlib.suppress(Exception):
+        # A listing failure is raised, not turned into []: "nothing there" and
+        # "could not look" must not look alike to a caller deciding what to delete.
+        try:
             paginator = self._get_client().get_paginator("list_objects_v2")
             for page in paginator.paginate(
                 Bucket=settings.s3_bucket, Prefix=self._full_key(prefix)
             ):
                 keys.extend(obj["Key"][strip:] for obj in page.get("Contents", []))
+        except Exception:
+            logger.warning("storage_list_keys_failed", prefix=prefix, exc_info=True)
+            raise
         return keys
 
     async def delete_prefix(self, prefix: str) -> int:

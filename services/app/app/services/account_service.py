@@ -30,6 +30,7 @@ docstring before adding a namespace.
 real database — the unit tests can only check the shape of the predicates.
 """
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -57,6 +58,9 @@ from app.services import (
 )
 
 logger = structlog.get_logger()
+
+#: A course id as ``generate_id`` mints it (a UUID); anything else in the ledger is not one.
+_COURSE_ID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 # Tables that belong to nobody: shared catalogs, and `users` itself (deleted
 # last, by primary key). Anything not here and not user-scoped is a bug.
@@ -297,12 +301,29 @@ async def purge_user_storage(
     # `course_service.delete_course` left behind still names them. This is the
     # only route to those summary / summary-version blobs (R-020).
     ledger_prefix = course_service.deleted_course_ledger_prefix(user_id)
-    ledger_keys = await store.list_keys(ledger_prefix)
-    prefixes.extend(
-        summary_service.summary_key_prefix_for_course(key.rsplit("/", 1)[-1]) for key in ledger_keys
-    )
+    # The listing is storage input, not trusted: an S3 folder placeholder
+    # ("<prefix>/") has an empty last segment and would turn the sweep into
+    # `summaries/` (every user), so only id-shaped segments name a course. A
+    # failed listing keeps the ledger: sweeping it unread would leave the
+    # deleted-course blobs unattributable forever.
+    ledger_readable = True
+    try:
+        ledger_keys = await store.list_keys(ledger_prefix)
+    except Exception:
+        ledger_readable = False
+        ledger_keys = []
+        logger.warning(
+            "purge_ledger_listing_failed", user_id=user_id, prefix=ledger_prefix, exc_info=True
+        )
+    for key in ledger_keys:
+        segment = key.rsplit("/", 1)[-1]
+        if not _COURSE_ID_RE.fullmatch(segment):
+            logger.warning("purge_ledger_entry_skipped", user_id=user_id, key=key)
+            continue
+        prefixes.append(summary_service.summary_key_prefix_for_course(segment))
     prefixes.append(courseops_service.courseops_key_prefix_for_user(user_id))
-    prefixes.append(ledger_prefix)  # last: sweep the markers once they are used
+    if ledger_readable:
+        prefixes.append(ledger_prefix)  # last: sweep the markers once they are used
 
     deleted = 0
     for key in keys:
