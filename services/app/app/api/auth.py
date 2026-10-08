@@ -487,7 +487,11 @@ async def mfa_disable(
     ``tokens_valid_from``, so the caller's cookies are dead the moment it
     returns. Clear them rather than leaving the client to trip over a 401.
     """
-    await user_service.disable_mfa(session, user.id, body.totp_code)
+    try:
+        await user_service.disable_mfa(session, user.id, body.totp_code)
+    except ValueError as exc:
+        # MFA not enabled is a client error, matching /mfa/verify -- not a 500.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     await session.commit()
     _clear_auth_cookies(response)
     logger.info("mfa_disabled_session_ended", user_id=user.id)

@@ -129,12 +129,12 @@ async def check_achievements(
                     session,
                     user_id,
                     kind="achievement",
-                    title=f"Achievement unlocked: {achievement.name}",
+                    title=f"Achievement unlocked: {achievement.title}",
                     body=achievement.description,
                     href="/achievements",
                 )
             except Exception:
-                logger.warning(
+                logger.error(
                     "achievement_inbox_notification_failed",
                     achievement_code=achievement.code,
                     exc_info=True,
