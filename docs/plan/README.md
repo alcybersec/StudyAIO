@@ -26,7 +26,7 @@ confirmed by the user.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M31-S2-BACKEND-026 (merge re-homes moved summary's versions — floor-4 VETO; archived by-id lookups) | `backend` | 2026-10-08 | isolated |
+| M31-S2-QA-028 (retire 2 reminder/digest XPASS markers) | `qa` | 2026-10-08 | isolated |
 
 ## Completed
 
@@ -65,6 +65,7 @@ Keep the current milestone's tasks here; roll earlier milestones into `docs/plan
 | M31-S2-SAFETY-025 (review BACKEND-019; detector blind spots) | `safety` | `5529484`/`4584541`/`f62501c` → `kit/retrofit` head `77f360c` | Diff = `tests/safety/**`. **Orchestrator on `kit/retrofit`: `1 failed, 71 passed`** — the 1 = `test_floor4_merge_carries_moved_summarys_versions_to_target` (new hole: merge strands moved summary's versions on the source course → BACKEND-026). Verdicts: floors 1/2/3 APPROVE; floor 4 VETO until BACKEND-026. Both floor-1 detector blind spots closed red-first; course delete bounded model-by-model (`COURSE_DELETE_MODELS`); `DB_VIOLATIONS` empty | 2026-10-08 |
 | M31-S2-ARCH-027 (ADR 0004: `summary_versions` named in course delete; merge must re-home versions) | `architect` | `7a86af1` → `kit/retrofit` (see log) | Diff = ADR 0004 only, dated clarification (no rule change). Agent `pytest tests/contracts` → `25 passed`. Re-home pin already exists (SAFETY-025) | 2026-10-08 |
 | M31-S2-AI-024 (versioned summary blob in `pipeline/summarize.py`, overwrite guard; reminders/digest scoped via Course + `archived_at`) | `ai` | `fb38a68`/`8679a0a` → `kit/retrofit` head `688c5c2` | Diff = 2 pipeline files + 2 unit test files. Agent: `make test` unit `2709 passed`, 87.19%; floor `68 passed`. Orchestrator on `kit/retrofit`: floor `1 failed, 71 passed` (unchanged: only the BACKEND-026 merge pin). XPASS for `qa`: `test_notifications.py::TestScheduledJobs::{test_daily_reminder_reaches_opted_in_user_with_due_cards,test_weekly_digest_reaches_opted_in_user}` | 2026-10-08 |
+| M31-S2-BACKEND-026 (merge re-homes moved summary's versions; archived cards/questions not reviewable) | `backend` | `506da98`/`dbebd88` → `kit/retrofit` head `0a3df0d` | Diff = 3 services + 1 unit test. **Orchestrator: floor tier `72 passed`, 0 failed — floor-4 VETO pin green with no test edit.** New archived-lookup tests red-checked by Orchestrator (agent had not): pre-fix srs/exam → `2 failed`; fixed → `2 passed`. Agent `make test` unit `2706 passed` | 2026-10-08 |
 
 ## Blocked
 
