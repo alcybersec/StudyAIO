@@ -91,8 +91,8 @@ note without a pasted run is not evidence and the Orchestrator re-runs the tests
 
 | ID | Name | Status |
 |---|---|---|
-| M31 | Maintenance | open |
-| M32 | Next feature | not started |
+| M31 | Maintenance | closed 2026-10-08 (CONDITIONAL; C1–C6 → M32) |
+| M32 | Next feature | open |
 
 ## 11. Task graph
 
@@ -139,6 +139,28 @@ M31-S1-ARCH-001 has somewhere to put its contract test.
 **Gate additions:** the floor tier must be non-empty and green, and every floor in §6 must map to a
 named test.
 
+### M32 — Next feature
+
+**Entry conditions**
+
+- [x] M31 gate accepted by the user (2026-10-08, CONDITIONAL; `docs/gates/M31/summary-rerun-2026-10-08.md`).
+- [ ] The user names the feature; the Orchestrator then adds its tasks here (S2 onward).
+
+**Tasks** — S1 carries the M31 gate conditions. A condition still open at the M32 gate survives a
+second milestone and becomes a BLOCK.
+
+| ID | Owner | Outputs | Tests | Acceptance |
+|---|---|---|---|---|
+| M32-S1-BACKEND-001 | `backend` | C2a: `delete_user_account` deletes in FK-safe order (course documents/assessments before courses) | `test_account_deletion_courseops.py` strict xfails turn XPASS (markers → `qa`) | `DELETE /auth/account` and admin delete succeed for a user with course documents and assessments |
+| M32-S1-BACKEND-002 | `backend` | C2b: billing free-tier constants, MFA-disable 400, achievement `title`, gcal RFC 3339 `timeMin` | the 4 remaining R-016 strict xfails turn XPASS | Each pinned integration test passes; no new xfail |
+| M32-S1-QA-003 | `qa`, `devops` | C3: the 10 conditional e2e skips made deterministic in CI (seed data + auth mode), or each accepted on record | `e2e-tests` job | `e2e-tests` reports 0 skipped, or each remaining skip is listed with a reason the user accepted |
+| M32-S1-SAFETY-004 | `safety` | C4: pin the global `AgentError` handler directly; F-2 stale `FLOORS.md` notes | floor tier | The pin fails with the handler fix reverted |
+| M32-S1-BACKEND-005 | `backend`, `architect` | C5 / R-020: account purge removes summary and summary-version blobs of all the user's courses, including already-deleted ones; ADR 0004 #1 wording corrected | floor-4 pin from `safety` | After account deletion no blob of the user's remains under `summaries/` |
+| M32-S1-BACKEND-006 | `backend`, `safety` | C6 / R-021: `user_id` required on scoped service functions, or the floor check fails on a `None` default | floor tier | A scoped function with `user_id=None` default reddens the floor tier |
+| M32-S1-ARCH-007 | `architect` | C1: ADR 0002 accepted or amended per the user's review | contract tests | ADR 0002 Status is Accepted |
+
+**Gate additions:** C1–C6 closed; floor tier non-empty and green; 0 strict xfails pinning R-016.
+
 ### Later milestones (outline only, not yet scoped)
 
-- M32 — Next feature
+_none yet_

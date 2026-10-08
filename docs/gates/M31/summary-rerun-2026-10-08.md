@@ -96,8 +96,12 @@ still calls ADR 0005 "(proposed)" (`architect`); R-019 flake triage (`frontend`)
 dispatch had to fast-forward first (one ran on `main` until told). Two backend memory notes were lost
 when the Orchestrator removed a worktree before syncing its gitignored `.claude/agent-memory/`.
 
+**User decision (2026-10-08):** conditions C1–C6 accepted; M31 closed; C1–C6 carried into M32 S1
+(`docs/strategy.md` §11 M32). ADR 0002 (C1) left Proposed pending the user's review.
+
 Signers:
 
 - Orchestrator — CONDITIONAL, 2026-10-08
 - `safety` — APPROVE (`floors-rerun-2026-10-08.md`)
 - `qa` — CONDITIONAL (review mode, this file § Tests)
+- user — accepted CONDITIONAL, 2026-10-08
