@@ -193,7 +193,7 @@ class TestAchievementUnlockEmitsInbox:
         achievement = MagicMock()
         achievement.id = "ach-001"
         achievement.code = "first_upload"
-        achievement.name = "First Upload"
+        achievement.title = "First Upload"
         achievement.xp_reward = 0
         achievement.criteria_json = {"type": "count", "event": "upload", "threshold": 1}
 
