@@ -73,7 +73,7 @@ same keys as the floor-4 inventories. Every pair was re-derived on 2026-10-04 at
 
 | # | Item | Route (handler, `services/app/`) | Delete site (`services/app/`) | What goes |
 |---|---|---|---|---|
-| 1 | Course | `DELETE /api/courses/{course_code}`, `app/api/courses.py:delete_course`. Requires `X-Confirm: <course_code>`, otherwise 428. | `app/services/course_service.py:delete_course` (DB) | The course and every DB child: artifacts, extractions, chunks, summaries, `summary_versions` (the retained prior versions of that course's own summaries; § Clarification 2026-10-08), flashcards plus reviews, quiz questions plus attempts, concepts plus relations, exams, study sessions, review items, pipeline runs, course documents, assessments, deadlines. **No blob is deleted.** The summary and summary-version blobs under `summaries/<course_id>/` are left on disk, and today no later step removes them; see § Correction 2026-10-08. |
+| 1 | Course | `DELETE /api/courses/{course_code}`, `app/api/courses.py:delete_course`. Requires `X-Confirm: <course_code>`, otherwise 428. | `app/services/course_service.py:delete_course` (DB) | The course and every DB child: artifacts, extractions, chunks, summaries, `summary_versions` (the retained prior versions of that course's own summaries; § Clarification 2026-10-08), flashcards plus reviews, quiz questions plus attempts, concepts plus relations, exams, study sessions, review items, pipeline runs, course documents, assessments, deadlines. **No blob is deleted.** The summary and summary-version blobs under `summaries/<course_id>/` are left on disk until explicit account deletion. `delete_course` makes one storage **write**, not a delete: a zero-byte ledger marker `ledger/deleted-courses/<user_id>/<course_id>`, so the account purge can still reach those blobs; see § Correction 2026-10-08. |
 | 2 | Course document or assessment attachment | `DELETE /api/courseops/documents/{document_id}`, `app/api/courseops.py:delete_document` | `app/services/courseops_service.py:delete_course_document` (DB), then `app/services/courseops_service.py:_delete_blob_if_unreferenced` (`store.delete`, blob) | The `course_documents` row. The blob goes only when no other row of the same user references the key, and only under that user's own `courseops/<user_id>/` prefix. |
 | 3 | Deadline | `DELETE /api/courseops/deadlines/{deadline_id}`, `app/api/courseops.py:delete_deadline` | `app/services/courseops_service.py:delete_deadline` (DB) | One `deadlines` row, whether AI-extracted or manual. |
 | 4 | Chat session | `DELETE /api/chat/sessions/{session_id}`, `app/api/chat.py:delete_session` | `app/services/chat_service.py:delete_session` (DB) | One `chat_sessions` row and its `chat_messages`, by ORM `delete-orphan` cascade and FK `ON DELETE CASCADE`. |
@@ -236,7 +236,7 @@ is a dated note here, not a new ADR. Found by `safety` in the M31 floors re-run
 
 - **What row #1 said.** "The account purge sweeps the user's prefix later." That is wrong. There is
   no per-user prefix for summaries.
-- **The real mechanism today.** Summary blobs are keyed per **course**, not per user:
+- **The mechanism before the fix.** Summary blobs are keyed per **course**, not per user:
   `summaries/<course_id>/Week<N>.md`, with retained versions as `summaries/<course_id>/Week<N>.v<M>.md`
   (`app/services/summary_service.py`). `app/services/account_service.py:purge_user_storage` derives
   every key from rows the user still owns when the account is deleted. For summaries it selects
@@ -247,15 +247,28 @@ is a dated note here, not a new ADR. Found by `safety` in the M31 floors re-run
   summary-version blobs, outlive both the course and the account.
 - **Effect on floor 4.** None. The blobs are kept, not lost. It is a retention and privacy gap:
   account deletion does not remove everything the user generated.
-- **In flight.** `M32-S1-BACKEND-005` is changing the purge to cover deleted courses' summary and
-  summary-version blobs. Final mechanism: **[PLACEHOLDER: to be filled from the
-  `M32-S1-BACKEND-005` handoff. State how the purge reaches a deleted course's
-  `summaries/<course_id>/` keys, for example by sweeping the `file_path` values of `summaries` and
-  `summary_versions` at course-delete time, or by keying summaries per user.]** Until it lands,
-  row #1 stands as corrected above.
+- **Fixed (`M32-S1-BACKEND-005`, code at `a3ab6ce`; design ruled by the user, `docs/decisions.md`
+  § Rulings, 2026-10-08, "C5 / R-020 purge design").** The mechanism is a **deleted-course ledger**:
+  - `app/services/course_service.py:delete_course` writes a zero-byte marker at
+    `ledger/deleted-courses/<user_id>/<course_id>` (`deleted_course_ledger_key`) before it deletes
+    the course's rows. This is a **new storage write site under row #1, not a delete**. It records
+    the course id, which after the delete exists nowhere in the database.
+  - At explicit account deletion, `app/services/account_service.py:purge_user_storage` lists that
+    user's ledger prefix (`deleted_course_ledger_prefix(user_id)`) with the new
+    `StorageBackend.list_keys` (`app/core/storage.py`, Local and S3). It then calls
+    `store.delete_prefix` on `summaries/<course_id>` for every live course and every marked course.
+    That prefix covers `Week<N>.md` and every `Week<N>.v<k>.md`. Last, it deletes the ledger prefix
+    itself.
+  - No blob is deleted outside account deletion. The summary layout is unchanged, so no key
+    migration is needed. The user first chose a per-user key prefix, then kept the ledger once it
+    existed and passed the C5 pin.
+  - **Known residual.** A course deleted before `a3ab6ce` has no marker. Its summary and
+    summary-version blobs cannot be attributed to a user, and they remain after account deletion.
+    This is a retention gap, not a floor-4 loss.
 - **Unchanged.** Row #1 still deletes no blob. The allowlist and `USER_ITEM_DELETE_CALLERS` are
-  unchanged. If the fix makes `delete_course` delete blobs, that is a new blob delete under floor 4,
-  and this ADR must be amended with the user first.
+  unchanged. The ledger marker is a write, so no `(module, function)` delete key is added. If
+  `delete_course` ever deletes a blob, or the ledger is swept anywhere but `purge_user_storage`,
+  that is a new delete under floor 4, and this ADR must be amended with the user first.
 
 ## Alternatives considered
 
