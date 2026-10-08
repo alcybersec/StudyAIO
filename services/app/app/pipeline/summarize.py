@@ -126,7 +126,16 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
             # Keyed on the course id, not its code: codes are unique only per
             # user, so a code-shaped key let one user's summary overwrite
             # another's (#92).
-            storage_key = summary_service.build_summary_storage_key(course.id, artifact.week)
+            # Versioned (floor 4): each re-summarize writes a new blob and the
+            # prior version's bytes stay intact.
+            version = existing.version + 1 if existing else 1
+            storage_key = summary_service.build_summary_storage_key(
+                course.id, artifact.week, version=version
+            )
+            if await storage.exists(storage_key):
+                raise SummarizationError(
+                    f"Refusing to overwrite existing summary blob {storage_key}"
+                )
             await storage.put(storage_key, summary_result.content_md.encode("utf-8"))
 
             # Collect source artifact IDs from the merged extraction
