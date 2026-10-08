@@ -6,7 +6,7 @@ channel fires for which preference) is what is under test. The scheduled jobs ru
 against committed rows, the way Celery beat runs them.
 """
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -476,7 +476,7 @@ class TestScheduledJobs:
                         id=generate_id(),
                         course_id=course_id,
                         title=title,
-                        due_date=date.today() + timedelta(days=offset),
+                        due_date=datetime.now(UTC).date() + timedelta(days=offset),
                         deadline_type="assignment",
                     )
                 )
