@@ -200,12 +200,6 @@ class TestAchievements:
         ).json()
         assert len(still) == len(pending)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: achievement_service.check_achievements builds the inbox notification from "
-        "achievement.name, but the model's column is `title`; the AttributeError is swallowed by "
-        "a best-effort try/except, so no 'Achievement unlocked' inbox item is ever created",
-    )
     async def test_unlock_creates_an_inbox_notification(self, make_user, db_session):
         user = await make_user()
         await _achievement(

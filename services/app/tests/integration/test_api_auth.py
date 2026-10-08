@@ -421,11 +421,6 @@ class TestMfa:
         assert resp.status_code == 403
         assert (await _fetch(db_session, user.id)).mfa_enabled is False
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: POST /auth/mfa/disable leaks disable_mfa's ValueError('MFA is not enabled') "
-        "as an unhandled 500; /auth/mfa/verify maps the same ValueError to 400",
-    )
     async def test_disable_when_not_enabled(self, client_factory, make_user):
         user = await make_user()
         resp = await client_factory(user).post(

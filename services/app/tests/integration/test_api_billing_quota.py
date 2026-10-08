@@ -69,13 +69,6 @@ class TestOverview:
         assert body["subscription"]["status"] == "active"
         assert body["usage"]["ai_calls_limit"] is None and body["usage"]["courses_limit"] is None
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: api/billing.py reads quota_service.FREE_MAX_AI_CALLS_PER_DAY / "
-        "FREE_MAX_UPLOADS_PER_MONTH / FREE_MAX_COURSES, which do not exist (limits moved to "
-        "settings + _limit_for), so GET /billing/subscription raises AttributeError for every "
-        "free user on a non-self-hosted instance",
-    )
     async def test_saas_free_user_sees_limits_and_usage(
         self, client_factory, make_user, db_session, saas
     ):

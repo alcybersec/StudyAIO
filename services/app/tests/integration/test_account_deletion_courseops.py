@@ -23,13 +23,6 @@ from app.services import account_service
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
-_BUG = (
-    "BUG: delete_user_account deletes `courses` before `course_documents`/`assessments` "
-    "(sorted_tables puts the cyclic pair ahead of courses), so a user who owns any of them "
-    "cannot be deleted: ForeignKeyViolationError on courses"
-)
-
-
 async def _owner_with(db_session, make_user, *, document=False, assessment=False, deadline=False):
     user = await make_user()
     course = Course(id=generate_id(), code="DEL101", name="Del", user_id=user.id)
@@ -75,14 +68,12 @@ async def test_user_with_deadline_only_is_deleted(db_session, make_user, storage
     assert (await db_session.execute(select(User).where(User.id == user.id))).first() is None
 
 
-@pytest.mark.xfail(strict=True, reason=_BUG)
 async def test_user_with_course_document_is_deleted(db_session, make_user, storage):
     user, course = await _owner_with(db_session, make_user, document=True)
     await account_service.delete_user_account(db_session, user.id, storage=storage)
     assert (await db_session.execute(select(User).where(User.id == user.id))).first() is None
 
 
-@pytest.mark.xfail(strict=True, reason=_BUG)
 async def test_user_with_assessment_is_deleted(db_session, make_user, storage):
     user, course = await _owner_with(db_session, make_user, assessment=True)
     await account_service.delete_user_account(db_session, user.id, storage=storage)

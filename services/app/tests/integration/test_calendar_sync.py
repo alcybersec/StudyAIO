@@ -199,11 +199,6 @@ class TestPull:
         assert sync.sync_token == "tok-2"
         assert fake.list_kwargs[1]["syncToken"] == "tok-2"  # incremental after the first pull
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: the first pull sends timeMin = datetime.now(UTC).isoformat() + 'Z', which "
-        "yields '...+00:00Z' - not RFC 3339, so Google rejects every first (full) sync with 400",
-    )
     async def test_first_pull_sends_a_valid_rfc3339_time_min(self, make_user, db_session):
         user = await make_user()
         sync = await _sync(db_session, user, direction="pull")
