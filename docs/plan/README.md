@@ -26,6 +26,9 @@ confirmed by the user.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M31-S2-QA-023 (integration tier vs BACKEND-019: resummarize XPASS, merge keep_source, leaderboard opt-in) | `qa` | 2026-10-08 | isolated |
+| M31-S2-AI-024 (versioned summary key in `pipeline/summarize.py`; `notification_tasks` `Flashcard.user_id` + `archived_at`) | `ai` | 2026-10-08 | isolated |
+| M31-S2-SAFETY-025 (review BACKEND-019 vs floors 1+4; close two detector blind spots) | `safety` | 2026-10-08 | isolated |
 
 ## Completed
 
