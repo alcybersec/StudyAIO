@@ -1,6 +1,6 @@
 """Tests for course_service."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -247,9 +247,15 @@ class TestDeleteCourse:
 
         mock_session.execute = AsyncMock(side_effect=dispatch)
 
-        with patch("app.services.course_service.get_storage", create=True) as mock_storage:
-            counts = await course_service.delete_course(mock_session, "user-001", "CSIT302")
-            mock_storage.assert_not_called()
+        storage = MagicMock()
+        storage.put = AsyncMock()
+        counts = await course_service.delete_course(
+            mock_session, "user-001", "CSIT302", storage=storage
+        )
+        # Only a ledger write (R-020); no blob is ever deleted here (ADR 0004).
+        storage.put.assert_awaited_once()
+        storage.delete.assert_not_called()
+        storage.delete_prefix.assert_not_called()
 
         assert counts["artifacts"] == 2
         # Course row itself deleted

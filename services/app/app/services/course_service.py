@@ -6,7 +6,7 @@ import structlog
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.storage import get_storage, normalize_storage_key
+from app.core.storage import StorageBackend, get_storage, normalize_storage_key
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.flashcard import Flashcard
@@ -319,16 +319,41 @@ async def archive_course(session: AsyncSession, user_id: str, code: str) -> Cour
     return course
 
 
-async def delete_course(session: AsyncSession, user_id: str, code: str) -> dict:
+def deleted_course_ledger_prefix(user_id: str) -> str:
+    """Storage prefix of the deleted-course ledger for one user.
+
+    Deleting a course removes its ``summaries``/``summary_versions`` rows but
+    keeps their blobs (ADR 0004), after which the course id is recorded nowhere
+    in the database. The ledger is a zero-byte marker per deleted course, so the
+    account purge can still find ``summaries/<course_id>`` later (R-020).
+    """
+    return f"ledger/deleted-courses/{user_id}"
+
+
+def deleted_course_ledger_key(user_id: str, course_id: str) -> str:
+    """Ledger marker key for one deleted course (last segment is the course id)."""
+    return f"{deleted_course_ledger_prefix(user_id)}/{course_id}"
+
+
+async def delete_course(
+    session: AsyncSession,
+    user_id: str,
+    code: str,
+    storage: StorageBackend | None = None,
+) -> dict:
     """Delete a course and all its database children.
 
     Storage blobs (uploads, extractions, summaries on disk) are deliberately
-    left untouched — only database rows are removed.
+    left untouched — only database rows are removed. The one storage *write* is
+    a ledger marker recording the course id, so the account purge can still
+    reach this course's summary blobs once its rows are gone (R-020). Nothing
+    is deleted from storage here (floor 4 / ADR 0004).
 
     Args:
         session: Database session.
         user_id: Owner user UUID.
         code: Course code.
+        storage: Storage backend for the ledger marker, defaulting to the singleton.
 
     Returns:
         Dict of deleted row counts per entity.
@@ -353,6 +378,11 @@ async def delete_course(session: AsyncSession, user_id: str, code: str) -> dict:
     from app.models.study_session import StudySession
 
     course = await _get_owned_course(session, user_id, code)
+
+    # Record the id before the rows go; harmless if the transaction rolls back
+    # (the account purge would just sweep an extra, empty prefix).
+    store = storage if storage is not None else get_storage()
+    await store.put(deleted_course_ledger_key(user_id, course.id), b"")
 
     artifact_ids_result = await session.execute(
         select(LectureArtifact.id).where(LectureArtifact.course_id == course.id)
