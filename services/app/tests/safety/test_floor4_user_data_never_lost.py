@@ -956,7 +956,7 @@ async def test_floor4_merge_carries_moved_summarys_versions_to_target():
     ``(target, 3, 1)``. Where the conflict week's source history goes is
     ADR 0004 #5's business (the source-side summary), not this pin's.
 
-    RED until the merge re-homes the moved week's versions (M31-S2 follow-up).
+    Found in SAFETY-025; green since M31-S2-BACKEND-026.
     """
     from sqlalchemy.sql.dml import Update
 

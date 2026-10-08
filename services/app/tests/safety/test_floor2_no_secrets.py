@@ -727,57 +727,95 @@ RAW_PROVIDER_TEXT = "floor2-raw-provider-text-4b1d"
 INSTANCE_SENTINEL = "floor2-sentinel-instance-key-7f3a9c"
 
 
+#: Where the global handler is reached from. The concepts route used to be the
+#: driver here, until BACKEND-013 made it catch ``AgentError`` itself: from
+#: then on the test exercised the route and never the handler, and disabling
+#: the handler's ``AgentError`` branch left it green (M31 re-run, mutant 3c,
+#: F-1). The concepts route is pinned as a request-time site above. This pin
+#: reaches the handler on two paths no route catch can shadow: a direct call,
+#: and a probe route mounted for the test that lets the error escape, so
+#: FastAPI's own dispatch picks the handler (a narrower ``AgentError``
+#: handler registered later would be the one tested).
+GLOBAL_HANDLER_PATHS = ("direct call", "escaping route")
+PROBE_PATH = "/api/__floor2_global_handler_probe__"
+
+
+def _agent_error_subclass(message: str) -> Exception:
+    """An ``AgentError`` subclass instance, so the handler's branch must cover subclasses."""
+    from app.core.exceptions import AgentError
+
+    return type("ProbeProviderError", (AgentError,), {})(message)
+
+
+async def _through_global_handler(path: str, error: Exception, async_client) -> tuple[int, str]:
+    """Hand ``error`` to the global ``StudyAIOError`` handler; return (status, body)."""
+    from starlette.requests import Request
+
+    from app.main import app, studyaio_error_handler
+
+    if path == "direct call":
+        request = Request({"type": "http", "method": "GET", "path": PROBE_PATH, "headers": []})
+        response = await studyaio_error_handler(request, error)
+        return response.status_code, response.body.decode()
+
+    async def probe() -> dict:
+        raise error
+
+    app.add_api_route(PROBE_PATH, probe, methods=["GET"])
+    route = app.router.routes[-1]
+    try:
+        response = await async_client.get(PROBE_PATH)
+    finally:
+        app.router.routes.remove(route)
+    return response.status_code, response.text
+
+
 @pytest.mark.asyncio
+@pytest.mark.parametrize("path", GLOBAL_HANDLER_PATHS)
 async def test_floor2_global_handler_never_returns_or_logs_raw_agent_error(
-    async_client, mock_session, caplog
+    path, async_client, caplog
 ):
-    """An ``AgentError`` that escapes a route is answered generically and logged redacted.
+    """An ``AgentError`` that reaches ``studyaio_error_handler`` is answered and logged generically.
 
     ``main.studyaio_error_handler`` used to log ``error=str(exc)`` and return
     ``{"detail": str(exc)}`` for every application error, so any ``AgentError``
-    that escaped a route (site #5) went to the client verbatim. This pins the
-    handler itself: the response carries none of the provider's text, and
-    neither the response nor the log carries the instance credential the
-    message quotes, which is the one credential the handler can know without
-    a user.
+    that escaped a route went to the client verbatim. Provider text can echo
+    the credential that was sent, and the handler has no user to redact
+    against, so none of the message may leave: not the provider's text, not
+    the instance key, and not a per-user key (an ``AgentError`` built outside
+    the adapter's redaction, as this one is, carries them raw).
     """
     from pydantic import SecretStr
 
     from app.config import settings
-    from app.core.exceptions import AgentError
+    from app.main import app
 
-    error = AgentError(
+    user_keys = " ".join(_all_sentinels())
+    error = _agent_error_subclass(
         f"OpenAI API call failed: {RAW_PROVIDER_TEXT} Incorrect API key provided: "
-        f"{INSTANCE_SENTINEL}"
+        f"{INSTANCE_SENTINEL} / {user_keys}"
     )
-    artifact = SimpleNamespace(id="a1", user_id="u1", course_id="c1", week=1)
-    extraction = SimpleNamespace(artifact_id="a1", manifest_json={"pages": []})
-    mock_session.execute = _db_with_stored_credentials(
-        {"lecture_artifacts": artifact, "extractions": extraction}
-    )
+    routes_before = len(app.router.routes)
     caplog.set_level(logging.DEBUG)
     with (
         structlog.testing.capture_logs() as events,
         patch.object(settings, "openai_api_key", SecretStr(INSTANCE_SENTINEL)),
-        patch("app.api.concepts.quota_service.check_ai_quota", new=AsyncMock()),
-        patch("app.agents.parsing.build_extraction_text", return_value="lecture text"),
-        patch(
-            "app.services.concept_service.extract_and_save_concepts",
-            new=AsyncMock(side_effect=error),
-        ) as service,
     ):
-        response = await async_client.post("/api/concepts/extract/a1")
+        status, body = await _through_global_handler(path, error, async_client)
 
-    assert service.await_count == 1, "the route never reached the failing call"
-    assert response.status_code >= 500, response.text
-    assert RAW_PROVIDER_TEXT not in response.text, (
-        f"Floor 2: the global handler returned raw AgentError text: {response.text}"
+    assert len(app.router.routes) == routes_before, "the probe route was left mounted"
+    assert status == 500, f"{path}: the error did not reach the global handler: {status} {body}"
+    assert RAW_PROVIDER_TEXT not in body, (
+        f"Floor 2 ({path}): the global handler returned raw AgentError text: {body}"
     )
-    assert INSTANCE_SENTINEL not in response.text
-    assert INSTANCE_SENTINEL not in repr(events), (
-        "Floor 2: the global handler logged a credential from AgentError text"
-    )
-    assert INSTANCE_SENTINEL not in caplog.text
+    assert INSTANCE_SENTINEL not in body, f"Floor 2 ({path}): instance key in the response"
+    _assert_no_sentinel(body, f"the global handler's response ({path})")
+    for where, text in (("structlog events", repr(events)), ("stdlib log records", caplog.text)):
+        assert RAW_PROVIDER_TEXT not in text, f"Floor 2 ({path}): raw AgentError text in {where}"
+        assert INSTANCE_SENTINEL not in text, (
+            f"Floor 2 ({path}): the global handler logged a credential in {where}"
+        )
+        _assert_no_sentinel(text, f"{where} ({path})")
 
 
 # ── committed ──────────────────────────────────────────────────────────
