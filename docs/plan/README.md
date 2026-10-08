@@ -26,7 +26,6 @@ not merged to `main`; no MR opened.
 |---|---|---|---|
 | M32-S1-BACKEND-006 (C6: `user_id` required + unconditional filter in services) | `backend` | 2026-10-08 | isolated |
 | M32-S1-SAFETY-009 (review BACKEND-001/005 ledger; classify 11 pipeline stages for C6) | `safety` | 2026-10-08 | isolated |
-| M32-S1-QA-010 (retire 6 R-016 xfails → 0 xfail in integration) | `qa` | 2026-10-08 | isolated |
 
 ## Completed
 
@@ -37,6 +36,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-QA-010 (retire 6 R-016 xfails) | `qa` | `f8624c8` → `kit/retrofit` (see log) | Diff = 32 pure deletions, 5 integration files. Agent: fixes reverted → exactly those `6 failed`; restored → `529 passed`, 0 xfailed, coverage gate exit 0. **Integration tier now has 0 xfails (C2 met)** | 2026-10-08 |
 | M32-S1-ARCH-011 (ADR 0004 § Correction: ledger purge mechanism, placeholder filled) | `architect` | `128b37d` → `kit/retrofit` (see log) | Diff = ADR 0004 only; checked against `a3ab6ce`. `pytest tests/contracts` → `25 passed`. Wording under SAFETY-009 review | 2026-10-08 |
 | M32-S1-SAFETY-004 (C4 handler pin direct; F-2; red pins for C5, C6) | `safety` | `131fb96`/`b8294f6`/`418cc46` → `kit/retrofit` head `d424aa2` | Diff = `tests/safety/**`. Agent: floor `2 failed, 75 passed`, 97.46% — the 2 = C5 and C6 pins. Handler pin kills 3 mutants incl. the M31 survivor. **C6 pin flags 71 functions, not 5** → user ruled scope (decisions.md) | 2026-10-08 |
 | M32-S1-BACKEND-002 (C2b: billing free limits, MFA-disable 400, achievement `title`, gcal RFC 3339) | `backend` | `b34c2c5`..`55ed110` → `kit/retrofit` head `94dbf00` | Diff = 4 app files + 3 unit tests (two old mocks had hidden bugs 1 and 3). **Orchestrator red-check** (agent not test-first): pre-fix → `6 failed`; fixed → `26 passed`. Agent integration: 4 strict XPASS → QA-010 | 2026-10-08 |
