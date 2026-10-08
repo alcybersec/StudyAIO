@@ -28,3 +28,18 @@ async def test_list_keys_refuses_to_walk_outside_root(tmp_path: Path) -> None:
     store = LocalStorageBackend(base_dir=str(tmp_path / "root"))
     (tmp_path / "secret.txt").write_text("x")
     assert await store.list_keys("..") == []
+
+
+@pytest.mark.asyncio
+async def test_s3_list_keys_failure_raises_not_empty() -> None:
+    """"Could not look" must not read as "nothing there" (a purge deletes on [])."""
+    from unittest.mock import MagicMock, patch
+
+    from app.core.storage import S3StorageBackend
+
+    store = S3StorageBackend.__new__(S3StorageBackend)
+    client = MagicMock()
+    client.get_paginator.return_value.paginate.side_effect = RuntimeError("s3 down")
+    with patch.object(S3StorageBackend, "_get_client", return_value=client):
+        with pytest.raises(RuntimeError):
+            await store.list_keys("ledger/x")

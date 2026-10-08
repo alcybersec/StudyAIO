@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.core.storage import LocalStorageBackend
+from app.core.utils import generate_id
 from app.services import account_service, course_service, summary_service
 
 
@@ -36,16 +37,17 @@ def test_ledger_prefix_is_per_user() -> None:
 @pytest.mark.asyncio
 async def test_purge_sweeps_summaries_of_ledgered_deleted_course(tmp_path) -> None:
     store = LocalStorageBackend(base_dir=str(tmp_path))
-    gone = "gone-course-id"
+    gone = generate_id()
     key = summary_service.build_summary_storage_key(gone, 1)
     vkey = summary_service.build_summary_storage_key(gone, 1, version=1)
     await store.put(key, b"s")
     await store.put(vkey, b"v")
     await store.put(course_service.deleted_course_ledger_key("u1", gone), b"")
     # Another user's deleted course, and its marker, must survive.
-    other = summary_service.build_summary_storage_key("other-course", 1)
+    other_id = generate_id()
+    other = summary_service.build_summary_storage_key(other_id, 1)
     await store.put(other, b"o")
-    await store.put(course_service.deleted_course_ledger_key("u2", "other-course"), b"")
+    await store.put(course_service.deleted_course_ledger_key("u2", other_id), b"")
 
     await account_service.purge_user_storage(_session_with([], []), "u1", store)
 
@@ -83,3 +85,32 @@ async def test_delete_course_records_ledger_marker_and_keeps_blobs(tmp_path) -> 
 
     assert await store.exists(course_service.deleted_course_ledger_key("user-001", "course-001"))
     assert await store.exists(blob)  # ADR 0004: course delete keeps blobs
+
+
+@pytest.mark.asyncio
+async def test_purge_ignores_ledger_entries_that_are_not_course_ids(tmp_path) -> None:
+    """A folder placeholder ('.../') must not widen the sweep to every summary."""
+    other_id = generate_id()
+    store = LocalStorageBackend(base_dir=str(tmp_path))
+    other = summary_service.build_summary_storage_key(other_id, 1)
+    await store.put(other, b"o")
+    prefix = course_service.deleted_course_ledger_prefix("u1")
+    store.list_keys = AsyncMock(return_value=[f"{prefix}/", f"{prefix}/imported", f"{prefix}/x/"])
+
+    await account_service.purge_user_storage(_session_with([], []), "u1", store)
+
+    assert await store.exists(other)
+
+
+@pytest.mark.asyncio
+async def test_purge_keeps_ledger_when_listing_fails(tmp_path) -> None:
+    """A failed listing aborts the ledger sweep: the markers are the only attribution."""
+    gone = generate_id()
+    store = LocalStorageBackend(base_dir=str(tmp_path))
+    marker = course_service.deleted_course_ledger_key("u1", gone)
+    await store.put(marker, b"")
+    store.list_keys = AsyncMock(side_effect=RuntimeError("s3 down"))
+
+    await account_service.purge_user_storage(_session_with([], []), "u1", store)
+
+    assert await store.exists(marker)
