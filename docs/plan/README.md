@@ -14,7 +14,7 @@ confirmed by the user.
 
 ## Next task
 
-**M31 gate run 2026-10-04: BLOCK** (`docs/gates/M31/summary.md`). Floors VETO (`floors.md`): R-015 floor-1 fixes, floor-1 sweep gap, F2 leak via global `StudyAIOError` handler (concepts site) + R-012, 4 R-007 rulings, R-004. Functional: DEVOPS-005 pipeline red-proof needs an authorised throwaway push. `kit/retrofit` @ `2da6f17` is pushed; pipeline #523 green.
+**M31 gate run 2026-10-04: BLOCK** (`docs/gates/M31/summary.md`). **All VETO-lift items addressed in M31-S2 (2026-10-08):** floor tier `72 passed`, 0 failed, 0 xfail on `kit/retrofit` @ `049cb2e`; rulings recorded; ADRs 0004/0005 accepted; DEVOPS-005 pipeline red-proof done (#526, #527). **Next: gate re-run — awaiting user go-ahead** (and a push of `kit/retrofit` so the pipeline evidence is on the gated sha).
 
 **Proposed next wave (awaiting user go-ahead):** `backend` fixes the R-015 floor-1 leaks + R-016 functional bugs; `ai` fixes classify known-courses leak + quick-capture `txt`; `safety` closes its floor-1 sweep gap for join-scoped tables and re-reviews.
 
@@ -26,7 +26,6 @@ confirmed by the user.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M31-S2-QA-028 (retire 2 reminder/digest XPASS markers) | `qa` | 2026-10-08 | isolated |
 
 ## Completed
 
@@ -66,6 +65,7 @@ Keep the current milestone's tasks here; roll earlier milestones into `docs/plan
 | M31-S2-ARCH-027 (ADR 0004: `summary_versions` named in course delete; merge must re-home versions) | `architect` | `7a86af1` → `kit/retrofit` (see log) | Diff = ADR 0004 only, dated clarification (no rule change). Agent `pytest tests/contracts` → `25 passed`. Re-home pin already exists (SAFETY-025) | 2026-10-08 |
 | M31-S2-AI-024 (versioned summary blob in `pipeline/summarize.py`, overwrite guard; reminders/digest scoped via Course + `archived_at`) | `ai` | `fb38a68`/`8679a0a` → `kit/retrofit` head `688c5c2` | Diff = 2 pipeline files + 2 unit test files. Agent: `make test` unit `2709 passed`, 87.19%; floor `68 passed`. Orchestrator on `kit/retrofit`: floor `1 failed, 71 passed` (unchanged: only the BACKEND-026 merge pin). XPASS for `qa`: `test_notifications.py::TestScheduledJobs::{test_daily_reminder_reaches_opted_in_user_with_due_cards,test_weekly_digest_reaches_opted_in_user}` | 2026-10-08 |
 | M31-S2-BACKEND-026 (merge re-homes moved summary's versions; archived cards/questions not reviewable) | `backend` | `506da98`/`dbebd88` → `kit/retrofit` head `0a3df0d` | Diff = 3 services + 1 unit test. **Orchestrator: floor tier `72 passed`, 0 failed — floor-4 VETO pin green with no test edit.** New archived-lookup tests red-checked by Orchestrator (agent had not): pre-fix srs/exam → `2 failed`; fixed → `2 passed`. Agent `make test` unit `2706 passed` | 2026-10-08 |
+| M31-S2-QA-028 (retire 2 reminder/digest xfails) | `qa` | `b728e4d` → `kit/retrofit` `049cb2e` | Diff = 12 deletions in `test_notifications.py`; agent revert of `notification_tasks.py` → `2 failed`. **Orchestrator full run on `kit/retrofit` @ `049cb2e`: `make test` → unit `Required test coverage of 75.0% reached. Total coverage: 87.18%`, `2711 passed`; floor `Required test coverage of 95% reached. Total coverage: 97.32%`, `72 passed` (0 failed, 0 xfail); `make test-integration` → `Required test coverage of 70% reached. Total coverage: 87.54%`, `523 passed, 6 xfailed`** | 2026-10-08 |
 
 ## Blocked
 
