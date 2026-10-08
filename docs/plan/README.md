@@ -24,9 +24,10 @@ not merged to `main`; no MR opened.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S1-BACKEND-001 + 005 (C2a account-deletion FK; C5/R-020 purge covers deleted courses' summary blobs) | `backend` | 2026-10-08 | isolated |
-| M32-S1-BACKEND-002 (C2b billing free tier, MFA disable, achievement `title`, gcal `timeMin`) | `backend` | 2026-10-08 | isolated |
-| M32-S1-SAFETY-004 (C4 handler pin; F-2; red pins for C5 and C6) | `safety` | 2026-10-08 | isolated |
+| M32-S1-BACKEND-006 (C6: `user_id` required + unconditional filter in services) | `backend` | 2026-10-08 | isolated |
+| M32-S1-SAFETY-009 (review BACKEND-001/005 ledger; classify 11 pipeline stages for C6) | `safety` | 2026-10-08 | isolated |
+| M32-S1-QA-010 (retire 6 R-016 xfails → 0 xfail in integration) | `qa` | 2026-10-08 | isolated |
+| M32-S1-ARCH-011 (fill ADR 0004 § Correction with the ledger mechanism) | `architect` | 2026-10-08 | isolated |
 
 ## Completed
 
@@ -37,6 +38,9 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-SAFETY-004 (C4 handler pin direct; F-2; red pins for C5, C6) | `safety` | `131fb96`/`b8294f6`/`418cc46` → `kit/retrofit` head `d424aa2` | Diff = `tests/safety/**`. Agent: floor `2 failed, 75 passed`, 97.46% — the 2 = C5 and C6 pins. Handler pin kills 3 mutants incl. the M31 survivor. **C6 pin flags 71 functions, not 5** → user ruled scope (decisions.md) | 2026-10-08 |
+| M32-S1-BACKEND-002 (C2b: billing free limits, MFA-disable 400, achievement `title`, gcal RFC 3339) | `backend` | `b34c2c5`..`55ed110` → `kit/retrofit` head `94dbf00` | Diff = 4 app files + 3 unit tests (two old mocks had hidden bugs 1 and 3). **Orchestrator red-check** (agent not test-first): pre-fix → `6 failed`; fixed → `26 passed`. Agent integration: 4 strict XPASS → QA-010 | 2026-10-08 |
+| M32-S1-BACKEND-001 + 005 (C2a FK-safe account deletion; C5 deleted-course ledger purge) | `backend` | `624eade`/`b1c712c` → `kit/retrofit` `b3b1bea`/`a3ab6ce` | Agent: unit services+core `1066 passed`; integration `2 failed, 523 passed` = 2 strict XPASS → QA-010. **Orchestrator: scratch worktree kit/retrofit + these → floor `1 failed, 76 passed`** (C5 pin green; only C6 left). Design = ledger (user kept it over per-user prefix; decisions.md) → ARCH-011, SAFETY-009 | 2026-10-08 |
 | M32-S1-QA-003 (C3: e2e 0 skipped) | `qa` | `fc6dbb7` → `kit/retrofit` (see log) | Diff = `services/ui/e2e/**` only (specs, `fixtures.ts`, new `seed_e2e.py` DB seed via app models — no public API creates course/concept/admin in CI's self-hosted, worker-less mode). Agent, local CI-mirror stack: `CI=1 npx playwright test` → `64 passed (2.9m)`, 0 skipped (was 54 passed / 10 skipped). Two specs had never run (reserved `@test.local` email, stale copy). **Pipeline confirmation pending next push.** Risk: a11y colour-contrast flake on offline toast | 2026-10-08 |
 | M32-S1-ARCH-008 (ADR 0004 #1 purge wording corrected; ADR 0003 header) | `architect` | `128abec` → `kit/retrofit` `948353a` | Diff = 2 ADRs. `pytest tests/contracts` → `25 passed`. ADR 0004 § Correction 2026-10-08 has a placeholder for BACKEND-005's final purge mechanism (Orchestrator fills) | 2026-10-08 |
 
