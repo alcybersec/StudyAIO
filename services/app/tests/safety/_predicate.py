@@ -15,6 +15,8 @@ past the evaluator instead of passing on a guess.
 from __future__ import annotations
 
 import operator
+from collections.abc import Callable
+from contextvars import ContextVar
 from typing import Any
 
 from sqlalchemy import Table
@@ -37,6 +39,11 @@ from sqlalchemy.sql.functions import Function
 from sqlalchemy.sql.selectable import Join, ScalarSelect, Select
 
 Row = dict[tuple[str, str], Any]
+
+#: When set, an ``IN (SELECT ...)`` is answered by running the subquery
+#: against a whole table set (``tests/safety/_minidb.py``) instead of against
+#: the one-row-per-table model below.
+SUBQUERY: ContextVar[Callable[[Select], list[Any]] | None] = ContextVar("SUBQUERY", default=None)
 
 
 class Unreadable(Exception):  # noqa: N818  (a verdict, not an error the code raised)
@@ -148,6 +155,8 @@ def _members(expr: Any, row: Row) -> list[Any]:
         return list(v) if isinstance(v, list | tuple | set | frozenset) else [v]
     if isinstance(expr, ScalarSelect):
         expr = expr.element
+    if isinstance(expr, Select) and (resolve := SUBQUERY.get()) is not None:
+        return resolve(expr)
     if isinstance(expr, Select):
         # The row model is one row per table, so the subquery returns its
         # selected column from this row when its own predicate keeps it.

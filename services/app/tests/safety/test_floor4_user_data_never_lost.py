@@ -1123,3 +1123,236 @@ async def test_floor4_asset_regeneration_keeps_study_history():
     assert not unconditional, "Floor 4: regeneration deletes studied items:\n" + "\n".join(
         unconditional
     )
+
+
+# ── account deletion reaches every summary blob the user ever had (R-020) ─
+#
+# The other side of retention: floor 4 names explicit account deletion as the
+# one path that may remove a user's generated content, and ADR 0004 #1 says
+# course delete keeps the course's blobs because "the account purge sweeps the
+# user's prefix later". Summary keys are per *course*, and the purge builds its
+# summary prefixes from the courses still in the DB, so every summary blob of
+# a course deleted earlier, all its retained ``Week<N>.v<k>.md`` versions
+# included, outlives the account. So do the versions merge re-homes to the
+# target, whose blobs stay under the archived source's prefix (M31 re-run
+# F-3, M32 condition C5).
+#
+# The pin runs the real calls end to end over an in-memory table set that
+# answers like a database (``_minidb``) and a real local storage root: the
+# summarize stage's write (blob, then ``create_or_update_summary``), a
+# re-summarize, ``merge_courses``, two ``delete_course`` calls, then
+# ``delete_user_account``. It is agnostic about the fix: it looks for the
+# bytes left anywhere under the storage root, by content, not by key.
+
+
+@pytest.mark.asyncio
+async def test_floor4_minidb_answers_like_a_database():
+    """``_minidb`` gives the answers Postgres would, and refuses what it does not model.
+
+    The R-020 pin is only as good as this fake: a WHERE it misread would
+    delete or keep the wrong rows and the pin would judge a fiction.
+    """
+    import sqlalchemy as sa
+
+    from app.models.course import Course
+    from app.models.summary import Summary
+    from tests.safety._minidb import MiniDB, MiniSession
+    from tests.safety._predicate import Unreadable
+
+    db = MiniDB()
+    session = MiniSession(db)
+    session.add_all(
+        [
+            Course(id="c1", user_id="u1", code="A"),
+            Course(id="c2", user_id="u1", code="B"),
+            Course(id="c3", user_id="u2", code="A"),
+        ]
+    )
+    session.add(Summary(id="s1", course_id="c1", week=1, content_md="x", file_path="k1"))
+    session.add(Summary(id="s2", course_id="c3", week=1, content_md="y", file_path="k2"))
+    assert db.rows["summaries"][0].version == 1, "a scalar column default was not applied"
+
+    mine = sa.select(Course.id).where(Course.user_id == "u1").order_by(Course.code.desc())
+    assert (await session.execute(mine)).scalars().all() == ["c2", "c1"]
+    assert await session.scalar(mine.limit(1)) == "c2"
+    count = sa.select(sa.func.count()).select_from(Course).where(Course.code == "A")
+    assert await session.scalar(count) == 2
+    owned = sa.select(Course.id).where(Course.user_id == "u1")
+    paths = sa.select(Summary.file_path).where(Summary.course_id.in_(owned))
+    assert (await session.execute(paths)).scalars().all() == ["k1"], "IN (subquery) misread"
+    joined = (
+        sa.select(Summary.file_path)
+        .join(Course, Course.id == Summary.course_id)
+        .where(Course.user_id == "u2")
+    )
+    assert (await session.execute(joined)).all() == [("k2",)], "inner join misread"
+    got = (await session.execute(sa.select(Course).where(Course.id == "c3"))).scalar_one()
+    assert got is await session.get(Course, "c3")
+
+    moved = await session.execute(sa.update(Summary).where(Summary.id == "s1").values(week=7))
+    assert moved.rowcount == 1 and db.get(Summary, "s1").week == 7
+    gone = await session.execute(sa.delete(Course).where(Course.user_id == "u2"))
+    assert gone.rowcount == 1 and [c.id for c in db.rows["courses"]] == ["c1", "c2"]
+    await session.execute(sa.insert(Course).values(id="c4", user_id="u3", code="Z"))
+    await session.delete(db.get(Course, "c1"))
+    await session.flush()
+    assert sorted(c.id for c in db.rows["courses"]) == ["c2", "c4"]
+
+    with pytest.raises(AssertionError):
+        (await session.execute(sa.select(Course))).one_or_none()
+    with pytest.raises(AssertionError):
+        (await session.execute(sa.select(Course).where(Course.id == "none"))).scalar_one()
+
+    unmodelled = {
+        "outer join": sa.select(Summary).outerjoin(Course, Course.id == Summary.course_id),
+        "FROM subquery": sa.select(sa.select(Course.id).subquery()),
+        "count beside a column": sa.select(Course.user_id, sa.func.count()),
+        "multi-row insert": sa.insert(Course).values([{"id": "c8"}, {"id": "c9"}]),
+        "group by": sa.select(Course.user_id).group_by(Course.user_id),
+        "text": sa.text("DELETE FROM courses"),
+    }
+    for label, statement in unmodelled.items():
+        with pytest.raises(Unreadable):
+            await session.execute(statement)
+            pytest.fail(f"MiniDB answered a statement it does not model: {label}")
+
+
+R020_USER = "00000000-0000-7000-8000-0000000000a1"
+R020_OTHER = "00000000-0000-7000-8000-0000000000b2"
+
+
+def _r020_marker(user: str, course: str, week: int, version: int) -> str:
+    return f"r020-{user[-2:]}-{course}-week{week}-v{version}"
+
+
+def _summary_key(course_id: str, week: int, version: int, user_id: str) -> str:
+    """The summarize stage's key, passing the owner if the builder takes one."""
+    import inspect
+
+    from app.services import summary_service
+
+    builder = summary_service.build_summary_storage_key
+    kwargs: dict[str, object] = {"version": version}
+    if "user_id" in inspect.signature(builder).parameters:
+        kwargs["user_id"] = user_id
+    return builder(course_id, week, **kwargs)
+
+
+async def _r020_summarize(session, storage, course, week: int) -> str:
+    """One summarize-stage write for ``course``/``week``, as ``pipeline/summarize.py`` does it."""
+    from app.services import summary_service
+
+    existing = await summary_service.get_existing_summary(session, course.id, week)
+    version = existing.version + 1 if existing else 1
+    text = _r020_marker(course.user_id, course.code, week, version)
+    key = _summary_key(course.id, week, version, course.user_id)
+    await storage.put(key, f"# {text}\n".encode())
+    await summary_service.create_or_update_summary(
+        session=session,
+        course_id=course.id,
+        week=week,
+        content_md=f"# {text}\n",
+        file_path=key,
+        source_artifact_ids=[],
+    )
+    return text
+
+
+def _markers_on_disk(root: str) -> set[str]:
+    import pathlib
+    import re
+
+    pattern = re.compile(r"r020-[0-9a-z]{2}-[A-Z0-9]+-week\d+-v\d+")
+    found: set[str] = set()
+    for path in pathlib.Path(root).rglob("*"):
+        if path.is_file():
+            found |= set(pattern.findall(path.read_text(errors="replace")))
+    return found
+
+
+@pytest.mark.asyncio
+async def test_floor4_account_deletion_purges_every_summary_blob_of_the_user():
+    """After account deletion no summary or summary-version blob of the user remains.
+
+    Covers a course still live at deletion, a course the user deleted earlier
+    (ADR 0004 #1 keeps its blobs), and the versions ``merge_courses``
+    re-homed to the target before the archived source was deleted. Another
+    user's summaries must survive untouched: a purge that sweeps all of
+    ``summaries/`` breaches floor 4 for that user, so it is not a fix.
+
+    RED until M32-S1-BACKEND-005 (R-020).
+    """
+    from app.core.storage import get_storage
+    from app.models.course import Course
+    from app.models.user import User
+    from app.services import account_service, course_service
+    from tests.safety._minidb import MiniDB, MiniSession
+
+    db = MiniDB()
+    session = MiniSession(db)
+    for uid in (R020_USER, R020_OTHER):
+        db.add(User(id=uid, email=f"{uid}@example.test", username=f"user-{uid[-2:]}"))
+
+    def course(code: str, owner: str) -> Course:
+        row = Course(id=f"{owner[:-4]}c{len(db.rows['courses']):03d}", user_id=owner, code=code)
+        db.add(row)
+        return row
+
+    with isolated_storage() as root:
+        storage = get_storage()
+        live = course("LIVE101", R020_USER)
+        deleted = course("GONE201", R020_USER)
+        source = course("SRC301", R020_USER)
+        target = course("TGT401", R020_USER)
+        other = course("LIVE101", R020_OTHER)
+
+        mine: set[str] = set()
+        theirs: set[str] = set()
+        for c in (live, deleted, source):
+            for _ in range(2):  # summarize, then re-summarize: v1 is retained
+                mine.add(await _r020_summarize(session, storage, c, 2))
+        mine.add(await _r020_summarize(session, storage, target, 1))
+        for _ in range(2):
+            theirs.add(await _r020_summarize(session, storage, other, 2))
+
+        assert _markers_on_disk(root) == mine | theirs, "control: the summarize writes did not land"
+        assert len(db.rows["summary_versions"]) == 4, "control: re-summarize retained no version"
+
+        # Week 2 is summarized only in the source, so merge moves it and
+        # re-homes its retained v1 to the target. Then the archived source and
+        # an unrelated course are deleted the sanctioned way (ADR 0004 #1).
+        merged = await course_service.merge_courses(session, R020_USER, "SRC301", "TGT401")
+        assert merged["moved_summaries"] == 1, f"control: merge moved nothing: {merged}"
+        await course_service.delete_course(session, R020_USER, "SRC301")
+        await course_service.delete_course(session, R020_USER, "GONE201")
+        assert not [c for c in db.rows["courses"] if c.id in (source.id, deleted.id)], (
+            "control: the course deletes did not run"
+        )
+        # Everything merge carried to the target is still the user's live
+        # data: deleting the emptied source must not take its bytes along.
+        still_live = {m for m in mine if "-GONE201-" not in m}
+        lost = sorted(still_live - _markers_on_disk(root))
+        assert not lost, (
+            "Floor 4: deleting a course destroyed summary blobs that still belong to a live "
+            f"course (re-homed by merge, or another course's): {lost}"
+        )
+
+        await account_service.delete_user_account(session, R020_USER, storage)
+
+        assert not [u for u in db.rows["users"] if u.id == R020_USER], (
+            "control: the account was not deleted"
+        )
+        left = _markers_on_disk(root)
+        assert theirs <= left, (
+            "Floor 4: deleting one account destroyed another user's summaries: "
+            f"{sorted(theirs - left)}"
+        )
+        survivors = sorted(left & mine)
+        assert not survivors, (
+            "Right to erasure (R-020): after account deletion these summary blobs of the "
+            "deleted user remain:\n  "
+            + "\n  ".join(survivors)
+            + "\nThe purge builds summaries/<course_id> prefixes only from courses still in "
+            "the DB, so a course deleted earlier (ADR 0004 #1 keeps its blobs) and the "
+            "versions merge re-homed from it are never reached."
+        )

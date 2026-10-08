@@ -128,6 +128,17 @@ an `EmbeddingProvider` subclass, and the worker site removed.
 | `…::test_floor4_merge_keep_source_snapshots_target_summary` | Merge with `on_conflict=keep_source` overwrites the target summary without a `summary_versions` row carrying the target's prior text and version, writes that row only after the overwrite, or leaves the row pointing at a key that no longer holds the prior bytes. A control checks that `keep_source` actually ran. This is ADR 0004 § Amendment 2026-10-04: the overwritten target is not merge-discard. Green since M31-S2-BACKEND-019. |
 | `…::test_floor4_merge_carries_moved_summarys_versions_to_target` | Merge moves a week summarized only in the source to the target, but that summary's `summary_versions` rows stay keyed to the archived source, where a later sanctioned course delete (ADR 0004 #1) destroys them. Re-homing by `UPDATE` or by mutating loaded rows both count. It also fails if the re-home collides with the target's own `(course_id, week, version)` (a blanket move of every source version does, on a `keep_source` conflict week). Controls check that the week moved and that `keep_source` ran. Found in SAFETY-025; green since M31-S2-BACKEND-026 re-homed the moved week's versions. |
 | `…::test_floor4_asset_regeneration_keeps_study_history` | Regeneration issues a `DELETE` on `flashcards` or `quiz_questions` that is not conditioned on `flashcard_reviews` or `quiz_attempts`. A control checks that new items were saved. Green since M31-S2-BACKEND-019. |
+| `…::test_floor4_account_deletion_purges_every_summary_blob_of_the_user` | After `delete_user_account`, any summary or summary-version blob of the deleted user remains anywhere under the storage root (found by content, not by key). The scenario runs the real calls over `_minidb.MiniDB`, a table set that answers statements like a database, and a real local storage root: the summarize stage's writes and a re-summarize for a live course, a course later deleted, and a merge source whose moved week carries its retained v1 to the target; then `merge_courses`, `delete_course` on the archived source and on the other course, then account deletion. It also fails if deleting a course destroys a blob that still belongs to a live course (a version merge re-homed), or if account deletion destroys another user's summaries. R-020 (M31 re-run F-3, M32 condition C5). **RED until M32-S1-BACKEND-005**: the purge sweeps `summaries/<course_id>` only for courses still in the DB, so the deleted course's v1 and v2 and the re-homed source v1 survive. |
+
+The account-deletion pin was run in a scratch copy against four fixes. Green: the
+purge also deletes every `file_path` in the user's `summaries` and
+`summary_versions` rows, and `delete_course` deletes the blobs of the rows it
+deletes. Red: the path sweep alone (the deleted course survives), `delete_course`
+sweeping its whole `summaries/<course_id>` prefix (destroys a version merge
+re-homed to the live target), and the purge sweeping all of `summaries/`
+(destroys the other user's). A fix that deletes blobs in `delete_course` also
+needs ADR 0004 #1 amended and `COURSE_DELETE_MODELS` and the blob inventory
+updated by `safety`; keying summaries per user does not.
 
 The three retention pins were run in a scratch copy against a fix shaped like
 BACKEND-019: a snapshot row plus the prior blob under a versioned key, and
