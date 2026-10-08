@@ -15,7 +15,7 @@ Orchestrator updates here.
 
 ## Next task
 
-Wave 1 dispatched 2026-10-08 (see Active). **Queued:** M32-S1-BACKEND-006 (C6) after BACKEND-002 lands (overlapping services). C1 (ADR 0002) waits on the user's review.
+**M32-S1 C2–C6 complete (2026-10-09)**; all tiers green locally on `kit/retrofit` @ `6de73a1`. Next: push for pipeline evidence (incl. QA-003 e2e), then M32 gate (awaiting user). C1 (ADR 0002) waits on the user's review.
 
 **Integration branch.** `kit/retrofit` @ `2f3296d`+ (code `8d9de14`, pipeline #537 green) — pushed,
 not merged to `main`; no MR opened.
@@ -24,7 +24,6 @@ not merged to `main`; no MR opened.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S1-QA-016 (deadline-reminder integration test seeds UTC date) | `qa` | 2026-10-09 | isolated |
 
 ## Completed
 
@@ -35,6 +34,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-QA-016 (reminder integration test seeds UTC date) | `qa` | `dc34624` → `kit/retrofit` `6de73a1` | Diff = 1 test file, 2 lines. Agent: full tier `529 passed` under host TZ, UTC, UTC+14, UTC-7. **Orchestrator on `kit/retrofit` @ `6de73a1`: `make test` → unit `Required test coverage of 75.0% reached. Total coverage: 87.63%`, `2737 passed`; floor `Required test coverage of 95% reached. Total coverage: 97.57%`, `80 passed`; `make test-integration` → `Required test coverage of 70% reached. Total coverage: 87.36%`, `529 passed`** (0 failed, 0 xfail in any tier) | 2026-10-09 |
 | M32-S1-AI-015 (reminder + digest windows use UTC date) | `ai` | `e1e411e`/`b0ec8d1` → `kit/retrofit` head `2df722d` | Diff = `notification_tasks.py` + unit test (red-first in agent's `make test`). Orchestrator: `test_notification_tasks.py` → `4 passed`. Integration test fixture also host-local → QA-016 | 2026-10-09 |
 | M32-S1-SAFETY-013 (review BACKEND-006 + AI-012; stale classification removed; row-owner pin tightened) | `safety` | `d41e674` → `kit/retrofit` (see log) | Diff = `tests/safety/**`. Agent: `pytest tests/safety` → `80 passed`, floor coverage 97.57%. 9 mutants each red on the intended pin. **APPROVE floors 1 + 4.** New low risk R-022 (SSE events use payload owner) | 2026-10-09 |
 | M32-S1-QA-014 (golden + integration tests pass the real owner) | `qa` | `ab38778` → `kit/retrofit` (see log) | Diff = 3 test files. Agent: golden+contracts `342 passed`; integration with the AI-015 test deselected `528 passed, 1 deselected`. Renamed `…stays_unscoped_for_internal_callers` → `test_omitting_user_id_raises_type_error` | 2026-10-09 |
