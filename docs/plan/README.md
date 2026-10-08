@@ -14,7 +14,7 @@ confirmed by the user.
 
 ## Next task
 
-**M31 gate run 2026-10-04: BLOCK** (`docs/gates/M31/summary.md`). **All VETO-lift items addressed in M31-S2 (2026-10-08):** floor tier `72 passed`, 0 failed, 0 xfail on `kit/retrofit` @ `049cb2e`; rulings recorded; ADRs 0004/0005 accepted; DEVOPS-005 pipeline red-proof done (#526, #527). **Next: gate re-run — awaiting user go-ahead** (and a push of `kit/retrofit` so the pipeline evidence is on the gated sha).
+**M31 gate run 2026-10-04: BLOCK** (`docs/gates/M31/summary.md`). **All VETO-lift items addressed in M31-S2 (2026-10-08):** floor tier `72 passed`, 0 failed, 0 xfail on `kit/retrofit` @ `049cb2e`; rulings recorded; ADRs 0004/0005 accepted; DEVOPS-005 pipeline red-proof done (#526, #527). **Gate re-run 2026-10-08: CONDITIONAL** (`docs/gates/M31/summary-rerun-2026-10-08.md`): Floors APPROVE (veto lifted), Functional met, Tests CONDITIONAL. Advancing M31 awaits user acceptance of conditions C1–C6.
 
 **Proposed next wave (awaiting user go-ahead):** `backend` fixes the R-015 floor-1 leaks + R-016 functional bugs; `ai` fixes classify known-courses leak + quick-capture `txt`; `safety` closes its floor-1 sweep gap for join-scoped tables and re-reviews.
 
@@ -77,3 +77,4 @@ Keep the current milestone's tasks here; roll earlier milestones into `docs/plan
 | Gate | Verdict | Summary | Date |
 |---|---|---|---|
 | M31 | **BLOCK** — `safety` VETO + DEVOPS-005 pipeline red-proof missing | [`docs/gates/M31/summary.md`](../gates/M31/summary.md) · floors: [`floors.md`](../gates/M31/floors.md) | 2026-10-04 |
+| M31 (re-run) | **CONDITIONAL** — Floors APPROVE; Tests CONDITIONAL; C1–C6 await user acceptance | [`summary-rerun-2026-10-08.md`](../gates/M31/summary-rerun-2026-10-08.md) · floors: [`floors-rerun-2026-10-08.md`](../gates/M31/floors-rerun-2026-10-08.md) | 2026-10-08 |
