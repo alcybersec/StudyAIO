@@ -28,7 +28,6 @@ confirmed by the user.
 |---|---|---|---|
 | M31-S2-AI-024 (versioned summary key in `pipeline/summarize.py`; `notification_tasks` `Flashcard.user_id` + `archived_at`) | `ai` | 2026-10-08 | isolated |
 | M31-S2-BACKEND-026 (merge re-homes moved summary's versions — floor-4 VETO; archived by-id lookups) | `backend` | 2026-10-08 | isolated |
-| M31-S2-ARCH-027 (ADR 0004 names `summary_versions` in course delete; merge re-home note) | `architect` | 2026-10-08 | isolated |
 
 ## Completed
 
@@ -65,6 +64,7 @@ Keep the current milestone's tasks here; roll earlier milestones into `docs/plan
 | M31-S2-BACKEND-019 (summary snapshots + versioned keys, archive-not-delete, leaderboard opt-in API) | `backend` | `7a4e2f1`/`57f44da`/`c0cba0a` → `kit/retrofit` (head `6d1ed13`) | Diff = backend services/api + unit tests. Agent: `make test` `2704 passed`, floor `68 passed`; integration `3 failed, 517 passed` = 1 XPASS (`test_resummarize_retains_prior_version_content`) + 2 stale tests (merge keep_source key, leaderboard opt-in) → `qa`. **Next:** `qa` fixes those 3; `ai` versions the key in `pipeline/summarize.py:129` and fixes `notification_tasks.py:130` `Flashcard.user_id`; `safety` re-reviews the new `SummaryVersion` delete in `delete_course`; then gate re-run (ask user) | 2026-10-04 |
 | M31-S2-QA-023 (integration aligned with R-007 retention + opt-in leaderboard) | `qa` | `b4cbe3f` → `kit/retrofit` `cf94a2c` | Diff = 3 `tests/integration` files. Agent: BACKEND-019 scratch-reverted → `2 failed` (`no stored copy of the version-1 summary remains`); full tier `Required test coverage of 70% reached. Total coverage: 87.50%`, `521 passed, 8 xfailed` (0 failed) | 2026-10-08 |
 | M31-S2-SAFETY-025 (review BACKEND-019; detector blind spots) | `safety` | `5529484`/`4584541`/`f62501c` → `kit/retrofit` head `77f360c` | Diff = `tests/safety/**`. **Orchestrator on `kit/retrofit`: `1 failed, 71 passed`** — the 1 = `test_floor4_merge_carries_moved_summarys_versions_to_target` (new hole: merge strands moved summary's versions on the source course → BACKEND-026). Verdicts: floors 1/2/3 APPROVE; floor 4 VETO until BACKEND-026. Both floor-1 detector blind spots closed red-first; course delete bounded model-by-model (`COURSE_DELETE_MODELS`); `DB_VIOLATIONS` empty | 2026-10-08 |
+| M31-S2-ARCH-027 (ADR 0004: `summary_versions` named in course delete; merge must re-home versions) | `architect` | `7a86af1` → `kit/retrofit` (see log) | Diff = ADR 0004 only, dated clarification (no rule change). Agent `pytest tests/contracts` → `25 passed`. Re-home pin already exists (SAFETY-025) | 2026-10-08 |
 
 ## Blocked
 
