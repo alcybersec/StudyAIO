@@ -403,18 +403,184 @@ ZONE_ATTRIBUTE_READERS = frozenset(
 )
 
 
+#: Worker-only reads of the zone column outside the scoped lookup, by exact
+#: expression and count. Each is a beat job that must pick, across every user,
+#: the ones for whom it is 08:xx locally (ADR 0006, AI-036), so it cannot go
+#: through ``get_user_timezone(session, user_id)`` one caller at a time.
+#: Classified in SAFETY-040; the three tests below are the conditions of the
+#: entry. A new read, or one more of the same, fails until it is reviewed.
+ZONE_ATTRIBUTE_BEAT_READS: dict[tuple[str, str], tuple[int, str]] = {
+    ("app/pipeline/notification_tasks.py", "UserSettings.timezone"): (
+        3,
+        "beat jobs (deadline reminders, daily reminders, weekly digest) select each "
+        "row's owner and that owner's zone in one row, joined on "
+        "UserSettings.user_id == <owner>.user_id (unique), so a zone is only ever "
+        "applied to its own user's sends",
+    ),
+    ("app/pipeline/notification_tasks.py", "row.timezone"): (
+        1,
+        "the deadline-reminder loop reads the zone from the same result row whose "
+        "Course.user_id it notifies",
+    ),
+}
+
+#: Where a beat read may live, and who may import it (nothing a route reaches).
+BEAT_READ_PREFIX = "app/pipeline/"
+BEAT_READ_IMPORTERS_ALLOWED = ("app/pipeline/", "app/worker.py")
+
+
+def _beat_read_paths() -> set[str]:
+    return {path for path, _ in ZONE_ATTRIBUTE_BEAT_READS}
+
+
 def test_r023_zone_column_read_only_through_the_scoped_lookup():
-    """``<settings>.timezone`` is read only in ``settings_service``.
+    """``<settings>.timezone`` is read only in ``settings_service``, or by a classified beat job.
 
     Everything else gets the zone from ``get_user_timezone`` (scoped above), so
     a cross-user read (``UserSettings.timezone`` joined into a leaderboard or
     an admin listing) fails here first.
     """
-    offenders = []
+    seen: dict[tuple[str, str], list[int]] = {}
     for path in app_modules():
         if rel(path) in ZONE_ATTRIBUTE_READERS:
             continue
         for node in ast.walk(parse(path)):
             if isinstance(node, ast.Attribute) and node.attr == "timezone":
-                offenders.append(f"{rel(path)}:{node.lineno} {ast.unparse(node)}")
+                seen.setdefault((rel(path), ast.unparse(node)), []).append(node.lineno)
+    offenders = []
+    for key, lines in sorted(seen.items()):
+        allowed = ZONE_ATTRIBUTE_BEAT_READS.get(key, (0, ""))[0]
+        if len(lines) > allowed:
+            offenders.append(f"{key[0]}:{lines} {key[1]} ({len(lines)} > {allowed} classified)")
     assert not offenders, offenders
+
+
+def test_r023_beat_zone_reads_are_worker_only():
+    """A classified beat read lives in the worker package and no route can reach it.
+
+    The allowlist above is safe only because nothing request-scoped calls these
+    functions; an ``app/api`` or ``app/services`` import of the module would
+    turn a cross-user beat query into a request path.
+    """
+    for path in _beat_read_paths():
+        assert path.startswith(BEAT_READ_PREFIX), path
+    targets = {p.removesuffix(".py").replace("/", ".") for p in _beat_read_paths()}
+    offenders = []
+    for path in app_modules():
+        r = rel(path)
+        if r.startswith(BEAT_READ_IMPORTERS_ALLOWED):
+            continue
+        for node in ast.walk(parse(path)):
+            names: list[str] = []
+            if isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names = [node.module] + [f"{node.module}.{a.name}" for a in node.names]
+            hits = [n for n in names if n in targets]
+            if hits:
+                offenders.append(f"{r}:{node.lineno} imports {hits}")
+    assert not offenders, offenders
+
+
+def _select_columns(call: ast.Call) -> set[str]:
+    """Selected column expressions, with ``.label(...)`` stripped."""
+    out = set()
+    for arg in call.args:
+        is_call = isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute)
+        if is_call and arg.func.attr == "label":
+            arg = arg.func.value
+        out.add(ast.unparse(arg))
+    return out
+
+
+def test_r023_beat_zone_is_joined_to_the_rows_own_owner():
+    """Every beat ``select`` of ``UserSettings.timezone`` joins it on the selected owner.
+
+    The zone of user A must never be applied to user B's sends: the statement
+    must carry ``<Owner>.user_id`` and join ``UserSettings`` on
+    ``UserSettings.user_id == <Owner>.user_id``, and ``user_settings.user_id``
+    must be unique so the join yields at most that owner's one zone.
+    """
+    from app.models.user_settings import UserSettings
+
+    assert UserSettings.__table__.c.user_id.unique, "user_settings.user_id lost its unique"
+
+    checked = 0
+    problems = []
+    for path in _beat_read_paths():
+        tree = parse(APP_ROOT.parent / path)
+        for node in ast.walk(tree):
+            # The outermost call of a method chain: select(...).join(...).where(...)
+            if not isinstance(node, ast.Call):
+                continue
+            chain, cur = [], node
+            while isinstance(cur, ast.Call) and isinstance(cur.func, ast.Attribute):
+                chain.append(cur)
+                cur = cur.func.value
+            if not (
+                isinstance(cur, ast.Call)
+                and isinstance(cur.func, ast.Name)
+                and cur.func.id == "select"
+            ):
+                continue
+            cols = _select_columns(cur)
+            if "UserSettings.timezone" not in cols:
+                continue
+            if any(  # an inner link of a chain already handled from its outer call
+                isinstance(parent, ast.Attribute) and parent.value is node
+                for parent in ast.walk(tree)
+            ):
+                continue
+            checked += 1
+            joins = [
+                c
+                for c in chain
+                if c.func.attr in {"join", "outerjoin"}
+                and c.args
+                and ast.unparse(c.args[0]) == "UserSettings"
+            ]
+            ok = False
+            for join in joins:
+                on = join.args[1] if len(join.args) > 1 else None
+                if not (
+                    isinstance(on, ast.Compare)
+                    and len(on.ops) == 1
+                    and isinstance(on.ops[0], ast.Eq)
+                ):
+                    continue
+                sides = {ast.unparse(on.left), ast.unparse(on.comparators[0])}
+                if "UserSettings.user_id" not in sides:
+                    continue
+                (owner,) = sides - {"UserSettings.user_id"}
+                if owner.endswith(".user_id") and owner in cols:
+                    ok = True
+            if not ok:
+                problems.append(f"{path}:{cur.lineno} {ast.unparse(node)[:160]}")
+    assert not problems, problems
+    expected = ZONE_ATTRIBUTE_BEAT_READS[
+        ("app/pipeline/notification_tasks.py", "UserSettings.timezone")
+    ][0]
+    assert checked == expected, f"checked {checked} zone selects, expected {expected}"
+
+
+def test_r023_beat_send_claim_is_per_user_and_zone_degrades_to_utc():
+    """The send-claim key cannot collide across users; a bad zone is UTC, never raises."""
+    from app.pipeline import notification_tasks as nt
+
+    a, b = "0190a8f2-0000-7000-8000-00000000000a", "0190a8f2-0000-7000-8000-00000000000b"
+    day = date(2026, 10, 9)
+    keys = {nt._claim_key(k, u, day) for k in ("cards_due", "weekly_digest") for u in (a, b)}
+    assert len(keys) == 4
+    assert nt._claim_key("cards_due", a, day).split(":") == [
+        "notif-sent",
+        "cards_due",
+        a,
+        "2026-10-09",
+    ]
+
+    at_0815_utc = datetime(2026, 10, 9, 8, 15, tzinfo=UTC)  # 17:15 in Tokyo
+    with _frozen(at_0815_utc):
+        assert nt._is_send_time("Asia/Tokyo") is False
+        for key in [k for k in HOSTILE_KEYS if k is None or isinstance(k, str)]:
+            assert nt._is_send_time(key) is True, repr(key)[:24]
+            assert nt._local_day_start_utc(key) == datetime(2026, 10, 9, tzinfo=UTC)
