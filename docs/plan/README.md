@@ -24,6 +24,11 @@ not merged to `main`; no MR opened.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S1-ARCH-007 (C1: ADR 0002 refreshed against code + acceptance brief) | `architect` | 2026-10-09 | isolated |
+| M32-S1-BACKEND-019 (GL#10: course/week from message, citation mapping, quiz-builder intent action) | `backend` | 2026-10-09 | isolated |
+| M32-S1-FRONTEND-020 (R-019: deterministic admin tests; offline-toast contrast) | `frontend` | 2026-10-09 | isolated |
+| M32-S1-AI-021 (R-022: pipeline events to the artifact row owner) | `ai` | 2026-10-09 | isolated |
+| M32-S1-QA-022 (R-023: UTC-consistent date seeds in integration) | `qa` | 2026-10-09 | isolated |
 
 ## Completed
 
@@ -54,7 +59,6 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Blocked on | Since |
 |---|---|---|---|
-| M32-S1-ARCH-007 (C1: ADR 0002 module boundaries) | `architect` | user review of `docs/adr/0002-module-boundaries.md` | 2026-10-08 |
 
 ## Open gates
 
