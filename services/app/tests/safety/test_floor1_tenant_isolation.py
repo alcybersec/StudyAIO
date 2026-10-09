@@ -909,6 +909,12 @@ UNSCOPED_FUNCTION_ALLOWED = {
     ("app/pipeline/calendar_task.py", "_sync_all"): (
         "beat task: syncs every user's calendar by design; each sync then runs as its owner"
     ),
+    ("app/pipeline/_owner.py", "_row_owner_async"): (
+        "worker-only owner lookup (R-022, AI-021): reads LectureArtifact.user_id for the "
+        "stage's own artifact id to pick the SSE channel; returns the owner id only, never a "
+        "row, and a miss or error fails closed to None (event dropped). Pinned by "
+        "test_floor1_owner_routing.py"
+    ),
     ("app/services/asset_service.py", "save_flashcards"): (
         "pipeline write path (pipeline/assets.py) with ids the worker resolved from its artifact"
     ),
