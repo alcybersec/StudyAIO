@@ -22,6 +22,10 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False)  # "user" or "assistant"
     content: Mapped[str] = mapped_column(Text, nullable=False)
     citations_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Structured UI action attached to an assistant reply, e.g.
+    # {"type": "open_quiz_builder", "course_code": str|None,
+    #  "course_id": str|None, "week": int|None}. NULL when there is none.
+    action_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
