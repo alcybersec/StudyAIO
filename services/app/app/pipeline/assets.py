@@ -16,7 +16,7 @@ from app.models.artifact import LectureArtifact
 from app.models.extraction import Extraction
 from app.models.pipeline_run import PipelineRun
 from app.models.summary import Summary
-from app.pipeline._owner import warn_on_owner_mismatch
+from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
 from app.pipeline.failures import record_stage_failure
 from app.services import asset_service
 from app.services.event_service import publish_pipeline_event_sync
@@ -262,19 +262,20 @@ def generate_assets(self, input_value: str | dict) -> dict:
         raise AssetGenerationError("No artifact_id provided")
 
     logger.info("assets_task_started", artifact_id=artifact_id, user_id=user_id)
-    publish_pipeline_event_sync(artifact_id, "assets", "started", user_id=user_id)
+    event_user_id = resolve_event_owner("assets", artifact_id, user_id)
+    publish_pipeline_event_sync(artifact_id, "assets", "started", user_id=event_user_id)
     try:
         result = run_async(_generate_assets(artifact_id, user_id=user_id))
         publish_pipeline_event_sync(
-            artifact_id, "assets", result.get("status", "completed"), user_id=user_id
+            artifact_id, "assets", result.get("status", "completed"), user_id=event_user_id
         )
         return result
     except (AssetGenerationError, AgentError):
-        publish_pipeline_event_sync(artifact_id, "assets", "failed", user_id=user_id)
+        publish_pipeline_event_sync(artifact_id, "assets", "failed", user_id=event_user_id)
         raise  # Don't retry on asset/agent errors
     except Exception as exc:
         # str(exc) stays operator-side: it can carry filenames and storage
         # paths, and the published event is client-facing (#69).
         logger.error("assets_task_error", error=str(exc), artifact_id=artifact_id)
-        publish_pipeline_event_sync(artifact_id, "assets", "failed", user_id=user_id)
+        publish_pipeline_event_sync(artifact_id, "assets", "failed", user_id=event_user_id)
         raise self.retry(exc=exc) from exc

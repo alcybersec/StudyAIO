@@ -16,7 +16,7 @@ from app.extractors.archive import check_archive_bounds
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.pipeline_run import PipelineRun
-from app.pipeline._owner import warn_on_owner_mismatch
+from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
 from app.pipeline.failures import record_stage_failure
 from app.services import review_service
 from app.services.event_service import publish_pipeline_event_sync
@@ -363,19 +363,20 @@ def classify_artifact(self, input_value: str | dict) -> dict:
         raise ClassificationError("No artifact_id provided")
 
     logger.info("classify_task_started", artifact_id=artifact_id, user_id=user_id)
-    publish_pipeline_event_sync(artifact_id, "classify", "started", user_id=user_id)
+    event_user_id = resolve_event_owner("classify", artifact_id, user_id)
+    publish_pipeline_event_sync(artifact_id, "classify", "started", user_id=event_user_id)
     try:
         result = run_async(_classify(artifact_id, user_id=user_id))
         publish_pipeline_event_sync(
-            artifact_id, "classify", result.get("status", "completed"), user_id=user_id
+            artifact_id, "classify", result.get("status", "completed"), user_id=event_user_id
         )
         return result
     except (ClassificationError, AgentError):
-        publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=user_id)
+        publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=event_user_id)
         raise  # Don't retry on classification/agent errors
     except Exception as exc:
         # str(exc) stays operator-side: it can carry filenames and storage
         # paths, and the published event is client-facing (#69).
         logger.error("classify_task_error", error=str(exc), artifact_id=artifact_id)
-        publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=user_id)
+        publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=event_user_id)
         raise self.retry(exc=exc) from exc
