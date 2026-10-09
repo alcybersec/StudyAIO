@@ -72,7 +72,7 @@ def _message_to_response(msg) -> dict:
         "role": msg.role,
         "content": msg.content,
         "citations_json": msg.citations_json,
-        "action": getattr(msg, "action_json", None),
+        "action": msg.action_json,
         "created_at": msg.created_at.isoformat(),
     }
 
