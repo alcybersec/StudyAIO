@@ -6,6 +6,7 @@ channel fires for which preference) is what is under test. The scheduled jobs ru
 against committed rows, the way Celery beat runs them.
 """
 
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,6 +23,7 @@ from app.models.notification import Notification
 from app.models.notification_preference import NotificationPreference
 from app.models.push_subscription import PushSubscription
 from app.models.telegram_link import TelegramLink
+from app.models.user_settings import UserSettings
 from app.pipeline import notification_tasks
 from app.services import email_service, notification_service, push_service, telegram_service
 
@@ -453,6 +455,16 @@ class TestDispatch:
         assert "New other notification" in build("other", {})
 
 
+@contextmanager
+def frozen_clock(instant: datetime):
+    """Pin the clock the scheduled jobs read (ADR 0006: sends happen at local 08:00)."""
+    with (
+        patch("app.core.clock.utc_now", return_value=instant),
+        patch.object(notification_tasks, "utc_now", return_value=instant),
+    ):
+        yield
+
+
 class TestScheduledJobs:
     async def _course(self, owner_id, code="JOB1"):
         async with async_session_factory() as session:
@@ -462,6 +474,9 @@ class TestScheduledJobs:
             return course.id
 
     async def test_deadline_reminders_are_scoped_deduped_and_windowed(self, committed_user):
+        # 08:00Z on the real UTC date: created_at (DB clock) falls inside this local day.
+        now = datetime.now(UTC)
+        frozen = now.replace(hour=8, minute=0, second=0, microsecond=0)
         owner = await committed_user()
         course_id = await self._course(owner.id)
         async with async_session_factory() as session:
@@ -476,13 +491,14 @@ class TestScheduledJobs:
                         id=generate_id(),
                         course_id=course_id,
                         title=title,
-                        due_date=datetime.now(UTC).date() + timedelta(days=offset),
+                        due_date=frozen.date() + timedelta(days=offset),
                         deadline_type="assignment",
                     )
                 )
             await session.commit()
 
-        emitted = await notification_tasks._send_deadline_reminders()
+        with frozen_clock(frozen):
+            emitted = await notification_tasks._send_deadline_reminders()
         assert emitted >= 2
         async with async_session_factory() as session:
             rows = (
@@ -497,7 +513,8 @@ class TestScheduledJobs:
         assert sorted(n.title for n in rows) == ["Due soon due in 3 days", "Due today due today"]
         assert all(n.kind == "deadline" and n.href.startswith("/courses/JOB1/ops") for n in rows)
 
-        await notification_tasks._send_deadline_reminders()  # same day: no duplicates
+        with frozen_clock(frozen + timedelta(minutes=30)):  # same hour: no duplicates
+            await notification_tasks._send_deadline_reminders()
         async with async_session_factory() as session:
             again = (
                 (
@@ -510,16 +527,22 @@ class TestScheduledJobs:
             )
         assert len(again) == 2
 
-    async def test_daily_reminder_reaches_opted_in_user_with_due_cards(self, committed_user):
+        with frozen_clock(frozen.replace(hour=14)):  # not 08:00 local: nothing is sent
+            assert await notification_tasks._send_deadline_reminders() == 0
+
+    async def _opted_in_with_due_card(self, owner_id, code, tz=None):
         from app.models.flashcard import Flashcard
 
-        owner = await committed_user()
-        course_id = await self._course(owner.id, code="JOB2")
+        course_id = await self._course(owner_id, code=code)
         async with async_session_factory() as session:
+            if tz:
+                session.add(
+                    UserSettings(id=generate_id(), user_id=owner_id, settings_json={}, timezone=tz)
+                )
             session.add(
                 NotificationPreference(
                     id=generate_id(),
-                    user_id=owner.id,
+                    user_id=owner_id,
                     channel="email",
                     event_type="cards_due",
                     enabled=True,
@@ -529,12 +552,12 @@ class TestScheduledJobs:
             session.add(
                 LectureArtifact(
                     id=artifact_id,
-                    user_id=owner.id,
+                    user_id=owner_id,
                     course_id=course_id,
                     week=1,
-                    title="JOB2 week 1",
-                    original_filename="job2.pdf",
-                    file_path=f"uploads/{artifact_id}_job2.pdf",
+                    title=f"{code} week 1",
+                    original_filename=f"{code}.pdf",
+                    file_path=f"uploads/{artifact_id}_{code}.pdf",
                     file_type="pdf",
                     sha256=generate_id().replace("-", "") * 2,
                     file_size_bytes=1,
@@ -555,11 +578,39 @@ class TestScheduledJobs:
                 )
             )
             await session.commit()
-        with patch.object(
-            notification_service, "notify_cards_due", AsyncMock(return_value={})
-        ) as notify:
+
+    async def _run_daily(self, instant, owner_id):
+        with (
+            frozen_clock(instant),
+            patch.object(
+                notification_service, "notify_cards_due", AsyncMock(return_value={})
+            ) as notify,
+        ):
             await notification_tasks._send_daily_reminders()
-        assert any(c.args[1] == owner.id and c.args[2] == 1 for c in notify.await_args_list)
+        return [c for c in notify.await_args_list if c.args[1] == owner_id]
+
+    async def test_daily_reminder_reaches_opted_in_user_with_due_cards(self, committed_user):
+        owner = await committed_user()
+        await self._opted_in_with_due_card(owner.id, "JOB2")
+        calls = await self._run_daily(datetime(2026, 10, 9, 8, 0, tzinfo=UTC), owner.id)
+        assert len(calls) == 1 and calls[0].args[2] == 1
+
+    async def test_daily_reminder_is_not_resent_within_the_same_local_day(self, committed_user):
+        owner = await committed_user()
+        await self._opted_in_with_due_card(owner.id, "JOB2B")
+        first = await self._run_daily(datetime(2026, 10, 9, 8, 0, tzinfo=UTC), owner.id)
+        second = await self._run_daily(datetime(2026, 10, 9, 8, 45, tzinfo=UTC), owner.id)
+        assert len(first) == 1
+        assert second == []
+
+    async def test_daily_reminder_waits_for_the_owners_local_08(self, committed_user):
+        owner = await committed_user()
+        await self._opted_in_with_due_card(owner.id, "JOB2C", tz="Asia/Tokyo")
+        # 08:00Z is 17:00 in Tokyo: not yet (nor any longer) their send time.
+        assert await self._run_daily(datetime(2026, 10, 10, 8, 0, tzinfo=UTC), owner.id) == []
+        # 23:00Z the previous UTC day is 08:00 on the 11th in Tokyo.
+        calls = await self._run_daily(datetime(2026, 10, 10, 23, 0, tzinfo=UTC), owner.id)
+        assert len(calls) == 1 and calls[0].args[2] == 1
 
     async def test_weekly_digest_reaches_opted_in_user(self, committed_user):
         owner = await committed_user()
@@ -574,9 +625,19 @@ class TestScheduledJobs:
                 )
             )
             await session.commit()
-        with patch.object(notification_service, "notify", AsyncMock(return_value={})) as notify:
-            await notification_tasks._send_weekly_digest()
-        assert any(c.args[1] == owner.id for c in notify.await_args_list)
+        sunday = datetime(2026, 10, 11, 8, 0, tzinfo=UTC)
+
+        async def run(instant):
+            with (
+                frozen_clock(instant),
+                patch.object(notification_service, "notify", AsyncMock(return_value={})) as notify,
+            ):
+                await notification_tasks._send_weekly_digest()
+            return [c for c in notify.await_args_list if c.args[1] == owner.id]
+
+        assert len(await run(sunday)) == 1
+        assert await run(sunday.replace(minute=40)) == []  # same hour: no duplicate
+        assert await run(sunday - timedelta(days=1)) == []  # Saturday: not digest day
 
     async def test_jobs_return_zero_when_nobody_opted_in(self):
         async with async_session_factory() as session:
