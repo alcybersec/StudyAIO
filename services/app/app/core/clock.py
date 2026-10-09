@@ -10,9 +10,8 @@ Nothing outside this module may call ``date.today()``, naive
 """
 
 from datetime import UTC, date, datetime, tzinfo
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-DEFAULT_TIMEZONE = "UTC"
+from functools import lru_cache
+from zoneinfo import ZoneInfo, available_timezones
 
 
 def utc_now() -> datetime:
@@ -27,9 +26,9 @@ def utc_today() -> date:
 
 def _zone(tz: str | None) -> tzinfo:
     """Resolve an IANA name to a zone; None or invalid falls back to UTC."""
-    if not valid_timezone(tz or ""):
+    if tz is None or not valid_timezone(tz):
         return UTC
-    return ZoneInfo(tz or "")
+    return ZoneInfo(tz)
 
 
 def user_now(tz: str | None) -> datetime:
@@ -42,12 +41,14 @@ def user_today(tz: str | None) -> date:
     return user_now(tz).date()
 
 
+@lru_cache(maxsize=1)
+def _known_zones() -> frozenset[str]:
+    return frozenset(available_timezones())
+
+
 def valid_timezone(tz: str) -> bool:
-    """Return True when ``tz`` is a known IANA zone name."""
-    if not isinstance(tz, str) or not tz or tz.startswith(("/", ".")) or ".." in tz:
-        return False
+    """True iff `tz` is a key of zoneinfo.available_timezones(). Never raises."""
     try:
-        ZoneInfo(tz)
-    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return isinstance(tz, str) and tz in _known_zones()
+    except Exception:
         return False
-    return True

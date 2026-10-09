@@ -47,10 +47,13 @@ async def get_due_cards(
     week: int | None = Query(None, description="Week number filter"),
     limit: int = Query(20, ge=1, le=100, description="Max cards to return"),
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> list[DueCardResponse]:
     """Get flashcards due for review."""
-    cards = await srs_service.get_due_cards(session, course_code, week, limit, user_id=user.id)
+    cards = await srs_service.get_due_cards(
+        session, course_code, week, limit, user_id=user.id, tz=tz
+    )
     return [DueCardResponse.model_validate(c) for c in cards]
 
 
@@ -96,10 +99,11 @@ async def get_stats(
     course_code: str | None = Query(None, description="Course code filter"),
     week: int | None = Query(None, description="Week number filter"),
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> StudyStatsResponse:
     """Get study statistics for a scope."""
-    stats = await srs_service.get_study_stats(session, course_code, week, user_id=user.id)
+    stats = await srs_service.get_study_stats(session, course_code, week, user_id=user.id, tz=tz)
     return StudyStatsResponse(
         total=stats.total,
         due_today=stats.due_today,

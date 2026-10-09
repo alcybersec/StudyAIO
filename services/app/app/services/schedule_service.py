@@ -1,12 +1,13 @@
 """Adaptive study schedule generation based on exam proximity."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import user_now, user_today
+from app.core.localday import local_day_end_utc
 from app.models.exam import Exam
 from app.models.flashcard import Flashcard
 from app.models.flashcard_review import FlashcardReview
@@ -65,8 +66,6 @@ async def generate_study_schedule(
     if not exam:
         return None
 
-    now = datetime.now(UTC)
-
     # Total due cards in scope
     due_count_result = await session.execute(
         select(func.count(Flashcard.id))
@@ -75,7 +74,8 @@ async def generate_study_schedule(
             Flashcard.course_id == exam.course_id,
             Flashcard.week.in_(exam.weeks_scope),
             Flashcard.archived_at.is_(None),
-            (FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at <= now),
+            (FlashcardReview.id.is_(None))
+            | (FlashcardReview.next_review_at < local_day_end_utc(tz)),
         )
     )
     total_due = due_count_result.scalar() or 0

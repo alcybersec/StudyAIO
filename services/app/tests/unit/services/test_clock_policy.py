@@ -25,6 +25,7 @@ from app.services import (
     exam_service,
     quota_service,
     schedule_service,
+    srs_service,
     streak_service,
     study_service,
 )
@@ -285,3 +286,31 @@ class TestUtcDayServices:
         session.execute = AsyncMock(return_value=_result(scalar_one=0))
         await quota_service.get_monthly_upload_count(session, "u1")
         assert date(2026, 3, 1) in _params(session.execute.await_args.args[0])
+
+
+class TestDueToday:
+    @pytest.mark.asyncio
+    async def test_card_due_later_today_locally_counts_as_due(self, freeze):
+        freeze(AHEAD)  # Kiritimati: 03-11 13:30; its day ends 2026-03-11T10:00Z
+        session = AsyncMock()
+        total = _result(scalar=2)
+        rows = MagicMock()
+        rows.all.return_value = [
+            ("f1", 1, datetime(2026, 3, 11, 5, 0, tzinfo=UTC)),
+            ("f2", 1, datetime(2026, 3, 11, 11, 0, tzinfo=UTC)),
+        ]
+        session.execute = AsyncMock(side_effect=[total, rows])
+        stats = await srs_service.get_study_stats(session, user_id="u1", tz=KIRI)
+        assert stats.due_today == 1
+
+    @pytest.mark.asyncio
+    async def test_due_cards_cutoff_is_end_of_local_day(self, freeze):
+        freeze(AHEAD)
+        session = AsyncMock()
+        res = MagicMock()
+        res.scalars.return_value.all.return_value = []
+        session.execute = AsyncMock(return_value=res)
+        await srs_service.get_due_cards(session, user_id="u1", tz=KIRI)
+        assert datetime(2026, 3, 11, 10, 0, tzinfo=UTC) in _params(
+            session.execute.await_args.args[0]
+        )

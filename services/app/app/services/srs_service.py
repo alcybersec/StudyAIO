@@ -7,6 +7,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.localday import local_day_end_utc
 from app.core.utils import generate_id
 from app.models.course import Course
 from app.models.flashcard import Flashcard
@@ -85,6 +86,7 @@ async def get_due_cards(
     limit: int = 20,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> list[Flashcard]:
     """Get flashcards due for review.
 
@@ -97,11 +99,12 @@ async def get_due_cards(
         week: Optional week filter.
         limit: Maximum cards to return.
         user_id: Owner user UUID; only this user's cards are returned.
+        tz: IANA zone of the caller; cards due any time today (their day) are due.
 
     Returns:
         List of Flashcard objects due for review.
     """
-    now = datetime.now(UTC)
+    cutoff = local_day_end_utc(tz)
 
     query = (
         select(Flashcard)
@@ -109,7 +112,7 @@ async def get_due_cards(
         .join(Course, Flashcard.course_id == Course.id)
         .where(
             Flashcard.archived_at.is_(None),
-            (FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at <= now),
+            (FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at < cutoff),
         )
         .order_by(
             # New cards (no review) first, then most overdue
@@ -230,6 +233,7 @@ async def get_study_stats(
     week: int | None = None,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> StudyStats:
     """Get study statistics for a scope.
 
@@ -237,11 +241,12 @@ async def get_study_stats(
         session: Database session.
         course_code: Optional course code filter.
         week: Optional week filter.
+        tz: IANA zone of the caller; due_today counts through the end of their day.
 
     Returns:
         StudyStats with total, due_today, mastered, learning, new counts.
     """
-    now = datetime.now(UTC)
+    cutoff = local_day_end_utc(tz)
 
     # Base query for total flashcards in scope
     base = (
@@ -284,7 +289,7 @@ async def get_study_stats(
             mastered += 1
         else:
             learning += 1
-        if next_review <= now:
+        if next_review < cutoff:
             due_today += 1
 
     new_count = total - len(reviewed_rows)
@@ -300,26 +305,29 @@ async def get_study_stats(
     )
 
 
-async def get_global_study_stats(session: AsyncSession, *, user_id: str) -> StudyStats:
+async def get_global_study_stats(
+    session: AsyncSession, *, user_id: str, tz: str | None = None
+) -> StudyStats:
     """Get study statistics across all courses.
 
     Returns:
         StudyStats aggregated across the entire flashcard pool.
     """
-    return await get_study_stats(session, user_id=user_id)
+    return await get_study_stats(session, user_id=user_id, tz=tz)
 
 
 async def get_per_course_due_counts(
     session: AsyncSession,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> list[dict]:
     """Get due card counts grouped by course.
 
     Returns:
         List of dicts with course_code and due_count.
     """
-    now = datetime.now(UTC)
+    cutoff = local_day_end_utc(tz)
 
     # New cards (no review record) per course
     new_query = (
@@ -338,7 +346,7 @@ async def get_per_course_due_counts(
         select(Course.code, func.count(Flashcard.id))
         .join(Flashcard, Course.id == Flashcard.course_id)
         .join(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
-        .where(FlashcardReview.next_review_at <= now, Flashcard.archived_at.is_(None))
+        .where(FlashcardReview.next_review_at < cutoff, Flashcard.archived_at.is_(None))
     )
     overdue_query = overdue_query.where(Course.user_id == user_id)
     overdue_query = overdue_query.group_by(Course.code)

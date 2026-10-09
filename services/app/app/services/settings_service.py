@@ -36,9 +36,12 @@ from app.core.ai_settings import (  # noqa: F401  (re-exported for existing impo
     _defaults,
     get_effective_setting,
 )
-from app.core.clock import DEFAULT_TIMEZONE, valid_timezone
+from app.core.clock import valid_timezone
 from app.core.utils import generate_id
 from app.models.user_settings import UserSettings
+
+#: Zone used when a user has stored none (matches the column default).
+_DEFAULT_TIMEZONE = "UTC"
 
 logger = structlog.get_logger()
 
@@ -394,7 +397,7 @@ async def get_user_settings(session: AsyncSession, user_id: str) -> dict[str, An
     merged["theme"] = user_settings.theme
     merged["language"] = user_settings.language
     merged["content_language"] = user_settings.content_language
-    merged["timezone"] = getattr(user_settings, "timezone", None) or DEFAULT_TIMEZONE
+    merged["timezone"] = getattr(user_settings, "timezone", None) or _DEFAULT_TIMEZONE
     # getattr: tolerant of lightweight settings stand-ins; the column defaults to False
     merged["leaderboard_opt_in"] = bool(getattr(user_settings, "leaderboard_opt_in", False))
     merged["dashboard_layout"] = user_settings.dashboard_layout
@@ -565,7 +568,7 @@ async def get_user_timezone(session: AsyncSession, user_id: str) -> str:
         The stored zone, or "UTC" when the user has no settings row.
     """
     row = await _get_row(session, user_id)
-    return (getattr(row, "timezone", None) if row else None) or DEFAULT_TIMEZONE
+    return (getattr(row, "timezone", None) if row else None) or _DEFAULT_TIMEZONE
 
 
 async def _get_overrides(session: AsyncSession, user_id: str) -> dict[str, Any]:

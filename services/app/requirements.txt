@@ -17,6 +17,9 @@ pgvector==0.3.6
 pydantic[email]==2.10.4
 pydantic-settings==2.7.1
 
+# Time zones (python:3.12-slim ships no system tz database; zoneinfo needs this)
+tzdata==2026.4
+
 # Logging
 structlog==24.4.0
 

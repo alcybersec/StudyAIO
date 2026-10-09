@@ -66,8 +66,8 @@ async def get_dashboard(
     # Study stats (best-effort, don't break dashboard on failure)
     study_stats = None
     try:
-        global_stats = await srs_service.get_global_study_stats(session, user_id=user.id)
-        per_course = await srs_service.get_per_course_due_counts(session, user_id=user.id)
+        global_stats = await srs_service.get_global_study_stats(session, user_id=user.id, tz=tz)
+        per_course = await srs_service.get_per_course_due_counts(session, user_id=user.id, tz=tz)
         study_stats = DashboardStudyStats(
             total=global_stats.total,
             due_today=global_stats.due_today,
