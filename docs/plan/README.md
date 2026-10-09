@@ -24,10 +24,9 @@ not merged to `main`; no MR opened.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S1-ARCH-007 (C1: ADR 0002 refreshed against code + acceptance brief) | `architect` | 2026-10-09 | isolated |
-| M32-S1-BACKEND-019 (GL#10: course/week from message, citation mapping, quiz-builder intent action) | `backend` | 2026-10-09 | isolated |
-| M32-S1-FRONTEND-020 (R-019: deterministic admin tests; offline-toast contrast) | `frontend` | 2026-10-09 | isolated |
-| M32-S1-AI-021 (R-022: pipeline events to the artifact row owner) | `ai` | 2026-10-09 | isolated |
+| M32-S1-SAFETY-024 (review GL#10 chat + R-022 events; classify `_row_owner_async`) | `safety` | 2026-10-09 | isolated |
+| M32-S1-DATA-025 (`chat_messages.action_json` JSONB) | `data` | 2026-10-09 | isolated |
+| M32-S1-FRONTEND-026 (chat quiz-builder button; nullable citation week/page) | `frontend` | 2026-10-09 | isolated |
 | M32-S1-BACKEND-023 (schedule_service `days_until_exam` mixes local and UTC dates) | `backend` | 2026-10-09 | isolated |
 
 ## Completed
@@ -39,6 +38,10 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-AI-021 (R-022: SSE events to artifact row owner, fail-closed) | `ai` | `bc5687b` → `kit/retrofit` `1d08ef4` | Diff = pipeline + `test_event_owner.py` (36 tests; agent revert → 35 failed). ruff clean. Floor red on new owner lookup `_row_owner_async` → SAFETY-024 classifies | 2026-10-09 |
+| M32-S1-FRONTEND-020 (R-019: admin tests load-independent; toast entry fade removed → AA contrast) | `frontend` | `d5a47df`/`78b8e05` → `kit/retrofit` head `19d1ce5` | Agent under 4×nproc CPU load, 20 runs: before 9/20 pass, after 20/20. Toast tokens already AA (5.62:1 light, 8.02:1 dark); the 3.37 was mid-fade. Orchestrator: admin tests `34 passed`. Agent full vitest `614 passed`. e2e a11y confirmation on next pipeline | 2026-10-09 |
+| M32-S1-BACKEND-019 (GL#10 parts 1–3: course/week from message, sources from chunk list, quiz-builder action) | `backend` | `8e4d430`/`7e63b44` → `kit/retrofit` head `8d2c54e` | Diff = chat service/api + `chat_scope.py` + unit tests. Wiring revert-checked (5 fail). Orchestrator: ruff `All checks passed!`, `490 files already formatted`; chat unit `40 passed`. Action not persisted until `data` adds column → DATA-025; UI → FRONTEND-026; review → SAFETY-024 | 2026-10-09 |
+| M32-S1-ARCH-007 (C1: ADR 0002 refreshed, layer-direction contract test) | `architect` | `496367c` → `kit/retrofit` `302b554` | Orchestrator: `pytest tests/contracts` → `28 passed`. Contract test red on a planted upward import and on a stale exception. ADR still **Proposed** — user acceptance pending (brief in session) | 2026-10-09 |
 | M32-S1-QA-022 (R-023 audit: integration date seeds) | `qa` | none (no change needed) | Audit: the 7 files' `date.today()` seeds match app code that also uses host-local dates — switching them to UTC would be wrong. Full tier: default TZ `529 passed`; `TZ=UTC` `529 passed`; UTC+14 `529 passed`; `TZ=America/Los_Angeles` `1 failed, 528 passed` (a real date mismatch at the time of the run) → app bug `schedule_service` local vs UTC → BACKEND-023 | 2026-10-09 |
 | M32-S1-QA-017 + BACKEND-018 (pipeline #542 `python-lint` failed: F401 in `test_notifications.py`; 3 files unformatted) | `qa`, `backend` | `de32fe3` → `577998f`; `c0f3372` → `ee0bc47` | Orchestrator: `ruff check .` → `All checks passed!`; `ruff format --check .` → `488 files already formatted`. Agent integration `529 passed`, 87.36%; billing unit `9 passed`. Lesson: `make test` runs no ruff, CI does | 2026-10-09 |
 | M32-S1-QA-016 (reminder integration test seeds UTC date) | `qa` | `dc34624` → `kit/retrofit` `6de73a1` | Diff = 1 test file, 2 lines. Agent: full tier `529 passed` under host TZ, UTC, UTC+14, UTC-7. **Orchestrator on `kit/retrofit` @ `6de73a1`: `make test` → unit `Required test coverage of 75.0% reached. Total coverage: 87.63%`, `2737 passed`; floor `Required test coverage of 95% reached. Total coverage: 97.57%`, `80 passed`; `make test-integration` → `Required test coverage of 70% reached. Total coverage: 87.36%`, `529 passed`** (0 failed, 0 xfail in any tier) | 2026-10-09 |
