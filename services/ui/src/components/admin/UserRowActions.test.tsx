@@ -51,9 +51,23 @@ beforeEach(() => {
   vi.mocked(useUpdateAdminUser).mockReturnValue(asResult({ mutate: updateMutate, isPending: false }))
 })
 
+// `delay: null` drops user-event's real-timer yield between actions, and
+// `typeInto` pastes instead of typing a key at a time: each keystroke is a
+// separate async step and React re-render, which is what pushed these tests
+// toward the 5s limit on a loaded CI runner. What is asserted is the field's
+// value, not how it got there.
+async function typeInto(
+  user: ReturnType<typeof userEvent.setup>,
+  field: HTMLElement,
+  text: string,
+) {
+  await user.click(field)
+  await user.paste(text)
+}
+
 function setup(currentUserId: string | undefined = 'admin-001') {
   render(<UserRowActions user={USER} currentUserId={currentUserId} />)
-  return userEvent.setup()
+  return userEvent.setup({ delay: null })
 }
 
 describe('UserRowActions', () => {
@@ -139,10 +153,10 @@ describe('UserRowActions: change email', () => {
 
     expect(submit).toBeDisabled()
 
-    await user.type(screen.getByLabelText(/new email address/i), NEW_ADDRESS)
+    await typeInto(user, screen.getByLabelText(/new email address/i), NEW_ADDRESS)
     expect(submit).toBeDisabled()
 
-    await user.type(screen.getByLabelText(/type the new address again/i), 'moved@exmaple.com')
+    await typeInto(user, screen.getByLabelText(/type the new address again/i), 'moved@exmaple.com')
     expect(screen.getByText(/do not match/i)).toBeInTheDocument()
     expect(submit).toBeDisabled()
     expect(updateMutate).not.toHaveBeenCalled()
@@ -154,8 +168,8 @@ describe('UserRowActions: change email', () => {
     const user = setup()
     await openEmailDialog(user)
 
-    await user.type(screen.getByLabelText(/new email address/i), ' Tester@Example.COM ')
-    await user.type(screen.getByLabelText(/type the new address again/i), ' Tester@Example.COM ')
+    await typeInto(user, screen.getByLabelText(/new email address/i), ' Tester@Example.COM ')
+    await typeInto(user, screen.getByLabelText(/type the new address again/i), ' Tester@Example.COM ')
 
     expect(screen.getByText(/already this account/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /change email and sign them out/i })).toBeDisabled()
@@ -165,8 +179,8 @@ describe('UserRowActions: change email', () => {
   it('cancelling sends nothing', async () => {
     const user = setup()
     await openEmailDialog(user)
-    await user.type(screen.getByLabelText(/new email address/i), NEW_ADDRESS)
-    await user.type(screen.getByLabelText(/type the new address again/i), NEW_ADDRESS)
+    await typeInto(user, screen.getByLabelText(/new email address/i), NEW_ADDRESS)
+    await typeInto(user, screen.getByLabelText(/type the new address again/i), NEW_ADDRESS)
     await user.click(screen.getByRole('button', { name: /cancel/i }))
 
     expect(updateMutate).not.toHaveBeenCalled()
@@ -176,8 +190,8 @@ describe('UserRowActions: change email', () => {
   it('PATCHes the normalised address on confirm', async () => {
     const user = setup()
     await openEmailDialog(user)
-    await user.type(screen.getByLabelText(/new email address/i), ` ${NEW_ADDRESS.toUpperCase()} `)
-    await user.type(screen.getByLabelText(/type the new address again/i), NEW_ADDRESS)
+    await typeInto(user, screen.getByLabelText(/new email address/i), ` ${NEW_ADDRESS.toUpperCase()} `)
+    await typeInto(user, screen.getByLabelText(/type the new address again/i), NEW_ADDRESS)
     await user.click(screen.getByRole('button', { name: /change email and sign them out/i }))
 
     expect(updateMutate).toHaveBeenCalledWith(
@@ -192,8 +206,8 @@ describe('UserRowActions: change email', () => {
     )
     const user = setup()
     await openEmailDialog(user)
-    await user.type(screen.getByLabelText(/new email address/i), NEW_ADDRESS)
-    await user.type(screen.getByLabelText(/type the new address again/i), NEW_ADDRESS)
+    await typeInto(user, screen.getByLabelText(/new email address/i), NEW_ADDRESS)
+    await typeInto(user, screen.getByLabelText(/type the new address again/i), NEW_ADDRESS)
     await user.click(screen.getByRole('button', { name: /change email and sign them out/i }))
 
     await user.click(screen.getByRole('button', { name: /send verification link/i }))
