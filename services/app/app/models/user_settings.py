@@ -29,6 +29,10 @@ class UserSettings(Base):
     content_language: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     #: Opt-in to appear on the XP leaderboard. Hidden (False) by default.
     leaderboard_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    #: IANA zone name (e.g. "Europe/Berlin"); validated in the service layer.
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="UTC", server_default="UTC"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
