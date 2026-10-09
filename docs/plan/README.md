@@ -24,7 +24,8 @@ not merged to `main`; no MR opened.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S1-BACKEND-028 (R-002: AI settings + DEFAULT_ADMIN_ID into core) | `backend` | 2026-10-09 | isolated |
+| M32-S1-BACKEND-029 (4 red `test_chat.py` unit tests after DATA-025; read `action_json` directly) | `backend` | 2026-10-09 | isolated |
+| M32-S1-AI-030 (R-002a: agents import `core.ai_settings`) | `ai` | 2026-10-09 | isolated |
 
 ## Completed
 
@@ -35,6 +36,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-BACKEND-028 (R-002: `core/ai_settings.py`, `core/constants.py` `DEFAULT_ADMIN_ID`; settings_service re-exports) | `backend` | `5ef9c14` → `kit/retrofit` `1edb3ab` | Diff = 5 app files. Agent: ruff clean; contracts red only on now-stale `admin_service→api.deps` exception (expected → architect after AI-030). Agent found 4 red `test_chat.py` tests already on `kit/retrofit` — **Orchestrator miss**: DATA-025 was applied after running only model + frontend tests → BACKEND-029 | 2026-10-09 |
 | M32-S1-SAFETY-024 (review GL#10 chat + R-022 events; classify `_row_owner_async`) | `safety` | `69ffb24` → `kit/retrofit` `98efd54` | Diff = `tests/safety/**` (+22 floor-1 pins: SSE owner routing, chat existence oracle, source provenance). Mutation-checked (6 mutants red). **Orchestrator on `kit/retrofit`: `pytest tests/safety` → `102 passed`.** APPROVE floors 1–4 | 2026-10-09 |
 | M32-S1-BACKEND-023 (exam schedule `days_until_exam` in UTC) | `backend` | `cd2c503`/`a7321eb` → `kit/retrofit` (see log) | Red-first (agent: old code `1 failed, 10 passed`, fixed `11 passed`). Agent integration `529 passed` under default TZ and `TZ=America/Los_Angeles`; ruff clean. Other host-local `date.today()` (quota, study, admin, analytics) compare against date columns — left for a zone-policy decision (R-023) | 2026-10-09 |
 | M32-S1-ARCH-027 (ADR 0002 Accepted; strategy §2 + decisions index) | `architect` | `d94d688` → `kit/retrofit` `03659fc` | Diff = 3 docs. `pytest tests/contracts` → `28 passed`. §2 matches `kit.yaml` (Orchestrator checked). **C1 closed** | 2026-10-09 |
