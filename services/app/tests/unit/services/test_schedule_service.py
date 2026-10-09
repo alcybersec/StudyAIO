@@ -140,3 +140,44 @@ class TestGetDailyStudyPlan:
 
         result = await get_daily_study_plan(AsyncMock(), "nonexistent", user_id="user-1")
         assert result is None
+
+
+class TestScheduleUsesUtcDates:
+    """The schedule must compare UTC dates with the UTC exam_date."""
+
+    @pytest.mark.asyncio
+    @patch("app.services.schedule_service.get_weak_topics", new_callable=AsyncMock)
+    async def test_days_until_exam_uses_utc_today_not_host_local(self, mock_weak):
+        mock_weak.return_value = []
+        fixed_now = datetime(2026, 3, 10, 2, 0, tzinfo=UTC)  # UTC date: Mar 10
+
+        class FakeDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return fixed_now if tz else fixed_now.replace(tzinfo=None)
+
+        class FakeDate(date):
+            @classmethod
+            def today(cls):  # host-local date lags UTC (e.g. Los Angeles)
+                return date(2026, 3, 9)
+
+        session = AsyncMock()
+        exam = MagicMock()
+        exam.course_id = "c"
+        exam.exam_date = datetime(2026, 3, 20, 9, 0, tzinfo=UTC)
+        exam.weeks_scope = [1, 2]
+        exam_result = MagicMock()
+        exam_result.scalar_one_or_none.return_value = exam
+        count_result = MagicMock()
+        count_result.scalar.return_value = 0
+        session.execute = AsyncMock(side_effect=[exam_result, count_result])
+
+        with (
+            patch("app.services.schedule_service.datetime", FakeDatetime),
+            patch("app.services.schedule_service.date", FakeDate, create=True),
+        ):
+            result = await generate_study_schedule(session, "e", user_id="u", days_ahead=2)
+
+        assert result is not None
+        assert result[0]["date"] == "2026-03-10"
+        assert result[0]["days_until_exam"] == 10
