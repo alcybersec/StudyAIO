@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import remarkGfm from 'remark-gfm'
 import { Link } from 'react-router-dom'
 import type { ChatMessage as ChatMessageType } from '../../types'
+import { ChatActionButton } from './ChatActionButton'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -10,11 +11,22 @@ interface ChatMessageProps {
 
 interface CitationData {
   ref?: number
-  course_code?: string
-  week?: number
-  artifact_id?: string
-  page_ref?: number
+  course_code?: string | null
+  week?: number | null
+  artifact_id?: string | null
+  page_ref?: number | null
   text_snippet?: string
+}
+
+function citationHref(c: CitationData): string {
+  if (!c.course_code) return '/courses'
+  const base =
+    c.week != null ? `/courses/${c.course_code}/weeks/${c.week}` : `/courses/${c.course_code}`
+  const params = new URLSearchParams()
+  if (c.artifact_id) params.set('artifact', c.artifact_id)
+  if (c.artifact_id && c.page_ref) params.set('page', String(c.page_ref))
+  const qs = params.toString()
+  return qs ? `${base}?${qs}` : base
 }
 
 function CitationLinks({ citations }: { citations: CitationData[] }) {
@@ -29,12 +41,17 @@ function CitationLinks({ citations }: { citations: CitationData[] }) {
         {citations.map((c, i) => (
           <Link
             key={i}
-            to={`/courses/${c.course_code}/weeks/${c.week}${c.artifact_id ? `?artifact=${c.artifact_id}` : ''}${c.page_ref ? `&page=${c.page_ref}` : ''}`}
+            to={citationHref(c)}
             className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-peri-soft text-peri-fg hover:bg-peri/20 transition-colors"
             title={c.text_snippet || undefined}
           >
             <span className="font-medium">[{c.ref ?? i + 1}]</span>
-            {c.course_code && <span>{c.course_code} W{c.week}</span>}
+            {c.course_code && (
+              <span>
+                {c.course_code}
+                {c.week != null && ` W${c.week}`}
+              </span>
+            )}
             {c.page_ref != null && <span>p.{c.page_ref}</span>}
           </Link>
         ))}
@@ -68,6 +85,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
             {message.content}
           </ReactMarkdown>
         </div>
+        {message.action && <ChatActionButton action={message.action} />}
         <CitationLinks citations={citations} />
         <p className="text-[10px] text-text-muted mt-1.5">
           {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

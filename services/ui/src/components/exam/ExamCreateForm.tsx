@@ -7,9 +7,11 @@ import { examCreateSchema, type ExamCreateFormData } from '../../lib/schemas'
 interface ExamCreateFormProps {
   onClose: () => void
   onCreated?: () => void
+  initialCourseCode?: string
+  initialWeek?: number | null
 }
 
-export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
+export function ExamCreateForm({ onClose, onCreated, initialCourseCode = '', initialWeek = null }: ExamCreateFormProps) {
   const { t } = useTranslation()
 
   const { data: courses } = useCourses()
@@ -22,7 +24,13 @@ export function ExamCreateForm({ onClose, onCreated }: ExamCreateFormProps) {
     formState: { errors, isValid },
   } = useForm<ExamCreateFormData>({
     resolver: zodResolver(examCreateSchema),
-    defaultValues: { courseCode: '', title: '', examDate: '', weeksInput: '', targetMastery: 80 },
+    defaultValues: {
+      courseCode: initialCourseCode,
+      title: '',
+      examDate: '',
+      weeksInput: initialWeek != null ? String(initialWeek) : '',
+      targetMastery: 80,
+    },
     mode: 'onChange',
   })
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { chatApi } from '../api/endpoints'
-import type { MessageScope } from '../types'
+import type { ChatAction, MessageScope } from '../types'
 
 export type ChatConnectionState = 'idle' | 'streaming' | 'interrupted' | 'error'
 
@@ -12,6 +12,8 @@ interface StreamingState {
   connectionState: ChatConnectionState
   /** 1-based attempt number while auto-retrying, 0 otherwise. */
   retryAttempt: number
+  /** Action from the `done` event; the persisted message carries it after refetch. */
+  action: ChatAction | null
 }
 
 const MAX_AUTO_RETRIES = 3
@@ -24,6 +26,7 @@ export function useStreamingChat(sessionId: string) {
     error: null,
     connectionState: 'idle',
     retryAttempt: 0,
+    action: null,
   })
   const abortRef = useRef<AbortController | null>(null)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -51,6 +54,7 @@ export function useStreamingChat(sessionId: string) {
         isStreaming: true,
         streamingText: attempt === 0 ? '' : s.streamingText,
         error: null,
+        action: attempt === 0 ? null : s.action,
         connectionState: 'streaming',
         retryAttempt: attempt,
       }))
@@ -106,6 +110,10 @@ export function useStreamingChat(sessionId: string) {
                   if (parsed.content) {
                     accumulated = parsed.content
                     setState((s) => ({ ...s, streamingText: accumulated }))
+                  }
+                  if (parsed.action && parsed.action.type === 'open_quiz_builder') {
+                    const action = parsed.action as ChatAction
+                    setState((s) => ({ ...s, action }))
                   }
                 } catch {
                   // Ignore parse errors

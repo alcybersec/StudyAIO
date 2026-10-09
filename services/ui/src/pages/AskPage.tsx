@@ -5,6 +5,7 @@ import { MessagesSquare, PanelRightOpen } from 'lucide-react'
 import { AskComposer, type AskScope } from '../components/ask/AskComposer'
 import { SessionRail } from '../components/ask/SessionRail'
 import { ChatMessage } from '../components/chat/ChatMessage'
+import { ChatActionButton } from '../components/chat/ChatActionButton'
 import { StreamingMessage } from '../components/chat/StreamingMessage'
 import { Button } from '../components/ui/Button'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -155,7 +156,7 @@ function ConversationWithScope({
 
   const { data: messagesData, isLoading } = useChatMessages(sessionId)
   const messages = useMemo(() => messagesData?.messages ?? [], [messagesData])
-  const { isStreaming, streamingText, error, sendStreaming } = useStreamingChat(sessionId)
+  const { isStreaming, streamingText, error, action, sendStreaming } = useStreamingChat(sessionId)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -182,6 +183,7 @@ function ConversationWithScope({
               <ChatMessage key={msg.id} message={msg} />
             ))}
             {isStreaming && streamingText && <StreamingMessage text={streamingText} />}
+            {isStreaming && action && <ChatActionButton action={action} />}
             <div ref={bottomRef} />
           </div>
         )}

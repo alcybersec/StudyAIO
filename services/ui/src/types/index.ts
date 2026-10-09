@@ -159,10 +159,12 @@ export interface Citation {
   ref: number
   chunk_id: string
   text_snippet: string
-  course_code: string
-  week: number
-  page_ref: number
-  artifact_id: string
+  course_code: string | null
+  /** Null when the chunk has no week (e.g. a course document). */
+  week: number | null
+  /** Null when the source has no page concept. */
+  page_ref: number | null
+  artifact_id: string | null
 }
 
 export interface QAResponse {
@@ -608,12 +610,21 @@ export interface ChatSession {
   updated_at: string
 }
 
+/** Server-suggested follow-up rendered under an assistant message. */
+export interface ChatAction {
+  type: 'open_quiz_builder'
+  course_code: string | null
+  course_id: string | null
+  week: number | null
+}
+
 export interface ChatMessage {
   id: string
   session_id: string
   role: 'user' | 'assistant'
   content: string
   citations_json: Record<string, unknown>[] | null
+  action?: ChatAction | null
   created_at: string
 }
 

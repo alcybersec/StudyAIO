@@ -132,4 +132,35 @@ describe('useStreamingChat', () => {
     expect(result.current.connectionState).toBe('error')
     expect(streamMessage).toHaveBeenCalledTimes(1)
   })
+
+  it('captures the quiz-builder action from the done event', async () => {
+    const done = JSON.stringify({
+      content: 'ok',
+      action: { type: 'open_quiz_builder', course_code: 'CSCI369', course_id: 'c1', week: 2 },
+    })
+    streamMessage.mockResolvedValue(
+      sseResponse(`event: token\ndata: ok\n\nevent: done\ndata: ${done}\n\n`),
+    )
+    const { result } = renderHook(() => useStreamingChat('s1'), { wrapper })
+    await act(async () => {
+      await result.current.sendStreaming('make a test')
+    })
+    expect(result.current.action).toEqual({
+      type: 'open_quiz_builder',
+      course_code: 'CSCI369',
+      course_id: 'c1',
+      week: 2,
+    })
+  })
+
+  it('leaves action null when done carries none', async () => {
+    streamMessage.mockResolvedValue(
+      sseResponse(`event: done\ndata: ${JSON.stringify({ content: 'ok', action: null })}\n\n`),
+    )
+    const { result } = renderHook(() => useStreamingChat('s1'), { wrapper })
+    await act(async () => {
+      await result.current.sendStreaming('hi')
+    })
+    expect(result.current.action).toBeNull()
+  })
 })
