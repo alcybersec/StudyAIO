@@ -24,9 +24,9 @@ not merged to `main`; no MR opened.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S1-ARCH-027 (ADR 0002 Accepted; strategy §2 ownership) | `architect` | 2026-10-09 | isolated |
+| M32-S1-BACKEND-028 (R-002: AI settings + DEFAULT_ADMIN_ID into core) | `backend` | 2026-10-09 | isolated |
 | M32-S1-SAFETY-024 (review GL#10 chat + R-022 events; classify `_row_owner_async`) | `safety` | 2026-10-09 | isolated |
-| M32-S1-DATA-025 (`chat_messages.action_json` JSONB) | `data` | 2026-10-09 | isolated |
-| M32-S1-FRONTEND-026 (chat quiz-builder button; nullable citation week/page) | `frontend` | 2026-10-09 | isolated |
 | M32-S1-BACKEND-023 (schedule_service `days_until_exam` mixes local and UTC dates) | `backend` | 2026-10-09 | isolated |
 
 ## Completed
@@ -38,6 +38,9 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-FRONTEND-026 (GL#10 UI: quiz-builder button, Study Hub preselect, nullable citation fields) | `frontend` | `777a6db` → `kit/retrofit` `adf98fa` | Orchestrator: full vitest `Test Files 84 passed (84)`, `Tests 625 passed (625)`. Agent lint 0 errors, `tsc -b` clean | 2026-10-09 |
+| M32-S1-DATA-025 (`chat_messages.action_json` JSONB, migration `f4b8d2a60c19`) | `data` | `8931f6d` → `kit/retrofit` `8655870` | Agent: upgrade/downgrade/upgrade on throwaway pg16. Orchestrator: single head (`f4b8d2a60c19` ← `e3a7c1f95b28`); models unit `12 passed` | 2026-10-09 |
+| Orchestrator: ADR 0002 ownership (R-003) | Orchestrator | `.claude/kit.yaml` + kit re-render (gitignored) | `backend` += main.py/config.py/cli.py; `ai` += worker.py. Re-render wiped `CLAUDE.md` project notes and `settings.json` allow/deny lists: `CLAUDE.md` restored from backup; **`settings.json` restore blocked by auto-mode — user to restore** (backup in session scratchpad). `/kit-doctor`: 0 failed | 2026-10-09 |
 | M32-S1-AI-021 (R-022: SSE events to artifact row owner, fail-closed) | `ai` | `bc5687b` → `kit/retrofit` `1d08ef4` | Diff = pipeline + `test_event_owner.py` (36 tests; agent revert → 35 failed). ruff clean. Floor red on new owner lookup `_row_owner_async` → SAFETY-024 classifies | 2026-10-09 |
 | M32-S1-FRONTEND-020 (R-019: admin tests load-independent; toast entry fade removed → AA contrast) | `frontend` | `d5a47df`/`78b8e05` → `kit/retrofit` head `19d1ce5` | Agent under 4×nproc CPU load, 20 runs: before 9/20 pass, after 20/20. Toast tokens already AA (5.62:1 light, 8.02:1 dark); the 3.37 was mid-fade. Orchestrator: admin tests `34 passed`. Agent full vitest `614 passed`. e2e a11y confirmation on next pipeline | 2026-10-09 |
 | M32-S1-BACKEND-019 (GL#10 parts 1–3: course/week from message, sources from chunk list, quiz-builder action) | `backend` | `8e4d430`/`7e63b44` → `kit/retrofit` head `8d2c54e` | Diff = chat service/api + `chat_scope.py` + unit tests. Wiring revert-checked (5 fail). Orchestrator: ruff `All checks passed!`, `490 files already formatted`; chat unit `40 passed`. Action not persisted until `data` adds column → DATA-025; UI → FRONTEND-026; review → SAFETY-024 | 2026-10-09 |
