@@ -84,17 +84,7 @@ ALLOWED_IMPORTS = {
     "cli": ["config", "core", "models", "services"],
 }
 
-KNOWN_EXCEPTIONS = [
-    # R-002a — scheduled fix, §3.
-    ("app.agents.factory", "app.services.settings_service"),
-    ("app.agents.claude_code", "app.services.settings_service"),
-    ("app.agents.anthropic_api", "app.services.settings_service"),
-    ("app.agents.openai_adapter", "app.services.settings_service"),
-    ("app.agents.zai_adapter", "app.services.settings_service"),
-    ("app.agents.ollama_adapter", "app.services.settings_service"),
-    # R-002b — scheduled fix, §3.
-    ("app.services.admin_service", "app.api.deps"),
-]
+KNOWN_EXCEPTIONS = []
 ```
 
 Removing a pair when its fix lands is maintenance and needs no amendment. Adding a pair, or
@@ -113,6 +103,13 @@ cheap and neither has a reason to stay.
   files are `backend`'s.
 
 Until they land, the pairs in `KNOWN_EXCEPTIONS` keep the test green and stop the list growing.
+
+> **Note 2026-10-09 (M32-S1-ARCH-031) — R-002 closed.** Both fixes have landed: BACKEND-028
+> (`1edb3ab`) moved the env-only AI settings and `DEFAULT_ADMIN_ID` into `app/core/`, and AI-030
+> (`e0e78b0`) repointed the six adapters at `app.core.ai_settings`. The seven pairs were removed
+> and `KNOWN_EXCEPTIONS` is now empty, so any upward import fails the contract test. For the
+> record: `pipeline` modules still import `app.services.settings_service`; that is `pipeline →
+> services`, an allowed direction, not an exception.
 
 **4. Paths no role owned (R-003).** `app/main.py`, `app/config.py` and `app/cli.py` go to `backend`:
 they are the API factory, the settings object every layer reads, and an admin CLI over `services`.
