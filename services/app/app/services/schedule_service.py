@@ -1,6 +1,6 @@
 """Adaptive study schedule generation based on exam proximity."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import func, select
@@ -63,7 +63,6 @@ async def generate_study_schedule(
         return None
 
     now = datetime.now(UTC)
-    max(0, (exam.exam_date - now).days)
 
     # Total due cards in scope
     due_count_result = await session.execute(
@@ -84,11 +83,13 @@ async def generate_study_schedule(
     strong_weeks = [w for w in exam.weeks_scope if w not in weak_weeks]
 
     schedule = []
-    today = date.today()
+    today = now.date()  # UTC, same zone as exam_date
+
+    exam_day = exam.exam_date.astimezone(UTC).date()
 
     for day_offset in range(days_ahead):
         plan_date = today + timedelta(days=day_offset)
-        days_until_exam = max(0, (exam.exam_date.date() - plan_date).days)
+        days_until_exam = max(0, (exam_day - plan_date).days)
 
         priority_label, multiplier = _get_priority(days_until_exam)
 
