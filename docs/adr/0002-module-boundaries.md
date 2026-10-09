@@ -1,10 +1,9 @@
 # ADR 0002 — Module boundaries of the modular monolith
 
-**Status** Proposed · **Date** 2026-10-04 · **Revised** 2026-10-09 (M32-S1-ARCH-007) · **Kit version** 1.10.3
+**Status** Accepted (2026-10-09, by the user) · **Date** 2026-10-04 · **Revised** 2026-10-09 (M32-S1-ARCH-007) · **Kit version** 1.10.3
 
-Proposed, not Accepted: the user's acceptance of these boundaries is gate condition C1 of M32-S1
-(carried from the M31 gate, Functional dimension, `docs/strategy.md` §5). This ADR records them;
-it cannot ratify them.
+Accepted by the user on 2026-10-09 (M32-S1-ARCH-027), closing gate condition C1 of M32-S1
+(carried from the M31 gate, Functional dimension, `docs/strategy.md` §5).
 
 ## Context
 

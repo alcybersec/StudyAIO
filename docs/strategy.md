@@ -13,8 +13,8 @@ paths, exclusively.
 | Role | Owns | Handoff extras |
 |---|---|---|
 | `architect` | `docs/adr/**`, `services/app/tests/contracts/**` | — |
-| `backend` | `services/app/app/api/**`, `services/app/app/services/**`, `services/app/app/core/**`, `services/app/app/templates/**` | — |
-| `ai` | `services/app/app/pipeline/**`, `services/app/app/agents/**`, `services/app/app/extractors/**`, `services/app/prompts/**`, `services/app/evals/**` | `PROMPT CHANGES:`, `EVAL DELTA:` |
+| `backend` | `services/app/app/api/**`, `services/app/app/services/**`, `services/app/app/core/**`, `services/app/app/templates/**`, `services/app/app/main.py`, `services/app/app/config.py`, `services/app/app/cli.py` | — |
+| `ai` | `services/app/app/pipeline/**`, `services/app/app/agents/**`, `services/app/app/extractors/**`, `services/app/prompts/**`, `services/app/evals/**`, `services/app/app/worker.py` | `PROMPT CHANGES:`, `EVAL DELTA:` |
 | `data` | `services/app/app/models/**`, `services/app/alembic/**` | `MIGRATION:`, `PII COLUMNS:` |
 | `frontend` | `services/ui/src/**`, `services/ui/scripts/**`, `services/ui/public/**` | `A11Y:`, `I18N:` |
 | `devops` | `infra/**`, `scripts/**`, `docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.production.yml`, `docker-compose.selfhosted.yml`, `.gitlab-ci.yml`, `Makefile`, `services/app/Dockerfile`, `services/ui/Dockerfile`, `services/ui/nginx.conf` | `SERVICES:`, `RUNBOOK:` |
