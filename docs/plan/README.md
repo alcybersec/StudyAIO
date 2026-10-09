@@ -24,7 +24,6 @@ not merged to `main`; no MR opened.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S1-ARCH-027 (ADR 0002 Accepted; strategy §2 ownership) | `architect` | 2026-10-09 | isolated |
 | M32-S1-BACKEND-028 (R-002: AI settings + DEFAULT_ADMIN_ID into core) | `backend` | 2026-10-09 | isolated |
 | M32-S1-SAFETY-024 (review GL#10 chat + R-022 events; classify `_row_owner_async`) | `safety` | 2026-10-09 | isolated |
 | M32-S1-BACKEND-023 (schedule_service `days_until_exam` mixes local and UTC dates) | `backend` | 2026-10-09 | isolated |
@@ -38,6 +37,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-ARCH-027 (ADR 0002 Accepted; strategy §2 + decisions index) | `architect` | `d94d688` → `kit/retrofit` `03659fc` | Diff = 3 docs. `pytest tests/contracts` → `28 passed`. §2 matches `kit.yaml` (Orchestrator checked). **C1 closed** | 2026-10-09 |
 | M32-S1-FRONTEND-026 (GL#10 UI: quiz-builder button, Study Hub preselect, nullable citation fields) | `frontend` | `777a6db` → `kit/retrofit` `adf98fa` | Orchestrator: full vitest `Test Files 84 passed (84)`, `Tests 625 passed (625)`. Agent lint 0 errors, `tsc -b` clean | 2026-10-09 |
 | M32-S1-DATA-025 (`chat_messages.action_json` JSONB, migration `f4b8d2a60c19`) | `data` | `8931f6d` → `kit/retrofit` `8655870` | Agent: upgrade/downgrade/upgrade on throwaway pg16. Orchestrator: single head (`f4b8d2a60c19` ← `e3a7c1f95b28`); models unit `12 passed` | 2026-10-09 |
 | Orchestrator: ADR 0002 ownership (R-003) | Orchestrator | `.claude/kit.yaml` + kit re-render (gitignored) | `backend` += main.py/config.py/cli.py; `ai` += worker.py. Re-render wiped `CLAUDE.md` project notes and `settings.json` allow/deny lists: `CLAUDE.md` restored from backup; **`settings.json` restore blocked by auto-mode — user to restore** (backup in session scratchpad). `/kit-doctor`: 0 failed | 2026-10-09 |
