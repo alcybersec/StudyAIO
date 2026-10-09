@@ -179,6 +179,31 @@ BACKEND-019: a snapshot row plus the prior blob under a versioned key, and
 wrong fixes each stay red: a snapshot pointing at the overwritten key, a merge
 snapshot written after the overwrite, and regeneration that saves nothing.
 
+## R-023: per-user time zone (ADR 0006), across floors
+
+`test_r023_clock_zone.py`, M32-S2-SAFETY-037. The zone in `user_settings.timezone` is
+user-supplied and unverified, so each floor is checked against it.
+
+| Test | Fails when |
+|---|---|
+| `test_r023_quota_and_usage_modules_never_read_the_user_zone` | A module that touches `UsageRecord`, or `quota_service`/`core/quota.py`, names `user_today`, `user_now`, `local_day_end_utc`, `get_user_timezone`, `get_user_tz`, a `.timezone` attribute or a `tz`/`timezone` parameter. ADR 0006 Decision 6: the quota day is UTC so that changing zone cannot buy a fresh daily allowance on the instance's credentials. |
+| `…::test_r023_usage_day_is_utc_whatever_the_zone[...]` | With the clock frozen where `Pacific/Kiritimati` and `Etc/GMT+12` are on different dates, `get_usage_today`, `get_global_usage_today` or `record_usage` compares or writes a `record_date` other than the UTC date. Mutation-checked: `get_usage_today` on the Kiritimati day fails here and in the structural test. |
+| `…::test_r023_zone_change_touches_no_usage_record` | Setting the zone touches `usage_records` or adds a row. |
+| `…::test_r023_valid_timezone_refuses_hostile_keys_without_raising[...]` | `valid_timezone` raises or accepts a path-like, host-specific, NUL, surrogate, oversized, non-ASCII or non-string key. **RED until backend fixes it (SAFETY-037):** `localtime` is accepted on Debian hosts because `available_timezones()` walks the host's TZPATH and `/usr/share/zoneinfo/localtime -> /etc/localtime`. |
+| `…::test_r023_accepted_zone_keys_come_from_the_declared_tzdata_only` | `valid_timezone` accepts a key that is not in the `tzdata` package's `zones` list, so the key set depends on the host or base image. **RED until the same fix.** |
+| `…::test_r023_every_valid_key_fits_the_column` | A shipped key is longer than `user_settings.timezone`'s `String(64)`. |
+| `…::test_r023_bad_stored_zone_degrades_to_utc[...]` | `user_now`, `user_today` or `local_day_end_utc` raises on, or does not answer in UTC for, a bad stored value. **RED on `localtime`**, which resolves to the host's zone. |
+| `…::test_r023_listed_but_unloadable_zone_degrades_to_utc[...]` | A key that passes validation but fails to load (`ZoneInfoNotFoundError`, `ValueError` on a corrupt TZif, `OSError`) raises out of `user_now`/`user_today` instead of falling back to UTC. **RED until `clock._zone` guards `ZoneInfo(...)`**: ADR 0006 Decision 4 says a bad zone never raises in a request or a beat task. |
+| `…::test_r023_put_hostile_zone_is_422_and_stores_nothing[...]` | `PUT /api/settings` answers a hostile `timezone` with anything but 422, or writes it to the row. **RED on `localtime`.** |
+| `…::test_r023_zone_lookup_filters_on_the_caller` | `get_user_timezone` runs a `user_settings` statement not filtered on the caller's `user_id`. Mutation-checked: dropping the `where` fails here. |
+| `…::test_r023_get_user_tz_takes_identity_only_from_authentication` | `deps.get_user_tz` gains a parameter that is not a `Depends`, stops depending on `get_current_user_or_default`, or passes anything but `user.id` to the lookup. |
+| `…::test_r023_zone_route_ignores_a_smuggled_user` | A zone route given `user_id`/`tz`/`timezone` query parameters naming someone else looks up, or serves, anyone but the caller. |
+| `…::test_r023_zone_is_carried_only_by_the_callers_own_settings` | A Pydantic model under `app/api/` other than `SettingsResponse`/`SettingsUpdateRequest` has a `timezone` or `tz` field (a leaderboard or admin view leaking zones). |
+| `…::test_r023_zone_column_read_only_through_the_scoped_lookup` | Code outside `settings_service` (and the model) reads a `.timezone` attribute, i.e. reaches the column without the scoped lookup. |
+
+Floor 4 needs nothing new: the R-023 diff (`28fe02e..bc63f39`) adds no delete, unlink or
+overwrite of user data, and a zone change is not retroactive (ADR 0006 Decision 4).
+
 ## Coverage
 
 The floor tier is mostly static: it reads all of `app/**` but executes very little
