@@ -24,7 +24,6 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S2-SAFETY-040 (re-review R-023; classify reminder job's zone reads) | `safety` | 2026-10-09 | isolated |
 
 ## Completed
 
@@ -35,6 +34,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S2-SAFETY-040 (re-review R-023; classify beat-job zone reads; VETO lifted) | `safety` | `ee1ce4a` → `kit/retrofit` `4d93261` | +4 floor tests; 6 mutants each red on its guard; clock.py mutants M1–M4 caught. **Orchestrator: `pytest tests/safety` → `159 passed`.** APPROVE all four floors | 2026-10-09 |
 | M32-S2-BACKEND-039 (clock: tzdata-only zone keys, guarded ZoneInfo; dashboard cache dropped on timezone PUT) | `backend` | `3859313` → `kit/retrofit` `06bb835` | SAFETY-037's 7 reds green. **Orchestrator `make test`: unit `88.12%`, `2894 passed`; floor `1 failed, 155 passed`** — the 1 = safety's column-read guard flagging AI-036's beat-job reads → SAFETY-040 | 2026-10-09 |
 | M32-S2-AI-036 + QA-038 (reminders/digest hourly at local 08:00 + integration tests) | `ai`, `qa` | `2f3f262` + `722c553` → `kit/retrofit` `2f5f37a`/`8935f30` | **Orchestrator: ruff clean; unit+golden+contracts `2892 passed`; `make test-integration` → `87.17%`, `531 passed`.** Red-check (Orchestrator): old pipeline `5 failed, 1 passed`. Note: deadline integration test seeds the real UTC date — could flake across UTC midnight | 2026-10-09 |
 | M32-S2-SAFETY-037 (review R-023 clock policy) | `safety` | `20d3fd3` → `kit/retrofit` `5be9b06` | +54 floor cases. Quota/billing on UTC: CLEAN + pinned (mutation-checked). Floor 1: CLEAN + pinned. Floor 4: CLEAN. **VETO** on zone validation: `localtime` host key accepted; unguarded `ZoneInfo` can raise → 7 red pins → BACKEND-039. Floor tier on `kit/retrofit` red by design until then | 2026-10-09 |
