@@ -30,6 +30,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.ai_settings import (  # noqa: F401  (re-exported for existing importers)
+    BACKEND_REQUIRED_KEY,
+    STUDYAIO_BACKEND,
+    _defaults,
+    get_effective_setting,
+)
 from app.core.utils import generate_id
 from app.models.user_settings import UserSettings
 
@@ -68,9 +74,6 @@ SUPPORTED_LANGUAGES = {"en", "ru"}
 #: a user asks for another *and* opts their study material in.
 DEFAULT_LANGUAGE = "en"
 
-#: "StudyAIO provided" — use the instance's configured backend and credentials.
-STUDYAIO_BACKEND = "studyaio"
-
 VALID_BACKENDS = {STUDYAIO_BACKEND, "claude_code", "anthropic_api", "openai", "zai", "ollama"}
 
 #: Deliberately absent from ALLOWED_KEYS: `embedding_backend`. It is instance-wide
@@ -92,19 +95,6 @@ SECRET_KEYS = frozenset(
         "claude_cli_credentials",
     }
 )
-
-#: What a user must supply for each provider they select explicitly. Absent it,
-#: the agent factory refuses rather than reaching for the instance credential.
-#: Ollama has no API key, so its endpoint plays the part: pointing at the
-#: instance's own Ollama would be spending the operator's hardware under a
-#: selection that claims to be the user's own.
-BACKEND_REQUIRED_KEY = {
-    "claude_code": "claude_cli_credentials",
-    "anthropic_api": "anthropic_api_key",
-    "openai": "openai_api_key",
-    "zai": "zai_api_key",
-    "ollama": "ollama_base_url",
-}
 
 #: Resolved from the user's own settings only — never from instance defaults.
 USER_ONLY_KEYS = frozenset(SECRET_KEYS | {"ollama_base_url"})
@@ -130,29 +120,6 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
     "chunk_overlap_tokens": (int, 0, 500),
     "max_upload_size_mb": (int, 1, 1000),
 }
-
-
-def _defaults() -> dict[str, Any]:
-    """Return default values from env-based config."""
-    return {
-        "claude_code_path": settings.claude_code_path,
-        "claude_model": settings.claude_model,
-        "agent_backend": settings.agent_backend,
-        "anthropic_api_key": settings.anthropic_api_key.get_secret_value(),
-        "openai_api_key": settings.openai_api_key.get_secret_value(),
-        "openai_model": settings.openai_model,
-        "zai_api_key": settings.zai_api_key.get_secret_value(),
-        "zai_model": settings.zai_model,
-        "zai_base_url": settings.zai_base_url,
-        "ollama_base_url": settings.ollama_base_url,
-        "ollama_model": settings.ollama_model,
-        "classification_confidence_threshold": settings.classification_confidence_threshold,
-        "flashcard_count_per_week": settings.flashcard_count_per_week,
-        "quiz_question_count_per_week": settings.quiz_question_count_per_week,
-        "chunk_size_tokens": settings.chunk_size_tokens,
-        "chunk_overlap_tokens": settings.chunk_overlap_tokens,
-        "max_upload_size_mb": settings.max_upload_size_mb,
-    }
 
 
 def validate_setting(key: str, value: Any) -> Any:
@@ -737,22 +704,6 @@ def _agent_config_from_overrides(overrides: dict[str, Any]) -> dict[str, Any] | 
 
 
 # ── Sync fallback for pipeline consumers ──────────────────────────────
-
-
-def get_effective_setting(key: str) -> Any:
-    """Get the effective value of a setting using env defaults only.
-
-    This is the sync fallback used by pipeline tasks that don't have
-    a DB session or user_id readily available. Returns env defaults.
-
-    Args:
-        key: Setting key name.
-
-    Returns:
-        The default value from environment config.
-    """
-    defaults = _defaults()
-    return defaults.get(key, getattr(settings, key, None))
 
 
 # ── Backward compatibility ────────────────────────────────────────────

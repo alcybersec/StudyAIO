@@ -7,6 +7,7 @@ from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.constants import DEFAULT_ADMIN_ID
 from app.core.exceptions import LastAdminError, UserExistsError
 from app.core.utils import generate_id, normalize_email
 from app.models.artifact import LectureArtifact
@@ -961,10 +962,6 @@ async def ensure_admin(
             On the create path (no existing admin), also raised if
             `username` collides with an existing account.
     """
-    # Layering: the service layer should not import the API layer at module
-    # scope, so this stays a local import even though there is no cycle.
-    from app.api.deps import DEFAULT_ADMIN_ID
-
     user = await session.get(User, DEFAULT_ADMIN_ID)
     if user is None:
         result = await session.execute(

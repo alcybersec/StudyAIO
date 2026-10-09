@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.auth import ACCESS_TOKEN_COOKIE, decode_token, is_token_invalidated
+from app.core.constants import DEFAULT_ADMIN_ID
 from app.core.database import get_session
 from app.core.exceptions import AuthenticationError, AuthorizationError, SessionRevokedError
 from app.models.user import User
@@ -16,8 +17,8 @@ from app.services import user_service
 
 logger = structlog.get_logger()
 
-# Default admin user for self-hosted mode (matches migration backfill)
-DEFAULT_ADMIN_ID = "00000000-0000-0000-0000-000000000001"
+# Default admin user for self-hosted mode (matches migration backfill);
+# DEFAULT_ADMIN_ID lives in core.constants so services need not import api.
 DEFAULT_ADMIN_EMAIL = "admin@studyaio.local"
 DEFAULT_ADMIN_USERNAME = "admin"
 
