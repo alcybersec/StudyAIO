@@ -24,9 +24,7 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S2-ARCH-033 (ADR 0006 clock policy + clock contract test) | `architect` | 2026-10-09 | isolated |
 | M32-S2-BACKEND-034 (`core/clock.py`; services to clock policy; settings API `timezone`) | `backend` | 2026-10-09 | isolated |
-| M32-S2-FRONTEND-035 (time zone auto-detect + setting) | `frontend` | 2026-10-09 | isolated |
 
 ## Completed
 
@@ -37,6 +35,8 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S2-FRONTEND-035 (time zone auto-detect, Settings field, zone-aware calendar days) | `frontend` | `fabdbec` → `kit/retrofit` `b9e6355` | **Orchestrator: vitest `Test Files 87 passed (87)`, `Tests 636 passed (636)`; `tsc -b` clean.** Agent lint 0 errors | 2026-10-09 |
+| M32-S2-ARCH-033 (ADR 0006 clock policy Accepted; CONTRACTS `core.clock v1`) | `architect` | `457683b` → `kit/retrofit` `aa89f85` | ADR + index + CONTRACTS applied. **Red contract test `4e435b8` held back** (24 offenders in services; would break `make test` under `-x` and hide the floor tier) — handed to BACKEND-034 to land together with the clock module. Agent: detector catches every banned form on a planted file; surface/semantics checks green against a reference clock.py | 2026-10-09 |
 | M32-S2-DATA-032 (`user_settings.timezone` String(64) NOT NULL default 'UTC'; migration `a5c9e3d71b04`) | `data` | `a5b7478` → `kit/retrofit` `be03043` | Agent: upgrade/downgrade/upgrade on throwaway pg16. **Orchestrator: single head; full unit+golden+contracts `2820 passed`** | 2026-10-09 |
 | M32-S1-AI-030 + ARCH-031 (R-002 closed: agents import `core.ai_settings`; ADR 0002 exceptions emptied) | `ai`, `architect` | `c00b833` → `e0e78b0`; `3ecec5e` | No `app.services` import left in `app/agents`. Contracts `28 passed` | 2026-10-09 |
 | M32-S1-BACKEND-029 (chat API reads `action_json` directly; fixtures fixed; round-trip test) | `backend` | `1201d2c` → `kit/retrofit` (see log) | Agent full unit+golden+contracts (no -x): `1 failed, 2818 passed` — the 1 = stale ADR 0002 exception (architect, after AI-030). Orchestrator: `test_chat.py` green. ruff clean | 2026-10-09 |
