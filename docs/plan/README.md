@@ -24,7 +24,6 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S2-DATA-032 (`user_settings.timezone`) | `data` | 2026-10-09 | isolated |
 | M32-S2-ARCH-033 (ADR 0006 clock policy + clock contract test) | `architect` | 2026-10-09 | isolated |
 | M32-S2-BACKEND-034 (`core/clock.py`; services to clock policy; settings API `timezone`) | `backend` | 2026-10-09 | isolated |
 | M32-S2-FRONTEND-035 (time zone auto-detect + setting) | `frontend` | 2026-10-09 | isolated |
@@ -38,6 +37,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S2-DATA-032 (`user_settings.timezone` String(64) NOT NULL default 'UTC'; migration `a5c9e3d71b04`) | `data` | `a5b7478` → `kit/retrofit` `be03043` | Agent: upgrade/downgrade/upgrade on throwaway pg16. **Orchestrator: single head; full unit+golden+contracts `2820 passed`** | 2026-10-09 |
 | M32-S1-AI-030 + ARCH-031 (R-002 closed: agents import `core.ai_settings`; ADR 0002 exceptions emptied) | `ai`, `architect` | `c00b833` → `e0e78b0`; `3ecec5e` | No `app.services` import left in `app/agents`. Contracts `28 passed` | 2026-10-09 |
 | M32-S1-BACKEND-029 (chat API reads `action_json` directly; fixtures fixed; round-trip test) | `backend` | `1201d2c` → `kit/retrofit` (see log) | Agent full unit+golden+contracts (no -x): `1 failed, 2818 passed` — the 1 = stale ADR 0002 exception (architect, after AI-030). Orchestrator: `test_chat.py` green. ruff clean | 2026-10-09 |
 | M32-S1-BACKEND-028 (R-002: `core/ai_settings.py`, `core/constants.py` `DEFAULT_ADMIN_ID`; settings_service re-exports) | `backend` | `5ef9c14` → `kit/retrofit` `1edb3ab` | Diff = 5 app files. Agent: ruff clean; contracts red only on now-stale `admin_service→api.deps` exception (expected → architect after AI-030). Agent found 4 red `test_chat.py` tests already on `kit/retrofit` — **Orchestrator miss**: DATA-025 was applied after running only model + frontend tests → BACKEND-029 | 2026-10-09 |
