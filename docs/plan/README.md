@@ -24,7 +24,6 @@ not merged to `main`; no MR opened.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S1-AI-030 (R-002a: agents import `core.ai_settings`) | `ai` | 2026-10-09 | isolated |
 
 ## Completed
 
@@ -35,6 +34,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-AI-030 + ARCH-031 (R-002 closed: agents import `core.ai_settings`; ADR 0002 exceptions emptied) | `ai`, `architect` | `c00b833` → `e0e78b0`; `3ecec5e` | No `app.services` import left in `app/agents`. Contracts `28 passed` | 2026-10-09 |
 | M32-S1-BACKEND-029 (chat API reads `action_json` directly; fixtures fixed; round-trip test) | `backend` | `1201d2c` → `kit/retrofit` (see log) | Agent full unit+golden+contracts (no -x): `1 failed, 2818 passed` — the 1 = stale ADR 0002 exception (architect, after AI-030). Orchestrator: `test_chat.py` green. ruff clean | 2026-10-09 |
 | M32-S1-BACKEND-028 (R-002: `core/ai_settings.py`, `core/constants.py` `DEFAULT_ADMIN_ID`; settings_service re-exports) | `backend` | `5ef9c14` → `kit/retrofit` `1edb3ab` | Diff = 5 app files. Agent: ruff clean; contracts red only on now-stale `admin_service→api.deps` exception (expected → architect after AI-030). Agent found 4 red `test_chat.py` tests already on `kit/retrofit` — **Orchestrator miss**: DATA-025 was applied after running only model + frontend tests → BACKEND-029 | 2026-10-09 |
 | M32-S1-SAFETY-024 (review GL#10 chat + R-022 events; classify `_row_owner_async`) | `safety` | `69ffb24` → `kit/retrofit` `98efd54` | Diff = `tests/safety/**` (+22 floor-1 pins: SSE owner routing, chat existence oracle, source provenance). Mutation-checked (6 mutants red). **Orchestrator on `kit/retrofit`: `pytest tests/safety` → `102 passed`.** APPROVE floors 1–4 | 2026-10-09 |
