@@ -40,15 +40,15 @@ celery_app.conf.update(
     beat_schedule={
         "daily-deadline-reminders": {
             "task": "app.pipeline.notification_tasks.send_deadline_reminders",
-            "schedule": crontab(hour=8, minute=30),
+            "schedule": crontab(minute=0),
         },
         "daily-card-reminders": {
             "task": "app.pipeline.notification_tasks.send_daily_reminders",
-            "schedule": crontab(hour=8, minute=0),
+            "schedule": crontab(minute=0),
         },
         "weekly-study-digest": {
             "task": "app.pipeline.notification_tasks.send_weekly_digest",
-            "schedule": crontab(hour=9, minute=0, day_of_week="sunday"),
+            "schedule": crontab(minute=0),
         },
         "calendar-sync": {
             "task": "app.pipeline.calendar_task.sync_all_calendars",

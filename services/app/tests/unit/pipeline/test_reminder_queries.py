@@ -1,9 +1,13 @@
 """R-016: reminder/digest queries must use real columns and scope via the owning course."""
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.dialects import postgresql
+
+# Reminders fire at local 08:00; the digest only on a local Sunday.
+_SUNDAY_0800_UTC = datetime(2026, 10, 11, 8, 0, tzinfo=UTC)
 
 
 def _factory_for(session: AsyncMock) -> MagicMock:
@@ -21,7 +25,7 @@ def _capturing_session(users: list[str]) -> tuple[AsyncMock, list]:
     session = AsyncMock()
     seen: list = []
     first = MagicMock()
-    first.all.return_value = [(u,) for u in users]
+    first.all.return_value = [(u, "UTC") for u in users]
     rest = MagicMock()
     rest.scalar.return_value = 0
 
@@ -39,7 +43,10 @@ class TestReminderQueriesUseRealColumns:
         from app.pipeline.notification_tasks import _send_daily_reminders
 
         session, seen = _capturing_session(["user-001"])
-        with patch("app.pipeline.notification_tasks.async_session_factory", _factory_for(session)):
+        with (
+            patch("app.core.clock.utc_now", return_value=_SUNDAY_0800_UTC),
+            patch("app.pipeline.notification_tasks.async_session_factory", _factory_for(session)),
+        ):
             await _send_daily_reminders()
 
         sql = _sql(seen[1])
@@ -53,6 +60,7 @@ class TestReminderQueriesUseRealColumns:
 
         session, seen = _capturing_session(["user-001"])
         with (
+            patch("app.core.clock.utc_now", return_value=_SUNDAY_0800_UTC),
             patch("app.pipeline.notification_tasks.async_session_factory", _factory_for(session)),
             patch("app.services.notification_service.notify", AsyncMock(return_value={})),
         ):

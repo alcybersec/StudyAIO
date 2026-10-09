@@ -73,8 +73,12 @@ class FakeRedis:
     async def get(self, key: str) -> str | None:
         return self._live(key)
 
-    async def set(self, key: str, value: str) -> bool:
-        self._store[key] = (value, None)
+    async def set(
+        self, key: str, value: str, nx: bool = False, ex: int | None = None
+    ) -> bool | None:
+        if nx and self._live(key) is not None:
+            return None
+        self._store[key] = (value, None if ex is None else time.monotonic() + ex)
         return True
 
     async def setex(self, key: str, ttl: int, value: str) -> bool:
