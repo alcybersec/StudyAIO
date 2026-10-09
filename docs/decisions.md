@@ -12,6 +12,7 @@ is the index plus the small rulings that do not warrant one.
 | [0003](adr/0003-floor3-request-time-ai-calls.md) | Floor 3 admits an enumerated set of request-time AI calls | Accepted |
 | [0004](adr/0004-floor4-user-initiated-item-deletes.md) | Floor 4 admits explicit user-initiated deletes of the user's own items | Accepted |
 | [0005](adr/0005-floor3-embedding-gateway.md) | Floor 3 covers embeddings through a second gateway, `get_embedding_provider` (amends 0003) | Accepted |
+| [0006](adr/0006-clock-policy.md) | Clock policy: user-local "today" for the study surface, UTC for quota and money | Accepted |
 
 ## Rulings
 

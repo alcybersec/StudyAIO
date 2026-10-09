@@ -232,6 +232,19 @@ only in `app/pipeline/**` and at five request-time call sites the ADR enumerates
 `extract_and_save_concepts`. A new request-time call site amends that ADR; it is not a change to
 this contract.
 
+### core.clock v1
+
+The only module that reads the host clock (ruling R-023). Provider: `backend` —
+`services/app/app/core/clock.py`. Consumers: every layer (it is in `core`, ADR 0002); first users
+are `app/services/**`, `app/api/**` and `app/pipeline/**`. Decided in
+[ADR 0006](adr/0006-clock-policy.md), whose single `python` block **is** the contract: five
+functions, `utc_now() -> datetime`, `utc_today() -> date`, `user_now(tz: str | None) -> datetime`,
+`user_today(tz: str | None) -> date`, `valid_timezone(tz: str) -> bool`. `None` or an invalid zone
+means UTC; results are aware. Not duplicated here, so there is one copy to keep in step.
+`services/app/tests/contracts/test_clock_contract.py` compares that block with the source and bans
+`date.today()`, `datetime.today()`, `datetime.utcnow()` and naive `datetime.now()` everywhere else
+under `app/`. A new public member is a version bump here and an amendment of ADR 0006 first.
+
 ## Change log
 
 The `Contract` column holds the name from that contract's `###` heading in Current.
@@ -240,3 +253,4 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 |---|---|---|---|---|
 | 2026-10-04 | agents.AgentAdapter | v1 | Recorded as-built: 7 abstract methods, `stream_answer`, metering and output-language members, `get_agent`, 13 data types, 5 backends, 12 direct consumers. No code changed. | M31-S1-ARCH-001 |
 | 2026-10-04 | agents.AgentAdapter | v1 | Floor-3 open question closed by reference to ADR 0003, which enumerates the five request-time `get_agent` call sites. Interface unchanged, so no version bump. | M31-S1-ARCH-006 |
+| 2026-10-09 | core.clock | v1 | New contract, recorded before implementation: five functions, `user_settings.timezone` as the zone source, `None`/invalid → UTC. Contract test committed red. | M32-S2-ARCH-033 |
