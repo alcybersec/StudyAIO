@@ -24,8 +24,8 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S2-AI-036 (reminders/digest hourly at user's local 08:00; idempotent per local day) | `ai` | 2026-10-09 | isolated |
-| M32-S2-SAFETY-037 (review clock policy: quota-on-UTC, zone input, scoping) | `safety` | 2026-10-09 | isolated |
+| M32-S2-QA-038 (notification integration tests for hourly local 08:00; lands with AI-036 `2f3f262`) | `qa` | 2026-10-09 | isolated |
+| M32-S2-BACKEND-039 (clock: tzdata-only zone keys, guarded ZoneInfo; dashboard cache keyed by zone) | `backend` | 2026-10-09 | isolated |
 
 ## Completed
 
@@ -36,6 +36,8 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S2-SAFETY-037 (review R-023 clock policy) | `safety` | `20d3fd3` → `kit/retrofit` `5be9b06` | +54 floor cases. Quota/billing on UTC: CLEAN + pinned (mutation-checked). Floor 1: CLEAN + pinned. Floor 4: CLEAN. **VETO** on zone validation: `localtime` host key accepted; unguarded `ZoneInfo` can raise → 7 red pins → BACKEND-039. Floor tier on `kit/retrofit` red by design until then | 2026-10-09 |
+| M32-S2-AI-036 (reminders + digest hourly at user's local 08:00; Redis SET NX claim per local day) | `ai` | `2f3f262` — **held**, lands with QA-038 | Orchestrator red-check in scratch worktree: old pipeline → `5 failed, 1 passed`; fixed → `6 passed`. Breaks 3 qa integration tests (wall-clock sends) → QA-038 | 2026-10-09 |
 | M32-S2-BACKEND-034 (`core/clock.py` + `core/localday.py`; services per ADR 0006; settings `timezone` 422-validated; `tzdata` direct dep; clock contract test landed green) | `backend` | `7176c17`/`dd0c69a`/`9d2c261`/`f32a869` → `kit/retrofit` `083070d`..`bc63f39` | **Orchestrator on `kit/retrofit`: ruff `All checks passed!`, `506 files already formatted`; `make test` → unit `Required test coverage of 75.0% reached. Total coverage: 88.05%`, `2887 passed`; floor `97.59%`, `102 passed`; `make test-integration` → `87.16%`, `529 passed`.** Not red-first (revert-checked on 2 services only). Behaviour change: `due_today` = due before local midnight (ADR wording) | 2026-10-09 |
 | M32-S2-FRONTEND-035 (time zone auto-detect, Settings field, zone-aware calendar days) | `frontend` | `fabdbec` → `kit/retrofit` `b9e6355` | **Orchestrator: vitest `Test Files 87 passed (87)`, `Tests 636 passed (636)`; `tsc -b` clean.** Agent lint 0 errors | 2026-10-09 |
 | M32-S2-ARCH-033 (ADR 0006 clock policy Accepted; CONTRACTS `core.clock v1`) | `architect` | `457683b` → `kit/retrofit` `aa89f85` | ADR + index + CONTRACTS applied. **Red contract test `4e435b8` held back** (24 offenders in services; would break `make test` under `-x` and hide the floor tier) — handed to BACKEND-034 to land together with the clock module. Agent: detector catches every banned form on a planted file; surface/semantics checks green against a reference clock.py | 2026-10-09 |
