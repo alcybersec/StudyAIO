@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_or_default
 from app.api.schemas import SettingsResponse, SettingsUpdateRequest, TestAIResponse
+from app.core.cache import cache_delete, dashboard_cache_key
 from app.core.database import get_session
 from app.models.user import User
 from app.services import settings_service
@@ -65,6 +66,10 @@ async def update_settings(
     except ValueError as e:
         logger.error("settings_update_failed", error=str(e), updates=list(updates.keys()))
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+    if "timezone" in updates:
+        # The cached dashboard embeds the old zone's "today"; drop it.
+        await cache_delete(dashboard_cache_key(str(user.id)))
 
     return SettingsResponse(**result)
 

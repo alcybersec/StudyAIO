@@ -104,3 +104,33 @@ class TestUpdateSettings:
         call_args = mock_update.call_args
         assert call_args[0][1] == "00000000-0000-0000-0000-000000000001"  # user.id
         assert call_args[0][2] == {"flashcard_count_per_week": 25}
+
+
+@pytest.mark.asyncio
+class TestTimezoneInvalidatesDashboardCache:
+    """A zone change must not leave the old zone's "today" in the dashboard cache."""
+
+    async def _put(self, async_client, body):
+        merged = {**MOCK_SETTINGS, **body}
+        with (
+            patch(
+                "app.api.settings.settings_service.update_user_settings",
+                new_callable=AsyncMock,
+                return_value=merged,
+            ),
+            patch("app.api.settings.cache_delete", new_callable=AsyncMock) as delete,
+        ):
+            response = await async_client.put("/api/settings", json=body)
+        return response, delete
+
+    async def test_timezone_update_drops_callers_dashboard_cache(self, async_client):
+        response, delete = await self._put(async_client, {"timezone": "Europe/Berlin"})
+
+        assert response.status_code == 200
+        delete.assert_awaited_once_with("cache:dashboard:00000000-0000-0000-0000-000000000001")
+
+    async def test_other_updates_leave_dashboard_cache_alone(self, async_client):
+        response, delete = await self._put(async_client, {"claude_model": "sonnet"})
+
+        assert response.status_code == 200
+        delete.assert_not_awaited()

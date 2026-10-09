@@ -9,9 +9,10 @@ Nothing outside this module may call ``date.today()``, naive
 ``datetime.now()``, ``datetime.utcnow()`` or ``datetime.today()``.
 """
 
+import importlib.resources
 from datetime import UTC, date, datetime, tzinfo
 from functools import lru_cache
-from zoneinfo import ZoneInfo, available_timezones
+from zoneinfo import ZoneInfo
 
 
 def utc_now() -> datetime:
@@ -28,7 +29,10 @@ def _zone(tz: str | None) -> tzinfo:
     """Resolve an IANA name to a zone; None or invalid falls back to UTC."""
     if tz is None or not valid_timezone(tz):
         return UTC
-    return ZoneInfo(tz)
+    try:
+        return ZoneInfo(tz)
+    except Exception:
+        return UTC
 
 
 def user_now(tz: str | None) -> datetime:
@@ -43,11 +47,13 @@ def user_today(tz: str | None) -> date:
 
 @lru_cache(maxsize=1)
 def _known_zones() -> frozenset[str]:
-    return frozenset(available_timezones())
+    """Zone keys of the declared ``tzdata`` package, independent of the host."""
+    text = importlib.resources.files("tzdata").joinpath("zones").read_text()
+    return frozenset(line.strip() for line in text.splitlines() if line.strip())
 
 
 def valid_timezone(tz: str) -> bool:
-    """True iff `tz` is a key of zoneinfo.available_timezones(). Never raises."""
+    """True iff `tz` is a key of the tzdata package's zone list. Never raises."""
     try:
         return isinstance(tz, str) and tz in _known_zones()
     except Exception:
