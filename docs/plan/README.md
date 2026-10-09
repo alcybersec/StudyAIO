@@ -18,12 +18,16 @@ Orchestrator updates here.
 **M32-S1 complete (2026-10-09): C1–C6 closed; GL#10, R-002, R-003, R-019, R-022 closed; R-023 audited (schedule bug fixed).** Pipeline **#549** on `5604b61`, all 6 jobs success by name: `backend-tests` `2474 passed` + golden `317` + contracts `28`; `test-floor` 97.59% / `102 passed`; `integration-tests` 87.14% / `529 passed`; `e2e-tests` `64 passed`; `frontend-checks` `625 passed`; `python-lint` success. **Open:** M32's feature not yet named by the user; R-023 zone policy undecided; `.claude/settings.json` needs restoring by the user after the kit re-render.
 
 **Integration branch.** `kit/retrofit` @ `2f3296d`+ (code `8d9de14`, pipeline #537 green) — pushed,
-not merged to `main`; no MR opened.
+not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 ## Active
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S2-DATA-032 (`user_settings.timezone`) | `data` | 2026-10-09 | isolated |
+| M32-S2-ARCH-033 (ADR 0006 clock policy + clock contract test) | `architect` | 2026-10-09 | isolated |
+| M32-S2-BACKEND-034 (`core/clock.py`; services to clock policy; settings API `timezone`) | `backend` | 2026-10-09 | isolated |
+| M32-S2-FRONTEND-035 (time zone auto-detect + setting) | `frontend` | 2026-10-09 | isolated |
 
 ## Completed
 
