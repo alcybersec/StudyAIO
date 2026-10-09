@@ -36,6 +36,7 @@ from app.core.ai_settings import (  # noqa: F401  (re-exported for existing impo
     _defaults,
     get_effective_setting,
 )
+from app.core.clock import DEFAULT_TIMEZONE, valid_timezone
 from app.core.utils import generate_id
 from app.models.user_settings import UserSettings
 
@@ -393,6 +394,7 @@ async def get_user_settings(session: AsyncSession, user_id: str) -> dict[str, An
     merged["theme"] = user_settings.theme
     merged["language"] = user_settings.language
     merged["content_language"] = user_settings.content_language
+    merged["timezone"] = getattr(user_settings, "timezone", None) or DEFAULT_TIMEZONE
     # getattr: tolerant of lightweight settings stand-ins; the column defaults to False
     merged["leaderboard_opt_in"] = bool(getattr(user_settings, "leaderboard_opt_in", False))
     merged["dashboard_layout"] = user_settings.dashboard_layout
@@ -421,6 +423,7 @@ async def update_user_settings(
     theme = updates.pop("theme", None)
     language = updates.pop("language", None)
     content_language = updates.pop("content_language", None)
+    timezone = updates.pop("timezone", None)
     leaderboard_opt_in = updates.pop("leaderboard_opt_in", None)
     dashboard_layout = updates.pop("dashboard_layout", None)
     clear_secrets = updates.pop("clear_secrets", None) or []
@@ -465,6 +468,11 @@ async def update_user_settings(
                 f"language must be one of {sorted(SUPPORTED_LANGUAGES)}, got '{language}'"
             )
         user_settings.language = language
+
+    if timezone is not None:
+        if not valid_timezone(timezone):
+            raise ValueError(f"timezone must be a valid IANA time zone name, got '{timezone}'")
+        user_settings.timezone = timezone
 
     if content_language is not None:
         if not isinstance(content_language, bool):
@@ -542,6 +550,22 @@ async def _get_row(session: AsyncSession, user_id: str) -> UserSettings | None:
     """
     result = await session.execute(select(UserSettings).where(UserSettings.user_id == user_id))
     return result.scalar_one_or_none()
+
+
+async def get_user_timezone(session: AsyncSession, user_id: str) -> str:
+    """Get the IANA time zone a user's "today" is computed in.
+
+    Look this up once per request and pass it down; do not call it in a loop.
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
+
+    Returns:
+        The stored zone, or "UTC" when the user has no settings row.
+    """
+    row = await _get_row(session, user_id)
+    return (getattr(row, "timezone", None) if row else None) or DEFAULT_TIMEZONE
 
 
 async def _get_overrides(session: AsyncSession, user_id: str) -> dict[str, Any]:
