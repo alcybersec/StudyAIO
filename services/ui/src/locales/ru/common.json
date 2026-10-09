@@ -1284,5 +1284,11 @@
   "· wk": "· нед.",
   "— currently": "— сейчас",
   "↑↓ navigate · enter opens · same actions as the graph": "↑↓ — перемещение · enter — открыть · те же действия, что и в графе",
-  "✓ {{provider}} responded in {{seconds}}s": "✓ {{provider}} ответил за {{seconds}} с"
+  "✓ {{provider}} responded in {{seconds}}s": "✓ {{provider}} ответил за {{seconds}} с",
+  "Time zone": "Часовой пояс",
+  "Save time zone": "Сохранить часовой пояс",
+  "Saving…": "Сохранение…",
+  "That time zone is not valid.": "Такого часового пояса не существует.",
+  "Couldn't save the time zone. Try again.": "Не удалось сохранить часовой пояс. Попробуйте ещё раз.",
+  "Decides when your day starts: streaks, what is due today, and exam countdowns.": "Определяет, когда начинается ваш день: серии, задачи на сегодня и обратный отсчёт до экзаменов."
 }

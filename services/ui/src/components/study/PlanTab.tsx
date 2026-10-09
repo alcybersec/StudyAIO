@@ -1,6 +1,7 @@
 import { CalendarDays, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStudyPlan } from '../../hooks/useApi'
+import { useUserTimeZone } from '../../hooks/useUserTimeZone'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { Button, Card, EmptyState, ErrorState, Skeleton } from '../ui'
 import {
@@ -42,6 +43,7 @@ function PlanSkeleton() {
 
 export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
   const { t } = useTranslation()
+  const timeZone = useUserTimeZone()
 
   const { data, isLoading, error, refetch } = useStudyPlan()
   const online = useOnlineStatus()
@@ -95,7 +97,7 @@ export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
       <Card padding={false} className="p-4">
         <ul className="divide-y divide-border">
           {data.days.map((day) => {
-            const today = isPlanToday(day.day)
+            const today = isPlanToday(day.day, new Date(), timeZone)
             return (
               <li
                 key={day.day}

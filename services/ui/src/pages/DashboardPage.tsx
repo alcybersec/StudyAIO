@@ -7,6 +7,8 @@ import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import { Flame, Settings2 } from 'lucide-react'
 import { useDashboard } from '../hooks/useApi'
+import { useUserTimeZone } from '../hooks/useUserTimeZone'
+import { isValidTimeZone } from '../lib/timezone'
 import { useDashboardLayout } from '../hooks/useDashboardLayout'
 import { Button } from '../components/ui'
 import { ReviewAlert } from '../components/dashboard/ReviewAlert'
@@ -42,14 +44,16 @@ export function DashboardPage() {
     setHeights((prev) => (Math.abs((prev[key] ?? 0) - px) < 3 ? prev : { ...prev, [key]: px }))
   }, [])
 
+  const timeZone = useUserTimeZone()
   const today = useMemo(
     () =>
       new Date().toLocaleDateString(i18n.language, {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
+        timeZone: timeZone && isValidTimeZone(timeZone) ? timeZone : undefined,
       }),
-    [],
+    [timeZone],
   )
 
   // Static element map — widgets fetch their own data, so this never changes.

@@ -39,6 +39,7 @@ function settings(overrides: Partial<Settings> = {}): Settings {
     content_language: false,
     leaderboard_opt_in: false,
     dashboard_layout: null,
+    timezone: 'UTC',
     ...overrides,
   }
 }

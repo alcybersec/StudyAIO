@@ -13,6 +13,7 @@ vi.mock('../../hooks/useApi', () => ({
   useCreateExamFromDeadline: vi.fn(),
   useDeleteDeadline: vi.fn(),
   useUpdateDeadline: vi.fn(),
+  useSettings: vi.fn(() => ({ data: { timezone: 'UTC' } })),
 }))
 
 vi.mock('../../hooks/useCalendar', () => ({

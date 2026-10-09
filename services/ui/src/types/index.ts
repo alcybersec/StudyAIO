@@ -199,6 +199,8 @@ export interface Settings {
   language: string
   /** Whether `language` also applies to AI-generated study material. */
   content_language: boolean
+  /** IANA zone defining the user's calendar day; "UTC" until set. */
+  timezone: string
   dashboard_layout: Record<string, unknown> | null
   /** Appear on other users' leaderboard. Opt-in; false by default. */
   leaderboard_opt_in: boolean

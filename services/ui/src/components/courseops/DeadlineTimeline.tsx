@@ -5,6 +5,7 @@ import { useCreateExamFromDeadline, useDeleteDeadline, useUpdateDeadline } from 
 import { useCalendarStatus, useSyncCalendar } from '../../hooks/useCalendar'
 import { Badge, EmptyState, ErrorState, Skeleton } from '../ui'
 import type { Deadline } from '../../types'
+import { useUserTimeZone } from '../../hooks/useUserTimeZone'
 import { daysUntil } from './dates'
 import { DeadlineEditModal } from './DeadlineEditModal'
 
@@ -42,6 +43,7 @@ function TimelineSkeleton() {
 
 export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: DeadlineTimelineProps) {
   const { t } = useTranslation()
+  const timeZone = useUserTimeZone()
 
   const [editingDeadline, setEditingDeadline] = useState<Deadline | null>(null)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
@@ -71,7 +73,7 @@ export function DeadlineTimeline({ deadlines, isLoading, isError, onRetry }: Dea
     <>
       <div className="space-y-3">
         {deadlines.map((d) => {
-          const days = daysUntil(d.due_date)
+          const days = daysUntil(d.due_date, new Date(), timeZone)
           const isPast = days < 0
           const isUrgent = !isPast && days <= 3
           const isSoon = !isPast && !isUrgent && days <= 7

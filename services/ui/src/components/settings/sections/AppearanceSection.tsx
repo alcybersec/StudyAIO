@@ -3,6 +3,7 @@ import { Card, Button } from '../../ui'
 import { useTheme, type Theme } from '../../../hooks/useTheme'
 import { useTour } from '../../../hooks/useTour'
 import { useLanguage } from '../../../hooks/useLanguage'
+import { TimeZoneField } from '../TimeZoneField'
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from '../../../i18n'
 
 const THEMES: Theme[] = ['light', 'dark', 'system']
@@ -99,6 +100,8 @@ export function AppearanceSection() {
             </span>
           </label>
         </div>
+
+        <TimeZoneField />
 
         <div>
           <span className="block text-xs font-medium text-text-muted mb-1.5">
