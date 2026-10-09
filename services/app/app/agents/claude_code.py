@@ -21,8 +21,8 @@ from app.agents.base import (
     QuizQuestionData,
     SummaryResult,
 )
+from app.core.ai_settings import get_effective_setting
 from app.core.exceptions import AgentError
-from app.services.settings_service import get_effective_setting
 
 logger = structlog.get_logger()
 

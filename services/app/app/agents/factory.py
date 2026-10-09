@@ -10,12 +10,12 @@ spend the operator's key (issue #30).
 from typing import Any
 
 from app.agents.base import AgentAdapter
-from app.core.exceptions import ProviderCredentialError
-from app.services.settings_service import (
+from app.core.ai_settings import (
     BACKEND_REQUIRED_KEY,
     STUDYAIO_BACKEND,
     get_effective_setting,
 )
+from app.core.exceptions import ProviderCredentialError
 
 
 def get_agent(

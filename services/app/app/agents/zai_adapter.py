@@ -11,7 +11,7 @@ Docs: https://docs.z.ai/guides/llm/glm-4.6
 import structlog
 
 from app.agents.openai_adapter import OpenAIAdapter
-from app.services.settings_service import get_effective_setting
+from app.core.ai_settings import get_effective_setting
 
 logger = structlog.get_logger()
 
