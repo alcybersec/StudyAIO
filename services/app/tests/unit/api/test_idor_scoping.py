@@ -28,7 +28,7 @@ class TestExamsIdorScoping:
     async def test_get_exam_progress_404_for_other_user(self, async_client, default_test_user):
         """GET /api/exams/{id} must not return user A's progress to user B."""
 
-        async def scoped(session, exam_id, user_id=None):
+        async def scoped(session, exam_id, user_id=None, tz=None):
             return {"id": exam_id} if user_id == OWNER_A else None
 
         mock = AsyncMock(side_effect=scoped)
@@ -83,7 +83,7 @@ class TestExamsIdorScoping:
     async def test_schedule_404_for_other_user(self, async_client, default_test_user):
         """GET /api/exams/{id}/schedule must not plan against user A's exam."""
 
-        async def scoped(session, exam_id, days_ahead=7, user_id=None):
+        async def scoped(session, exam_id, days_ahead=7, user_id=None, tz=None):
             return [] if user_id == OWNER_A else None
 
         mock = AsyncMock(side_effect=scoped)
@@ -96,7 +96,7 @@ class TestExamsIdorScoping:
     async def test_today_404_for_other_user(self, async_client, default_test_user):
         """GET /api/exams/{id}/today must not plan against user A's exam."""
 
-        async def scoped(session, exam_id, user_id=None):
+        async def scoped(session, exam_id, user_id=None, tz=None):
             return {} if user_id == OWNER_A else None
 
         mock = AsyncMock(side_effect=scoped)
@@ -499,7 +499,7 @@ class TestCourseOpsIdorScoping:
     async def test_list_deadlines_scoped_to_user(self, async_client, default_test_user):
         """Sharing a course code with user A must not list their deadlines."""
 
-        async def scoped(session, course_code, upcoming_only=False, user_id=None):
+        async def scoped(session, course_code, upcoming_only=False, user_id=None, tz=None):
             return [MagicMock()] if user_id == OWNER_A else []
 
         mock = AsyncMock(side_effect=scoped)
@@ -532,7 +532,7 @@ class TestCourseOpsIdorScoping:
     ):
         """Same for the markdown plan: assessments, weights and deadlines."""
 
-        async def scoped(session, course_code, user_id=None):
+        async def scoped(session, course_code, user_id=None, tz=None):
             return (io.BytesIO(b"# plan"), "x.md") if user_id == OWNER_A else None
 
         mock = AsyncMock(side_effect=scoped)
@@ -557,7 +557,7 @@ class TestExamHistoryIdorScoping:
     async def test_history_scoped_to_the_caller(self, async_client, default_test_user):
         """GET /api/exams/{id}/history must not report user A's study days."""
 
-        async def scoped(session, exam_id=None, days=30, user_id=None):
+        async def scoped(session, exam_id=None, days=30, user_id=None, tz=None):
             return (
                 [{"date": "2026-03-01", "minutes": 45.0, "cards": 20, "sessions": 2}]
                 if user_id == OWNER_A

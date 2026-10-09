@@ -13,7 +13,7 @@ from app.core.constants import DEFAULT_ADMIN_ID
 from app.core.database import get_session
 from app.core.exceptions import AuthenticationError, AuthorizationError, SessionRevokedError
 from app.models.user import User
-from app.services import user_service
+from app.services import settings_service, user_service
 
 logger = structlog.get_logger()
 
@@ -155,6 +155,18 @@ async def get_current_user_or_default(
             return await _get_or_create_default_user(session)
     else:
         return await get_current_user(request, session)
+
+
+async def get_user_tz(
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> str:
+    """Resolve the caller's IANA time zone once per request (R-023 clock policy).
+
+    Returns:
+        The zone stored in the caller's settings, "UTC" when none is stored.
+    """
+    return await settings_service.get_user_timezone(session, user.id)
 
 
 def require_role(*allowed_roles: str) -> Callable:

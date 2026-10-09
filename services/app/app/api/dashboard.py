@@ -27,6 +27,7 @@ from app.services import (
     exam_service,
     pipeline_service,
     review_service,
+    settings_service,
     srs_service,
     streak_service,
     xp_service,
@@ -54,6 +55,7 @@ async def get_dashboard(
     if cached is not None:
         return DashboardResponse(**cached)
 
+    tz = await settings_service.get_user_timezone(session, user.id)
     pending_count = await review_service.count_pending_reviews(session, user_id=user.id)
     activity_raw = await pipeline_service.get_recent_activity(session, limit=10, user_id=user.id)
     course_stats = await course_service.list_courses_with_stats(session, user_id=user.id)
@@ -84,9 +86,7 @@ async def get_dashboard(
         # Need course codes — build a lookup from course_items
         course_lookup = {c.id: c.code for c in course_items}
         for exam in exams:
-            from datetime import UTC, datetime
-
-            days_remaining = max(0, (exam.exam_date - datetime.now(UTC)).days)
+            days_remaining = exam_service.days_until(exam.exam_date, tz)
             active_exams.append(
                 DashboardExamSummary(
                     exam_id=exam.id,
@@ -105,7 +105,7 @@ async def get_dashboard(
     # Streak (best-effort)
     streak = None
     try:
-        streak_data = await streak_service.get_streak(session, user_id=user.id)
+        streak_data = await streak_service.get_streak(session, user_id=user.id, tz=tz)
         streak = DashboardStreakInfo(**streak_data)
     except Exception:
         logger.warning("streak_failed", exc_info=True)
@@ -114,7 +114,7 @@ async def get_dashboard(
     upcoming_deadlines = []
     try:
         raw_deadlines = await courseops_service.get_upcoming_deadlines_all_courses(
-            session, limit=5, user_id=user.id
+            session, limit=5, user_id=user.id, tz=tz
         )
         upcoming_deadlines = [UpcomingDeadlineItem(**d) for d in raw_deadlines]
     except Exception:
@@ -124,7 +124,9 @@ async def get_dashboard(
     gamification = None
     try:
         xp_data = await xp_service.get_xp_summary(session, user.id)
-        challenge_data = await challenge_service.get_user_challenge_progress(session, user.id)
+        challenge_data = await challenge_service.get_user_challenge_progress(
+            session, user.id, tz=tz
+        )
         unnotified = await achievement_service.get_unnotified(session, user.id)
         gamification = DashboardGamificationSummary(
             total_xp=xp_data["total_xp"],

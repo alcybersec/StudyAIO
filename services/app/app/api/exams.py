@@ -4,7 +4,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, get_user_tz
 from app.api.exam_schemas import (
     DailyPlanResponse,
     ExamCreateRequest,
@@ -90,10 +90,11 @@ async def list_exams(
 async def get_exam(
     exam_id: str,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> ExamProgressResponse:
     """Get exam detail with progress."""
-    progress = await exam_service.get_exam_progress(session, exam_id, user_id=user.id)
+    progress = await exam_service.get_exam_progress(session, exam_id, user_id=user.id, tz=tz)
     if not progress:
         raise HTTPException(status_code=404, detail="Exam not found")
     await session.commit()  # persist auto-completions
@@ -149,11 +150,12 @@ async def get_schedule(
     exam_id: str,
     days: int = Query(7, ge=1, le=30, description="Days to plan ahead"),
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> list[DailyPlanResponse]:
     """Get study schedule."""
     schedule = await schedule_service.generate_study_schedule(
-        session, exam_id, days, user_id=user.id
+        session, exam_id, days, user_id=user.id, tz=tz
     )
     if schedule is None:
         raise HTTPException(status_code=404, detail="Exam not found")
@@ -169,10 +171,11 @@ async def get_schedule(
 async def get_today(
     exam_id: str,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> DailyPlanResponse:
     """Get today's study plan."""
-    plan = await schedule_service.get_daily_study_plan(session, exam_id, user_id=user.id)
+    plan = await schedule_service.get_daily_study_plan(session, exam_id, user_id=user.id, tz=tz)
     if plan is None:
         raise HTTPException(status_code=404, detail="Exam not found")
     return DailyPlanResponse(**plan)
@@ -208,6 +211,7 @@ async def record_session(
     exam_id: str,
     body: StudySessionRequest,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> StudySessionResponse:
     """Record a study session."""
@@ -224,6 +228,7 @@ async def record_session(
         quiz_correct=body.quiz_correct,
         duration_seconds=body.duration_seconds,
         user_id=user.id,
+        tz=tz,
     )
     await session.commit()
 
@@ -231,7 +236,7 @@ async def record_session(
     try:
         await xp_service.award_xp(session, user.id, "streak_day")
         await challenge_service.update_challenge_progress(
-            session, user.id, "study_minutes", body.duration_seconds // 60
+            session, user.id, "study_minutes", body.duration_seconds // 60, tz=tz
         )
     except Exception:
         logger.warning("gamification_xp_failed", exc_info=True)
@@ -258,11 +263,12 @@ async def get_history(
     exam_id: str,
     days: int = Query(30, ge=1, le=365, description="Days of history"),
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> list[StudyHistoryDayResponse]:
     """Get study history for an exam."""
     history = await streak_service.get_study_history(
-        session, exam_id=exam_id, days=days, user_id=user.id
+        session, exam_id=exam_id, days=days, user_id=user.id, tz=tz
     )
     return [StudyHistoryDayResponse(**h) for h in history]
 
@@ -277,10 +283,11 @@ async def get_history(
 async def get_readiness_detail(
     exam_id: str,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> ReadinessDetailResponse:
     """Get topic-level readiness detail for an exam."""
-    detail = await readiness_service.compute_readiness_detail(session, exam_id, user.id)
+    detail = await readiness_service.compute_readiness_detail(session, exam_id, user.id, tz=tz)
     if not detail:
         raise HTTPException(status_code=404, detail="Exam not found")
     return ReadinessDetailResponse(

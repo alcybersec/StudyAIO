@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.agents.base import CourseOpsResult
+from app.core.clock import user_today
 from app.core.exceptions import CourseOpsError
 from app.core.storage import StorageBackend, get_storage
 from app.core.utils import generate_id
@@ -740,13 +741,15 @@ async def list_deadlines(
     upcoming_only: bool = False,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> list[Deadline]:
     """List deadlines for a course.
 
     Args:
         session: Database session.
         course_code: Course code.
-        upcoming_only: If True, only return future deadlines.
+        upcoming_only: If True, only return deadlines from the caller's local today on.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
         user_id: Owner user UUID; only match the course owned by this user.
             Course codes are unique *per user* (uq_courses_code_user), so a
             code like "CSIT302" resolves to a different course for every
@@ -764,7 +767,7 @@ async def list_deadlines(
 
     query = select(Deadline).where(Deadline.course_id == course.id)
     if upcoming_only:
-        query = query.where(Deadline.due_date >= date.today())
+        query = query.where(Deadline.due_date >= user_today(tz))
     query = query.order_by(Deadline.due_date)
 
     deadlines_result = await session.execute(query)
@@ -913,12 +916,14 @@ async def get_upcoming_deadlines_all_courses(
     limit: int = 5,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> list[dict]:
     """Get upcoming deadlines across all courses for the dashboard.
 
     Args:
         session: Database session.
         limit: Max deadlines to return.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         List of deadline dicts with course_code.
@@ -926,7 +931,7 @@ async def get_upcoming_deadlines_all_courses(
     query = (
         select(Deadline, Course.code)
         .join(Course, Deadline.course_id == Course.id)
-        .where(Deadline.due_date >= date.today())
+        .where(Deadline.due_date >= user_today(tz))
     )
     query = query.where(Course.user_id == user_id).order_by(Deadline.due_date).limit(limit)
     result = await session.execute(query)

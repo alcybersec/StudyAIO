@@ -4,7 +4,7 @@ import structlog
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, get_user_tz
 from app.api.gamification_schemas import (
     AchievementItem,
     AchievementsListResponse,
@@ -74,10 +74,11 @@ async def get_achievements(
 async def get_daily_challenge(
     request: Request,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> DailyChallengeResponse:
     """Get today's challenge with progress."""
-    progress = await challenge_service.get_user_challenge_progress(session, user.id)
+    progress = await challenge_service.get_user_challenge_progress(session, user.id, tz=tz)
     return DailyChallengeResponse(**progress)
 
 

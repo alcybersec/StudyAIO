@@ -6,6 +6,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import user_now, user_today
 from app.models.exam import Exam
 from app.models.flashcard import Flashcard
 from app.models.flashcard_review import FlashcardReview
@@ -38,6 +39,7 @@ async def generate_study_schedule(
     days_ahead: int = 7,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> list[dict] | None:
     """Generate an adaptive daily study plan for the next N days.
 
@@ -52,6 +54,7 @@ async def generate_study_schedule(
         exam_id: Exam UUID.
         days_ahead: Number of days to plan (default 7).
         user_id: Owner user UUID; only an exam this user owns is planned.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         List of daily plan dicts, or None if exam not found (or not owned).
@@ -83,9 +86,9 @@ async def generate_study_schedule(
     strong_weeks = [w for w in exam.weeks_scope if w not in weak_weeks]
 
     schedule = []
-    today = now.date()  # UTC, same zone as exam_date
+    today = user_today(tz)
 
-    exam_day = exam.exam_date.astimezone(UTC).date()
+    exam_day = exam.exam_date.astimezone(user_now(tz).tzinfo).date()
 
     for day_offset in range(days_ahead):
         plan_date = today + timedelta(days=day_offset)
@@ -134,6 +137,7 @@ async def get_daily_study_plan(
     exam_id: str,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> dict | None:
     """Get today's study plan for an exam.
 
@@ -141,11 +145,12 @@ async def get_daily_study_plan(
         session: Database session.
         exam_id: Exam UUID.
         user_id: Owner user UUID; only an exam this user owns is planned.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Today's plan dict, or None if exam not found (or not owned).
     """
-    schedule = await generate_study_schedule(session, exam_id, days_ahead=1, user_id=user_id)
+    schedule = await generate_study_schedule(session, exam_id, days_ahead=1, user_id=user_id, tz=tz)
     if not schedule:
         return None
     return schedule[0]

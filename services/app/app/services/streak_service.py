@@ -1,11 +1,12 @@
 """Study streak calculation and session recording."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import user_today
 from app.core.utils import generate_id
 from app.models.study_session import StudySession
 
@@ -22,6 +23,7 @@ async def record_study_session(
     exam_id: str | None = None,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> StudySession:
     """Record or update a study session for today.
 
@@ -37,11 +39,12 @@ async def record_study_session(
         duration_seconds: Session duration in seconds.
         exam_id: Optional exam UUID.
         user_id: Owner user UUID (required).
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Created or updated StudySession.
     """
-    today = date.today()
+    today = user_today(tz)
 
     # Check for existing session today
     query = select(StudySession).where(
@@ -88,6 +91,7 @@ async def get_streak(
     course_id: str | None = None,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> dict:
     """Calculate current and longest study streak.
 
@@ -97,6 +101,7 @@ async def get_streak(
         session: Database session.
         course_id: Optional course filter.
         user_id: Owner user UUID (required).
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Dict with current_streak, longest_streak, last_study_date.
@@ -115,7 +120,7 @@ async def get_streak(
         return {"current_streak": 0, "longest_streak": 0, "last_study_date": None}
 
     last_study = dates[0]
-    today = date.today()
+    today = user_today(tz)
 
     # Calculate longest streak (always needed)
     longest_streak = 1
@@ -162,6 +167,7 @@ async def get_study_history(
     days: int = 30,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> list[dict]:
     """Get daily study session aggregates.
 
@@ -170,11 +176,12 @@ async def get_study_history(
         exam_id: Optional exam filter.
         days: Number of days of history (default 30).
         user_id: Owner user UUID (required).
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         List of daily aggregate dicts.
     """
-    since = date.today() - timedelta(days=days)
+    since = user_today(tz) - timedelta(days=days)
 
     query = (
         select(

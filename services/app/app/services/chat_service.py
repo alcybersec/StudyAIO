@@ -2,7 +2,6 @@
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime
 
 import structlog
 from sqlalchemy import select
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.embeddings import get_embedding_provider
 from app.agents.factory import get_agent
+from app.core.clock import utc_now
 from app.core.utils import generate_id
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
@@ -228,7 +228,7 @@ async def send_message(
     if not chat_session:
         raise ValueError("Chat session not found")
 
-    now = datetime.now(tz=None)
+    now = utc_now()
 
     # 1. Save user message
     user_msg = ChatMessage(
@@ -316,14 +316,14 @@ async def send_message(
         role="assistant",
         content=answer_text,
         citations_json=answer_citations if answer_citations else None,
-        created_at=datetime.now(tz=None),
+        created_at=utc_now(),
     )
     assistant_msg.action_json = plan.action
     session.add(assistant_msg)
 
     # 6. Update session metadata
     chat_session.message_count += 2  # user + assistant
-    chat_session.updated_at = datetime.now(tz=None)
+    chat_session.updated_at = utc_now()
 
     # Auto-generate title from first user message
     if chat_session.message_count <= 2 and chat_session.title == "New Chat":
@@ -381,7 +381,7 @@ async def stream_message(
         yield {"event": "error", "data": "Chat session not found"}
         return
 
-    now = datetime.now(tz=None)
+    now = utc_now()
 
     # Save user message
     user_msg = ChatMessage(
@@ -484,14 +484,14 @@ async def stream_message(
         role="assistant",
         content=full_text,
         citations_json=citations if citations else None,
-        created_at=datetime.now(tz=None),
+        created_at=utc_now(),
     )
     assistant_msg.action_json = plan.action
     session.add(assistant_msg)
 
     # Update session metadata
     chat_session.message_count += 2
-    chat_session.updated_at = datetime.now(tz=None)
+    chat_session.updated_at = utc_now()
     if chat_session.message_count <= 2 and chat_session.title == "New Chat":
         chat_session.title = content[:80] + ("..." if len(content) > 80 else "")
 

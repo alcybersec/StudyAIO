@@ -151,16 +151,6 @@ class TestScheduleUsesUtcDates:
         mock_weak.return_value = []
         fixed_now = datetime(2026, 3, 10, 2, 0, tzinfo=UTC)  # UTC date: Mar 10
 
-        class FakeDatetime(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return fixed_now if tz else fixed_now.replace(tzinfo=None)
-
-        class FakeDate(date):
-            @classmethod
-            def today(cls):  # host-local date lags UTC (e.g. Los Angeles)
-                return date(2026, 3, 9)
-
         session = AsyncMock()
         exam = MagicMock()
         exam.course_id = "c"
@@ -172,10 +162,7 @@ class TestScheduleUsesUtcDates:
         count_result.scalar.return_value = 0
         session.execute = AsyncMock(side_effect=[exam_result, count_result])
 
-        with (
-            patch("app.services.schedule_service.datetime", FakeDatetime),
-            patch("app.services.schedule_service.date", FakeDate, create=True),
-        ):
+        with patch("app.core.clock.utc_now", return_value=fixed_now):
             result = await generate_study_schedule(session, "e", user_id="u", days_ahead=2)
 
         assert result is not None

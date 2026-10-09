@@ -11,7 +11,7 @@ from app.api.analytics_schemas import (
     MasteryResponse,
     RetentionResponse,
 )
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, get_user_tz
 from app.core.database import get_session
 from app.models.user import User
 from app.services import analytics_service
@@ -45,10 +45,11 @@ async def get_overview(
 async def get_heatmap(
     days: int = Query(default=90, ge=7, le=365),
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> HeatmapResponse:
     """Get daily study totals for heatmap display."""
-    data = await analytics_service.get_study_heatmap(session, user.id, days=days)
+    data = await analytics_service.get_study_heatmap(session, user.id, days=days, tz=tz)
     return HeatmapResponse(days=data)
 
 
@@ -93,10 +94,11 @@ async def get_mastery(
 async def get_readiness(
     exam_id: str,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> ExamReadinessResponse:
     """Get exam readiness score with component breakdown."""
-    data = await analytics_service.get_exam_readiness(session, exam_id, user.id)
+    data = await analytics_service.get_exam_readiness(session, exam_id, user.id, tz=tz)
     if not data:
         raise HTTPException(status_code=404, detail="Exam not found")
     return ExamReadinessResponse(**data)

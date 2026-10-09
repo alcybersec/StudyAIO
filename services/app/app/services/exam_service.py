@@ -6,6 +6,7 @@ import structlog
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import user_now, user_today
 from app.core.utils import generate_id
 from app.models.course import Course
 from app.models.exam import Exam
@@ -17,6 +18,21 @@ from app.models.study_session import StudySession
 from app.services import readiness_service
 
 logger = structlog.get_logger()
+
+
+def days_until(exam_date: datetime, tz: str | None) -> int:
+    """Whole calendar days from the user's today to the exam's local date.
+
+    Args:
+        exam_date: The exam instant (naive values are read as UTC).
+        tz: IANA time zone of the caller (UTC if None).
+
+    Returns:
+        Days remaining, never negative.
+    """
+    aware = exam_date if exam_date.tzinfo else exam_date.replace(tzinfo=UTC)
+    local_day = aware.astimezone(user_now(tz).tzinfo).date()
+    return max(0, (local_day - user_today(tz)).days)
 
 
 async def create_exam(
@@ -299,6 +315,7 @@ async def get_exam_progress(
     exam_id: str,
     *,
     user_id: str,
+    tz: str | None = None,
 ) -> dict | None:
     """Get comprehensive exam progress data.
 
@@ -306,6 +323,7 @@ async def get_exam_progress(
         session: Database session.
         exam_id: Exam UUID.
         user_id: Owner user UUID; only an exam this user owns is reported.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Dict with progress data or None if exam not found (or not owned).
@@ -314,8 +332,7 @@ async def get_exam_progress(
     if not exam:
         return None
 
-    now = datetime.now(UTC)
-    days_remaining = max(0, (exam.exam_date - now).days)
+    days_remaining = days_until(exam.exam_date, tz)
 
     # Quiz accuracy across exam scope
     quiz_result = await session.execute(

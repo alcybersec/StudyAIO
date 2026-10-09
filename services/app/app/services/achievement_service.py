@@ -19,6 +19,7 @@ async def _evaluate_criteria(
     session: AsyncSession,
     user_id: str,
     criteria: dict,
+    tz: str | None = None,
 ) -> bool:
     """Evaluate whether a user meets achievement criteria.
 
@@ -26,6 +27,7 @@ async def _evaluate_criteria(
         session: Database session.
         user_id: User UUID.
         criteria: Criteria dict with type and threshold.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         True if criteria are met.
@@ -46,7 +48,7 @@ async def _evaluate_criteria(
     elif criteria_type == "streak":
         from app.services import streak_service
 
-        streak_data = await streak_service.get_streak(session, user_id=user_id)
+        streak_data = await streak_service.get_streak(session, user_id=user_id, tz=tz)
         return streak_data.get("current_streak", 0) >= threshold
 
     elif criteria_type == "total_xp":
@@ -84,9 +86,17 @@ async def check_achievements(
 
     newly_earned: list[UserAchievement] = []
 
+    # Streaks are counted in the user's local days; look the zone up once, and
+    # only when a streak achievement is actually still in play.
+    tz: str | None = None
+    if any((a.criteria_json or {}).get("type") == "streak" for a in unearned):
+        from app.services.settings_service import get_user_timezone
+
+        tz = await get_user_timezone(session, user_id)
+
     for achievement in unearned:
         criteria = achievement.criteria_json
-        if await _evaluate_criteria(session, user_id, criteria):
+        if await _evaluate_criteria(session, user_id, criteria, tz):
             ua = UserAchievement(
                 id=generate_id(),
                 user_id=user_id,

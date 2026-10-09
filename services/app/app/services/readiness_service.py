@@ -115,6 +115,8 @@ async def compute_readiness_detail(
     session: AsyncSession,
     exam_id: str,
     user_id: str,
+    *,
+    tz: str | None = None,
 ) -> dict | None:
     """Compute topic-level readiness detail for an exam.
 
@@ -125,6 +127,7 @@ async def compute_readiness_detail(
         session: Database session.
         exam_id: Exam UUID.
         user_id: Requesting user UUID (tenant isolation).
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Dict {exam_id, title, overall, topics: [{topic, week, accuracy,
@@ -136,7 +139,7 @@ async def compute_readiness_detail(
     if not exam:
         return None
 
-    readiness = await analytics_service.get_exam_readiness(session, exam_id, user_id)
+    readiness = await analytics_service.get_exam_readiness(session, exam_id, user_id, tz=tz)
     overall = int(round(readiness["readiness_score"])) if readiness else 0
 
     weeks_scope = list(exam.weeks_scope or [])

@@ -7,6 +7,7 @@ import structlog
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import user_today
 from app.core.utils import generate_id
 from app.models.analytics_snapshot import AnalyticsSnapshot
 from app.models.course import Course
@@ -81,7 +82,9 @@ async def get_overview(session: AsyncSession, user_id: str) -> dict:
     }
 
 
-async def get_study_heatmap(session: AsyncSession, user_id: str, days: int = 90) -> list[dict]:
+async def get_study_heatmap(
+    session: AsyncSession, user_id: str, days: int = 90, *, tz: str | None = None
+) -> list[dict]:
     """Get daily study totals for heatmap display.
 
     Returns list of {date: "YYYY-MM-DD", minutes: float, cards: int, sessions: int}
@@ -91,11 +94,13 @@ async def get_study_heatmap(session: AsyncSession, user_id: str, days: int = 90)
         session: Database session.
         user_id: User UUID.
         days: Number of days to look back (default 90).
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         List of daily study activity dicts.
     """
-    since = date.today() - timedelta(days=days)
+    today = user_today(tz)
+    since = today - timedelta(days=days)
 
     result = await session.execute(
         select(
@@ -122,7 +127,6 @@ async def get_study_heatmap(session: AsyncSession, user_id: str, days: int = 90)
     # Fill in all days in range (including zero days)
     heatmap: list[dict] = []
     current = since
-    today = date.today()
     while current <= today:
         if current in data_by_date:
             heatmap.append(data_by_date[current])
@@ -273,7 +277,9 @@ async def get_mastery_breakdown(
     ]
 
 
-async def get_exam_readiness(session: AsyncSession, exam_id: str, user_id: str) -> dict | None:
+async def get_exam_readiness(
+    session: AsyncSession, exam_id: str, user_id: str, *, tz: str | None = None
+) -> dict | None:
     """Get exam readiness score — weighted combination of mastery, quiz accuracy, and study consistency.
 
     Weights: mastery 40%, quiz accuracy 30%, study consistency 30%.
@@ -282,6 +288,7 @@ async def get_exam_readiness(session: AsyncSession, exam_id: str, user_id: str) 
         session: Database session.
         exam_id: Exam UUID.
         user_id: User UUID.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Dict with readiness_score (0-100), component scores, and details,
@@ -293,7 +300,7 @@ async def get_exam_readiness(session: AsyncSession, exam_id: str, user_id: str) 
     if not exam:
         return None
 
-    progress = await get_exam_progress(session, exam_id, user_id=user_id)
+    progress = await get_exam_progress(session, exam_id, user_id=user_id, tz=tz)
     if not progress:
         return None
 
@@ -304,7 +311,7 @@ async def get_exam_readiness(session: AsyncSession, exam_id: str, user_id: str) 
     quiz_score = progress["quiz_accuracy"]
 
     # Component 3: Study consistency (30%) — sessions in last 7 days / 7
-    week_ago = date.today() - timedelta(days=7)
+    week_ago = user_today(tz) - timedelta(days=7)
     consistency_result = await session.execute(
         select(func.count(func.distinct(StudySession.session_date))).where(
             StudySession.user_id == user_id,
@@ -335,7 +342,9 @@ async def get_exam_readiness(session: AsyncSession, exam_id: str, user_id: str) 
     }
 
 
-async def compute_and_store_snapshot(session: AsyncSession, user_id: str) -> AnalyticsSnapshot:
+async def compute_and_store_snapshot(
+    session: AsyncSession, user_id: str, *, tz: str | None = None
+) -> AnalyticsSnapshot:
     """Compute and store a daily analytics snapshot.
 
     If a snapshot already exists for today, updates it. Otherwise creates a new one.
@@ -343,11 +352,12 @@ async def compute_and_store_snapshot(session: AsyncSession, user_id: str) -> Ana
     Args:
         session: Database session.
         user_id: User UUID.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         The created or updated AnalyticsSnapshot.
     """
-    today = date.today()
+    today = user_today(tz)
 
     # Get overview as the snapshot metrics
     overview = await get_overview(session, user_id)

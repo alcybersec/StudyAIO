@@ -1,12 +1,13 @@
 """Billing service for Stripe subscription management."""
 
-from datetime import date, datetime
+from datetime import datetime
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.clock import utc_today
 from app.core.utils import generate_id
 from app.models.subscription import Subscription
 from app.models.usage_record import UsageRecord
@@ -275,7 +276,7 @@ async def record_usage(
         tokens_input: Input tokens to add.
         tokens_output: Output tokens to add.
     """
-    today = date.today()
+    today = utc_today()
     result = await session.execute(
         select(UsageRecord).where(
             UsageRecord.user_id == user_id,

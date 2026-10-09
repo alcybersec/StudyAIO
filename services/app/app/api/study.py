@@ -4,7 +4,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, get_user_tz
 from app.api.study_schemas import (
     DueCardResponse,
     PlanDay,
@@ -63,6 +63,7 @@ async def get_due_cards(
 async def post_review(
     body: ReviewRequest,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> ReviewResponse:
     """Record a flashcard review."""
@@ -78,7 +79,7 @@ async def post_review(
     # Award XP (best-effort)
     try:
         await xp_service.award_xp(session, user.id, "card_reviewed")
-        await challenge_service.update_challenge_progress(session, user.id, "review_cards")
+        await challenge_service.update_challenge_progress(session, user.id, "review_cards", tz=tz)
     except Exception:
         logger.warning("gamification_xp_failed", exc_info=True)
 
@@ -118,6 +119,7 @@ async def get_stats(
 async def post_quiz_attempt(
     body: QuizAttemptRequest,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> QuizAttemptResponse:
     """Record a quiz attempt."""
@@ -143,7 +145,9 @@ async def post_quiz_attempt(
     try:
         if body.is_correct:
             await xp_service.award_xp(session, user.id, "quiz_correct")
-            await challenge_service.update_challenge_progress(session, user.id, "quiz_correct")
+            await challenge_service.update_challenge_progress(
+                session, user.id, "quiz_correct", tz=tz
+            )
     except Exception:
         logger.warning("gamification_xp_failed", exc_info=True)
 
@@ -159,10 +163,11 @@ async def post_quiz_attempt(
 async def get_streak(
     course_id: str | None = Query(None, description="Optional course ID filter"),
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> StreakResponse:
     """Get study streak data."""
-    data = await streak_service.get_streak(session, course_id, user_id=user.id)
+    data = await streak_service.get_streak(session, course_id, user_id=user.id, tz=tz)
     return StreakResponse(**data)
 
 
@@ -206,10 +211,11 @@ async def generate_timed_plan(
 )
 async def get_week_plan(
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> WeekPlanResponse:
     """Get the weekly study plan for the current user."""
-    plan = await study_service.build_week_plan(session, user.id)
+    plan = await study_service.build_week_plan(session, user.id, tz=tz)
     return WeekPlanResponse(
         days=[
             PlanDay(
