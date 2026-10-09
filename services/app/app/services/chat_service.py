@@ -1,6 +1,7 @@
 """Chat service — persistent AI study companion conversations with RAG."""
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import datetime
 
 import structlog
@@ -12,7 +13,8 @@ from app.agents.factory import get_agent
 from app.core.utils import generate_id
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
-from app.services import search_service, settings_service
+from app.services import course_service, search_service, settings_service
+from app.services.chat_scope import build_sources, detect_quiz_intent, parse_scope
 
 logger = structlog.get_logger()
 
@@ -20,6 +22,68 @@ logger = structlog.get_logger()
 MAX_HISTORY_MESSAGES = 10
 # Max RAG chunks to retrieve per question.
 MAX_RAG_CHUNKS = 5
+
+
+@dataclass
+class _Plan:
+    """Retrieval scope and short-circuit reply decided before any AI call."""
+
+    course_id: str | None
+    week: int | None
+    code: str | None = None
+    from_message: bool = False
+    reply: str | None = None
+    action: dict | None = None
+
+
+def _no_material_reply(plan: _Plan) -> str:
+    """Plain reply when the named course/week has nothing indexed."""
+    label = plan.code or "That course"
+    if plan.week is not None:
+        return f"{label} has no Week {plan.week} material indexed yet."
+    return f"{label} has no indexed material yet."
+
+
+async def _plan_message(
+    session: AsyncSession,
+    user_id: str,
+    content: str,
+    course_id: str | None,
+    week: int | None,
+    session_course_id: str | None,
+) -> _Plan:
+    """Resolve the course/week scope and quiz intent for a message.
+
+    A course code named in the message is resolved against the caller's own
+    courses only; a code they do not own is reported exactly like a missing
+    one. An explicit ``course_id`` skips message parsing entirely.
+    """
+    plan = _Plan(course_id=course_id or session_course_id, week=week)
+    if course_id is None:
+        parsed = parse_scope(content)
+        if parsed.code:
+            course = await course_service.get_course_by_code(session, parsed.code, user_id=user_id)
+            if course is None:
+                plan.code = parsed.code
+                plan.reply = f"You have no course {parsed.code}."
+                return plan
+            plan.course_id = course.id
+            plan.code = parsed.code
+            plan.from_message = True
+            if week is None:
+                plan.week = parsed.week
+    if detect_quiz_intent(content):
+        plan.action = {
+            "type": "open_quiz_builder",
+            "course_code": plan.code,
+            "course_id": plan.course_id,
+            "week": plan.week,
+        }
+        target = plan.code or "your course"
+        if plan.week is not None:
+            target += f" Week {plan.week}"
+        plan.reply = f"Open the quiz builder to create a test for {target}."
+    return plan
 
 
 async def create_session(
@@ -190,45 +254,60 @@ async def send_message(
     # Append current user message
     history.append({"role": "user", "content": content})
 
-    # 3. Embed question and search for relevant chunks via RAG
+    # 3. Resolve scope named in the message, then embed + search (RAG)
+    plan = await _plan_message(session, user_id, content, course_id, week, chat_session.course_id)
     chunks: list[dict] = []
-    try:
-        provider = get_embedding_provider()
-        query_embeddings = provider.embed_texts([content])
-        if query_embeddings:
-            chunks = await search_service.search_chunks(
-                session=session,
-                query_embedding=query_embeddings[0],
-                top_k=MAX_RAG_CHUNKS,
-                course_id=course_id or chat_session.course_id,
-                week=week,
-                user_id=user_id,
+    answer_text = ""
+    answer_citations: list[dict] = []
+    if plan.reply is None:
+        search_ok = False
+        try:
+            provider = get_embedding_provider()
+            query_embeddings = provider.embed_texts([content])
+            if query_embeddings:
+                chunks = await search_service.search_chunks(
+                    session=session,
+                    query_embedding=query_embeddings[0],
+                    top_k=MAX_RAG_CHUNKS,
+                    course_id=plan.course_id,
+                    week=plan.week,
+                    user_id=user_id,
+                )
+                search_ok = True
+        except Exception as e:
+            logger.warning(
+                "chat_rag_search_failed",
+                error=await settings_service.redacted_error(session, user_id, e),
             )
-    except Exception as e:
-        logger.warning(
-            "chat_rag_search_failed",
-            error=await settings_service.redacted_error(session, user_id, e),
-        )
-        # Continue without RAG context — still useful for general conversation
+            # Continue without RAG context — still useful for general conversation
+        if search_ok and plan.from_message and not chunks:
+            plan.reply = _no_material_reply(plan)
 
-    # 4. Call agent with per-user settings
-    from app.services.settings_service import get_user_ai_context
+    if plan.reply is not None:
+        answer_text = plan.reply
+    else:
+        # 4. Call agent with per-user settings
+        from app.services.settings_service import get_user_ai_context
 
-    user_agent_config, output_language = await get_user_ai_context(session, user_id)
-    agent = get_agent(user_settings=user_agent_config, output_language=output_language)
-    try:
-        context_question = _build_contextual_question(content, history[:-1], chunks)
-        answer_result = await agent.answer_question(context_question, chunks)
-        answer_text = answer_result.answer
-        answer_citations = answer_result.citations
-    except Exception as e:
-        logger.error(
-            "chat_agent_error", error=await settings_service.redacted_error(session, user_id, e)
-        )
-        answer_text = (
-            "I'm sorry, I encountered an error while processing your question. Please try again."
-        )
-        answer_citations = []
+        user_agent_config, output_language = await get_user_ai_context(session, user_id)
+        agent = get_agent(user_settings=user_agent_config, output_language=output_language)
+        try:
+            context_question = _build_contextual_question(content, history[:-1], chunks)
+            answer_result = await agent.answer_question(context_question, chunks)
+            answer_text = answer_result.answer
+            # Sources are derived from the chunk order the [n] markers refer to,
+            # not from the adapter's own (possibly partial) citation list.
+            answer_citations = build_sources(answer_text, chunks)
+        except Exception as e:
+            logger.error(
+                "chat_agent_error",
+                error=await settings_service.redacted_error(session, user_id, e),
+            )
+            answer_text = (
+                "I'm sorry, I encountered an error while processing your question. "
+                "Please try again."
+            )
+            answer_citations = []
 
     # 5. Save assistant message
     assistant_msg = ChatMessage(
@@ -239,6 +318,7 @@ async def send_message(
         citations_json=answer_citations if answer_citations else None,
         created_at=datetime.now(tz=None),
     )
+    assistant_msg.action_json = plan.action
     session.add(assistant_msg)
 
     # 6. Update session metadata
@@ -324,25 +404,31 @@ async def stream_message(
     history = [{"role": m.role, "content": m.content} for m in history_msgs]
     history.append({"role": "user", "content": content})
 
-    # RAG search
+    # Resolve scope named in the message, then RAG search
+    plan = await _plan_message(session, user_id, content, course_id, week, chat_session.course_id)
     chunks: list[dict] = []
-    try:
-        provider = get_embedding_provider()
-        query_embeddings = provider.embed_texts([content])
-        if query_embeddings:
-            chunks = await search_service.search_chunks(
-                session=session,
-                query_embedding=query_embeddings[0],
-                top_k=MAX_RAG_CHUNKS,
-                course_id=course_id or chat_session.course_id,
-                week=week,
-                user_id=user_id,
+    if plan.reply is None:
+        search_ok = False
+        try:
+            provider = get_embedding_provider()
+            query_embeddings = provider.embed_texts([content])
+            if query_embeddings:
+                chunks = await search_service.search_chunks(
+                    session=session,
+                    query_embedding=query_embeddings[0],
+                    top_k=MAX_RAG_CHUNKS,
+                    course_id=plan.course_id,
+                    week=plan.week,
+                    user_id=user_id,
+                )
+                search_ok = True
+        except Exception as e:
+            logger.warning(
+                "chat_stream_rag_failed",
+                error=await settings_service.redacted_error(session, user_id, e),
             )
-    except Exception as e:
-        logger.warning(
-            "chat_stream_rag_failed",
-            error=await settings_service.redacted_error(session, user_id, e),
-        )
+        if search_ok and plan.from_message and not chunks:
+            plan.reply = _no_material_reply(plan)
 
     # Yield user message ID
     yield {
@@ -350,38 +436,46 @@ async def stream_message(
         "data": {"id": user_msg.id},
     }
 
-    # Stream tokens from agent with per-user settings
-    from app.services.settings_service import get_user_ai_context
-
-    user_agent_config, output_language = await get_user_ai_context(session, user_id)
-    agent = get_agent(user_settings=user_agent_config, output_language=output_language)
     full_text = ""
-    try:
-        context_question = _build_contextual_question(content, history[:-1], chunks)
-        async for token in agent.stream_answer(context_question, chunks):
-            full_text += token
-            yield {"event": "token", "data": token}
-    except Exception as e:
-        logger.error(
-            "chat_stream_error", error=await settings_service.redacted_error(session, user_id, e)
-        )
-        error_msg = (
-            "I'm sorry, I encountered an error while processing your question. Please try again."
-        )
-        full_text = error_msg
-        yield {"event": "token", "data": error_msg}
+    if plan.reply is not None:
+        full_text = plan.reply
+        yield {"event": "token", "data": full_text}
+    else:
+        # Stream tokens from agent with per-user settings
+        from app.services.settings_service import get_user_ai_context
+
+        user_agent_config, output_language = await get_user_ai_context(session, user_id)
+        agent = get_agent(user_settings=user_agent_config, output_language=output_language)
+        try:
+            context_question = _build_contextual_question(content, history[:-1], chunks)
+            async for token in agent.stream_answer(context_question, chunks):
+                full_text += token
+                yield {"event": "token", "data": token}
+        except Exception as e:
+            logger.error(
+                "chat_stream_error",
+                error=await settings_service.redacted_error(session, user_id, e),
+            )
+            error_msg = (
+                "I'm sorry, I encountered an error while processing your question. "
+                "Please try again."
+            )
+            full_text = error_msg
+            yield {"event": "token", "data": error_msg}
 
     # Parse citations from the full response (best-effort)
     citations: list[dict] = []
-    try:
-        from app.agents import parsing
+    if plan.reply is None:
+        try:
+            from app.agents import parsing
 
-        parsed = parsing.parse_json_response(full_text)
-        if isinstance(parsed, dict) and "answer" in parsed:
-            full_text = parsed["answer"]
-            citations = parsed.get("citations", [])
-    except Exception:
-        pass  # Use raw text if not valid JSON
+            parsed = parsing.parse_json_response(full_text)
+            if isinstance(parsed, dict) and "answer" in parsed:
+                full_text = parsed["answer"]
+        except Exception:
+            pass  # Use raw text if not valid JSON
+        # Sources follow the chunk order the [n] markers refer to.
+        citations = build_sources(full_text, chunks)
 
     # Save assistant message
     assistant_msg = ChatMessage(
@@ -392,6 +486,7 @@ async def stream_message(
         citations_json=citations if citations else None,
         created_at=datetime.now(tz=None),
     )
+    assistant_msg.action_json = plan.action
     session.add(assistant_msg)
 
     # Update session metadata
@@ -409,6 +504,7 @@ async def stream_message(
             "id": assistant_msg.id,
             "content": full_text,
             "citations_json": citations if citations else None,
+            "action": plan.action,
         },
     }
 
