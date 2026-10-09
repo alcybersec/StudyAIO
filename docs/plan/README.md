@@ -15,7 +15,7 @@ Orchestrator updates here.
 
 ## Next task
 
-**M32-S1 complete (2026-10-09): C1–C6 closed; GL#10, R-002, R-003, R-019, R-022 closed; R-023 audited (schedule bug fixed).** Pipeline **#549** on `5604b61`, all 6 jobs success by name: `backend-tests` `2474 passed` + golden `317` + contracts `28`; `test-floor` 97.59% / `102 passed`; `integration-tests` 87.14% / `529 passed`; `e2e-tests` `64 passed`; `frontend-checks` `625 passed`; `python-lint` success. **Open:** M32's feature not yet named by the user; R-023 zone policy undecided; `.claude/settings.json` needs restoring by the user after the kit re-render.
+**M32-S1 + R-023 complete (2026-10-09).** Pipeline **#553** on `12408ba`, all 6 jobs success by name: `backend-tests` `2524 passed` + golden `317` + contracts `53`; `test-floor` 97.48% / `159 passed`; `integration-tests` 87.16% / `531 passed`; `e2e-tests` `64 passed`; `frontend-checks` `636 passed`; `python-lint` success. MR !33 marked ready. **Open:** M32's feature not yet named by the user.
 
 **Integration branch.** `kit/retrofit` @ `2f3296d`+ (code `8d9de14`, pipeline #537 green) — pushed,
 not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
