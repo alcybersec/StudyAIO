@@ -28,7 +28,7 @@ not merged to `main`; no MR opened.
 | M32-S1-BACKEND-019 (GL#10: course/week from message, citation mapping, quiz-builder intent action) | `backend` | 2026-10-09 | isolated |
 | M32-S1-FRONTEND-020 (R-019: deterministic admin tests; offline-toast contrast) | `frontend` | 2026-10-09 | isolated |
 | M32-S1-AI-021 (R-022: pipeline events to the artifact row owner) | `ai` | 2026-10-09 | isolated |
-| M32-S1-QA-022 (R-023: UTC-consistent date seeds in integration) | `qa` | 2026-10-09 | isolated |
+| M32-S1-BACKEND-023 (schedule_service `days_until_exam` mixes local and UTC dates) | `backend` | 2026-10-09 | isolated |
 
 ## Completed
 
@@ -39,6 +39,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S1-QA-022 (R-023 audit: integration date seeds) | `qa` | none (no change needed) | Audit: the 7 files' `date.today()` seeds match app code that also uses host-local dates — switching them to UTC would be wrong. Full tier: default TZ `529 passed`; `TZ=UTC` `529 passed`; UTC+14 `529 passed`; `TZ=America/Los_Angeles` `1 failed, 528 passed` (a real date mismatch at the time of the run) → app bug `schedule_service` local vs UTC → BACKEND-023 | 2026-10-09 |
 | M32-S1-QA-017 + BACKEND-018 (pipeline #542 `python-lint` failed: F401 in `test_notifications.py`; 3 files unformatted) | `qa`, `backend` | `de32fe3` → `577998f`; `c0f3372` → `ee0bc47` | Orchestrator: `ruff check .` → `All checks passed!`; `ruff format --check .` → `488 files already formatted`. Agent integration `529 passed`, 87.36%; billing unit `9 passed`. Lesson: `make test` runs no ruff, CI does | 2026-10-09 |
 | M32-S1-QA-016 (reminder integration test seeds UTC date) | `qa` | `dc34624` → `kit/retrofit` `6de73a1` | Diff = 1 test file, 2 lines. Agent: full tier `529 passed` under host TZ, UTC, UTC+14, UTC-7. **Orchestrator on `kit/retrofit` @ `6de73a1`: `make test` → unit `Required test coverage of 75.0% reached. Total coverage: 87.63%`, `2737 passed`; floor `Required test coverage of 95% reached. Total coverage: 97.57%`, `80 passed`; `make test-integration` → `Required test coverage of 70% reached. Total coverage: 87.36%`, `529 passed`** (0 failed, 0 xfail in any tier) | 2026-10-09 |
 | M32-S1-AI-015 (reminder + digest windows use UTC date) | `ai` | `e1e411e`/`b0ec8d1` → `kit/retrofit` head `2df722d` | Diff = `notification_tasks.py` + unit test (red-first in agent's `make test`). Orchestrator: `test_notification_tasks.py` → `4 passed`. Integration test fixture also host-local → QA-016 | 2026-10-09 |
