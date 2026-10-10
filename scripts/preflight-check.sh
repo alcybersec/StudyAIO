@@ -193,6 +193,36 @@ fi
 
 # ── AI provider credentials ───────────────────────────────────────
 
+# The worker's Claude login lives in a dedicated directory (R-025/R-026), never
+# the personal ~/.claude. If it is missing at `compose up`, Docker creates
+# root-owned directories in place of the single-file mounts.
+check_claude_login_dir() {
+    local dir="${STUDYAIO_CLAUDE_LOGIN_DIR:-$(get_val STUDYAIO_CLAUDE_LOGIN_DIR)}"
+    dir="${dir:-/opt/studyaio/claude-login}"
+    if [[ ! -d "$dir" ]]; then
+        error "Claude login dir $dir is missing — run scripts/setup-claude-login.sh BEFORE compose up (Docker would create root-owned dirs in place of the file mounts)."
+        return
+    fi
+    if [[ "$(realpath -m "$dir")" == "$(realpath -m "$HOME/.claude")" ]]; then
+        error "Claude login dir resolves to \$HOME/.claude — the worker must use a dedicated directory, not your personal one."
+        return
+    fi
+    local mode
+    mode=$(stat -c '%a' "$dir")
+    if (( (8#$mode & 8#007) != 0 )); then
+        error "Claude login dir $dir is world-accessible (mode $mode) — chmod 700."
+    else
+        ok "Claude login dir $dir exists (mode $mode) and is dedicated"
+    fi
+    if [[ -s "$dir/oauth-token" ]]; then
+        ok "Claude login: oauth-token present"
+    elif [[ -s "$dir/.credentials.json" && "$(tr -d '[:space:]' < "$dir/.credentials.json")" != "{}" ]]; then
+        warn "Claude login: only the .credentials.json fallback is present (it expires and is not refreshed) — run scripts/setup-claude-login.sh for a long-lived token."
+    else
+        error "Claude login dir $dir has no oauth-token — run scripts/setup-claude-login.sh."
+    fi
+}
+
 AGENT_BACKEND=$(get_val "AGENT_BACKEND")
 AGENT_BACKEND=${AGENT_BACKEND:-claude_code}
 
@@ -214,7 +244,8 @@ case "$AGENT_BACKEND" in
     openai)        require_key OPENAI_API_KEY ;;
     anthropic_api) require_key ANTHROPIC_API_KEY ;;
     claude_code)
-        ok "AGENT_BACKEND=claude_code — credentials come from the mounted ~/.claude"
+        ok "AGENT_BACKEND=claude_code — login comes from the dedicated service-login dir"
+        check_claude_login_dir
         ;;
     ollama)
         ok "AGENT_BACKEND=ollama — no API key required"

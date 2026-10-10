@@ -82,6 +82,10 @@ services:
     env_file:
       - .env
     environment:
+      # Preferred login: a long-lived token (`claude setup-token`) stored as
+      # <dir>/oauth-token (0600). The adapter reads it from this file and hands
+      # it only to the CLI subprocess. .credentials.json stays as the fallback.
+      CLAUDE_HOST_OAUTH_TOKEN_FILE: /run/claude-host/oauth-token
       CLAUDE_HOST_CREDENTIALS_FILE: /run/claude-host/.credentials.json
     command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=2
     healthcheck:

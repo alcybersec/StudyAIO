@@ -468,36 +468,56 @@ curl https://your-domain.com/health
 
 ## Claude service login
 
-The `claude_code` backend needs a Claude CLI login in the worker. It comes from a
-**dedicated directory**, not the operator's personal `~/.claude`.
+The `claude_code` backend needs a Claude login in the worker. It comes from a
+**dedicated directory**, not the operator's personal `~/.claude`, and is a
+**long-lived token** (`claude setup-token`, R-026) so nothing needs refreshing.
+The directory holds `oauth-token` (one line, mode 0600); the worker reads it via
+`CLAUDE_HOST_OAUTH_TOKEN_FILE=/run/claude-host/oauth-token` and the adapter
+hands it only to the CLI subprocess. A `.credentials.json` there is only the
+documented fallback (an expiring login that is never refreshed).
 
-**One-time setup (on the server, as the deploy user, not root):**
+**Operator steps on deploy-host (deploy user, not root, in `/opt/studyaio`):**
 
 ```bash
-bash scripts/setup-claude-login.sh              # creates /opt/studyaio/claude-login, 0700
-CLAUDE_CONFIG_DIR=/opt/studyaio/claude-login claude login
+# 1. Create the dir BEFORE the first `compose up` (see warning below)
+bash scripts/setup-claude-login.sh              # /opt/studyaio/claude-login, 0700; prompts for the token
+# 2. In a second terminal, as the same user, mint the token (dedicated, revocable account/plan)
+claude setup-token                              # prints a token once; copy it
+# 3. Paste it at the script's hidden "Token:" prompt (not echoed, written 0600;
+#    never put it in .env, a shell variable on the command line, or history)
+# 4. Deploy / restart the worker
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d worker
+# 5. Verify the dir is visible to the worker (and only the worker)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec worker ls /run/claude-host
+bash scripts/preflight-check.sh                 # checks dir exists, not world-readable, has oauth-token
 ```
 
-To use another path, set `STUDYAIO_CLAUDE_LOGIN_DIR` in the deploy `.env` and pass
-it to the script. The script copies no existing credentials; it also writes an
-empty `settings.json` so Docker does not create a directory in its place.
+To use another path, set `STUDYAIO_CLAUDE_LOGIN_DIR` in the deploy `.env` and
+pass it to the script. The script copies no existing credentials and refuses a
+path that resolves to your `~/.claude`; preflight checks the same.
 
-**Rotate:** re-run `CLAUDE_CONFIG_DIR=<dir> claude login` (use a dedicated
-account/plan you can revoke), then `docker compose ... restart worker`. To revoke,
-delete `<dir>/.credentials.json`.
+**Run setup first.** If the directory (or the placeholder `settings.json` /
+`.credentials.json`) is missing when you run `compose up`, Docker creates
+root-owned *directories* at those paths in place of the single-file mounts,
+and the worker then cannot start cleanly. If that happened, stop the stack,
+`sudo rm -r` the bogus entries, and re-run the setup script.
+
+**Rotate:** `bash scripts/setup-claude-login.sh --rotate`, paste a fresh token
+from `claude setup-token`, then `docker compose ... restart worker`.
+
+**Revoke:** delete `<dir>/oauth-token` (and `.credentials.json` if used), restart
+the worker, and revoke the token in the Claude account that issued it.
 
 **What the worker can see:** only that directory, mounted read-only at
-`/run/claude-host` (with `CLAUDE_HOST_CREDENTIALS_FILE` pointing at its
-`.credentials.json`) plus its `.credentials.json` and `settings.json` over the
-same files in the image's `/root/.claude`. The image's `~/.claude` is not overlaid
-as a directory. The api and beat containers get nothing. The operator's personal
-`~/.claude` is never mounted.
+`/run/claude-host`, plus `settings.json` and `.credentials.json` over the same
+files in the image's `/root/.claude` (kept as placeholders so the single-file
+mounts have a source). The image's `~/.claude` is not overlaid as a directory.
+The api and beat containers get nothing. The operator's personal `~/.claude` is
+never mounted.
 
 **Read-only on purpose:** a writable mount would let a compromised worker plant
 hooks or settings into a Claude config that a host-side `claude` may later load.
-The adapter never writes back to this directory (refreshed tokens live in a
-per-call temp dir); after an expiry, re-run the login above.
+The adapter never writes back to this directory.
 
 ---
 

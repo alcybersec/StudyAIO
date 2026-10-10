@@ -18,13 +18,13 @@ This guide covers everything needed to develop, test, and extend StudyAIO.
 The processing pipeline uses the Claude Code CLI for classification, summarization, and asset generation. The CLI itself ships inside the worker image; only a login comes from the host, and it comes from a **dedicated service-login directory, never your personal `~/.claude`** (R-025: the worker feeds untrusted lecture text to `claude -p`, so it must not see your transcripts, history or plugins).
 
 ```bash
-bash scripts/setup-claude-login.sh            # creates the dir (0700), copies nothing
-CLAUDE_CONFIG_DIR=/opt/studyaio/claude-login claude login   # one-time, as the deploy user
+bash scripts/setup-claude-login.sh            # creates the dir (0700), then prompts (hidden) for the token
+claude setup-token                            # in another terminal; paste the printed token at the prompt
 ```
 
 `STUDYAIO_CLAUDE_LOGIN_DIR` (default `/opt/studyaio/claude-login`) is mounted
 read-only into the worker only. See "Claude service login" in `docs/deployment.md`
-for rotation and what the worker can see. Do not bind-mount a host `claude`
+for rotation, revocation and what the worker can see. Run the setup script before the first `compose up`, or Docker creates root-owned directories in place of the file mounts. Do not bind-mount a host `claude`
 binary over `/usr/local/bin/claude` — that path is a symlink into the npm
 package, and Docker resolves it onto `bin/claude.exe`, which node then refuses
 to load.

@@ -51,6 +51,11 @@ services:
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/.credentials.json:/root/.claude/.credentials.json:ro
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/settings.json:/root/.claude/settings.json:ro
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}:/run/claude-host:ro
+    environment:
+      # Preferred login: a long-lived token (`claude setup-token`) stored as
+      # <dir>/oauth-token (0600). The adapter reads it from this file and hands
+      # it only to the CLI subprocess. .credentials.json stays as the fallback.
+      CLAUDE_HOST_OAUTH_TOKEN_FILE: /run/claude-host/oauth-token
 
   beat:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
