@@ -19,6 +19,7 @@ from app.services import (
     search_service,
     settings_service,
 )
+from app.services.chat_scope import build_sources
 
 logger = structlog.get_logger()
 
@@ -112,17 +113,19 @@ async def ask_question(
         logger.warning("usage_record_qa_failed", exc_info=True)
 
     # Build response
+    # Citations are derived from the chunks we sent, never from the model's
+    # own citation list: ids and snippets there cannot be trusted (GL#13).
     citations = [
         Citation(
-            ref=c.get("ref", i + 1),
-            chunk_id=c.get("chunk_id", ""),
-            text_snippet=c.get("text_snippet", ""),
-            course_code=c.get("course_code", ""),
-            week=c.get("week", 0),
-            page_ref=c.get("page_ref", 0),
-            artifact_id=c.get("artifact_id", ""),
+            ref=s["ref"],
+            chunk_id=str(s["chunk_id"] or ""),
+            text_snippet=s["text_snippet"],
+            course_code=s["course_code"] or "",
+            week=s["week"] or 0,
+            page_ref=s["page_ref"] or 0,
+            artifact_id=str(s["artifact_id"] or ""),
         )
-        for i, c in enumerate(answer_result.citations)
+        for s in build_sources(answer_result.answer, chunks)
     ]
 
     return QAResponse(
