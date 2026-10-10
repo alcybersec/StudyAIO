@@ -1,7 +1,12 @@
 """Per-stage Celery time limits and the stuck threshold (TECH-04, GL#22).
 
-Import-light on purpose: `app.worker` reads this while building the Celery app.
+Import-light on purpose. Importing this module applies the limits to the Celery
+app as `task_annotations` (the soft limit raises inside the task so it can retry;
+the hard limit kills a wedged process). `app.worker` lists it in `include=` by
+name, so the dependency points pipeline -> worker as ADR 0002 requires.
 """
+
+from app.worker import celery_app
 
 TRANSIENT_MAX_RETRIES = 4
 BACKOFF_BASE_SECONDS = 30
@@ -20,3 +25,8 @@ STAGE_TIME_LIMITS: dict[str, tuple[int, int]] = {
 #: An in-progress artifact untouched this long is stuck. Above the largest hard
 #: limit (1560s) plus the longest backoff (600s) with margin.
 STUCK_THRESHOLD_SECONDS = 45 * 60
+
+celery_app.conf.task_annotations = {
+    name: {"soft_time_limit": soft, "time_limit": hard}
+    for name, (soft, hard) in STAGE_TIME_LIMITS.items()
+}
