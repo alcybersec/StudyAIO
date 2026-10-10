@@ -27,7 +27,6 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S4-AI-024 (GL#14 adapter use-time URL check + no redirects; GL#15 nudge beat job) | `ai` | 2026-10-10 | isolated |
 | M32-S4-SAFETY-026 (review wave 1: SEC-01/03, AGENT-01, PROD-03) | `safety` | 2026-10-10 | isolated |
 | M32-S4-BACKEND-009 (GL#19 QUOTA-01 + COST-01 + beta-Pro CLI) | `backend` | 2026-10-10 | isolated |
 
@@ -44,6 +43,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S4-AI-024 (GL#14 use-time URL validation for user-supplied endpoints + redirects disabled; GL#15 `_send_study_nudges` in the hourly beat) | `ai` | `c872f4c`/`c4032d5` → `kit/retrofit` `ee6b441` | 12 tests red-first (agent). **Orchestrator: agents+pipeline+safety `667 passed, 1 skipped`; ruff clean.** No DNS pinning (rebinding narrowed, not closed) → SAFETY-026 to rule | 2026-10-10 |
 | M32-S4-BACKEND-023 (GL#31: chat scope carried across turns, caller-scoped; bare week → clarifying question; quiz action uses carried course) | `backend` | `5c51323` → `kit/retrofit` `423b178` | **Orchestrator red-check** (agent not red-first): old chat_service → `11 failed`; fixed + safety → `206 passed, 1 skipped`. Agent unit+safety `2872 passed`. Relevance floor (AI-06) not included. Review added to SAFETY-026 | 2026-10-10 |
 | M32-S4-DATA-027 (GL#15 backfill: opt-out defaults for users who never touched preferences; migration `b7d1f4a82c35`) | `data` | `5284105` → `kit/retrofit` `079d08c` | Throwaway pg16: no-rows → 18/4; untouched → 4 enabled; changed / toggled-off / inactive unchanged; idempotent; downgrade no-op. Single head. Seeds the placeholder system user too (harmless) | 2026-10-10 |
 | M32-S4-FRONTEND-025 (GL#11/14 operator-only fields read-only, Ollama disabled when hosted; GL#15 nudge toggle + inbox icon) | `frontend` | `c5edc49` → `kit/retrofit` `e206e07` | **Orchestrator: vitest `643 passed`.** Event names match backend (`study_nudge`, `nudge`) | 2026-10-10 |
