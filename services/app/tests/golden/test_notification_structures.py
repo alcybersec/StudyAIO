@@ -94,6 +94,7 @@ class TestNotificationPreferencesStructure:
             "cards_due",
             "exam_reminder",
             "weekly_digest",
+            "study_nudge",
         }
         assert set(EVENT_TYPES) == expected
 
