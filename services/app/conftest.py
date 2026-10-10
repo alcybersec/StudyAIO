@@ -174,6 +174,15 @@ def _assert_disposable_data_dir(when: str) -> None:
 #: Set before anything imports ``app``; see this module's docstring.
 TEST_DATA_DIR = _install_test_data_dir()
 
+# The instance-wide AI ceilings default to non-zero in production (COST-01).
+# Most tests drive endpoints with a mocked session, where the ceiling's
+# aggregate query has nothing to read, so the suite pins them off. Tests of the
+# ceiling itself patch the settings explicitly, and the default is asserted
+# against the model field in tests/unit/api/test_cost_guards.py. Assigned, not
+# defaulted: an operator's real value must not leak into the run.
+os.environ["GLOBAL_MAX_AI_CALLS_PER_DAY"] = "0"
+os.environ["GLOBAL_MAX_AI_TOKENS_PER_DAY"] = "0"
+
 # Collection-time refusal. This runs at conftest import, so it aborts before a
 # single test module is imported — earlier than any fixture can.
 _assert_disposable_data_dir("at conftest import")

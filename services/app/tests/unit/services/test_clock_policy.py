@@ -274,9 +274,8 @@ class TestUtcDayServices:
         freeze(AHEAD)
         session = AsyncMock()
         session.execute = AsyncMock(return_value=_result(scalar_one_or_none=None))
-        session.add = MagicMock()
         await billing_service.record_usage(session, "u1", ai_calls=1)
-        assert session.add.call_args.args[0].record_date == UTC_DAY
+        assert UTC_DAY in _params(session.execute.await_args.args[0])
 
     @pytest.mark.asyncio
     async def test_monthly_upload_window_is_utc_month(self, freeze):

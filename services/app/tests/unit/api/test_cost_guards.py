@@ -22,6 +22,7 @@ class TestTopKBound:
 
 class TestCeilingDefaults:
     def test_global_ceilings_are_on_by_default(self):
-        s = Settings(_env_file=None)
-        assert s.global_max_ai_calls_per_day > 0
-        assert s.global_max_ai_tokens_per_day > 0
+        # The model default, not an instance: the suite pins the env to 0.
+        fields = Settings.model_fields
+        assert fields["global_max_ai_calls_per_day"].default > 0
+        assert fields["global_max_ai_tokens_per_day"].default > 0

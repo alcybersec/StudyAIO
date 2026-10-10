@@ -18,9 +18,10 @@ from app.api.schemas import (
     WeekSummaryRow,
 )
 from app.core.database import get_session
+from app.core.exceptions import GlobalCeilingError, QuotaExceededError
 from app.models.user import User
 from app.pipeline.orchestrator import resume_pipeline
-from app.services import artifact_service, course_service, summary_service
+from app.services import artifact_service, course_service, quota_service, summary_service
 
 logger = structlog.get_logger()
 
@@ -270,7 +271,23 @@ async def merge_course(
     # back, and the task reads the course/week it was told about — so it would
     # summarize the pre-merge artifact set, or nothing at all. Same ordering as
     # the resume in review_items.resolve_review_item.
-    for artifact_id in result.pop("summarize_artifact_ids", []):
+    summarize_ids = result.pop("summarize_artifact_ids", [])
+    if summarize_ids:
+        # The merge is committed and correct, so a refusal here must not undo
+        # it: skip regeneration only. The target keeps its existing summaries
+        # (the keep_target outcome), so nothing is lost (QUOTA-01).
+        try:
+            await quota_service.check_ai_quota(
+                session, user.id, user.tier, calls=len(summarize_ids)
+            )
+        except (QuotaExceededError, GlobalCeilingError):
+            logger.warning(
+                "merge_regenerate_skipped_quota",
+                course_code=course_code,
+                skipped=len(summarize_ids),
+            )
+            summarize_ids = []
+    for artifact_id in summarize_ids:
         try:
             resume_pipeline(artifact_id, from_stage="summarize", user_id=user.id)
         except Exception:
