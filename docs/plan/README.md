@@ -15,7 +15,7 @@ Orchestrator updates here.
 
 ## Next task
 
-**M32-S1 + R-023 complete (2026-10-09).** Pipeline **#553** on `12408ba`, all 6 jobs success by name: `backend-tests` `2524 passed` + golden `317` + contracts `53`; `test-floor` 97.48% / `159 passed`; `integration-tests` 87.16% / `531 passed`; `e2e-tests` `64 passed`; `frontend-checks` `636 passed`; `python-lint` success. MR !33 **merged** 2026-10-10 (merge commit `d9df2fc`, user waived the pre-merge backup; nightly backup only). Prod deploy result not yet read by the Orchestrator — the auto-mode classifier denied polling the main pipeline; user to confirm `deploy-selfhosted` by job name. **Open:** M32's feature not yet named by the user.
+**M32-S1 + R-023 complete (2026-10-09).** Pipeline **#553** on `12408ba`, all 6 jobs success by name: `backend-tests` `2524 passed` + golden `317` + contracts `53`; `test-floor` 97.48% / `159 passed`; `integration-tests` 87.16% / `531 passed`; `e2e-tests` `64 passed`; `frontend-checks` `636 passed`; `python-lint` success. MR !33 **merged** 2026-10-10 (merge commit `d9df2fc`, user waived the pre-merge backup; nightly backup only). Prod deploy result not yet read by the Orchestrator — the auto-mode classifier denied polling the main pipeline; user to confirm `deploy-selfhosted` by job name. Pipeline **#559** on `e6128d2` (kit/retrofit, after MR !33): all 6 jobs success. **Open:** M32's feature not yet named; main deploy of !33 unconfirmed.
 
 **Integration branch.** `kit/retrofit` @ `2f3296d`+ (code `8d9de14`, pipeline #537 green) — pushed,
 not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
@@ -24,6 +24,8 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S3-DEVOPS-048 (dedicated Claude login dir, R-025) | `devops` | 2026-10-10 | **held** `bd82d86` — deploy-order dependency: operator must create the login dir on prod before this reaches main |
+| M32-S3-SAFETY-050 (review DEVOPS-048 + AI-049) | `safety` | 2026-10-10 | isolated |
 
 ## Completed
 
@@ -34,6 +36,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S3-AI-049 (GL#8: no retry on expired host token; host retry log fixed) | `ai` | `10db45f` → `kit/retrofit` `67feb7e` | 7 new tests (agent: all red before fix). Orchestrator: safety+agents+contracts `530 passed`. Review in SAFETY-050 | 2026-10-10 |
 | M32-S3-AI-041 + SAFETY-045/046 (GL#8: claude_code re-reads host credentials, one retry; host creds never persisted as a user's; container token redacted) | `ai`, `safety` | → `kit/retrofit` `d8b4fa6`..`a6c05c2` | **Orchestrator: `pytest tests/safety tests/unit/agents` → `470 passed`; ruff clean.** safety APPROVE all floors, VETO lifted; 3 mutants red. **Inert until the compose mount lands** — `0bdf597` held on R-025 (whole `~/.claude` exposed to root worker) pending user decision | 2026-10-10 |
 | M32-S3-QA-047 (daily-challenge integration test date-independent) | `qa` | `c33a800` → `kit/retrofit` (see log) | Cause: template = `date.toordinal() % 7`; 2026-10-10 → `perfect_quiz` (target 1). Test now freezes `app.core.clock.utc_now`, parametrized over a target-10 and a target-1 day. Agent full integration `532 passed` | 2026-10-10 |
 | M32-S3-DEVOPS-042 (GL#7: CI installs from the lock with no resolver, one index per package; + GL#8 compose mount) | `devops` | `b389bbb` → `kit/retrofit` `5e9b87b`; compose `0bdf597` **held** with GL#8 | Root cause from job 2810 trace: index lookup for aiohttp returned nothing silently → pip backtracked 40 aiogram releases → fake ResolutionImpossible. Fix: `scripts/ci-pip-install.sh` (`--no-deps` from lock, torch from CPU index only, offline requirements check + `pip check`), same in 4 jobs; e2e uses a venv. `glab ci lint` valid. Pipeline **#558** (`b1eff69`): all 4 backend jobs install via the script (`lock: 152 PyPI pins, 1 local-version pins`, `No broken requirements found`); `e2e-tests` `64 passed`. `integration-tests` failed on an unrelated date-dependent test (daily challenge) → QA-047 | 2026-10-10 |
