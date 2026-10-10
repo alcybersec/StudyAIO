@@ -78,8 +78,8 @@ class Settings(BaseSettings):
     classification_confidence_threshold: float = 0.7
     flashcard_count_per_week: int = 15
     quiz_question_count_per_week: int = 8
-    chunk_size_tokens: int = 500
-    chunk_overlap_tokens: int = 50
+    chunk_size_tokens: int = 200
+    chunk_overlap_tokens: int = 30
 
     # Embeddings
     # This default is read by services/app/Dockerfile at build time and baked

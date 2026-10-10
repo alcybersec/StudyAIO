@@ -131,8 +131,8 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
     "classification_confidence_threshold": (float, 0.0, 1.0),
     "flashcard_count_per_week": (int, 1, 100),
     "quiz_question_count_per_week": (int, 1, 100),
-    "chunk_size_tokens": (int, 50, 5000),
-    "chunk_overlap_tokens": (int, 0, 500),
+    "chunk_size_tokens": (int, 50, 248),
+    "chunk_overlap_tokens": (int, 0, 124),
     "max_upload_size_mb": (int, 1, 1000),
 }
 
