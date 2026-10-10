@@ -23,6 +23,8 @@ Orchestrator updates here.
 **Integration branch.** `kit/retrofit` @ `2f3296d`+ (code `8d9de14`, pipeline #537 green) — pushed,
 not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
+**M32 wave 1 deployed 2026-10-10** — MR !35 merged (`677209b`), closes GL#11–16, #18, #19, #31. Verified on the prod host: api/worker/beat/ui on `ghcr.io/…:677209b`, alembic `c8e2a5f93d16 (head)`, worker `CLAUDE_CLI_UID=10001` (denied on `/app/data`, `/run/claude-host`), `AGENT_BACKEND=zai`, health 200, UI 200, 0 schema errors at startup (migrate-first deploy worked). **Open:** operator `grant-pro`, the secret manager `NOTIFICATIONS_ENABLED`+SMTP, ceilings vs Z.ai limit; AI-03 (GL#17); wave 2.
+
 ## Active
 
 | Task | Owner | Dispatched | Worktree |
