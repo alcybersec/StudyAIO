@@ -14,7 +14,7 @@ from app.core.exceptions import AgentError
 @pytest.fixture
 def adapter():
     """ClaudeCodeAdapter with test config."""
-    return ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="test")
+    return ClaudeCodeAdapter(model="test")
 
 
 @pytest.fixture

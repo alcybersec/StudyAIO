@@ -107,7 +107,7 @@ class TestInstanceKeys:
 class TestClaudeCode:
     async def test_stderr_with_nested_cli_token_is_redacted(self):
         creds = {"claudeAiOauth": {"accessToken": CLI_TOKEN, "refreshToken": SENTINEL}}
-        adapter = ClaudeCodeAdapter(cli_path="claude", model="sonnet", credentials_json=creds)
+        adapter = ClaudeCodeAdapter(model="sonnet", credentials_json=creds)
         proc = MagicMock()
         proc.returncode = 1
         proc.communicate = AsyncMock(
@@ -120,7 +120,7 @@ class TestClaudeCode:
         assert "401 token" in str(ei.value)
 
     def test_json_string_credentials_are_scrubbed(self):
-        adapter = ClaudeCodeAdapter(cli_path="claude", credentials_json=None)
+        adapter = ClaudeCodeAdapter(credentials_json=None)
         adapter._credentials_json = json.dumps({"a": {"t": CLI_TOKEN}})  # type: ignore[assignment]
         assert CLI_TOKEN not in str(adapter._agent_error(f"x {CLI_TOKEN}"))
 

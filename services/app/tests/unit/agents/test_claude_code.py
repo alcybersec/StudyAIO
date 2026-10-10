@@ -21,7 +21,7 @@ from app.core.exceptions import AgentError
 @pytest.fixture
 def adapter():
     """ClaudeCodeAdapter with test config."""
-    return ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="test")
+    return ClaudeCodeAdapter(model="test")
 
 
 class TestRunClaudeCode:
@@ -84,7 +84,7 @@ class TestRunClaudeCode:
         assert "test prompt" not in args
         # --tools is variadic: "" must be last so no positional can be swallowed.
         assert args == (
-            "/usr/bin/claude",
+            adapter._cli_path,
             "-p",
             "--output-format",
             "text",

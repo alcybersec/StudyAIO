@@ -113,7 +113,7 @@ class TestClaudeCodeAdapterExtractCourseOps:
         """Calls Claude CLI and returns CourseOpsResult."""
         from app.agents.claude_code import ClaudeCodeAdapter
 
-        adapter = ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet")
+        adapter = ClaudeCodeAdapter(model="sonnet")
 
         response_json = json.dumps(
             {
@@ -143,7 +143,7 @@ class TestClaudeCodeAdapterExtractCourseOps:
         """Raises AgentError when CLI fails."""
         from app.agents.claude_code import ClaudeCodeAdapter
 
-        adapter = ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet")
+        adapter = ClaudeCodeAdapter(model="sonnet")
 
         with (
             patch.object(

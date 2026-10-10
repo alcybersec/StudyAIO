@@ -91,13 +91,18 @@ def _drop_privileges_ids() -> tuple[int, int] | None:
 
     Returns:
         ``(uid, gid)`` from ``CLAUDE_CLI_UID`` / ``CLAUDE_CLI_GID`` (gid defaults
-        to the uid), or None when unset or invalid (the child keeps the worker's
-        uid).
+        to the uid), or None when unset, invalid or 0 (root is not a drop; a
+        warning is logged and the child keeps the worker's uid).
     """
     raw = os.environ.get("CLAUDE_CLI_UID", "").strip()
     if not raw.isdigit():
         return None
     uid = int(raw)
+    if uid == 0:
+        # uid 0 is "no drop" spelled as a number: treat as unset, loudly,
+        # rather than let a misconfiguration look like isolation.
+        logger.warning("claude_cli_uid_zero_ignored")
+        return None
     gid_raw = os.environ.get("CLAUDE_CLI_GID", "").strip()
     return uid, int(gid_raw) if gid_raw.isdigit() else uid
 
@@ -188,13 +193,13 @@ class ClaudeCodeAdapter(AgentAdapter):
 
     def __init__(
         self,
-        cli_path: str = "",
         model: str = "",
         credentials_json: dict[str, Any] | None = None,
     ):
-        self._cli_path = cli_path or get_effective_setting("claude_code_path")
-        # GL#12: the model is an operator setting. A per-user ``model`` argument
-        # is accepted for factory compatibility but never reaches the CLI.
+        # ``model`` is accepted for call-site compatibility and ignored (GL#12).
+        # SEC-01 (GL#11): the executable and the model are operator settings.
+        # There is deliberately no per-instance override for either.
+        self._cli_path = get_effective_setting("claude_code_path")
         self._model = get_effective_setting("claude_model")
         self._credentials_json = credentials_json
         self.refreshed_credentials: dict[str, Any] | None = None
@@ -324,6 +329,8 @@ class ClaudeCodeAdapter(AgentAdapter):
         try:
             if ids is not None:
                 spawn_opts["user"], spawn_opts["group"] = ids
+                # Drop root's supplementary groups too (setgroups([])).
+                spawn_opts["extra_groups"] = []
                 # The child cannot read the worker's (root's) HOME; give it the
                 # scratch dir, which it owns, for its own cache writes.
                 env["HOME"] = work_dir
@@ -352,6 +359,8 @@ class ClaudeCodeAdapter(AgentAdapter):
                     except (OSError, ValueError):
                         host_creds = None
                 if host_creds:
+                    # GL#12: register the copied login so CLI failures redact it.
+                    self._host_credentials = host_creds
                     temp_dir = tempfile.mkdtemp(prefix="claude_creds_")
                     with open(os.path.join(temp_dir, ".credentials.json"), "w") as f:
                         json.dump(host_creds, f)

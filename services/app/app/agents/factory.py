@@ -87,7 +87,6 @@ def _build_agent(user_settings: dict[str, Any] | None) -> AgentAdapter:
         if user_settings and user_settings.get("anthropic_api_key"):
             return AnthropicAPIAdapter(
                 api_key=user_settings["anthropic_api_key"],
-                model=user_settings.get("claude_model", ""),
             )
         return AnthropicAPIAdapter()
 
@@ -139,8 +138,6 @@ def _build_agent(user_settings: dict[str, Any] | None) -> AgentAdapter:
             raise ProviderCredentialError("claude_code", "claude_cli_credentials") from e
 
         return ClaudeCodeAdapter(
-            cli_path=user_settings.get("claude_code_path", ""),
-            model=user_settings.get("claude_model", ""),
             credentials_json=credentials_json,
         )
     return ClaudeCodeAdapter()
