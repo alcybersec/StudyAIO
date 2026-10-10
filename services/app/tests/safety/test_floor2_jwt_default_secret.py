@@ -42,29 +42,12 @@ def _start(*, self_hosted: bool, single_user_mode: bool, secret: str) -> None:
         asyncio.run(_run())
 
 
-#: SAFETY-027 VETO on SEC-05 (33c7d1d). Strict: the moment backend lands the fix
-#: this XPASSes and fails the tier, so the marker cannot outlive the veto.
-_VETO_SEC05 = pytest.mark.xfail(
-    strict=True,
-    raises=pytest.fail.Exception,
-    reason=(
-        "VETO SAFETY-027: app/main.py lifespan skips the default-JWT refusal under "
-        "self_hosted; backend must gate it on single_user_mode"
-    ),
-)
-
-
-@pytest.mark.parametrize(
-    "self_hosted",
-    [False, pytest.param(True, marks=_VETO_SEC05)],
-    ids=["saas", "self_hosted"],
-)
+@pytest.mark.parametrize("self_hosted", [False, True], ids=["saas", "self_hosted"])
 def test_floor2_default_jwt_secret_refused_whenever_login_is_on(self_hosted):
     """Startup refuses the committed key in every authenticated mode.
 
-    ``self_hosted`` case held open by the SAFETY-027 veto (strict xfail) until
-    backend gates the refusal in ``app/main.py`` lifespan on
-    ``settings.single_user_mode`` instead of ``settings.self_hosted``.
+    The ``self_hosted`` case was held by the SAFETY-027 veto of SEC-05 until
+    8356b15 keyed the refusal on ``settings.single_user_mode`` (SAFETY-028).
     """
     from app.main import _DEFAULT_JWT_SECRET
 
