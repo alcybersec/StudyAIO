@@ -24,6 +24,7 @@ from app.agents.base import (
     _string_leaves,
 )
 from app.core.ai_settings import get_effective_setting
+from app.core.clock import utc_now
 from app.core.exceptions import AgentError
 
 logger = structlog.get_logger()
@@ -99,6 +100,18 @@ def _read_host_credentials() -> dict[str, Any] | None:
     return data if isinstance(data, dict) and data else None
 
 
+def _host_token_expired(creds: dict[str, Any]) -> bool:
+    """True when ``claudeAiOauth.expiresAt`` (epoch ms) is already past.
+
+    Missing or unparseable values return False (keep the single retry).
+    """
+    oauth = creds.get("claudeAiOauth")
+    raw = oauth.get("expiresAt") if isinstance(oauth, dict) else None
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        return False
+    return raw <= utc_now().timestamp() * 1000
+
+
 class ClaudeCodeAdapter(AgentAdapter):
     """Calls Claude Code CLI via subprocess.
 
@@ -162,6 +175,13 @@ class ClaudeCodeAdapter(AgentAdapter):
             if fresh is None:
                 raise
             self._host_credentials = fresh
+            if _host_token_expired(fresh):
+                # A retry would make the CLI spend, and possibly rotate, the host's
+                # refresh token, which the read-only mount cannot persist.
+                logger.warning("claude_code_host_login_expired")
+                raise AgentError(
+                    "host Claude login has expired — refresh it on the host"
+                ) from first
             logger.warning("claude_code_auth_failed_retrying_with_host_credentials")
             try:
                 return await self._run_once(prompt, timeout, fresh, host=True)
@@ -199,7 +219,7 @@ class ClaudeCodeAdapter(AgentAdapter):
             "claude_code_call",
             prompt_length=len(prompt),
             model=self._model,
-            has_user_credentials=credentials is not None,
+            has_user_credentials=credentials is not None and not host,
         )
 
         env = None
