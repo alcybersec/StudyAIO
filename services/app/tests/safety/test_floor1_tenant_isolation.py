@@ -119,7 +119,18 @@ ADMIN_PREFIX = "/api/admin"
 #: The sweep must keep reaching this many routes that query a user-owned
 #: table. A drop means the harness stopped exercising handlers (an auth
 #: override broke, everything 401s) and every assertion became vacuous.
-MIN_ROUTES_WITH_OWNED_QUERIES = 60
+#: Raised from 60 at M32-S4: with query-param and multipart routes swept it
+#: reaches 98.
+MIN_ROUTES_WITH_OWNED_QUERIES = 90
+
+#: Floors for route *enumeration*, below the sweep. ``fastapi`` is capped
+#: ``<0.137`` in requirements.txt because 0.137 makes ``include_router`` lazy:
+#: ``app.routes`` then holds ``_IncludedRouter`` placeholders, not ``APIRoute``s,
+#: and every guard that walks ``app.routes`` (this sweep, and
+#: tests/unit/api/test_endpoint_authn_guard.py) iterates nothing and passes. At M32-S4 the app
+#: mounts 149 ``/api`` APIRoutes and the sweep calls 115 method+path pairs.
+MIN_API_ROUTES = 130
+MIN_SWEPT_ROUTES = 100
 
 
 # ── layer 1: route sweep ───────────────────────────────────────────────
@@ -152,6 +163,30 @@ def _sweep_routes() -> list[tuple[str, str, APIRoute]]:
     return out
 
 
+def test_floor1_route_enumeration_is_not_vacuous():
+    """Walking ``app.routes`` still yields the app's real routes.
+
+    Every route-walking guard trusts this enumeration. If a framework upgrade
+    hides routes behind a lazy wrapper, the guards see an empty app and pass;
+    this fails instead. Lifting the fastapi cap means teaching ``_sweep_routes``
+    to expand the wrapper first, then lifting these numbers only if routes were
+    really removed.
+    """
+    from app.main import app
+
+    api_routes = [r for r in app.routes if isinstance(r, APIRoute) and r.path.startswith("/api/")]
+    others = sorted({type(r).__name__ for r in app.routes if not isinstance(r, APIRoute)})
+    assert len(api_routes) >= MIN_API_ROUTES, (
+        f"app.routes yields only {len(api_routes)} /api APIRoutes (floor {MIN_API_ROUTES}); "
+        f"non-APIRoute entries: {others}. A lazy include_router (fastapi>=0.137) does this, "
+        "and leaves every route-walking safety guard vacuous."
+    )
+    swept = _sweep_routes()
+    assert len(swept) >= MIN_SWEPT_ROUTES, (
+        f"floor-1 sweep enumerates only {len(swept)} routes (floor {MIN_SWEPT_ROUTES})"
+    )
+
+
 def _empty_result(*_args, **_kwargs) -> MagicMock:
     result = MagicMock()
     result.scalars.return_value.all.return_value = []
@@ -170,10 +205,26 @@ def _empty_result(*_args, **_kwargs) -> MagicMock:
     return result
 
 
+#: Required query parameters typed as bare ``str`` but checked against a fixed
+#: set inside the handler. A foreign string there stops the handler at a 400
+#: before its first ownership query, so the sweep would see nothing; each gets
+#: a value valid on every route that requires it. Not an id: nothing to plant.
+SWEEP_QUERY_ENUMS = {
+    "document_type": "other",  # POST /courseops/documents: outline|rubric|handbook|other
+}
+
+
 def _required_query_params(route: APIRoute) -> dict[str, object]:
     params: dict[str, object] = {}
     for qp in route.dependant.query_params:
-        if qp.required:
+        # ``FieldInfo.is_required()``, not ``ModelField.required``: fastapi 0.136
+        # dropped the latter, and the sweep then skipped every route with a
+        # query parameter (27 of them) while recording it as a handler crash.
+        if not qp.field_info.is_required():
+            continue
+        if qp.alias in SWEEP_QUERY_ENUMS:
+            params[qp.alias] = SWEEP_QUERY_ENUMS[qp.alias]
+        else:
             params[qp.alias] = value_for(qp.field_info.annotation, list(qp.field_info.metadata))
     return params
 
@@ -197,8 +248,8 @@ def _url(route: APIRoute) -> str:
 def _json_body(route: APIRoute, method: str) -> object:
     """The route's JSON body built from its own schema, foreign ids in every slot.
 
-    File/form routes keep ``{}``: they 422 before the handler, and are listed in
-    ``SWEEP_UNREACHED_BY_DESIGN``.
+    File/form parameters are not JSON; ``_upload_files`` sends them, and a route
+    that has them sends no JSON body at all.
     """
     from fastapi.params import Body
 
@@ -215,6 +266,35 @@ def _json_body(route: APIRoute, method: str) -> object:
     if len(params) == 1 and not getattr(params[0].field_info, "embed", False):
         return build(params[0])
     return {p.alias: build(p) for p in params}
+
+
+#: The file every upload route receives: valid PDF magic bytes and a supported
+#: extension, so ``validate_upload_content`` lets the handler past the edge and
+#: into its quota and ownership queries. Written only under the per-test
+#: tempdir the ``async_client`` fixture roots storage in.
+SWEEP_UPLOAD = ("sweep.pdf", b"%PDF-1.4\n% floor-1 sweep\n%%EOF\n", "application/pdf")
+
+
+def _upload_files(route: APIRoute) -> list[tuple[str, tuple[str, bytes, str]]] | None:
+    """One multipart file part per ``File``/``UploadFile`` parameter, or ``None``.
+
+    Until M32-S4 the sweep sent ``json={}`` here, so all four upload routes
+    422ed before the handler and were excused in ``SWEEP_UNREACHED_BY_DESIGN``.
+    A non-file ``Form`` field has no builder yet and fails loudly rather than
+    sending a request that silently 422s.
+    """
+    from fastapi.params import File, Form
+
+    forms = [b for b in route.dependant.body_params if isinstance(b.field_info, Form)]
+    if not forms:
+        return None
+    plain = [b.alias for b in forms if not isinstance(b.field_info, File)]
+    if plain:
+        raise AssertionError(
+            f"{route.path}: form field(s) {plain} have no sweep builder; teach "
+            "_upload_files to send them"
+        )
+    return [(b.alias, SWEEP_UPLOAD) for b in forms]
 
 
 #: Stand-in id for a row the *caller* owns, returned in the owned-parent pass.
@@ -262,19 +342,39 @@ def _no_live_ai():
     def refuse(*_a, **_k):
         raise AgentError("floor-1 sweep: no live AI provider")
 
-    originals = {factory.get_agent, embeddings.get_embedding_provider}
-    with contextlib.ExitStack() as stack:
-        for name, module in list(sys.modules.items()):
-            if not (name == "app" or name.startswith("app.")) or module is None:
-                continue
-            for attr in ("get_agent", "get_embedding_provider"):
-                if getattr(module, attr, None) in originals:
-                    stack.enter_context(patch.object(module, attr, refuse))
-        yield
+    originals = {
+        "get_agent": factory.get_agent,
+        "get_embedding_provider": embeddings.get_embedding_provider,
+    }
+
+    def app_modules_now():
+        return [
+            m
+            for n, m in list(sys.modules.items())
+            if m is not None and (n == "app" or n.startswith("app."))
+        ]
+
+    try:
+        with contextlib.ExitStack() as stack:
+            for module in app_modules_now():
+                for attr, original in originals.items():
+                    if getattr(module, attr, None) is original:
+                        stack.enter_context(patch.object(module, attr, refuse))
+            yield
+    finally:
+        # A module first imported inside the window (a handler's lazy
+        # ``from app.pipeline.courseops_task import …``) copied ``refuse`` from
+        # the patched factory, and no ``patch`` owns it. Left alone it refuses
+        # in every later test: floor 2's worker-credential echo then saw no
+        # provider call. Put the real factory back wherever ``refuse`` remains.
+        for module in app_modules_now():
+            for attr, original in originals.items():
+                if getattr(module, attr, None) is refuse:
+                    setattr(module, attr, original)
 
 
 async def _run_sweep(async_client, mock_session, caller_id: str, *, owned_parent: bool = False):
-    """Call every swept route; return (violations, routes reaching owned tables, statuses).
+    """Call every swept route; return (violations, routes that queried an owned table, statuses).
 
     Two passes, two questions:
 
@@ -318,11 +418,20 @@ async def _run_sweep(async_client, mock_session, caller_id: str, *, owned_parent
 
     app.dependency_overrides[get_current_user] = user[get_current_user_or_default]
 
+    @contextlib.asynccontextmanager
+    async def side_session():
+        yield mock_session
+
     violations: dict[str, list[str]] = {}
     statuses: dict[str, object] = {}
-    reached = 0
+    reached: set[str] = set()
     with (
         _no_live_ai(),
+        # A handler that opens its own session (upload XP award) gets the
+        # recording mock too: its statements are judged like the request's,
+        # and it no longer waits ~10s on a Postgres that is not there.
+        patch("app.core.database.async_session_factory", side_session),
+        patch("app.api.uploads.async_session_factory", side_session),
         # Unreachable Redis that refuses at once instead of timing out.
         patch.object(settings, "redis_url", "redis://127.0.0.1:1/0"),
         # ~150 requests from one client address would trip the per-route limits.
@@ -333,13 +442,15 @@ async def _run_sweep(async_client, mock_session, caller_id: str, *, owned_parent
         for method, path, route in _sweep_routes():
             captured.clear()
             fetched.clear()
+            # Built outside the ``try``: a harness that cannot build a request
+            # must fail the floor, not be recorded as the handler's crash.
+            url = _url(route)
+            params = _required_query_params(route)
+            files = _upload_files(route)
+            payload = {"files": files} if files else {"json": _json_body(route, method)}
             try:
                 response = await async_client.request(
-                    method,
-                    _url(route),
-                    params=_required_query_params(route),
-                    json=_json_body(route, method),
-                    timeout=5,
+                    method, url, params=params, timeout=5, **payload
                 )
                 statuses[f"{method} {path}"] = _status(response)
             except Exception as exc:  # a handler crash on a mock row is not the subject
@@ -375,7 +486,8 @@ async def _run_sweep(async_client, mock_session, caller_id: str, *, owned_parent
                     if owned_parent and (ident == OWNED_ROW_ID or ident in vetted):
                         continue  # FK traversal from a row the caller was shown to own
                     bad.append(f"session.get({model.__name__}, {ident!r}) — no WHERE at all")
-            reached += touched_owned
+            if touched_owned:
+                reached.add(f"{method} {path}")
             if bad:
                 violations[f"{method} {path}"] = bad
     return violations, reached, statuses
@@ -420,8 +532,8 @@ async def test_floor1_route_sweep_every_owned_query_filters_on_caller(
     )
     stale = sorted(set(SWEEP_PENDING_RULING) - set(violations))
     assert not stale, f"SWEEP_PENDING_RULING entries no longer cross users — remove them: {stale}"
-    assert reached >= MIN_ROUTES_WITH_OWNED_QUERIES, (
-        f"Sweep reached only {reached} routes that query a user-owned table "
+    assert len(reached) >= MIN_ROUTES_WITH_OWNED_QUERIES, (
+        f"Sweep reached only {len(reached)} routes that query a user-owned table "
         f"(floor {MIN_ROUTES_WITH_OWNED_QUERIES}). The harness has stopped "
         "exercising handlers; the scoping assertion above is vacuous until fixed.\n"
         + "\n".join(f"  {k}: {v}" for k, v in sorted(statuses.items()))
@@ -534,15 +646,20 @@ def test_floor1_payload_builder_plants_type_valid_foreign_values():
 #: Routes the typed sweep still cannot get past validation, each with why.
 #: Any other route that 422s is invisible to both passes, which is the gap the
 #: M31 gate found; ``test_floor1_route_sweep_reaches_every_handler`` pins it.
-SWEEP_UNREACHED_BY_DESIGN = {
-    "POST /api/uploads": "multipart file upload; covered by tests/unit/api upload scoping tests",
-    "POST /api/uploads/batch": "multipart file upload",
-    "POST /api/courseops/documents": "multipart file upload",
-    "POST /api/courseops/assessments/{assessment_id}/documents": (
-        "multipart file upload; V1 pinned by "
-        "test_floor1_cannot_attach_document_to_another_users_assessment"
-    ),
-}
+#: Empty since M32-S4: the four multipart upload routes once listed here are
+#: now sent a real file part (``_upload_files``) and swept like any other.
+SWEEP_UNREACHED_BY_DESIGN: dict[str, str] = {}
+
+#: Routes that were blind to the sweep until M32-S4 and must stay covered: each
+#: must reach a query on a user-owned table, not just avoid a 422. The courseops
+#: pair is where the reported "now reaches the handler" came from, which was the
+#: harness crashing on ``ModelField.required`` before the request was sent.
+SWEEP_MUST_QUERY_OWNED = (
+    "POST /api/uploads",  # quota + per-user sha256 dedup
+    "POST /api/uploads/batch",
+    "POST /api/courseops/documents",  # course_service.get_course_by_code(user_id=)
+    "POST /api/courseops/assessments/{assessment_id}/documents",  # _get_course_owned
+)
 
 
 @pytest.mark.asyncio
@@ -554,8 +671,13 @@ async def test_floor1_route_sweep_reaches_every_handler(
     A 422 means the handler never ran, so the sweep saw no SQL and reported the
     route clean. That is how the first sweep missed four body-borne R-015 ids.
     """
-    _violations, _reached, statuses = await _run_sweep(
+    _violations, reached, statuses = await _run_sweep(
         async_client, mock_session, default_test_user.id
+    )
+    harness_blind = sorted(k for k in SWEEP_MUST_QUERY_OWNED if k not in reached)
+    assert not harness_blind, (
+        "Floor-1 sweep no longer drives these routes to a user-owned query: "
+        + ", ".join(f"{k} -> {statuses.get(k)}" for k in harness_blind)
     )
     unreached = sorted(
         k for k, v in statuses.items() if v == "rejected" and k not in SWEEP_UNREACHED_BY_DESIGN
