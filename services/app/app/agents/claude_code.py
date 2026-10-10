@@ -100,6 +100,28 @@ def _read_host_credentials() -> dict[str, Any] | None:
     return data if isinstance(data, dict) and data else None
 
 
+def _read_host_oauth_token() -> str | None:
+    """Read the long-lived ``claude setup-token`` token fresh from its file.
+
+    The path is ``CLAUDE_HOST_OAUTH_TOKEN_FILE``. Read per call, never cached,
+    so a rotated token applies without a restart.
+
+    Returns:
+        The stripped token, or None when unconfigured, unreadable or empty.
+        Never logs the content.
+    """
+    path = os.environ.get("CLAUDE_HOST_OAUTH_TOKEN_FILE", "")
+    if not path:
+        return None
+    try:
+        with open(path) as f:
+            token = f.read().strip()
+    except (OSError, UnicodeDecodeError):
+        logger.warning("claude_code_host_oauth_token_unreadable")
+        return None
+    return token or None
+
+
 def _host_token_expired(creds: dict[str, Any]) -> bool:
     """True when ``claudeAiOauth.expiresAt`` (epoch ms) is already past.
 
@@ -140,6 +162,9 @@ class ClaudeCodeAdapter(AgentAdapter):
         """Also cover the host credentials re-read after an auth failure."""
         values = super()._credential_values()
         values.extend(_string_leaves(self._host_credentials))
+        token = _read_host_oauth_token()
+        if token:
+            values.append(token)
         try:
             with open(os.path.expanduser("~/.claude/.credentials.json")) as f:
                 values.extend(_string_leaves(json.load(f)))
@@ -171,7 +196,11 @@ class ClaudeCodeAdapter(AgentAdapter):
         try:
             return await self._run_once(prompt, timeout, self._credentials_json)
         except _CliAuthError as first:
-            fresh = None if self._credentials_json else _read_host_credentials()
+            # A long-lived token cannot go stale the way the credentials file
+            # does, so there is nothing to retry with: fail with the CLI's message.
+            if self._credentials_json or _read_host_oauth_token():
+                raise
+            fresh = _read_host_credentials()
             if fresh is None:
                 raise
             self._host_credentials = fresh
@@ -238,6 +267,11 @@ class ClaudeCodeAdapter(AgentAdapter):
                 env = {**os.environ, "CLAUDE_CONFIG_DIR": temp_dir}
                 if not host:
                     logger.info("claude_code_using_user_credentials", config_dir=temp_dir)
+
+            elif (token := _read_host_oauth_token()) is not None:
+                # R-026: the child's env only; never argv, never os.environ.
+                env = {**os.environ, "CLAUDE_CODE_OAUTH_TOKEN": token}
+                logger.info("claude_code_using_host_oauth_token")
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
