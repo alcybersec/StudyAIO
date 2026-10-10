@@ -29,8 +29,6 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 |---|---|---|---|
 | M32-S4-BACKEND-001 + 004 (SEC-01 GL#11, SEC-03 GL#14) | `backend` | 2026-10-10 | isolated |
 | M32-S4-DEVOPS-022 (AGENT-01 image/compose: unprivileged CLI uid 10001, data dir not readable by it, GL#12) | `devops` | 2026-10-10 | isolated |
-| M32-S4-AI-006 (AI-04 GL#16) | `ai` | 2026-10-10 | isolated |
-| M32-S4-QA-021 (mobile e2e for UX-06, GL#18) | `qa` | 2026-10-10 | isolated |
 | M32-S4-BACKEND-005 (PROD-03 GL#15) | `backend` | 2026-10-10 | isolated |
 
 **M32 GitLab issues (2026-10-10):** GL#11–#30 = M32-S4-BACKEND-001 … M32-S4-QA-020 in §11 order (labels `M32`, `audit-2026-10`). Queued: AI-007 (AI-03, after wave 1), BACKEND-009 (QUOTA-01/COST-01; PROD-08 decided: beta users get Pro).
@@ -44,6 +42,8 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S4-AI-006 (AI-04 GL#16: streamed chat emits plain prose; JSON guard; new `answer_question_stream.txt`) | `ai` | `ef4364d` → `kit/retrofit` `a20564f` | Cause: zai/openai and anthropic `stream_answer` used the JSON prompt and forwarded tokens verbatim. **Orchestrator red-check:** old adapters → `1 failed, 8 passed` (the mocked-stream test); fixed + golden → `326 passed`. Agent unit+golden+safety `3099 passed`. Live GLM output with the new prompt unverified | 2026-10-10 |
+| M32-S4-QA-021 (Study hub mobile e2e, GL#18) | `qa` | `5e6503a` → `kit/retrofit` `96acc9d` | Agent local CI-mirror: `28 passed`; with pre-fix page → `12 failed, 16 passed` (catches the bug) | 2026-10-10 |
 | M32-S4-BACKEND-003 (AI-05 GL#13: Q&A citations from retrieved chunks via `build_sources`) | `backend` | `76ce786`/`5e50173` → `kit/retrofit` (see log) | Red-first (5 tests). Agent: unit+safety `2778 passed, 1 skipped`; Q&A integration files `38 passed`; ruff clean. No frontend change | 2026-10-10 |
 | M32-S4-AI-002 (AGENT-01 GL#12: per-call empty cwd, operator `--model`, fixed `--system-prompt`, optional unprivileged uid via `CLAUDE_CLI_UID`) | `ai` | `f2a3e87` → `kit/retrofit` `ff90277` | 7 new tests red-first (agent). **Orchestrator: ruff clean; `tests/safety tests/unit/agents tests/contracts` → `583 passed, 1 skipped`.** uid drop inert until DEVOPS-022; `safety` review pending | 2026-10-10 |
 | M32-S4-FRONTEND-008 (UX-06 GL#18: Study hub tab bar scrolls in its own container at 375px; active tab kept in view) | `frontend` | `b01fa61` → `kit/retrofit` `7615969` | Orchestrator: `StudyHubPage.test.tsx` `2 passed`. Agent: lint 0 errors, `tsc -b` clean, vitest `638 passed`. jsdom can't prove layout → mobile e2e QA-021 | 2026-10-10 |
