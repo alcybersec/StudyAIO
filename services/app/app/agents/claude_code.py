@@ -127,6 +127,11 @@ class ClaudeCodeAdapter(AgentAdapter):
         """Also cover the host credentials re-read after an auth failure."""
         values = super()._credential_values()
         values.extend(_string_leaves(self._host_credentials))
+        try:
+            with open(os.path.expanduser("~/.claude/.credentials.json")) as f:
+                values.extend(_string_leaves(json.load(f)))
+        except (OSError, ValueError):
+            pass
         return values
 
     async def _run_claude_code(self, prompt: str, timeout: int = _DEFAULT_TIMEOUT) -> str:
@@ -159,11 +164,17 @@ class ClaudeCodeAdapter(AgentAdapter):
             self._host_credentials = fresh
             logger.warning("claude_code_auth_failed_retrying_with_host_credentials")
             try:
-                return await self._run_once(prompt, timeout, fresh)
+                return await self._run_once(prompt, timeout, fresh, host=True)
             except _CliAuthError as second:
                 raise second from first
 
-    async def _run_once(self, prompt: str, timeout: int, credentials: dict[str, Any] | None) -> str:
+    async def _run_once(
+        self,
+        prompt: str,
+        timeout: int,
+        credentials: dict[str, Any] | None,
+        host: bool = False,
+    ) -> str:
         """Execute claude CLI with the given prompt and return output.
 
         If per-user credentials are configured, writes them to a temp
@@ -205,10 +216,8 @@ class ClaudeCodeAdapter(AgentAdapter):
                 os.chmod(creds_path, stat.S_IRUSR | stat.S_IWUSR)
 
                 env = {**os.environ, "CLAUDE_CONFIG_DIR": temp_dir}
-                logger.info(
-                    "claude_code_using_user_credentials",
-                    config_dir=temp_dir,
-                )
+                if not host:
+                    logger.info("claude_code_using_user_credentials", config_dir=temp_dir)
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -237,7 +246,9 @@ class ClaudeCodeAdapter(AgentAdapter):
                         with open(creds_path) as f:
                             refreshed = json.load(f)
                         # Only store if different from original
-                        if refreshed != credentials:
+                        # Host (operator) credentials are never handed back: callers
+                        # persist refreshed_credentials into the user's own row.
+                        if not host and refreshed != credentials:
                             self.refreshed_credentials = refreshed
                             logger.info("claude_code_credentials_refreshed")
                 except Exception:
