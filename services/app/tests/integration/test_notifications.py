@@ -31,9 +31,7 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
 class TestPreferences:
-    async def test_defaults_are_seeded_then_updated(
-        self, client_factory, make_user, db_session
-    ):
+    async def test_defaults_are_seeded_then_updated(self, client_factory, make_user, db_session):
         user = await make_user()
         client = client_factory(user)
         seeded = (await client.get("/api/notifications/preferences")).json()["preferences"]
