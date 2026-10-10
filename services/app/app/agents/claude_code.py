@@ -261,7 +261,20 @@ class ClaudeCodeAdapter(AgentAdapter):
         # SAFETY-053: ``--tools ""`` leaves the CLI with no tools. The prompt carries
         # untrusted lecture text; with default tools an injected lecture could make
         # the CLI Read /proc/self/environ or the mounted login into the summary.
-        cmd = [self._cli_path, "-p", "--output-format", "text", "--tools", ""]
+        cmd = [
+            self._cli_path,
+            "-p",
+            "--output-format",
+            "text",
+            # No --mcp-config is passed, so strict mode means no MCP server (and
+            # none of its tools) can load, whatever config the container carries.
+            "--strict-mcp-config",
+            # Do not persist transcripts of users' lecture text under ~/.claude.
+            "--no-session-persistence",
+            # Variadic: keep last so nothing positional is swallowed.
+            "--tools",
+            "",
+        ]
         logger.info(
             "claude_code_call",
             prompt_length=len(prompt),

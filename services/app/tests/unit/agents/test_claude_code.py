@@ -82,7 +82,17 @@ class TestRunClaudeCode:
 
         args = mock_exec.call_args[0]
         assert "test prompt" not in args
-        assert args == ("/usr/bin/claude", "-p", "--output-format", "text", "--tools", "")
+        # --tools is variadic: "" must be last so no positional can be swallowed.
+        assert args == (
+            "/usr/bin/claude",
+            "-p",
+            "--output-format",
+            "text",
+            "--strict-mcp-config",
+            "--no-session-persistence",
+            "--tools",
+            "",
+        )
         assert mock_exec.call_args[1]["stdin"] is asyncio.subprocess.PIPE
         assert mock_process.communicate.call_args[1]["input"] == b"test prompt"
 
