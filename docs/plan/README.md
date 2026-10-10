@@ -27,7 +27,6 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 | M32-S3-AI-041 (GL#8: claude_code re-reads host credentials, one retry on auth failure) | `ai` | 2026-10-10 | **held** `c85297b`/`f4e5c98` — lands with SAFETY-045 + DEVOPS-042 compose mount |
 | M32-S3-SAFETY-045 (review GL#8 retry; reclassify `_run_once` rmtree) | `safety` | 2026-10-10 | isolated |
 | M32-S3-DEVOPS-042 (GL#7: e2e pip ResolutionImpossible) | `devops` | 2026-10-10 | isolated |
-| M32-S3-AI-044 (wall-clock-dependent reminder unit test on main; audit for others) | `ai` | 2026-10-10 | isolated |
 
 ## Completed
 
@@ -38,6 +37,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S3-AI-044 (R-024: wall-clock-dependent reminder test frozen; audit) | `ai` | `3aec19e` → `kit/retrofit` (see log) | Test-only. Agent harness: 147 tests × 5 UTC hours × 3 zones all pass; only one offender found. Orchestrator: file green | 2026-10-10 |
 | M32-S3-AI-043 (GL#9: summarize v2.2 — Connections only from provided context; no industry paragraph; eval `check_connections`) | `ai` | `969e09e` → `kit/retrofit` `a35a4ec` | Section list unchanged (golden green). Orchestrator: eval harness + golden `390 passed`; ruff clean. Offline eval flags v2.1-style Connections on all 3 synthetic cases, v2.2 clean. **Live-backend eval run not done** (needs AI credentials): `python -m evals -n 3`, plus real CSIT302 W2 / CSIT314 W2 | 2026-10-10 |
 | M32-S2-SAFETY-040 (re-review R-023; classify beat-job zone reads; VETO lifted) | `safety` | `ee1ce4a` → `kit/retrofit` `4d93261` | +4 floor tests; 6 mutants each red on its guard; clock.py mutants M1–M4 caught. **Orchestrator: `pytest tests/safety` → `159 passed`.** APPROVE all four floors | 2026-10-09 |
 | M32-S2-BACKEND-039 (clock: tzdata-only zone keys, guarded ZoneInfo; dashboard cache dropped on timezone PUT) | `backend` | `3859313` → `kit/retrofit` `06bb835` | SAFETY-037's 7 reds green. **Orchestrator `make test`: unit `88.12%`, `2894 passed`; floor `1 failed, 155 passed`** — the 1 = safety's column-read guard flagging AI-036's beat-job reads → SAFETY-040 | 2026-10-09 |
