@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.config import settings
 from app.services import billing_service
 
 
@@ -239,40 +240,86 @@ class TestHandleWebhookEvent:
 class TestRecordUsage:
     """Tests for record_usage."""
 
-    @pytest.mark.asyncio
-    async def test_creates_new_record(self, mock_session):
-        """Creates a new UsageRecord when none exists for today."""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_session.execute.return_value = mock_result
+    @staticmethod
+    def _sql(mock_session) -> str:
+        from sqlalchemy.dialects import postgresql
 
-        await billing_service.record_usage(mock_session, "user-1", ai_calls=1)
-
-        mock_session.add.assert_called_once()
-        record = mock_session.add.call_args[0][0]
-        assert record.ai_calls_count == 1
-        assert record.uploads_count == 0
+        stmt = mock_session.execute.call_args[0][0]
+        return str(stmt.compile(dialect=postgresql.dialect()))
 
     @pytest.mark.asyncio
-    async def test_increments_existing_record(self, mock_session):
-        """Increments existing UsageRecord."""
-        existing = MagicMock()
-        existing.ai_calls_count = 5
-        existing.uploads_count = 2
-        existing.ai_tokens_input = 100
-        existing.ai_tokens_output = 50
+    async def test_is_one_atomic_upsert_not_read_modify_write(self, mock_session):
+        """Concurrent calls must not lose increments (COST-01 lost-update race)."""
+        await billing_service.record_usage(mock_session, "user-1", ai_calls=1, uploads=1)
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = existing
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.assert_awaited_once()
+        sql = self._sql(mock_session)
+        assert "ON CONFLICT" in sql
+        # increments are computed by the database from the stored value
+        assert "usage_records.ai_calls_count +" in sql
+        assert "usage_records.uploads_count +" in sql
+        # nothing is read into Python and written back
+        mock_session.add.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_upsert_carries_the_deltas_and_owner(self, mock_session):
+        """The inserted row holds this call's deltas for this user."""
         await billing_service.record_usage(
-            mock_session, "user-1", ai_calls=1, uploads=1, tokens_input=50
+            mock_session, "user-1", ai_calls=2, tokens_input=50, tokens_output=7
         )
 
-        assert existing.ai_calls_count == 6
-        assert existing.uploads_count == 3
-        assert existing.ai_tokens_input == 150
+        params = mock_session.execute.call_args[0][0].compile().params
+        assert params["user_id"] == "user-1"
+        assert params["ai_calls_count"] == 2
+        assert params["ai_tokens_input"] == 50
+        assert params["ai_tokens_output"] == 7
+
+
+class TestEstimateTokens:
+    """Per-call token estimate used when the adapter reports none."""
+
+    def test_floor_applies_to_short_text(self):
+        assert billing_service.estimate_tokens("hi") == settings.ai_call_estimate_min_tokens
+
+    def test_scales_with_length(self):
+        big = "x" * (settings.ai_call_estimate_min_tokens * 40)
+        assert billing_service.estimate_tokens(big) == len(big) // 4
+
+
+class TestRecordAiCall:
+    """record_ai_call prefers real adapter tokens, else an estimate."""
+
+    @pytest.mark.asyncio
+    async def test_uses_adapter_tokens_when_reported(self, mock_session):
+        agent = MagicMock()
+        agent.usage.calls = 1
+        agent.usage.input_tokens = 900
+        agent.usage.output_tokens = 100
+        with patch.object(billing_service, "record_usage", AsyncMock()) as rec:
+            await billing_service.record_ai_call(mock_session, "u1", agent=agent)
+        rec.assert_awaited_once_with(
+            mock_session, "u1", ai_calls=1, tokens_input=900, tokens_output=100
+        )
+
+    @pytest.mark.asyncio
+    async def test_estimates_when_adapter_reports_zero_tokens(self, mock_session):
+        agent = MagicMock()
+        agent.usage.calls = 1
+        agent.usage.input_tokens = 0
+        agent.usage.output_tokens = 0
+        with patch.object(billing_service, "record_usage", AsyncMock()) as rec:
+            await billing_service.record_ai_call(
+                mock_session, "u1", agent=agent, prompt_text="q", output_text="a"
+            )
+        kw = rec.await_args.kwargs
+        assert kw["ai_calls"] == 1
+        assert kw["tokens_input"] >= settings.ai_call_estimate_min_tokens
+        assert kw["tokens_output"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_never_raises(self, mock_session):
+        with patch.object(billing_service, "record_usage", AsyncMock(side_effect=RuntimeError)):
+            await billing_service.record_ai_call(mock_session, "u1")
 
 
 class TestCancelSubscription:

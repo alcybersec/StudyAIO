@@ -166,9 +166,17 @@ class Settings(BaseSettings):
 
     # Instance-wide daily ceiling. 0 disables it. This is an operator cost
     # guard, so unlike the per-tier limits it applies to every tier and in
-    # self-hosted mode too.
-    global_max_ai_calls_per_day: int = 0
-    global_max_ai_tokens_per_day: int = 0
+    # self-hosted mode too. On by default (COST-01): a metered backend such as
+    # zai or anthropic_api otherwise has no bound on the bill. Override with
+    # GLOBAL_MAX_AI_CALLS_PER_DAY / GLOBAL_MAX_AI_TOKENS_PER_DAY; 0 turns one off.
+    global_max_ai_calls_per_day: int = 2000
+    global_max_ai_tokens_per_day: int = 10_000_000
+
+    # Floor for the token estimate recorded for an AI call whose adapter reports
+    # no usage (CLI backend, streaming chat). Chat/Q&A prompts carry retrieved
+    # context the API layer does not see, so the floor stands in for it. Real
+    # tokens always win when the adapter returns them.
+    ai_call_estimate_min_tokens: int = 1500
 
     # Stripe billing
     stripe_api_key: SecretStr = SecretStr("")

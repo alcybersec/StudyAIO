@@ -424,13 +424,18 @@ class BatchUploadResponse(BaseModel):
     results: list[BatchUploadFileResult]
 
 
+#: Upper bound on retrieved chunks per question. Each chunk is pasted into the
+#: prompt, so an unbounded value is an unbounded token bill (COST-01).
+MAX_TOP_K = 30
+
+
 class QARequest(BaseModel):
     """Request body for asking a question."""
 
     question: str
     course_code: str | None = None
     week: int | None = None
-    top_k: int | None = None
+    top_k: int | None = Field(default=None, ge=1, le=MAX_TOP_K)
 
 
 class Citation(BaseModel):
