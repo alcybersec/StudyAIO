@@ -45,7 +45,8 @@ Key variables:
 - `UI_PORT` — host port for the UI (default: `3001`)
 - `STUDYAIO_CLAUDE_LOGIN_DIR` — host path of the dedicated Claude service-login directory (default: `/opt/studyaio/claude-login`); worker only, read-only
 - `AGENT_BACKEND` — which AI adapter to use: `claude_code` (default), `anthropic_api`, `openai`, or `ollama`. Each has its own key/model variables in `.env.example`. Credentials saved per user in Settings override these.
-- `SELF_HOSTED` — `true` (default) skips auth and uses a single default admin user; `false` enforces login
+- `SELF_HOSTED` — `false` (default). Controls only billing, quota and URL policy; it does not affect authentication.
+- `SINGLE_USER_MODE` — `true` is the opt-in no-login mode (one default admin user). It requires `BIND_HOST` to be a loopback address, or `I_UNDERSTAND_NO_AUTH=true`.
 
 `.env.example` lists every setting in `app/config.py`, commented out where the
 default is fine.

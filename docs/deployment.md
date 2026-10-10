@@ -587,7 +587,8 @@ The adapter never writes back to this directory.
 | `S3_REGION` | `us-east-1` | AWS region |
 | `S3_ENDPOINT_URL` | | Custom S3 endpoint |
 | `LOG_LEVEL` | `INFO` | Logging level |
-| `SELF_HOSTED` | `true` | Bypass tier/quota checks |
+| `SELF_HOSTED` | `false` | Billing, quota and URL policy only; does not affect auth |
+| `SINGLE_USER_MODE` | `false` | Opt-in no-login mode (one default admin). Requires `BIND_HOST` loopback or `I_UNDERSTAND_NO_AUTH=true` |
 | `JWT_SECRET_KEY` | (insecure default) | **Change in production** |
 | `CORS_ORIGINS` | `http://localhost:3001` | Comma-separated origins |
 | `MAX_UPLOAD_SIZE_MB` | `100` | Max upload file size (compressed bytes on the wire) |
@@ -667,7 +668,7 @@ token is not origin-bound, so substitute an origin your browser can reach and
 keep the `?token=` intact.
 
 Follow the link, set a password, and confirm you can log in **before** changing
-`SELF_HOSTED` — after the flip the default identity no longer exists and there
+`SINGLE_USER_MODE` — after the flip the default identity no longer exists and there
 is no other way in.
 
 Re-running the command is safe, but it voids any link an earlier run printed.
@@ -677,8 +678,8 @@ If you run it twice, use only the newest link — an older one fails with
 The link is a bearer credential for an admin account. Do not paste it into a
 shared channel.
 
-**1. Multi-user mode.** `SELF_HOSTED=false`. Left at `true`, the API falls back
-to a single shared admin identity and there are no real accounts.
+**1. Multi-user mode.** Leave `SINGLE_USER_MODE` unset (`false`). With it `true`, the API
+falls back to a single shared admin identity and there are no real accounts.
 
 **2. Working outbound email.** Set `SMTP_HOST` and `SMTP_FROM_EMAIL`. With them
 empty, `send_email()` returns `False` without sending, so password resets and
