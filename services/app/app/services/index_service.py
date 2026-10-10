@@ -4,7 +4,13 @@ import structlog
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.embeddings import EmbeddingProvider
+from app.agents.embeddings import (
+    MINILM_MAX_SEQ_LENGTH,
+    EmbeddingProvider,
+    count_word_tokens,
+    heuristic_word_tokens,
+    input_window,
+)
 from app.config import settings
 from app.core.utils import generate_id
 from app.models.chunk import Chunk
@@ -44,90 +50,111 @@ def _build_stable_id(artifact_id: str, page_ref: int, chunk_idx: int) -> str:
     return f"{artifact_id}_p{page_ref}_c{chunk_idx}"
 
 
+# [CLS] + [SEP] are added by the embedder around every input, plus a little
+# headroom for tokenizer differences between counting and embedding.
+_SPECIAL_TOKENS = 2
+_HEADROOM_TOKENS = 6
+
+# Window assumed when no provider is injected: MiniLM, the default backend.
+_DEFAULT_WINDOW = MINILM_MAX_SEQ_LENGTH
+
+
+def max_chunk_tokens(provider: EmbeddingProvider | None = None) -> int:
+    """Largest chunk, in the embedder's own tokens, that is embedded in full.
+
+    Anything beyond the model's context window is silently dropped by the
+    embedder, so a bigger chunk is partly unsearchable (GL#17). The configured
+    and user-set chunk sizes are both clamped to this.
+
+    Args:
+        provider: The embedding provider; MiniLM's window is assumed if omitted.
+
+    Returns:
+        The model's window less special tokens and headroom (248 for MiniLM).
+    """
+    window = input_window(provider) if provider is not None else _DEFAULT_WINDOW
+    return max(8, window - _SPECIAL_TOKENS - _HEADROOM_TOKENS)
+
+
 def chunk_pages(
     pages: list[dict],
     chunk_size_tokens: int | None = None,
     chunk_overlap_tokens: int | None = None,
+    provider: EmbeddingProvider | None = None,
 ) -> list[dict]:
-    """Split extraction pages into overlapping text chunks.
+    """Split extraction pages into overlapping text chunks that fit the embedder.
 
-    Uses page-aware fixed-token windows: processes page by page,
-    accumulates text until chunk_size_tokens is reached, then starts
-    a new chunk with overlap from the previous one.
+    Page-aware windows measured in the embedder's own tokens (not whitespace
+    words, not chars/4): each chunk is at most `max_chunk_tokens(provider)`
+    tokens whatever size was requested, so nothing is truncated at embed time.
+    A word that is longer than the window on its own gets a chunk to itself.
 
     Args:
         pages: List of page dicts with "page_number", "text", optional "slide_title".
-        chunk_size_tokens: Target tokens per chunk (default from settings).
-        chunk_overlap_tokens: Overlap tokens between chunks (default from settings).
+        chunk_size_tokens: Requested tokens per chunk (default from settings),
+            clamped to the embedder window.
+        chunk_overlap_tokens: Requested overlap (default from settings), clamped
+            to half the chunk so every chunk advances.
+        provider: Embedding provider whose tokenizer and window to size against.
 
     Returns:
         List of chunk dicts with "text", "page_ref", "slide_title", "chunk_idx".
     """
-    chunk_size = chunk_size_tokens or settings.chunk_size_tokens
-    overlap = chunk_overlap_tokens or settings.chunk_overlap_tokens
+    cap = min(chunk_size_tokens or settings.chunk_size_tokens, max_chunk_tokens(provider))
+    overlap_req = (
+        settings.chunk_overlap_tokens if chunk_overlap_tokens is None else chunk_overlap_tokens
+    )
+    overlap = max(0, min(overlap_req, cap // 2))
+
+    def count(words: list[str]) -> list[int]:
+        if provider is None:
+            return heuristic_word_tokens(words)
+        return count_word_tokens(provider, words)
 
     chunks: list[dict] = []
-    current_text = ""
-    current_page_ref = 1
-    current_slide_title: str | None = None
-    chunk_idx = 0
+    cur: list[tuple[str, int]] = []
+    cur_tokens = 0
+    page_ref = 1
+    slide: str | None = None
 
-    for page in pages:
-        page_num = page.get("page_number", 1)
-        page_text = page.get("text", "")
-        slide_title = page.get("slide_title") or page.get("title")
-
-        if not page_text.strip():
-            continue
-
-        # If this is the first content, set page ref
-        if not current_text:
-            current_page_ref = page_num
-            current_slide_title = slide_title
-
-        # Split page text into words for token-approximate processing
-        words = page_text.split()
-
-        for word in words:
-            candidate = f"{current_text} {word}".strip() if current_text else word
-
-            if _estimate_tokens(candidate) >= chunk_size:
-                # Emit current chunk
-                if current_text.strip():
-                    chunks.append(
-                        {
-                            "text": current_text.strip(),
-                            "page_ref": current_page_ref,
-                            "slide_title": current_slide_title,
-                            "chunk_idx": chunk_idx,
-                        }
-                    )
-                    chunk_idx += 1
-
-                # Start new chunk with overlap
-                overlap_chars = overlap * 4  # rough reverse estimate
-                if len(current_text) > overlap_chars:
-                    overlap_text = current_text[-overlap_chars:]
-                    current_text = f"{overlap_text} {word}"
-                else:
-                    current_text = word
-
-                current_page_ref = page_num
-                current_slide_title = slide_title
-            else:
-                current_text = candidate
-
-    # Emit final chunk
-    if current_text.strip():
+    def emit() -> None:
         chunks.append(
             {
-                "text": current_text.strip(),
-                "page_ref": current_page_ref,
-                "slide_title": current_slide_title,
-                "chunk_idx": chunk_idx,
+                "text": " ".join(w for w, _ in cur),
+                "page_ref": page_ref,
+                "slide_title": slide,
+                "chunk_idx": len(chunks),
             }
         )
 
+    for page in pages:
+        page_num = page.get("page_number", 1)
+        words = (page.get("text") or "").split()
+        if not words:
+            continue
+        slide_title = page.get("slide_title") or page.get("title")
+        if not cur:
+            page_ref, slide = page_num, slide_title
+
+        for word, n in zip(words, count(words), strict=True):
+            if cur and cur_tokens + n > cap:
+                emit()
+                tail: list[tuple[str, int]] = []
+                acc = 0
+                for item in reversed(cur):
+                    if acc + item[1] > overlap:
+                        break
+                    tail.insert(0, item)
+                    acc += item[1]
+                while tail and acc + n > cap:
+                    acc -= tail.pop(0)[1]
+                cur, cur_tokens = tail, acc
+                page_ref, slide = page_num, slide_title
+            cur.append((word, n))
+            cur_tokens += n
+
+    if cur:
+        emit()
     return chunks
 
 
@@ -155,7 +182,9 @@ async def index_artifact_chunks(
         List of created Chunk records.
     """
     # Chunk the text
-    raw_chunks = chunk_pages(pages, chunk_size_tokens, chunk_overlap_tokens)
+    raw_chunks = chunk_pages(
+        pages, chunk_size_tokens, chunk_overlap_tokens, provider=embedding_provider
+    )
     if not raw_chunks:
         logger.warning("no_chunks_generated", artifact_id=artifact_id)
         return []
@@ -206,3 +235,19 @@ async def index_artifact_chunks(
     )
 
     return chunk_records
+
+
+def chunk_exceeds_window(provider: EmbeddingProvider, text: str) -> bool:
+    """True when a stored chunk is longer than the embedder embeds in full.
+
+    Used by the re-embed task (GL#17) to find chunks written before chunks were
+    sized to the embedder's window.
+
+    Args:
+        provider: The embedding provider.
+        text: The stored chunk text.
+
+    Returns:
+        Whether the chunk's tail was being truncated away at embed time.
+    """
+    return sum(count_word_tokens(provider, text.split())) > input_window(provider) - _SPECIAL_TOKENS

@@ -20,6 +20,7 @@ celery_app = Celery(
         "app.pipeline.extract",
         "app.pipeline.summarize",
         "app.pipeline.index",
+        "app.pipeline.reembed_task",
         "app.pipeline.assets",
         "app.pipeline.courseops_task",
         "app.pipeline.notification_tasks",

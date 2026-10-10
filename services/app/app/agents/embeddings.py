@@ -9,6 +9,7 @@ Embeddings are AI calls under floor 3; see
 docs/adr/0005-floor3-embedding-gateway.md for the gateway and its allowlist.
 """
 
+import math
 from abc import ABC, abstractmethod
 
 import structlog
@@ -66,6 +67,9 @@ class EmbeddingProvider(ABC):
         ...
 
 
+MINILM_MAX_SEQ_LENGTH = 256
+
+
 class SentenceTransformerProvider(EmbeddingProvider):
     """Local embedding provider using sentence-transformers.
 
@@ -82,6 +86,24 @@ class SentenceTransformerProvider(EmbeddingProvider):
     def dimensions(self) -> int:
         """Return embedding dimensionality (384 for MiniLM)."""
         return self._dimensions
+
+    def _input_window(self) -> int:
+        """MiniLM's `max_seq_length`: 256 word pieces, [CLS] and [SEP] included.
+
+        Measured on all-MiniLM-L6-v2 (GL#17). Read from the loaded model when
+        there is one, so a different `EMBEDDING_MODEL` is honoured.
+        """
+        if self._model is not None:
+            return int(self._model.max_seq_length)
+        return MINILM_MAX_SEQ_LENGTH
+
+    def _word_tokens(self, words: list[str]) -> list[int]:
+        """Count word pieces with the model's own tokenizer (loads the model)."""
+        if not words:
+            return []
+        self._load_model()
+        ids = self._model.tokenizer(words, add_special_tokens=False)["input_ids"]
+        return [max(1, len(i)) for i in ids]
 
     def _load_model(self):
         """Lazy-load the sentence-transformers model."""
@@ -232,6 +254,62 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         )
 
         return response.embeddings
+
+
+# Context windows of the non-local backends, in their own tokens.
+_OPENAI_WINDOW = 8191  # text-embedding-3-small
+_OLLAMA_WINDOW = 2048  # nomic-embed-text at Ollama's default context
+_UNKNOWN_WINDOW = 512
+
+
+def input_window(provider: EmbeddingProvider) -> int:
+    """Longest input, in the provider's own tokens, that is embedded in full.
+
+    Anything past this is silently truncated by the model, so text beyond it is
+    unsearchable; the chunker sizes chunks from it (GL#17). A module function and
+    not an `EmbeddingProvider` method on purpose: ADR 0005 pins that interface's
+    public surface, and this reads a model property rather than embedding.
+
+    Args:
+        provider: The embedding provider.
+
+    Returns:
+        The window (256 for MiniLM, measured from the loaded model's
+        `max_seq_length`).
+    """
+    hook = getattr(provider, "_input_window", None)
+    if callable(hook):
+        return int(hook())
+    if isinstance(provider, OpenAIEmbeddingProvider):
+        return _OPENAI_WINDOW
+    if isinstance(provider, OllamaEmbeddingProvider):
+        return _OLLAMA_WINDOW
+    return _UNKNOWN_WINDOW
+
+
+def count_word_tokens(provider: EmbeddingProvider, words: list[str]) -> list[int]:
+    """Token count of each whitespace-delimited word in the provider's tokenizer.
+
+    Word-piece and BPE tokenizers split on whitespace first, so a text's token
+    count is the sum of its words' counts and the chunker can size windows in one
+    pass. Providers without a local tokenizer fall back to ~4 chars/token.
+
+    Args:
+        provider: The embedding provider.
+        words: Whitespace-free words.
+
+    Returns:
+        One count (>= 1) per word.
+    """
+    hook = getattr(provider, "_word_tokens", None)
+    if callable(hook):
+        return list(hook(words))
+    return heuristic_word_tokens(words)
+
+
+def heuristic_word_tokens(words: list[str]) -> list[int]:
+    """~4 chars per token, for when no tokenizer is available."""
+    return [max(1, math.ceil(len(w) / 4)) for w in words]
 
 
 # Singleton instance — reuse across calls to avoid reloading the model.
