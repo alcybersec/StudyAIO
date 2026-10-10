@@ -4,7 +4,7 @@ Driven through the real endpoints that award XP (flashcard review, quiz attempts
 study sessions) so the whole award -> level -> achievement -> inbox chain runs.
 """
 
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import patch
 
 import pytest
@@ -224,26 +224,43 @@ class TestAchievements:
 
 
 class TestChallenges:
+    # The template is chosen from the date ordinal, so pin the clock (the one the
+    # service reads, app.core.clock.utc_now) to dates with a known template:
+    # 2026-10-11 -> review_cards x10 (multi-step), 2026-10-10 -> perfect_quiz x1.
+    @pytest.mark.parametrize(
+        ("frozen", "expected_target"), [(date(2026, 10, 11), 10), (date(2026, 10, 10), 1)]
+    )
     async def test_daily_challenge_is_stable_and_tracks_progress(
-        self, client_factory, make_user, db_session
+        self, client_factory, make_user, db_session, frozen, expected_target
     ):
+        instant = datetime(frozen.year, frozen.month, frozen.day, 12, tzinfo=UTC)
+        with patch("app.core.clock.utc_now", return_value=instant):
+            await self._challenge_flow(
+                client_factory, make_user, db_session, frozen, expected_target
+            )
+
+    async def _challenge_flow(self, client_factory, make_user, db_session, frozen, expected_target):
         user = await make_user()
         client = client_factory(user)
         first = (await client.get("/api/gamification/challenges")).json()
         second = (await client.get("/api/gamification/challenges")).json()
         assert first["challenge_id"] == second["challenge_id"]
-        assert first["challenge_date"] == date.today().isoformat()
+        assert first["challenge_date"] == frozen.isoformat()
         assert first["progress"] == 0 and first["completed"] is False
 
         ctype, target = first["challenge_type"], first["target"]
+        assert target == expected_target
         assert (
             await challenge_service.update_challenge_progress(db_session, user.id, "no-such-type")
             is None
         )
-        partial = await challenge_service.update_challenge_progress(db_session, user.id, ctype, 1)
-        assert partial.progress == 1
-        mid = (await client.get("/api/gamification/challenges")).json()
-        assert mid["progress"] == 1 and mid["completed"] is False
+        if target > 1:
+            partial = await challenge_service.update_challenge_progress(
+                db_session, user.id, ctype, 1
+            )
+            assert partial.progress == 1
+            mid = (await client.get("/api/gamification/challenges")).json()
+            assert mid["progress"] == 1 and mid["completed"] is False
 
         done = await challenge_service.update_challenge_progress(db_session, user.id, ctype, target)
         assert done.completed_at is not None
