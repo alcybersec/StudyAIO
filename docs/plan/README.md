@@ -28,7 +28,6 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
 | M32-S4-BACKEND-001 + 004 (SEC-01 GL#11, SEC-03 GL#14) | `backend` | 2026-10-10 | isolated |
-| M32-S4-BACKEND-003 (AI-05 GL#13) | `backend` | 2026-10-10 | isolated |
 | M32-S4-DEVOPS-022 (AGENT-01 image/compose: unprivileged CLI uid 10001, data dir not readable by it, GL#12) | `devops` | 2026-10-10 | isolated |
 | M32-S4-AI-006 (AI-04 GL#16) | `ai` | 2026-10-10 | isolated |
 | M32-S4-QA-021 (mobile e2e for UX-06, GL#18) | `qa` | 2026-10-10 | isolated |
@@ -45,6 +44,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S4-BACKEND-003 (AI-05 GL#13: Q&A citations from retrieved chunks via `build_sources`) | `backend` | `76ce786`/`5e50173` → `kit/retrofit` (see log) | Red-first (5 tests). Agent: unit+safety `2778 passed, 1 skipped`; Q&A integration files `38 passed`; ruff clean. No frontend change | 2026-10-10 |
 | M32-S4-AI-002 (AGENT-01 GL#12: per-call empty cwd, operator `--model`, fixed `--system-prompt`, optional unprivileged uid via `CLAUDE_CLI_UID`) | `ai` | `f2a3e87` → `kit/retrofit` `ff90277` | 7 new tests red-first (agent). **Orchestrator: ruff clean; `tests/safety tests/unit/agents tests/contracts` → `583 passed, 1 skipped`.** uid drop inert until DEVOPS-022; `safety` review pending | 2026-10-10 |
 | M32-S4-FRONTEND-008 (UX-06 GL#18: Study hub tab bar scrolls in its own container at 375px; active tab kept in view) | `frontend` | `b01fa61` → `kit/retrofit` `7615969` | Orchestrator: `StudyHubPage.test.tsx` `2 passed`. Agent: lint 0 errors, `tsc -b` clean, vitest `638 passed`. jsdom can't prove layout → mobile e2e QA-021 | 2026-10-10 |
 | M32-S3-DEVOPS-060 (R-028: migrate in a one-off container from the new image before `up -d`; failed migration leaves old stack serving) | `devops` | `10f9d9b` → `kit/retrofit` (see log) | `bash -n` ok; `glab ci lint` valid. Agent ran the exact new lines on a throwaway stack: failing migration → exit 1, old api untouched; passing → migrate then recreate. **Not live yet:** prod's `/opt/studyaio/deploy.sh` is installed by hand (SSH forced command) — needs install per docs/deployment.md "Updating deploy.sh" | 2026-10-10 |
