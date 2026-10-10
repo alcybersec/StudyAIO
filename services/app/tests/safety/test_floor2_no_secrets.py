@@ -1240,3 +1240,39 @@ async def test_floor2_host_credential_retry_is_not_logged_as_user_credentials(
         "the host-credential retry was logged as a per-user-credential run"
     )
     assert adapter.refreshed_credentials is None
+
+
+def test_floor2_expired_host_login_is_not_spent_and_never_leaks(tmp_path, monkeypatch, caplog):
+    """AI-049: an expired re-read host token gets no second CLI call.
+
+    A retry would make the CLI try to refresh (and possibly rotate) the
+    service login's refresh token, which the read-only mount cannot persist.
+    The task must fail after exactly one CLI call, with neither the host's
+    access nor refresh token in ``pipeline_runs``, the logs or the cause chain.
+    """
+    import traceback
+
+    path = tmp_path / "host-credentials.json"
+    oauth = {
+        "accessToken": HOST_SENTINEL,
+        "refreshToken": HOST_SENTINEL + "-r",
+        "expiresAt": 1_000,  # 1970: expired against any clock
+    }
+    path.write_text(json.dumps({"claudeAiOauth": oauth}))
+    monkeypatch.setenv("CLAUDE_HOST_CREDENTIALS_FILE", str(path))
+    cli = _RevokedThenEcho()
+    caplog.set_level(logging.DEBUG)
+    with structlog.testing.capture_logs() as events:
+        raised, stored = _host_login_classify(cli.fake())
+
+    assert cli.calls == [None], f"expired host login was retried: CLI calls {cli.calls}"
+    assert stored and raised is not None, "the task did not fail, so this test proves nothing"
+    assert "claude_code_host_login_expired" in [e.get("event") for e in events]
+    chain = "".join(traceback.format_exception(raised))
+    for text, where in (
+        ("\n".join(stored), "pipeline_runs.error_message"),
+        (repr(events), "structlog events"),
+        (caplog.text, "stdlib log records"),
+        (chain, "the task's exception and its cause chain"),
+    ):
+        assert HOST_SENTINEL not in text, f"Floor 2: the expired host token appears in {where}"

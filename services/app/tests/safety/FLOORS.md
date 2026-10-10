@@ -73,6 +73,17 @@ plus `test_idor_scoping.py` cover endpoint wiring.
 | `…::test_floor2_no_env_file_tracked` | A `.env*` file other than a template is tracked. |
 | `…::test_floor2_detect_secrets_baseline_is_wired_and_clean` | The pre-commit hook loses detect-secrets with `--baseline .secrets.baseline`, or loses `detect-private-key`. It also fails if a baseline entry is audited `is_secret: true`. |
 | `…::test_floor2_sentinels_are_not_secret_shaped` | This tier's own sentinels would trip the scanner. |
+| `…::test_floor2_host_credential_retry_failure_never_stores_or_logs_the_token` | GL#8: on the one host-credential retry, the re-read host OAuth token reaches `pipeline_runs.error_message`, a log, or the task's exception including its `__cause__` chain. |
+| `…::test_floor2_host_credentials_are_never_handed_back_as_the_users_own` | A token refreshed during the host retry is exposed as `refreshed_credentials`, which classify, summarize and assets persist to the caller's `user_settings` (SAFETY-045). |
+| `…::test_floor2_container_login_token_is_redacted_from_cli_failures` | The worker's own mounted `~/.claude` token appears unredacted in a CLI failure or its logs. |
+| `…::test_floor2_host_credential_retry_is_not_logged_as_user_credentials` | The host retry logs `claude_code_using_user_credentials`, which attributes the operator's login to the user. |
+| `…::test_floor2_expired_host_login_is_not_spent_and_never_leaks` | AI-049: a re-read host token whose `expiresAt` has passed still gets a second CLI call, or its token leaks into `pipeline_runs`, the logs or the cause chain. Mutation-checked: `_host_token_expired` forced to `False` turns it red on the call count. |
+| `test_floor2_claude_login_mounts.py::test_floor2_only_the_worker_mounts_a_claude_login` | R-025 (user ruling 2026-10-10): in any tracked `docker-compose*.yml`, a service other than `worker` mounts something whose source or target names `claude`. |
+| `…::test_floor2_claude_mounts_come_only_from_the_dedicated_dir_read_only` | A Claude mount is not sourced from `${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}`, is writable, or lands anywhere except `/run/claude-host`, `/root/.claude/.credentials.json` or `/root/.claude/settings.json` (a directory overlay onto `/root/.claude` included). |
+| `…::test_floor2_pinned_credentials_file_is_paired_with_the_tracking_dir_mount` | A file mounts `.credentials.json` as a single file (which pins its inode, GL#8) without the `/run/claude-host` directory mount. Also fails if base `CLAUDE_HOST_CREDENTIALS_FILE` is not `/run/claude-host/.credentials.json`, or an overlay drops or repoints it (`environment: !override` included). |
+| `…::test_floor2_no_compose_or_env_example_line_points_at_the_personal_claude_dir` | An uncommented line in a compose file or `.env.example` names `CLAUDE_CONFIG_DIR`, `~/.claude` or `$HOME/.claude`. |
+| `…::test_floor2_setup_script_creates_a_private_empty_dir_and_copies_no_login` | `scripts/setup-claude-login.sh` (run for real, via `setpriv` to uid 65534 when the suite runs as root) leaves the directory other than 0700, leaves `settings.json` other than a private `{}`, puts anything else in the directory, or prints a planted personal token. |
+| `…::test_floor2_setup_script_refuses_to_run_as_root` / `…has_its_root_guard_before_mkdir` | The script runs as root, or its refuse-root guard is missing or comes after `mkdir`. The behavioural variant runs only as root (CI). |
 
 ## 3. AI only via the adapter (amended by ADR 0003 and ADR 0005)
 
