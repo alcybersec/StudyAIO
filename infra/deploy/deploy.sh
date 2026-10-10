@@ -101,11 +101,26 @@ echo "    ${AVAIL_GB}G available on ${DOCKER_ROOT}"
 echo "==> Pulling images..."
 $COMPOSE pull --quiet
 
+# Migrate BEFORE any new app container exists. On the !34 deploy (2026-10-10,
+# R-028) `up -d` started the new worker/beat first, the hourly beat fired at once
+# and its tasks failed with "column user_settings.timezone does not exist" for the
+# ~5s until the old `exec ... alembic upgrade head` ran.
+#
+# So: bring up only the data tier (idempotent, no-op when already running, --wait
+# blocks on its healthchecks), then run alembic in a ONE-OFF container from the
+# NEW api image (--no-deps: db/redis are already up; the one-off publishes no
+# ports). The OLD api/worker/beat/ui keep serving meanwhile. set -e means a failed
+# migration aborts here and leaves the old stack untouched. This relies on
+# migrations being additive/backwards-compatible for one release; see
+# docs/deployment.md.
+echo "==> Ensuring db and redis are up..."
+$COMPOSE up -d --no-build --wait db redis
+
+echo "==> Running migrations (one-off container, new image)..."
+$COMPOSE run --rm --no-deps -T api alembic upgrade head
+
 echo "==> Starting containers..."
 $COMPOSE up -d --no-build --remove-orphans
-
-echo "==> Running migrations..."
-$COMPOSE exec -T api alembic upgrade head
 
 echo "==> Verifying health..."
 sleep 5

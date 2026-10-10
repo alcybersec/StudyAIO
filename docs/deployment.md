@@ -140,8 +140,17 @@ GitLab CI (`.gitlab-ci.yml`) runs five stages — `lint`, `test`, `e2e`, `build`
    - Sends **only the commit SHA** over SSH. The deploy key on the server is
      command-restricted to `/opt/studyaio/deploy.sh`, which reads it from
      `SSH_ORIGINAL_COMMAND` — CI cannot run an arbitrary command on the host.
-   - `deploy.sh` checks free disk, pins the host `.env` to that tag, pulls, runs
-     `alembic upgrade head`, and restarts the stack.
+   - `deploy.sh` checks free disk, pins the host `.env` to that tag, pulls, starts
+     db/redis, runs `alembic upgrade head` in a one-off container from the new api
+     image, and only then recreates api/worker/beat/ui. A failed migration aborts
+     the deploy with the old containers still running.
+
+   **Migrations must stay additive and backwards-compatible for one release**
+   (new nullable/defaulted columns, new tables; no drops, renames or type
+   changes in the same release as the code that stops using them). The old
+   containers keep serving against the new schema while the migration applies and
+   until `up -d` recreates them. A destructive change must be split across two
+   releases (stop using, then drop). Origin: R-028, the !34 deploy.
 
 ### Updating `deploy.sh`
 
