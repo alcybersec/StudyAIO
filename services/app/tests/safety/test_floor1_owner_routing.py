@@ -381,3 +381,111 @@ async def test_floor1_chat_sources_come_only_from_caller_scoped_chunks():
     arts = {s.get("artifact_id") for s in reply.citations_json or []}
     assert ids == {"own-1", "own-2"}, f"Floor 1 VIOLATION: sources outside the chunk list: {ids}"
     assert arts == {"own-art"}
+
+
+# ── chat: scope carried across turns (GL#31, backend 423b178) ────────────
+
+
+def _database_with_week(course_owner: str | None, caller: str):
+    """``_database_with`` plus the course-has-week listing: CSIT302 (A's) has a week 3.
+
+    A listing not filtered on a non-owner caller returns A's code, so an
+    unscoped ``_courses_with_week`` would disclose it in the clarifying reply.
+    """
+    session, statements = _database_with(course_owner, caller)
+    inner = session.execute.side_effect
+
+    def execute(statement, *a, **k):
+        result = inner(statement, *a, **k)
+        hit = (
+            course_owner is not None
+            and "courses" in tables_in(statement)
+            and not (caller != course_owner and filters_on_user(statement, caller))
+        )
+        result.all.return_value = [("CSIT302",)] if hit else []
+        return result
+
+    session.execute = AsyncMock(side_effect=execute)
+    return session, statements
+
+
+CARRY_CASES = [
+    # (earlier user messages, newest first; follow-up message)
+    (["what is in CSIT302 week 2?"], "and week 3?"),
+    (["explain CSIT302"], "make a quiz on that"),
+    (["hello", "summarise CSIT302 week 1"], "what about the next part?"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("history", "message"), CARRY_CASES)
+async def test_floor1_chat_carried_foreign_course_is_indistinguishable_from_missing(
+    history, message
+):
+    """A code another user owns, named in an earlier turn, carries nothing and leaks nothing.
+
+    Same plan and statement count as a code nobody owns; the owner (control)
+    does carry it.
+    """
+    from app.services.chat_service import _plan_message
+
+    owned, _ = _database_with_week(OWNER_A, OWNER_A)
+    control = await _plan_message(owned, OWNER_A, message, None, None, None, history)
+    assert control.course_id == "course-of-a", "control: the owner's carried scope was lost"
+
+    foreign_db, foreign_stmts = _database_with_week(OWNER_A, CALLER_B)
+    foreign = await _plan_message(foreign_db, CALLER_B, message, None, None, None, history)
+    missing_db, missing_stmts = _database_with_week(None, CALLER_B)
+    missing = await _plan_message(missing_db, CALLER_B, message, None, None, None, history)
+
+    assert _plan_fields(foreign) == _plan_fields(missing), (
+        "Floor 1 VIOLATION: a carried course code another user owns changes the chat plan.\n"
+        f"  foreign: {_plan_fields(foreign)}\n  missing: {_plan_fields(missing)}"
+    )
+    assert foreign.course_id is None
+    assert "course-of-a" not in repr(_plan_fields(foreign))
+    assert len(foreign_stmts) == len(missing_stmts)
+    assert foreign_db.get.await_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message", ["what was week 3 about?", "summarise week 3"])
+async def test_floor1_chat_bare_week_lists_only_the_callers_courses(message):
+    """ "Which course for Week N" never names, or resolves to, another user's course.
+
+    The DB holds A's CSIT302 with a week 3; caller B must get the same plan as
+    with nothing in the DB. Control: owner A is scoped to it or offered it.
+    """
+    from app.services.chat_service import _plan_message
+
+    owned, _ = _database_with_week(OWNER_A, OWNER_A)
+    control = await _plan_message(owned, OWNER_A, message, None, None, None, [])
+    assert control.course_id == "course-of-a" or "CSIT302" in (control.reply or ""), (
+        "control: the owner's week-3 course was not found, so this proves nothing"
+    )
+
+    foreign_db, foreign_stmts = _database_with_week(OWNER_A, CALLER_B)
+    foreign = await _plan_message(foreign_db, CALLER_B, message, None, None, None, [])
+    missing_db, missing_stmts = _database_with_week(None, CALLER_B)
+    missing = await _plan_message(missing_db, CALLER_B, message, None, None, None, [])
+
+    assert "CSIT302" not in repr(_plan_fields(foreign)), (
+        f"Floor 1 VIOLATION: chat discloses another user's course code: {_plan_fields(foreign)}"
+    )
+    assert _plan_fields(foreign) == _plan_fields(missing)
+    assert len(foreign_stmts) == len(missing_stmts)
+
+
+def test_floor1_chat_scope_carry_adds_no_ai_call_site():
+    """The carried-scope helpers run no adapter: the clarifying reply is a template."""
+    import inspect
+
+    from app.services import chat_service
+
+    for fn in (
+        chat_service._carry_scope,
+        chat_service._courses_with_week,
+        chat_service._plan_message,
+    ):
+        src = inspect.getsource(fn)
+        assert "get_agent" not in src and "agent." not in src, f"{fn.__name__} calls the adapter"

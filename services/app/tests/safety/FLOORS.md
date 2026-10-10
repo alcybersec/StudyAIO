@@ -48,6 +48,22 @@ cd services/app && .venv/bin/python -m pytest tests/safety -v
 | `…::test_floor1_event_owner_lookup_fails_closed`, `…::test_floor1_publisher_drops_an_ownerless_event`, `…::test_floor1_row_owner_lookup_is_worker_only` | `resolve_event_owner` falls back to the payload owner on a miss or error, the publisher opens a channel for a `None` owner, or the unscoped `_row_owner[_async]` lookup (classified in `UNSCOPED_FUNCTION_ALLOWED`) gains a caller outside `app/pipeline/`. |
 | `…::test_floor1_chat_unowned_course_code_is_indistinguishable_from_missing[<msg>]` | A course code typed into chat (GL#10, BACKEND-019) that another user owns yields a different plan (reply text, quiz action, scope) or a different number of statements than a code nobody owns, i.e. chat becomes an existence oracle for other users' course codes. The fake session finds the row for any lookup not filtered on the asking non-owner, so a dropped filter is visible; the control (owner) must resolve it. Mutation-checked in SAFETY-024: unscoping `get_course_by_code`, or branching a miss on an unscoped probe, both fail. |
 | `…::test_floor1_chat_sources_come_only_from_caller_scoped_chunks` | Stored chat sources name a chunk or artifact outside the caller-scoped `search_chunks` result, e.g. from the adapter's own citation list (model output). |
+| `test_floor1_owner_routing.py::test_floor1_chat_carried_foreign_course_is_indistinguishable_from_missing[…]` | GL#31 (backend `423b178`). A course code another user owns, named in an earlier turn, carries scope into a follow-up, or yields a different plan or statement count than a code nobody owns. Control: the owner's code is carried. |
+| `…::test_floor1_chat_bare_week_lists_only_the_callers_courses[…]` | "Which course for Week N" names, or scopes to, another user's course, or differs from an empty database for a non-owner. |
+| `…::test_floor1_chat_scope_carry_adds_no_ai_call_site` | `_carry_scope`, `_courses_with_week` or `_plan_message` calls an adapter (the clarifying reply is a template). |
+
+Mutation-checked in SAFETY-026, all caught: carried code looked up unscoped; week listing with no owner filter; week listing filter OR-widened. An extra unscoped probe whose result is not used survives, correctly: output and statement count stay equal, so it discloses nothing.
+
+| Test | Fails when |
+|---|---|
+| `test_floor1_study_nudge.py::test_floor1_nudge_candidate_subqueries_are_each_correlated_to_the_candidate` | PROD-03 (GL#15, backend `ebae1cb`). An EXISTS sub-query in `nudge_service.candidates_stmt` (opt-in, studied, reviewed, uploads) lacks `<table>.user_id = users.id` as a plain AND conjunct, so another user's rows decide who is nudged. A correlation under OR also fails. |
+| `…::test_floor1_nudge_selection_returns_ids_not_other_users_data` | The cross-user selection returns a column other than `users.id` and booleans (an email, a zone, content). |
+| `…::test_floor1_nudge_selection_is_worker_only` | A module outside `app/pipeline/`, `app/worker.py` and `nudge_service` itself imports `nudge_service` or names `find_nudge_candidates`/`candidates_stmt`. |
+| `…::test_floor1_nudge_delivery_is_keyed_on_the_candidate_only[…]` | `send_study_nudge` writes an inbox row for anyone but the candidate, or runs a statement on an owned table (or `users`) not filtered on the candidate. |
+| `…::test_floor1_preference_seeding_writes_and_reads_only_the_new_users_rows`, `…::test_floor1_signup_seeds_preferences_for_the_user_just_created[…]` | Default-preference seeding creates or looks up rows for anyone but the new user, or one of the three signup paths (`register_user`, `create_or_link_oauth`, admin `create_user`) seeds for anything but `user.id` of the row it just created. |
+| `…::test_floor2_email_unsubscribe_link_is_static_and_carries_no_token_or_pii[<sender>]` | Any `email_service.send_*` email lacks the footer unsubscribe link, or the link is anything but the static `<app_base_url>/settings/notifications` (no token, address or id; a signed one-click link would be a credential in every inbox and mail log). |
+
+Mutation-checked in SAFETY-026 (scratch copy, `scratchpad/mutate.py`), all caught: `studied` uncorrelated; opt-in correlation OR-widened; `User.email` selected; a route importing `find_nudge_candidates`; seeding for another owner; inbox row to another user; unsubscribe URL carrying the recipient.
 
 The deeper layers live in other tiers: `tests/integration/test_idor_row_level.py`
 runs against a real database, and `tests/unit/api/test_endpoint_scoping_guard.py`
@@ -103,6 +119,48 @@ plus `test_idor_scoping.py` cover endpoint wiring.
 Mutation-checked in SAFETY-053, each mutant on a scratch git repo, all caught: token on argv; token in `os.environ`; token dropped from `_credential_values`; auth retry despite a token; per-user env also given the token; api told the token path; `CLAUDE_CODE_OAUTH_TOKEN=` in `.env.example`; unpinned CLI; script writing the token 0644; script echoing the token; script personal-dir guard removed; `--rotate` ignored.
 
 Mutation-checked in SAFETY-057 (scratch copy of services/app, `scratchpad/muts_057.py`), all caught: `--tools ""` dropped; `--tools default`; `DATABASE_URL` / `REDIS_URL` / `SENTRY_DSN` added to the adapter allowlist (the last two only by the exact-allowlist pin); child env `{**os.environ}`; pre-fix `env=None` + `{**os.environ, …}`; operator token handed to every mode; `include_local_variables=False` and the frame-vars scrub removed together, and each alone.
+
+### Operator-only AI settings (SEC-01, SEC-03; backend `a5f3255`)
+
+`claude_code_path` is the program the worker execs. Running a user's path runs their code next to the JWT secret, the DB URL and the instance keys, so it is held here.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_operator_only_ai_settings.py::test_floor2_put_operator_only_ai_key_is_422_and_stores_nothing[…]` | `PUT /api/settings` naming `claude_code_path` or `claude_model` answers anything but 422, or stores anything. |
+| `…::test_floor2_stored_legacy_path_and_model_never_reach_the_cli`, `…::test_floor2_get_user_ai_context_drops_stored_path_and_model`, `…::test_floor2_stored_legacy_model_never_reaches_the_anthropic_api` | A row stored before SEC-01 with a user path/model reaches the agent config, CLI argv[0], `--model`, or the Anthropic API adapter's model. |
+| `…::test_floor2_factory_never_runs_a_user_supplied_executable_or_model` | **RED until ai fixes it (proposed M32-S4-AI-025).** `get_agent(user_settings={…"claude_code_path": X})` runs X. The factory is the single choke point, and it still forwards `cli_path`/`model`, which `ClaudeCodeAdapter` honours for `cli_path`. Only `_agent_config_from_overrides` builds the dict today and it drops the keys, so this is not reachable from a request now; one more builder would make it so. Fix: stop forwarding both keys and drop the adapter's `cli_path` override. Shown green on that fix in a scratch copy. |
+| `…::test_floor2_get_settings_never_echoes_stored_path_or_model` | `GET /api/settings` returns a stored legacy path or model. |
+| `…::test_floor2_self_hosted_user_endpoint_refuses_internal_targets[…]` | Self-hosted, a user base URL is accepted with a non-http(s) scheme, userinfo, a loopback/private/link-local/metadata/CGNAT/benchmark/multicast/broadcast/unspecified address, an IPv4-mapped, 6to4 or NAT64 wrapper of one, an IPv6 zone id, a decimal/octal/hex/short IPv4 spelling, fullwidth digits, a trailing-dot literal or name, `localhost`, a name with any private answer, an unresolvable name, or parser-confusion forms (`a@b`, `#@`, `\@`, bad port). |
+| `…::test_floor2_self_hosted_user_endpoint_accepts_a_public_url[…]` | Control: a public URL is refused. |
+| `…::test_floor2_hosted_user_endpoint_put_is_422_and_stores_nothing[…]` | Not self-hosted, a PUT of `zai_base_url`/`ollama_base_url` is accepted. |
+| `…::test_floor2_stored_user_endpoint_is_revalidated_when_the_config_is_built[…]` | A stored URL reaches the agent config or public view when the deployment is hosted, or when its name now resolves inward (rebound since PUT). |
+| `…::test_floor2_url_validator_checks_every_resolved_address_not_the_first` | One public answer hides a private one. |
+
+Mutation-checked in SAFETY-026, all caught: `claude_code_path` back in `ALLOWED_KEYS` without the operator guard; `claude_code_path` / `claude_model` back in `_AGENT_CONFIG_KEYS`; public view iterating the operator-only keys; URL keys accepted when not self-hosted; stored URL not re-validated; only the first DNS answer checked; userinfo allowed. Two mutants survive by design, because a later layer catches the same input: removing the explicit v4-mapped unwrap (`ipaddress` already marks those non-global) and removing the numeric-spelling regex (the resolver turns them into a loopback literal that `_check_ip` refuses).
+
+Use time (ai AI-024, `ee6b441`):
+
+| Test | Fails when |
+|---|---|
+| `…::test_floor2_user_endpoint_rebound_after_config_is_refused_before_connecting[zai\|ollama]` | A user URL that passed at config time but now resolves inward reaches a constructed SDK client (no `AgentError` first). |
+| `…::test_floor2_user_endpoint_clients_never_follow_redirects[zai\|ollama]` | The client built for a user URL follows redirects. |
+
+Mutation-checked, all caught: the factory dropping `user_supplied_url` for zai and for ollama; `DefaultAsyncHttpxClient(follow_redirects=True)`; ollama `AsyncClient` without `follow_redirects=False`.
+
+**Residual, logged on R-032, not a floor red:** no DNS pinning. The adapter validates, then httpx resolves again on connect, so a TTL-0 rebinding name can still answer public to the check and private to the connect. It is exposed only on self-hosted instances (hosted ones refuse user URLs), and SSRF is outside the four floors. Closing it needs a transport that connects to the validated address (ai).
+
+### Claude CLI child isolation (AGENT-01, ai `ff90277`)
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_cli_child_isolation.py::test_floor1_cli_cwd_is_a_fresh_empty_private_dir_removed_after[…]` | The child inherits the worker's cwd (`/app`, every tenant's files), two calls share a cwd, the cwd is not empty or not 0700, or a `claude_*` dir survives the call. Both modes, with and without `CLAUDE_CLI_UID`. |
+| `…::test_floor2_cli_runs_the_operator_binary_and_model_never_a_users[…]` | argv[0] or `--model` is not the operator's, or the caller's `model` argument appears on argv. |
+| `…::test_floor2_cli_system_prompt_is_fixed_and_lecture_stays_off_argv[…]` | `--system-prompt` is not `_SYSTEM_PROMPT`, lecture text reaches argv, or `--tools ""` is not the last two argv items. |
+| `…::test_floor2_cli_uid_mode_spawns_as_the_configured_uid_with_private_home` | With `CLAUDE_CLI_UID`, the child is not spawned as that uid/gid, its `HOME` is not its private cwd, or the cwd/config dir is not chowned to it. |
+| `…::test_floor2_host_login_copy_is_never_handed_back_and_is_removed[…]`, `…::test_floor2_per_user_refresh_still_reaches_the_user_in_uid_mode` | The per-call copy of the operator login (from `CLAUDE_HOST_CREDENTIALS_FILE` or `~/.claude`) is read back into `refreshed_credentials` after a refresh, or its dir survives. Control: the user's own refresh still comes back. |
+| `…::test_floor2_host_login_copy_token_is_redacted_from_cli_failures[…]` | **RED until ai fixes it (proposed M32-S4-AI-025), `host_credentials_file` case.** The uid-mode copy built from `CLAUDE_HOST_CREDENTIALS_FILE` hands the child a token that is not in the adapter's redaction set (`_credential_values` covers `_host_credentials` only after a GL#8 retry, and the inode-pinned `~/.claude` file, which holds the pre-refresh token). A CLI failure quoting it puts the operator's token into the `AgentError`, so into `pipeline_runs.error_message` and the logs. Fix: record the copied login for redaction (`self._host_credentials = host_creds`) or re-read the file in `_credential_values`. Both shown green in a scratch copy. |
+
+Mutation-checked in SAFETY-026, all caught: cwd not passed; cwd not removed; `model or …` restored; `--system-prompt` dropped; a flag after `--tools ""`; host copy read back (`not host`/`credentials` guards removed); copy dir not removed; uid not passed to spawn.
 
 ## 3. AI only via the adapter (amended by ADR 0003 and ADR 0005)
 
