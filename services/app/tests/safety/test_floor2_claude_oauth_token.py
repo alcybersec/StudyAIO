@@ -17,7 +17,8 @@ token to that one channel:
 * ``scripts/setup-claude-login.sh`` writes it 0600 in a 0700 dir and never
   prints it; the image pins the CLI version that receives it.
 
-Three pins are RED until the CLI is sandboxed (SAFETY-053). ``claude -p`` reads
+The CLI child is sandboxed (SAFETY-053, green since ai 31c1f28 and backend
+def2701, confirmed SAFETY-057). ``claude -p`` reads
 untrusted lecture text, and by default it may use its read-only tools
 (Read/Glob/Grep need no approval, and outside ``--restricted`` they are not
 confined to the working directory). A prompt-injected lecture can therefore ask
@@ -28,14 +29,15 @@ it every other user's session, floor 1) and the instance AI keys to any
 uploader. The child also inherits the worker's whole environment, and Sentry
 ships the adapter's ``env`` local with every captured CLI failure.
 
-* ``test_floor2_cli_runs_with_no_tools`` — RED until ai passes ``--tools ""``.
-* ``test_floor2_cli_environment_carries_no_worker_secret`` — RED until ai
-  builds the child env from an allowlist.
-* ``test_floor2_sentry_event_for_a_cli_failure_carries_no_credential`` — RED
-  until backend stops Sentry attaching frame locals
-  (``include_local_variables=False`` in ``core/observability.py``). It must stay
-  red after ai's allowlist alone: a short env dict falls inside Sentry's
-  10-item databag window, so the token would then ship.
+* ``test_floor2_cli_runs_with_no_tools`` — ai passes ``--tools ""``.
+* ``test_floor2_cli_environment_carries_no_worker_secret`` and
+  ``..._is_exactly_the_reviewed_allowlist`` — the child env is built from an
+  allowlist; widening it means editing ``CHILD_ENV_ALLOWED`` here.
+* ``test_floor2_sentry_event_for_a_cli_failure_carries_no_credential`` — Sentry
+  never ships frame locals. The allowlist alone is not enough: a short env dict
+  falls inside Sentry's 10-item databag window, so the token would ship. Each
+  of the two Sentry layers (``include_local_variables=False`` and the
+  ``scrub_event`` frame-vars strip) is also pinned on its own.
 """
 
 from __future__ import annotations
@@ -431,7 +433,7 @@ def test_floor2_setup_script_refuses_the_personal_claude_dir():
     assert TOKEN_SENTINEL not in run.stdout + run.stderr
 
 
-# ── RED until SAFETY-053 follow-ups: sandbox the CLI child ───────────────
+# ── SAFETY-053: the CLI child is sandboxed (green since SAFETY-057) ───────
 
 MODES = ["setup_token", "per_user", "host_login"]
 
@@ -449,7 +451,7 @@ async def _run_mode(mode: str, tmp_path: pathlib.Path, monkeypatch, cli: _Cli):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", MODES)
 async def test_floor2_cli_runs_with_no_tools(mode, tmp_path, monkeypatch, clean_home):
-    """RED until ai: ``claude -p`` over untrusted lecture text gets no tools.
+    """``claude -p`` over untrusted lecture text gets no tools.
 
     With its default tools the CLI can Read ``/proc/self/environ``, the
     mounted ``oauth-token`` / ``.credentials.json`` or a user's temp config
@@ -476,7 +478,7 @@ async def test_floor2_cli_runs_with_no_tools(mode, tmp_path, monkeypatch, clean_
 async def test_floor2_cli_environment_carries_no_worker_secret(
     mode, tmp_path, monkeypatch, clean_home, worker_secrets_first
 ):
-    """RED until ai: the CLI child gets an allowlisted env, not ``{**os.environ}``.
+    """The CLI child gets an allowlisted env, not ``{**os.environ}``.
 
     ``env=None`` inherits everything, so it counts as a leak too. The login
     the mode needs must still be there.
@@ -493,6 +495,38 @@ async def test_floor2_cli_environment_carries_no_worker_secret(
         f"Floor 2 ({mode}): the CLI child, which reads untrusted lecture text, "
         f"inherits worker secrets {leaked}"
     )
+
+
+# The only names the CLI child may see (SAFETY-057). The sentinel pin above
+# catches the secrets it plants; this one catches a name nobody planted, e.g.
+# ``REDIS_URL`` (password-bearing) added to the adapter's allowlist. Widening
+# it is a floor-2 decision: change this set in the same review.
+CHILD_ENV_ALLOWED = {"PATH", "HOME", "LANG", "LC_ALL", "CLAUDE_CONFIG_DIR", TOKEN_ENV}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", MODES)
+async def test_floor2_cli_environment_is_exactly_the_reviewed_allowlist(
+    mode, tmp_path, monkeypatch, clean_home, worker_secrets_first
+):
+    """The child's env names are a subset of ``CHILD_ENV_ALLOWED``, in every mode.
+
+    ``REDIS_URL`` and ``SENTRY_DSN`` are set so a widened allowlist has
+    something to pass through; ``env=None`` / ``{**os.environ}`` fail here too.
+    """
+    monkeypatch.setenv("REDIS_URL", "redis://:floor2-redis-pass@redis:6379/0")
+    monkeypatch.setenv("SENTRY_DSN", "https://k@sentry.invalid/1")
+    monkeypatch.setenv("LANG", "C.UTF-8")
+    cli = _Cli()
+    await _run_mode(mode, tmp_path, monkeypatch, cli)
+    effective = cli.calls[0]["effective"]
+    extra = sorted(set(effective) - CHILD_ENV_ALLOWED)
+    assert not extra, (
+        f"Floor 2 ({mode}): the CLI child, which reads untrusted lecture text, gets "
+        f"unreviewed variables {extra}"
+    )
+    if mode != "setup_token":
+        assert TOKEN_ENV not in effective, f"{mode}: the operator token reached a non-token run"
 
 
 @pytest.fixture
@@ -535,7 +569,7 @@ def sentry_events(monkeypatch):
 async def test_floor2_sentry_event_for_a_cli_failure_carries_no_credential(
     mode, tmp_path, monkeypatch, clean_home, worker_secrets_first, sentry_events
 ):
-    """RED until backend: a captured CLI failure ships no secret to Sentry.
+    """A captured CLI failure ships no secret to Sentry.
 
     Sentry attaches each frame's locals; ``_run_once`` holds ``env`` (the
     child's environment) and ``credentials``. The default scrubber only
@@ -558,3 +592,40 @@ async def test_floor2_sentry_event_for_a_cli_failure_carries_no_credential(
     secrets = {**WORKER_SECRETS, "setup token": TOKEN_SENTINEL, "user token": USER_SENTINEL}
     leaked = sorted(k for k, v in secrets.items() if v in blob)
     assert not leaked, f"Floor 2 ({mode}): a captured CLI failure sends {leaked} to Sentry"
+
+
+# Each Sentry layer alone (SAFETY-057): the end-to-end pin above goes red only
+# when BOTH are gone, so a regression of one would pass silently.
+
+
+def test_floor2_sentry_is_initialised_without_frame_locals(monkeypatch):
+    """Layer 1: ``init_sentry`` passes ``include_local_variables=False``."""
+    import sentry_sdk
+
+    from app.core import observability
+
+    seen: dict = {}
+    monkeypatch.setattr(sentry_sdk, "init", lambda *a, **k: seen.update(k))
+    monkeypatch.setattr(sentry_sdk, "set_tag", lambda *a, **k: None)
+    monkeypatch.setattr(observability, "_initialized", False)
+    monkeypatch.setattr(observability, "_build_integrations", lambda _c: [])
+    monkeypatch.setattr(observability.settings, "sentry_dsn", "https://k@sentry.invalid/1")
+    observability.init_sentry("worker")
+    assert seen, "init_sentry never reached sentry_sdk.init, so this test proves nothing"
+    assert seen.get("include_local_variables") is False, (
+        "Floor 2: Sentry ships frame locals, e.g. _run_once's env holding the Claude token"
+    )
+
+
+@pytest.mark.parametrize("container", ["exception", "threads"])
+def test_floor2_scrub_event_drops_frame_locals(container):
+    """Layer 2: ``scrub_event`` strips ``vars`` from every frame, whatever the SDK sent."""
+    from app.core.observability import scrub_event
+
+    frame = {"function": "_run_once", "vars": {"env": {TOKEN_ENV: TOKEN_SENTINEL}}}
+    event = {container: {"values": [{"stacktrace": {"frames": [frame]}}]}}
+    out = scrub_event(event, {})
+    assert out is not None
+    assert TOKEN_SENTINEL not in json.dumps(out), (
+        f"Floor 2: scrub_event leaves frame locals in {container} frames"
+    )
