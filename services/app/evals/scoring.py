@@ -85,6 +85,10 @@ class CaseScore:
     faithfulness: int | None = None
     unsupported_claims: list[str] = field(default_factory=list)
     judge_error: str | None = None
+    #: `## Connections` claims the prompt context cannot support (GL#9): a week
+    #: referenced that is neither this one, listed, nor in the source, or
+    #: industry/market framing the source never used.
+    connection_violations: list[str] = field(default_factory=list)
     calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -97,7 +101,12 @@ class CaseScore:
         gating on it would make the result depend on which backend happened to
         judge. It is reported for reading, not for passing.
         """
-        return self.coverage == 1.0 and not self.fabricated and not self.missing_sections
+        return (
+            self.coverage == 1.0
+            and not self.fabricated
+            and not self.missing_sections
+            and not self.connection_violations
+        )
 
 
 def score_deterministic(case: dict, summary: str) -> CaseScore:
@@ -122,7 +131,73 @@ def score_deterministic(case: dict, summary: str) -> CaseScore:
         missing=missing,
         fabricated=fabricated,
         missing_sections=missing_sections,
+        connection_violations=check_connections(case, summary),
     )
+
+
+#: Words that signal outside-the-lecture framing in `## Connections`. A hit is
+#: forgiven when the same word appears in the source: the prompt allows
+#: attributed industry context the lecturer actually gave.
+INDUSTRY_TERMS = (
+    "industry",
+    "industries",
+    "market",
+    "commercial",
+    "real-world",
+    "real world",
+    "in the field",
+    "career",
+    "adoption",
+    "aerospace",
+    "defence",
+    "defense",
+)
+
+_WEEK_REF = re.compile(r"\bweeks?\s+(\d{1,2})\b", re.IGNORECASE)
+_CONNECTIONS = re.compile(
+    r"^##\s+Connections\s*$(.*?)(?=^##\s|^---\s*$|\Z)", re.MULTILINE | re.DOTALL
+)
+_WEEK_NUM = re.compile(r"(\d+)")
+
+
+def connections_section(summary: str) -> str:
+    """Body of the `## Connections` section, or "" when absent."""
+    match = _CONNECTIONS.search(summary)
+    return match.group(1) if match else ""
+
+
+def check_connections(case: dict, summary: str) -> list[str]:
+    """Flag `## Connections` content the prompt context cannot support.
+
+    Deterministic and model-free. Two rules, both from GL#9:
+
+    * a "Week N" reference is allowed only if N is this lecture's week, is
+      listed in the case's optional `other_weeks` (strings like "Week 4:
+      Arrays"), or appears in the source pages. Anything else is the model
+      asserting knowledge of a week it was never shown.
+    * industry/market framing is allowed only if the source uses the same word.
+
+    Returns:
+        One human-readable violation per offence; empty when clean.
+    """
+    body = connections_section(summary)
+    if not body:
+        return []
+    source = "\n".join(p.get("text", "") for p in case.get("pages", []))
+    allowed = {int(case["week"])} if "week" in case else set()
+    for entry in case.get("other_weeks", []):
+        m = _WEEK_NUM.search(entry)
+        if m:
+            allowed.add(int(m.group(1)))
+    allowed |= {int(n) for n in _WEEK_REF.findall(source)}
+
+    violations: list[str] = []
+    for n in sorted({int(n) for n in _WEEK_REF.findall(body)} - allowed):
+        violations.append(f"references Week {n}, which was not provided")
+    for term in INDUSTRY_TERMS:
+        if _mentions(body, term) and not _mentions(source, term):
+            violations.append(f"industry framing '{term}' not in the lecture")
+    return violations
 
 
 JUDGE_INSTRUCTION = """Grade the SUMMARY UNDER REVIEW for FAITHFULNESS to the SOURCE MATERIAL.

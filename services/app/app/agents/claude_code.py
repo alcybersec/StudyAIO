@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import re
 import stat
 import tempfile
 from typing import Any
@@ -20,8 +21,10 @@ from app.agents.base import (
     FlashcardData,
     QuizQuestionData,
     SummaryResult,
+    _string_leaves,
 )
 from app.core.ai_settings import get_effective_setting
+from app.core.clock import utc_now
 from app.core.exceptions import AgentError
 
 logger = structlog.get_logger()
@@ -66,6 +69,86 @@ def _describe_failure(stdout: bytes, stderr: bytes) -> str:
     return " | ".join(parts) or "Unknown error"
 
 
+# What the CLI prints when its OAuth token is revoked/expired (GL#8).
+_AUTH_FAILURE = re.compile(
+    r"\b401\b|failed to authenticate|token has been revoked|invalid[_ ]grant|"
+    r"token (?:has )?expired|not logged in",
+    re.IGNORECASE,
+)
+
+
+class _CliAuthError(AgentError):
+    """An AgentError known to be an authentication failure (already redacted)."""
+
+
+# SAFETY-053: the only variables the CLI child inherits. Everything else in the
+# worker's environment (JWT secret, DB URL, instance AI keys) stays out of reach
+# of a prompt-injected lecture. The login (token or config dir) is added per call.
+_CHILD_ENV_ALLOWLIST = ("PATH", "HOME", "LANG", "LC_ALL")
+
+
+def _base_env() -> dict[str, str]:
+    """Build the CLI child's environment from the allowlist, never ``os.environ``.
+
+    Returns:
+        A new dict holding only the allowlisted variables that are set.
+    """
+    return {k: os.environ[k] for k in _CHILD_ENV_ALLOWLIST if k in os.environ}
+
+
+def _read_host_credentials() -> dict[str, Any] | None:
+    """Read the host's credentials fresh from ``CLAUDE_HOST_CREDENTIALS_FILE``.
+
+    Returns:
+        The parsed credentials, or None when unconfigured, missing or invalid.
+        Never logs the content.
+    """
+    path = os.environ.get("CLAUDE_HOST_CREDENTIALS_FILE", "")
+    if not path:
+        return None
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        logger.warning("claude_code_host_credentials_unreadable")
+        return None
+    return data if isinstance(data, dict) and data else None
+
+
+def _read_host_oauth_token() -> str | None:
+    """Read the long-lived ``claude setup-token`` token fresh from its file.
+
+    The path is ``CLAUDE_HOST_OAUTH_TOKEN_FILE``. Read per call, never cached,
+    so a rotated token applies without a restart.
+
+    Returns:
+        The stripped token, or None when unconfigured, unreadable or empty.
+        Never logs the content.
+    """
+    path = os.environ.get("CLAUDE_HOST_OAUTH_TOKEN_FILE", "")
+    if not path:
+        return None
+    try:
+        with open(path) as f:
+            token = f.read().strip()
+    except (OSError, UnicodeDecodeError):
+        logger.warning("claude_code_host_oauth_token_unreadable")
+        return None
+    return token or None
+
+
+def _host_token_expired(creds: dict[str, Any]) -> bool:
+    """True when ``claudeAiOauth.expiresAt`` (epoch ms) is already past.
+
+    Missing or unparseable values return False (keep the single retry).
+    """
+    oauth = creds.get("claudeAiOauth")
+    raw = oauth.get("expiresAt") if isinstance(oauth, dict) else None
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        return False
+    return raw <= utc_now().timestamp() * 1000
+
+
 class ClaudeCodeAdapter(AgentAdapter):
     """Calls Claude Code CLI via subprocess.
 
@@ -88,8 +171,74 @@ class ClaudeCodeAdapter(AgentAdapter):
         self._model = model or get_effective_setting("claude_model")
         self._credentials_json = credentials_json
         self.refreshed_credentials: dict[str, Any] | None = None
+        self._host_credentials: dict[str, Any] | None = None
+
+    def _credential_values(self) -> list[str]:
+        """Also cover the host credentials re-read after an auth failure."""
+        values = super()._credential_values()
+        values.extend(_string_leaves(self._host_credentials))
+        token = _read_host_oauth_token()
+        if token:
+            values.append(token)
+        try:
+            with open(os.path.expanduser("~/.claude/.credentials.json")) as f:
+                values.extend(_string_leaves(json.load(f)))
+        except (OSError, ValueError):
+            pass
+        return values
 
     async def _run_claude_code(self, prompt: str, timeout: int = _DEFAULT_TIMEOUT) -> str:
+        """Run the CLI; after a stale-token auth failure, retry once with fresh creds.
+
+        GL#8: the worker's ``~/.claude/.credentials.json`` is a single-file bind
+        mount, which pins an inode. When the host refreshes the token by
+        rename-over, the container keeps the revoked one for good. The host file
+        is therefore also exposed on a path that tracks it (the
+        ``CLAUDE_HOST_CREDENTIALS_FILE`` env var, a directory mount) and is
+        re-read here, per failure, never cached. Exactly one retry; per-user
+        credentials (from the DB) are never substituted.
+
+        Args:
+            prompt: The full prompt text to send.
+            timeout: Timeout in seconds.
+
+        Returns:
+            Raw stdout from the CLI.
+
+        Raises:
+            AgentError: If the CLI fails (redacted) or times out.
+        """
+        try:
+            return await self._run_once(prompt, timeout, self._credentials_json)
+        except _CliAuthError as first:
+            # A long-lived token cannot go stale the way the credentials file
+            # does, so there is nothing to retry with: fail with the CLI's message.
+            if self._credentials_json or _read_host_oauth_token():
+                raise
+            fresh = _read_host_credentials()
+            if fresh is None:
+                raise
+            self._host_credentials = fresh
+            if _host_token_expired(fresh):
+                # A retry would make the CLI spend, and possibly rotate, the host's
+                # refresh token, which the read-only mount cannot persist.
+                logger.warning("claude_code_host_login_expired")
+                raise AgentError(
+                    "host Claude login has expired — refresh it on the host"
+                ) from first
+            logger.warning("claude_code_auth_failed_retrying_with_host_credentials")
+            try:
+                return await self._run_once(prompt, timeout, fresh, host=True)
+            except _CliAuthError as second:
+                raise second from first
+
+    async def _run_once(
+        self,
+        prompt: str,
+        timeout: int,
+        credentials: dict[str, Any] | None,
+        host: bool = False,
+    ) -> str:
         """Execute claude CLI with the given prompt and return output.
 
         If per-user credentials are configured, writes them to a temp
@@ -109,32 +258,51 @@ class ClaudeCodeAdapter(AgentAdapter):
         # The prompt goes on stdin, not argv: rendered lecture prompts routinely
         # exceed ARG_MAX and exec() then fails with "[Errno 7] Argument list too
         # long". `claude -p` with no positional prompt reads it from stdin.
-        cmd = [self._cli_path, "-p", "--output-format", "text"]
+        # SAFETY-053: ``--tools ""`` leaves the CLI with no tools. The prompt carries
+        # untrusted lecture text; with default tools an injected lecture could make
+        # the CLI Read /proc/self/environ or the mounted login into the summary.
+        cmd = [
+            self._cli_path,
+            "-p",
+            "--output-format",
+            "text",
+            # No --mcp-config is passed, so strict mode means no MCP server (and
+            # none of its tools) can load, whatever config the container carries.
+            "--strict-mcp-config",
+            # Do not persist transcripts of users' lecture text under ~/.claude.
+            "--no-session-persistence",
+            # Variadic: keep last so nothing positional is swallowed.
+            "--tools",
+            "",
+        ]
         logger.info(
             "claude_code_call",
             prompt_length=len(prompt),
             model=self._model,
-            has_user_credentials=self._credentials_json is not None,
+            has_user_credentials=credentials is not None and not host,
         )
 
-        env = None
+        env = _base_env()
         temp_dir = None
 
         try:
             # Set up per-user credentials if provided
-            if self._credentials_json:
+            if credentials:
                 temp_dir = tempfile.mkdtemp(prefix="claude_creds_")
                 creds_path = os.path.join(temp_dir, ".credentials.json")
                 with open(creds_path, "w") as f:
-                    json.dump(self._credentials_json, f)
+                    json.dump(credentials, f)
                 # Restrictive permissions: owner read/write only
                 os.chmod(creds_path, stat.S_IRUSR | stat.S_IWUSR)
 
-                env = {**os.environ, "CLAUDE_CONFIG_DIR": temp_dir}
-                logger.info(
-                    "claude_code_using_user_credentials",
-                    config_dir=temp_dir,
-                )
+                env["CLAUDE_CONFIG_DIR"] = temp_dir
+                if not host:
+                    logger.info("claude_code_using_user_credentials", config_dir=temp_dir)
+
+            elif (token := _read_host_oauth_token()) is not None:
+                # R-026: the child's env only; never argv, never os.environ.
+                env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+                logger.info("claude_code_using_host_oauth_token")
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -163,7 +331,9 @@ class ClaudeCodeAdapter(AgentAdapter):
                         with open(creds_path) as f:
                             refreshed = json.load(f)
                         # Only store if different from original
-                        if refreshed != self._credentials_json:
+                        # Host (operator) credentials are never handed back: callers
+                        # persist refreshed_credentials into the user's own row.
+                        if not host and refreshed != credentials:
                             self.refreshed_credentials = refreshed
                             logger.info("claude_code_credentials_refreshed")
                 except Exception:
@@ -194,7 +364,10 @@ class ClaudeCodeAdapter(AgentAdapter):
             # stdout first: `claude -p` writes its answer, and its refusal to
             # produce one, there. stderr is where warnings go.
             error_text = _describe_failure(stdout, stderr)
-            raise self._agent_error(f"Claude Code failed (exit {process.returncode}): {error_text}")
+            message = self._redact(f"Claude Code failed (exit {process.returncode}): {error_text}")
+            if _AUTH_FAILURE.search(error_text):
+                raise _CliAuthError(message)
+            raise AgentError(message)
 
         result = stdout.decode().strip()
         # The CLI runs with --output-format text and reports no token usage, so

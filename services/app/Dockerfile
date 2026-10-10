@@ -51,7 +51,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-crosextra-caladea \
     fonts-dejavu-core \
     && fc-cache -f \
-    && npm install -g @anthropic-ai/claude-code \
+    && npm install -g @anthropic-ai/claude-code@2.1.286 \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 

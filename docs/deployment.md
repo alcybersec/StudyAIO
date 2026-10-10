@@ -466,6 +466,89 @@ curl https://your-domain.com/health
 
 ---
 
+## Claude service login
+
+The `claude_code` backend needs a Claude login in the worker. It comes from a
+**dedicated directory**, not the operator's personal `~/.claude`, and is a
+**long-lived token** (`claude setup-token`, R-026) so nothing needs refreshing.
+The directory holds `oauth-token` (one line, mode 0600); the worker reads it via
+`CLAUDE_HOST_OAUTH_TOKEN_FILE=/run/claude-host/oauth-token` and the adapter
+hands it only to the CLI subprocess. A `.credentials.json` there is only the
+documented fallback (an expiring login that is never refreshed).
+
+**Operator steps on deploy-host (deploy user, not root, in `/opt/studyaio`):**
+
+```bash
+# 1. Create the dir BEFORE the first `compose up` (see warning below)
+bash scripts/setup-claude-login.sh              # /opt/studyaio/claude-login, 0700; prompts for the token
+# 2. In a second terminal, as the same user, mint the token (dedicated, revocable account/plan)
+claude setup-token                              # prints a token once; copy it
+# 3. Paste it at the script's hidden "Token:" prompt (not echoed, written 0600;
+#    never put it in .env, a shell variable on the command line, or history)
+# 4. Deploy via GitLab CI only: merge to main and let `deploy-selfhosted` roll the
+#    stack. Do not hand-run `docker compose up` on the host (a manual `up` caused
+#    prod drift); CI pins IMAGE_TAG and uses the same compose files every time.
+# 5. Verify after that deploy: preflight, then the worker's view of the dir (read-only exec)
+bash scripts/preflight-check.sh                 # dir exists, not world-readable, oauth-token is 0600
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec worker ls /run/claude-host
+```
+
+To use another path, set `STUDYAIO_CLAUDE_LOGIN_DIR` in the deploy `.env` and
+pass it to the script. The script copies no existing credentials and refuses a
+path that resolves to your `~/.claude`; preflight checks the same.
+
+**Run setup first.** If the directory (or the placeholder `settings.json` /
+`.credentials.json`) is missing when you run `compose up`, Docker creates
+root-owned *directories* at those paths in place of the single-file mounts,
+and the worker then cannot start cleanly. If that happened, stop the stack,
+`sudo rm -r` the bogus entries, and re-run the setup script.
+
+**Rotate:** `bash scripts/setup-claude-login.sh --rotate`, paste a fresh token
+from `claude setup-token`. No recreate is needed: the adapter re-reads
+`oauth-token` on every call and `/run/claude-host` is a directory mount, so the
+new token takes effect on the next CLI call.
+
+**Revoke:** delete `<dir>/oauth-token` (and reset `.credentials.json` to `{}`, do
+not delete it: a missing file makes Docker create a directory there) and revoke
+the token in the Claude account that issued it. Again no recreate: the deleted
+token is gone on the next CLI call.
+
+**`settings.json` must stay `{}`.** Hooks, MCP servers or permissions in it give
+the worker's CLI tools or commands. Preflight errors if it is anything else, and
+`setup-claude-login.sh` warns (without overwriting) when it finds such a file.
+
+**Emergency only: recreate just the worker outside CI.** Rotation and revocation
+do not need it (see above); use it only when the worker itself must be recreated
+outside CI. **First step:** run `grep '^IMAGE_TAG=' .env` in `/opt/studyaio` and
+confirm it is the CI-pinned sha; the secret-manager service can regenerate `.env`
+(e.g. after a reboot) and drop the pin. **Stop if it is not the pinned sha.**
+Then, with the `.env` that the last CI deploy pinned (so `IMAGE_TAG`
+and `GHCR_OWNER` are left exactly as they are; do not edit or regenerate it):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  up -d --no-build --no-deps worker
+```
+
+It must use both files CI uses (base plus prod overlay), run the GHCR images at
+the unchanged `IMAGE_TAG`, never `--build`, and touch only `worker`. Never
+restart `the secret-manager sync service`: it regenerates `.env` and drops the
+`IMAGE_TAG` pin. Note the use in the deploy log; the next CI deploy reasserts
+the canonical state.
+
+**What the worker can see:** only that directory, mounted read-only at
+`/run/claude-host`, plus `settings.json` and `.credentials.json` over the same
+files in the image's `/root/.claude` (kept as placeholders so the single-file
+mounts have a source). The image's `~/.claude` is not overlaid as a directory.
+The api and beat containers get nothing. The operator's personal `~/.claude` is
+never mounted.
+
+**Read-only on purpose:** a writable mount would let a compromised worker plant
+hooks or settings into a Claude config that a host-side `claude` may later load.
+The adapter never writes back to this directory.
+
+---
+
 ## Environment Variable Reference
 
 | Variable | Default | Description |

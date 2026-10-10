@@ -126,7 +126,7 @@ BLOB_SANCTIONED = {
     ("app/services/account_service.py", "purge_user_storage", "store.delete_prefix"): (
         "explicit account deletion (as above)"
     ),
-    ("app/agents/claude_code.py", "ClaudeCodeAdapter._run_claude_code", "shutil.rmtree"): (
+    ("app/agents/claude_code.py", "ClaudeCodeAdapter._run_once", "shutil.rmtree"): (
         "per-call tempfile.mkdtemp() credentials dir, outside data/"
     ),
     ("app/pipeline/classify.py", "_extract_text_preview", "path.unlink"): (

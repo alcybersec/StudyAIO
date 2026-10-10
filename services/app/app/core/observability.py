@@ -117,6 +117,17 @@ def scrub_event(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] |
             if isinstance(data, dict):
                 _scrub_mapping(data)
 
+        # Defence in depth: drop frame locals even if the SDK option regresses.
+        for container in ("exception", "threads"):
+            holder = event.get(container)
+            values = holder.get("values") if isinstance(holder, dict) else None
+            for entry in values if isinstance(values, list) else []:
+                stacktrace = entry.get("stacktrace") if isinstance(entry, dict) else None
+                frames = stacktrace.get("frames") if isinstance(stacktrace, dict) else None
+                for frame in frames if isinstance(frames, list) else []:
+                    if isinstance(frame, dict):
+                        frame.pop("vars", None)
+
         for section in ("extra", "tags"):
             value = event.get(section)
             if isinstance(value, dict):
@@ -194,6 +205,9 @@ def init_sentry(component: str) -> bool:
             # Never let Sentry attach request bodies, headers or user identity
             # on its own — `scrub_event` decides what is safe.
             send_default_pii=False,
+            # Frame locals carry whatever the failing function held, e.g. the
+            # worker env dict with the Claude token. Never ship them.
+            include_local_variables=False,
             before_send=scrub_event,
         )
         sentry_sdk.set_tag("component", component)

@@ -98,6 +98,31 @@ def _quoted_env_text(**overrides) -> str:
     return "".join(f"{k}='{v}'\n" for k, v in values.items() if v is not None)
 
 
+def _make_login_dir(base: Path, *, token: bool = True, mode: int = 0o700) -> Path:
+    """A prepared Claude service-login dir, as setup-claude-login.sh leaves it."""
+    d = base / "claude-login"
+    d.mkdir()
+    for name in ("settings.json", ".credentials.json"):
+        (d / name).write_text("{}\n")
+        (d / name).chmod(0o600)
+    if token:
+        (d / "oauth-token").write_text("<test-placeholder>\n")
+        (d / "oauth-token").chmod(0o600)
+    d.chmod(mode)
+    return d
+
+
+@pytest.fixture
+def login_dir(tmp_path) -> Path:
+    return _make_login_dir(tmp_path)
+
+
+@pytest.fixture(autouse=True)
+def _default_login_dir(login_dir, monkeypatch):
+    """Point the check at a prepared tmp dir so tests never depend on /opt/studyaio."""
+    monkeypatch.setenv("STUDYAIO_CLAUDE_LOGIN_DIR", str(login_dir))
+
+
 def _run(env_file: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     """Run the script against an env file, optionally overriding the process env."""
     process_env = None
@@ -143,7 +168,7 @@ class TestProviderCredential:
     def test_claude_code_needs_no_key(self, tmp_path):
         result = _run(_write_env(tmp_path, AGENT_BACKEND="claude_code"))
         assert result.returncode == 0, result.stdout
-        assert "mounted ~/.claude" in result.stdout
+        assert "dedicated service-login dir" in result.stdout
 
     def test_ollama_needs_no_key(self, tmp_path):
         result = _run(_write_env(tmp_path, AGENT_BACKEND="ollama"))
@@ -175,6 +200,90 @@ class TestProviderCredential:
         )
         assert result.returncode == 0, result.stdout
         assert "AGENT_BACKEND=claude_code" in result.stdout
+
+
+class TestClaudeLoginDir:
+    """The worker's dedicated Claude login dir (R-025/R-026)."""
+
+    def _run_cc(self, tmp_path, login_dir, **env):
+        return _run(
+            _write_env(tmp_path, AGENT_BACKEND="claude_code"),
+            {"STUDYAIO_CLAUDE_LOGIN_DIR": str(login_dir), **env},
+        )
+
+    def test_prepared_dir_passes(self, tmp_path, login_dir):
+        result = self._run_cc(tmp_path, login_dir)
+        assert result.returncode == 0, result.stdout
+        assert "oauth-token present" in result.stdout
+
+    def test_missing_dir_fails(self, tmp_path):
+        result = self._run_cc(tmp_path, tmp_path / "nope")
+        assert result.returncode == 1
+        assert "is missing" in result.stdout
+
+    def test_world_readable_dir_fails(self, tmp_path, login_dir):
+        login_dir.chmod(0o755)
+        result = self._run_cc(tmp_path, login_dir)
+        assert result.returncode == 1
+        assert "world-accessible" in result.stdout
+
+    def test_missing_token_fails(self, tmp_path):
+        (tmp_path / "x").mkdir()
+        d = _make_login_dir(tmp_path / "x", token=False)
+        result = self._run_cc(tmp_path, d)
+        assert result.returncode == 1
+        assert "no oauth-token" in result.stdout
+
+    def test_fallback_credentials_only_warns(self, tmp_path):
+        (tmp_path / "x").mkdir()
+        d = _make_login_dir(tmp_path / "x", token=False)
+        (d / ".credentials.json").write_text('{"k": "v"}\n')
+        result = self._run_cc(tmp_path, d)
+        assert result.returncode == 0, result.stdout
+        assert "fallback" in result.stdout
+
+    @pytest.mark.parametrize("body", ["{ }\n", "\n{\n}\n", " {} "])
+    def test_settings_empty_object_any_whitespace_passes(self, tmp_path, login_dir, body):
+        (login_dir / "settings.json").write_text(body)
+        result = self._run_cc(tmp_path, login_dir)
+        assert result.returncode == 0, result.stdout
+        assert "settings.json is an empty {}" in result.stdout
+
+    @pytest.mark.parametrize(
+        "body", ['{"hooks": {}}', '{"permissions": {"allow": ["Bash"]}}', "", "[]"]
+    )
+    def test_settings_not_empty_object_fails(self, tmp_path, login_dir, body):
+        (login_dir / "settings.json").write_text(body)
+        result = self._run_cc(tmp_path, login_dir)
+        assert result.returncode == 1
+        assert "settings.json" in result.stdout and "not exactly {}" in result.stdout
+
+    def test_settings_missing_fails(self, tmp_path, login_dir):
+        (login_dir / "settings.json").unlink()
+        result = self._run_cc(tmp_path, login_dir)
+        assert result.returncode == 1
+        assert "not exactly {}" in result.stdout
+
+    def test_token_not_0600_fails(self, tmp_path, login_dir):
+        (login_dir / "oauth-token").chmod(0o644)
+        result = self._run_cc(tmp_path, login_dir)
+        assert result.returncode == 1
+        assert "oauth-token is mode 644" in result.stdout
+
+    def test_dir_that_is_home_claude_fails(self, tmp_path):
+        home = tmp_path / "home"
+        (home / ".claude").mkdir(parents=True)
+        result = self._run_cc(tmp_path, home / ".claude", HOME=str(home))
+        assert result.returncode == 1
+        assert "dedicated directory" in result.stdout
+
+    def test_dir_that_contains_home_claude_fails(self, tmp_path):
+        home = tmp_path / "home"
+        (home / ".claude").mkdir(parents=True)
+        home.chmod(0o700)
+        result = self._run_cc(tmp_path, home, HOME=str(home))
+        assert result.returncode == 1
+        assert "CONTAINS" in result.stdout
 
 
 class TestSpendCeiling:

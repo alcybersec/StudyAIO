@@ -36,19 +36,15 @@ default:
 
 variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  # The torch CPU wheel alone is ~200MB; the CPU index keeps CI off the CUDA build.
-  PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
   PIP_CACHE_DIR: $CI_PROJECT_DIR/.cache/pip
-  # Pin every resolved version, direct and transitive, for every pip install in
-  # this file. requirements.txt still decides WHAT is installed; the lock only
-  # fixes WHICH VERSION, so CI does not re-resolve against a moving index on
-  # each run. GL#7: e2e-tests failed with ResolutionImpossible on an unchanged
-  # requirements.txt and passed on a plain retry -- a resolve that consults the
-  # network for candidates can fail on a run where nothing changed.
-  #
-  # Absolute, because backend-tests and e2e both `cd services/app` first.
-  # Regenerate with ./scripts/lock-requirements.sh after editing requirements.txt.
-  PIP_CONSTRAINT: $CI_PROJECT_DIR/services/app/requirements.lock.txt
+  # Backend installs go through scripts/ci-pip-install.sh, which installs the
+  # exact pins in services/app/requirements.lock.txt with --no-deps (no resolver)
+  # and gives each package a single index (PyPI, or the torch CPU index for
+  # torch==x+cpu). So there is deliberately no PIP_EXTRA_INDEX_URL or
+  # PIP_CONSTRAINT here. GL#7: e2e-tests failed ResolutionImpossible on an
+  # unchanged requirements.txt (job 2810) because an index lookup came back
+  # empty and the resolver called it a conflict. Regenerate the lock with
+  # ./scripts/lock-requirements.sh after editing requirements.txt.
   npm_config_cache: $CI_PROJECT_DIR/.cache/npm
 
 # Redis has no client binary in these images, so reachability is checked in pure
@@ -90,8 +86,8 @@ backend-tests:
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends build-essential libpq-dev
+    - ./scripts/ci-pip-install.sh
     - cd services/app
-    - pip install -r requirements.txt
   script:
     - python -m pytest tests/unit -x -v -n auto --cov=app --cov-report=term-missing
       --cov-report=xml:coverage.xml
@@ -126,8 +122,8 @@ test-floor:
     - apt-get update
     - apt-get install -y --no-install-recommends build-essential libpq-dev git
     - git --version
+    - ./scripts/ci-pip-install.sh
     - cd services/app
-    - pip install -r requirements.txt
   script:
     - python -m pytest tests/safety -v --cov=tests/safety --cov-report=term-missing
       --cov-fail-under=$(python ../../scripts/coverage-tier.py floor)
@@ -156,8 +152,8 @@ integration-tests:
     - for i in $(seq 1 60); do pg_isready -h postgres -U testuser -d testdb && break; sleep 1; done
     - *wait-for-redis
     - PGPASSWORD=testpass psql -h postgres -U testuser -d testdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+    - ./scripts/ci-pip-install.sh
     - cd services/app
-    - pip install -r requirements.txt
   script:
     # Gate = the `integration` tier in pyproject's [tool.studyaio.coverage-tiers].
     - python -m pytest tests/integration -x -v --cov=app --cov-report=term-missing
@@ -205,6 +201,7 @@ e2e-tests:
   # 293); noble enforces PEP 668, so that flag is required there.
   image: mcr.microsoft.com/playwright:v1.58.2-noble
   needs: [frontend-checks]
+  cache: *pip-cache
   services:
     - name: pgvector/pgvector:pg16
       alias: postgres
@@ -231,7 +228,11 @@ e2e-tests:
     - for i in $(seq 1 60); do pg_isready -h postgres -U studyaio -d studyaio && break; sleep 1; done
     - *wait-for-redis
     - PGPASSWORD=studyaio psql -h postgres -U studyaio -d studyaio -c "CREATE EXTENSION IF NOT EXISTS vector;"
-    - python3 -m pip install --break-system-packages -r services/app/requirements.txt
+    # A venv, not --break-system-packages: the lock's pins would otherwise try to
+    # replace Debian-owned packages, which pip cannot uninstall (no RECORD file).
+    - python3 -m venv "$CI_PROJECT_DIR/.venv"
+    - export PATH="$CI_PROJECT_DIR/.venv/bin:$PATH"
+    - ./scripts/ci-pip-install.sh
   script:
     - mkdir -p "$DATA_DIR"
     - cd services/app

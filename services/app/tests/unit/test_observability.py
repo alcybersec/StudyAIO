@@ -85,6 +85,11 @@ class TestInitSentryEnabled:
         kwargs = fake_sentry.init.call_args.kwargs
         assert kwargs["send_default_pii"] is False
 
+    def test_never_ships_frame_local_variables(self, fake_sentry):
+        observability.init_sentry("worker")
+        kwargs = fake_sentry.init.call_args.kwargs
+        assert kwargs["include_local_variables"] is False
+
     def test_passes_environment_release_and_sample_rate(self, fake_sentry):
         observability.init_sentry("api")
         kwargs = fake_sentry.init.call_args.kwargs
@@ -123,6 +128,32 @@ class TestInitSentryEnabled:
 
 class TestScrubEvent:
     """Credentials must never reach Sentry."""
+
+    def test_strips_stack_frame_vars(self):
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "stacktrace": {
+                            "frames": [
+                                {"function": "_run_once", "vars": {"env": {"TOKEN": "x"}}},
+                                {"function": "other"},
+                            ]
+                        }
+                    },
+                    {"type": "NoStack"},
+                ]
+            }
+        }
+        out = observability.scrub_event(event, {})
+        frames = out["exception"]["values"][0]["stacktrace"]["frames"]
+        assert all("vars" not in f for f in frames)
+        assert frames[0]["function"] == "_run_once"
+
+    def test_strips_frame_vars_in_threads(self):
+        event = {"threads": {"values": [{"stacktrace": {"frames": [{"vars": {"a": 1}}]}}]}}
+        out = observability.scrub_event(event, {})
+        assert "vars" not in out["threads"]["values"][0]["stacktrace"]["frames"][0]
 
     def test_scrubs_sensitive_headers(self):
         event = {
