@@ -9,8 +9,9 @@ import zipfile
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
+from app.core import secret_box
 from app.models.usage_record import UsageRecord
 from app.models.user_settings import UserSettings
 
@@ -218,13 +219,44 @@ class TestSettings:
         row = (
             await db_session.execute(select(UserSettings).where(UserSettings.user_id == user.id))
         ).scalar_one()
-        assert row.settings_json["openai_api_key"] == secret
+        stored = row.settings_json["openai_api_key"]
+        assert stored != secret
+        assert stored.startswith("enc:v1:")
+        assert secret_box.decrypt(stored) == secret
 
         # An empty value leaves it unchanged; clear_secrets removes it.
         await client.put("/api/settings", json={"openai_api_key": "", "theme": "light"})
         assert (await client.get("/api/settings")).json()["openai_api_key_configured"] is True
         await client.put("/api/settings", json={"clear_secrets": ["openai_api_key"]})
         assert (await client.get("/api/settings")).json()["openai_api_key_configured"] is False
+
+    async def test_credential_encrypted_in_postgres_and_decrypted_for_agent(
+        self, client_factory, make_user, db_session
+    ):
+        from app.services import settings_service
+
+        user = await make_user()
+        secret = "sk-test-ROUNDTRIP-VALUE"
+        put = await client_factory(user).put(
+            "/api/settings", json={"agent_backend": "openai", "openai_api_key": secret}
+        )
+        assert put.status_code == 200, put.text
+
+        # The raw column, read with SQL rather than the ORM, holds no plaintext.
+        raw = (
+            await db_session.execute(
+                text("SELECT settings_json::text FROM user_settings WHERE user_id = :u"),
+                {"u": user.id},
+            )
+        ).scalar_one()
+        assert secret not in raw
+        assert "enc:v1:" in raw
+
+        # The agent-config path still hands the factory the plaintext.
+        config = await settings_service.get_user_agent_config(db_session, user.id)
+        assert config is not None
+        assert config["agent_backend"] == "openai"
+        assert config["openai_api_key"] == secret
 
     async def test_settings_are_per_user(self, client_factory, make_user):
         a, b = await make_user(), await make_user()
