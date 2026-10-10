@@ -264,6 +264,41 @@ def test_floor1_signup_seeds_preferences_for_the_user_just_created(path, functio
         assert owner == "user.id", f"{path}:{function} seeds preferences for {owner!r}"
 
 
+# ── course quota at classify (GL#19, ai AI-029 447efb4) ───────────────────
+
+
+@pytest.mark.asyncio
+async def test_floor1_course_quota_reads_only_the_row_owners_tier_and_count():
+    """A new course is gated on the owner's own tier and course count.
+
+    ``users`` is a catalogue table to the sweep, so a tier read on another
+    user (``select(User.tier).limit(1)``) would pass every other pin while
+    pricing A's upload on B's plan. Nothing is deleted on refusal.
+    """
+    from app.core.exceptions import QuotaExceededError
+    from app.pipeline import classify
+
+    session = _Recorder()
+    deleted = AsyncMock()
+    session.delete = deleted
+    check = AsyncMock(side_effect=QuotaExceededError("courses", 3, "plan"))
+    with patch.object(classify, "check_course_quota", check):
+        with pytest.raises(QuotaExceededError):
+            await classify._get_or_create_course(session, "NEW101", user_id=USER_A)
+
+    assert check.await_args.args[1] == USER_A, "course quota checked for someone else"
+    tier_reads = [s for s in session.statements if tables_in(s) == {"users"}]
+    assert tier_reads, "no tier lookup ran, so this proves nothing"
+    for statement in tier_reads:
+        assert _filters_users_id(statement, USER_A), (
+            f"Floor 1: the course-quota tier is read from another user's row: {statement}"
+        )
+    for statement in session.statements:
+        if "courses" in tables_in(statement):
+            assert filters_on_user(statement, USER_A), f"unscoped course lookup: {statement}"
+    assert session.added == [] and deleted.await_count == 0, "a refused course wrote or deleted"
+
+
 # ── unsubscribe link ─────────────────────────────────────────────────────
 
 EMAIL_SENTINEL = "floor2-nudge-recipient@floor2.invalid"
