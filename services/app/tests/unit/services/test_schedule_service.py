@@ -1,10 +1,11 @@
 """Tests for schedule service."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.clock import utc_today
 from app.services.schedule_service import (
     _get_priority,
     generate_study_schedule,
@@ -125,12 +126,12 @@ class TestGetDailyStudyPlan:
     @patch("app.services.schedule_service.generate_study_schedule", new_callable=AsyncMock)
     async def test_returns_todays_plan(self, mock_gen):
         """Returns only today's plan."""
-        mock_gen.return_value = [{"date": date.today().isoformat(), "priority": "medium"}]
+        mock_gen.return_value = [{"date": utc_today().isoformat(), "priority": "medium"}]
 
         result = await get_daily_study_plan(AsyncMock(), "exam-001", user_id="user-1")
 
         assert result is not None
-        assert result["date"] == date.today().isoformat()
+        assert result["date"] == utc_today().isoformat()
 
     @pytest.mark.asyncio
     @patch("app.services.schedule_service.generate_study_schedule", new_callable=AsyncMock)

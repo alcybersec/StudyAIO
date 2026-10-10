@@ -1,10 +1,11 @@
 """Tests for study_service — weekly planner."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.clock import utc_today
 from app.services import study_service
 
 
@@ -16,7 +17,7 @@ def _make_exam(exam_id: str, course_id: str) -> MagicMock:
 
 
 def _schedule(days: int, card_target: int, quiz_target: int, priority: str = "low") -> list[dict]:
-    today = date.today()
+    today = utc_today()
     return [
         {
             "date": (today + timedelta(days=i)).isoformat(),
@@ -77,7 +78,7 @@ class TestBuildWeekPlan:
             plan = await study_service.build_week_plan(mock_session, "user-001")
 
         assert len(plan) == 7
-        today = date.today()
+        today = utc_today()
         assert plan[0]["day"] == today.isoformat()
         first_items = plan[0]["items"]
         kinds = {i["kind"] for i in first_items}
@@ -141,7 +142,7 @@ class TestBuildWeekPlan:
     async def test_done_computed_from_study_sessions(self, mock_session):
         """cards/quiz done counts come from this week's study sessions."""
         exam = _make_exam("exam-001", "course-001")
-        today = date.today()
+        today = utc_today()
 
         session_row = MagicMock()
         session_row.course_id = "course-001"
