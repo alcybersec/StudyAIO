@@ -232,6 +232,13 @@ check_claude_login_dir() {
     else
         error "Claude login dir $dir has no oauth-token — run scripts/setup-claude-login.sh."
     fi
+    # settings.json is mounted over the CLI's own config: hooks, MCP servers or
+    # permissions in it would hand the worker's CLI tools or commands.
+    if [[ -f "$dir/settings.json" && "$(tr -d '[:space:]' < "$dir/settings.json")" == "{}" ]]; then
+        ok "Claude login: settings.json is an empty {}"
+    else
+        error "Claude login: $dir/settings.json is missing or not exactly {} — hooks/MCP/permissions there give the worker's CLI tools or commands. Reset it to {}."
+    fi
 }
 
 AGENT_BACKEND=$(get_val "AGENT_BACKEND")

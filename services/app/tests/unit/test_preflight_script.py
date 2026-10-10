@@ -242,6 +242,28 @@ class TestClaudeLoginDir:
         assert result.returncode == 0, result.stdout
         assert "fallback" in result.stdout
 
+    @pytest.mark.parametrize("body", ["{ }\n", "\n{\n}\n", " {} "])
+    def test_settings_empty_object_any_whitespace_passes(self, tmp_path, login_dir, body):
+        (login_dir / "settings.json").write_text(body)
+        result = self._run_cc(tmp_path, login_dir)
+        assert result.returncode == 0, result.stdout
+        assert "settings.json is an empty {}" in result.stdout
+
+    @pytest.mark.parametrize(
+        "body", ['{"hooks": {}}', '{"permissions": {"allow": ["Bash"]}}', "", "[]"]
+    )
+    def test_settings_not_empty_object_fails(self, tmp_path, login_dir, body):
+        (login_dir / "settings.json").write_text(body)
+        result = self._run_cc(tmp_path, login_dir)
+        assert result.returncode == 1
+        assert "settings.json" in result.stdout and "not exactly {}" in result.stdout
+
+    def test_settings_missing_fails(self, tmp_path, login_dir):
+        (login_dir / "settings.json").unlink()
+        result = self._run_cc(tmp_path, login_dir)
+        assert result.returncode == 1
+        assert "not exactly {}" in result.stdout
+
     def test_token_not_0600_fails(self, tmp_path, login_dir):
         (login_dir / "oauth-token").chmod(0o644)
         result = self._run_cc(tmp_path, login_dir)

@@ -55,6 +55,9 @@ chmod 0700 "$DIR"
 
 # Placeholders: without them Docker creates root-owned directories at these paths.
 [[ -e "$DIR/settings.json" ]] || ( umask 077; echo '{}' > "$DIR/settings.json" )
+if [[ -f "$DIR/settings.json" && "$(tr -d '[:space:]' < "$DIR/settings.json")" != "{}" ]]; then
+    echo "WARNING: $DIR/settings.json is not '{}' (left untouched). Hooks, MCP servers or permissions there give the worker's CLI tools or commands; reset it to {} unless you are certain. Preflight will fail until you do." >&2
+fi
 # Always a private empty `{}` (0600); the fallback login, if ever used, replaces it.
 [[ -e "$DIR/.credentials.json" ]] || ( umask 077; echo '{}' > "$DIR/.credentials.json" )
 

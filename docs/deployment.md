@@ -504,18 +504,25 @@ and the worker then cannot start cleanly. If that happened, stop the stack,
 `sudo rm -r` the bogus entries, and re-run the setup script.
 
 **Rotate:** `bash scripts/setup-claude-login.sh --rotate`, paste a fresh token
-from `claude setup-token`. There is no CI job that recreates only the worker, so
-the next CI deploy (`deploy-selfhosted` on main) picks the new token up. If it
-cannot wait, use the emergency procedure below.
+from `claude setup-token`. No recreate is needed: the adapter re-reads
+`oauth-token` on every call and `/run/claude-host` is a directory mount, so the
+new token takes effect on the next CLI call.
 
 **Revoke:** delete `<dir>/oauth-token` (and reset `.credentials.json` to `{}`, do
-not delete it: a missing file makes Docker create a directory there), revoke the
-token in the Claude account that issued it, and let the next CI deploy recreate
-the worker (or use the emergency procedure).
+not delete it: a missing file makes Docker create a directory there) and revoke
+the token in the Claude account that issued it. Again no recreate: the deleted
+token is gone on the next CLI call.
 
-**Emergency only: recreate just the worker outside CI.** Use this only when a
-rotation or revocation cannot wait for a CI deploy. On the host, in
-`/opt/studyaio`, with the `.env` that the last CI deploy pinned (so `IMAGE_TAG`
+**`settings.json` must stay `{}`.** Hooks, MCP servers or permissions in it give
+the worker's CLI tools or commands. Preflight errors if it is anything else, and
+`setup-claude-login.sh` warns (without overwriting) when it finds such a file.
+
+**Emergency only: recreate just the worker outside CI.** Rotation and revocation
+do not need it (see above); use it only when the worker itself must be recreated
+outside CI. **First step:** run `grep '^IMAGE_TAG=' .env` in `/opt/studyaio` and
+confirm it is the CI-pinned sha; the secret-manager service can regenerate `.env`
+(e.g. after a reboot) and drop the pin. **Stop if it is not the pinned sha.**
+Then, with the `.env` that the last CI deploy pinned (so `IMAGE_TAG`
 and `GHCR_OWNER` are left exactly as they are; do not edit or regenerate it):
 
 ```bash
