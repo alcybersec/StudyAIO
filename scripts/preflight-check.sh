@@ -207,6 +207,12 @@ check_claude_login_dir() {
         error "Claude login dir resolves to \$HOME/.claude — the worker must use a dedicated directory, not your personal one."
         return
     fi
+    local rdir rpersonal
+    rdir="$(realpath -m "$dir")"; rpersonal="$(realpath -m "$HOME/.claude")"
+    if [[ "$rpersonal" == "${rdir%/}/"* ]]; then
+        error "Claude login dir $dir CONTAINS your personal ~/.claude (e.g. it is \$HOME) — use a dedicated directory."
+        return
+    fi
     local mode
     mode=$(stat -c '%a' "$dir")
     if (( (8#$mode & 8#007) != 0 )); then
@@ -216,6 +222,11 @@ check_claude_login_dir() {
     fi
     if [[ -s "$dir/oauth-token" ]]; then
         ok "Claude login: oauth-token present"
+        local tmode
+        tmode=$(stat -c '%a' "$dir/oauth-token")
+        if [[ "$tmode" != "600" ]]; then
+            error "Claude login: oauth-token is mode $tmode — chmod 600 $dir/oauth-token."
+        fi
     elif [[ -s "$dir/.credentials.json" && "$(tr -d '[:space:]' < "$dir/.credentials.json")" != "{}" ]]; then
         warn "Claude login: only the .credentials.json fallback is present (it expires and is not refreshed) — run scripts/setup-claude-login.sh for a long-lived token."
     else

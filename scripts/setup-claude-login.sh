@@ -6,8 +6,7 @@
 # from `claude setup-token`, stored as <dir>/oauth-token (0600). This script:
 #   1. creates the directory (0700, refuses root),
 #   2. creates placeholder files so Docker does not create directories in place
-#      of the single-file mounts (settings.json now, .credentials.json once the
-#      token is saved),
+#      of the single-file mounts (settings.json and .credentials.json, both `{}`, 0600),
 #   3. reads the token from the terminal WITHOUT echo and writes it with
 #      umask 077. It is never printed, never put in .env or shell history.
 # It copies NO existing credentials. Idempotent; an existing token is kept
@@ -38,6 +37,11 @@ if [[ "$(realpath -m "$DIR")" == "$(realpath -m "$HOME/.claude")" ]]; then
     echo "[ERROR] $DIR is your personal ~/.claude; the worker must use a dedicated directory." >&2
     exit 1
 fi
+_rdir="$(realpath -m "$DIR")"
+if [[ "$(realpath -m "$HOME/.claude")" == "${_rdir%/}/"* ]]; then
+    echo "[ERROR] $DIR contains your personal ~/.claude (e.g. it is \$HOME); use a dedicated directory." >&2
+    exit 1
+fi
 
 if [[ ! -d "$DIR" ]]; then
     if ! mkdir -p "$DIR" 2>/dev/null; then
@@ -51,12 +55,11 @@ chmod 0700 "$DIR"
 
 # Placeholders: without them Docker creates root-owned directories at these paths.
 [[ -e "$DIR/settings.json" ]] || ( umask 077; echo '{}' > "$DIR/settings.json" )
-# (.credentials.json is created only once a token is saved, below.)
-placeholder() { [[ -e "$DIR/.credentials.json" ]] || ( umask 077; echo '{}' > "$DIR/.credentials.json" ); }
+# Always a private empty `{}` (0600); the fallback login, if ever used, replaces it.
+[[ -e "$DIR/.credentials.json" ]] || ( umask 077; echo '{}' > "$DIR/.credentials.json" )
 
 if [[ -s "$DIR/oauth-token" && "$ROTATE" -eq 0 ]]; then
     chmod 0600 "$DIR/oauth-token"
-    placeholder
     echo "[OK] $DIR already holds a token. Re-run with --rotate to replace it."
     exit 0
 fi
@@ -79,7 +82,7 @@ fi
 TOKEN="${TOKEN//[[:space:]]/}"
 if [[ -z "$TOKEN" && ! -t 0 ]]; then
     echo "[OK] Directory prepared; no token supplied on stdin. Re-run interactively to save one"
-    echo "     (do not run compose up until then: the .credentials.json mount source is missing)."
+    echo "     (the worker has no login until a token is saved)."
     exit 0
 fi
 if [[ -z "$TOKEN" ]]; then
@@ -92,8 +95,8 @@ printf '%s\n' "$TOKEN" > "$tmp"
 chmod 0600 "$tmp"
 mv -f "$tmp" "$DIR/oauth-token"
 unset TOKEN
-placeholder
 
 echo "[OK] Token saved to $DIR/oauth-token (0600)."
 echo "Set STUDYAIO_CLAUDE_LOGIN_DIR=$DIR in the deploy .env if it differs from the default,"
-echo "then restart the worker:  docker compose up -d worker"
+echo "then deploy via CI (deploy-selfhosted on main); the worker picks the token up on its next"
+echo "recreate. Do not hand-run 'docker compose up'; see docs/deployment.md, Claude service login."

@@ -485,11 +485,12 @@ bash scripts/setup-claude-login.sh              # /opt/studyaio/claude-login, 07
 claude setup-token                              # prints a token once; copy it
 # 3. Paste it at the script's hidden "Token:" prompt (not echoed, written 0600;
 #    never put it in .env, a shell variable on the command line, or history)
-# 4. Deploy / restart the worker
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d worker
-# 5. Verify the dir is visible to the worker (and only the worker)
+# 4. Deploy via GitLab CI only: merge to main and let `deploy-selfhosted` roll the
+#    stack. Do not hand-run `docker compose up` on the host (a manual `up` caused
+#    prod drift); CI pins IMAGE_TAG and uses the same compose files every time.
+# 5. Verify after that deploy: preflight, then the worker's view of the dir (read-only exec)
+bash scripts/preflight-check.sh                 # dir exists, not world-readable, oauth-token is 0600
 docker compose -f docker-compose.yml -f docker-compose.prod.yml exec worker ls /run/claude-host
-bash scripts/preflight-check.sh                 # checks dir exists, not world-readable, has oauth-token
 ```
 
 To use another path, set `STUDYAIO_CLAUDE_LOGIN_DIR` in the deploy `.env` and
@@ -503,10 +504,30 @@ and the worker then cannot start cleanly. If that happened, stop the stack,
 `sudo rm -r` the bogus entries, and re-run the setup script.
 
 **Rotate:** `bash scripts/setup-claude-login.sh --rotate`, paste a fresh token
-from `claude setup-token`, then `docker compose ... restart worker`.
+from `claude setup-token`. There is no CI job that recreates only the worker, so
+the next CI deploy (`deploy-selfhosted` on main) picks the new token up. If it
+cannot wait, use the emergency procedure below.
 
-**Revoke:** delete `<dir>/oauth-token` (and `.credentials.json` if used), restart
-the worker, and revoke the token in the Claude account that issued it.
+**Revoke:** delete `<dir>/oauth-token` (and reset `.credentials.json` to `{}`, do
+not delete it: a missing file makes Docker create a directory there), revoke the
+token in the Claude account that issued it, and let the next CI deploy recreate
+the worker (or use the emergency procedure).
+
+**Emergency only: recreate just the worker outside CI.** Use this only when a
+rotation or revocation cannot wait for a CI deploy. On the host, in
+`/opt/studyaio`, with the `.env` that the last CI deploy pinned (so `IMAGE_TAG`
+and `GHCR_OWNER` are left exactly as they are; do not edit or regenerate it):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  up -d --no-build --no-deps worker
+```
+
+It must use both files CI uses (base plus prod overlay), run the GHCR images at
+the unchanged `IMAGE_TAG`, never `--build`, and touch only `worker`. Never
+restart `the secret-manager sync service`: it regenerates `.env` and drops the
+`IMAGE_TAG` pin. Note the use in the deploy log; the next CI deploy reasserts
+the canonical state.
 
 **What the worker can see:** only that directory, mounted read-only at
 `/run/claude-host`, plus `settings.json` and `.credentials.json` over the same
