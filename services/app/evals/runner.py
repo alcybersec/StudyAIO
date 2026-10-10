@@ -130,6 +130,7 @@ class CaseAggregate:
                     "missing": r.missing,
                     "fabricated": r.fabricated,
                     "missing_sections": r.missing_sections,
+                    "connection_violations": r.connection_violations,
                     "faithfulness": r.faithfulness,
                     "unsupported_claims": r.unsupported_claims,
                     "judge_error": r.judge_error,
@@ -339,6 +340,8 @@ def format_report(report: RunReport) -> str:
         sections = sorted({s for r in c.runs for s in r.missing_sections})
         if sections:
             lines.append(f"         missing sections: {', '.join(sections)}")
+        for v in dict.fromkeys(v for r in c.runs for v in r.connection_violations):
+            lines.append(f"         connections: {v}")
         for claim in dict.fromkeys(cl for r in c.runs for cl in r.unsupported_claims):
             lines.append(f"         unsupported: {claim}")
         errors = {r.judge_error for r in c.runs if r.judge_error}

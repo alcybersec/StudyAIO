@@ -1,6 +1,24 @@
-{# Summarize prompt template — v2.1
+{# Summarize prompt template — v2.2
    Purpose: Generate a comprehensive, pedagogically-structured lecture summary.
-   Variables: course_code, week, extraction_text, image_references
+   Variables: course_code, week, extraction_text, image_references,
+              other_weeks (optional: list of "Week N: topic" strings)
+
+   v2.2 (2026-10-10, GL#9): `## Connections` may only point at material that is
+   in the context this prompt was given.
+   Validating v2.1 against real lectures (CSIT302 W2, CSIT314 W2) found two
+   leaks. (1) A closing "In industry, ..." paragraph imported aerospace,
+   SOC practice, persuasion psychology: context the lecturer never gave, which
+   a student cannot tell from the lecture. (2) v2.1 invited links to "other
+   lectures in this course" while the model only ever sees this week, so it
+   asserted what other weeks taught ("builds on Week 1's CIA triad") from
+   priors. Right by luck on a canonical topic, confidently wrong elsewhere.
+   Now: no industry/market/real-world-adoption paragraph unless the lecture
+   itself discusses it; other weeks may be named only if listed under
+   "Other Weeks" below or if this lecture names them, and then only by title
+   or topic, never by what they contain; with nothing to go on the section says
+   so in one plain sentence. The section list and order are unchanged.
+   `other_weeks` is optional and no caller passes it yet, so today every
+   summary takes the "nothing known" path.
 
    v2.1 (2026-09-29): Section 9 `## Connections` grounded in the lecture.
 
@@ -45,6 +63,14 @@ Each entry shows: `filename (page N: surrounding text context...)`. Use the page
 Be SELECTIVE — only reference images that have genuine study value. Use markdown image syntax: `![description](filename_only)` where `filename_only` is JUST the filename part (before the parenthetical context). IMPORTANT: Use the EXACT filenames — do NOT change file extensions. Do NOT invent filenames that are not in the list above. Match each image to the correct concept based on its page context, NOT based on where you place it in the summary.
 {% endif %}
 
+{% if other_weeks %}
+## Other Weeks
+The only other lectures in this course that you know anything about:
+{% for w in other_weeks %}
+- {{ w }}
+{% endfor %}
+{% endif %}
+
 ## Output Requirements
 
 Generate a complete markdown summary with EXACTLY these sections in this order:
@@ -72,7 +98,11 @@ Generate a complete markdown summary with EXACTLY these sections in this order:
 
 8. `## Key Takeaways` — Bullet list of the most important lessons and insights from the lecture. Write as distilled "so what?" statements that capture why each point matters — not just restating facts.
 
-9. `## Connections` — 2-4 paragraphs linking this week's material to other lectures in this course. Ground every connection in something this lecture actually said: a concept it named, a problem it left open, a technique it built on. Where the lecture itself points beyond its own scope ("we will cover X next week", "this is used in Y"), follow that pointer and attribute it. Do NOT introduce named technologies, algorithms, standards or industry practices the lecture did not mention: a student revising from this cannot tell your additions from the lecturer's, and the exam will test the lecturer's.
+9. `## Connections` — 1-3 short paragraphs linking this week's material to other lectures in this course, using ONLY what is in this prompt:
+   - Ground every connection in something this lecture actually said: a concept it named, a problem it left open, a technique it built on. Where the lecture itself points beyond its own scope ("we will cover X next week", "this is used in Y"), follow that pointer and attribute it ("the lecture notes that...").
+   - You have seen only this week{% if other_weeks %} and the titles listed under "Other Weeks"{% endif %}. You may name another week only if{% if other_weeks %} it is listed under "Other Weeks" or{% endif %} this lecture names it. Refer to it by its title or topic only. NEVER state, summarise or imply what another week taught, covered or defined ("builds on Week 1's CIA triad", "as seen in Week 3"): you have not read it, and a wrong pointer misleads a student who cannot check.
+   - Do NOT add industry, market, career, historical or real-world-adoption context, and do NOT write an "In industry..." paragraph, unless the lecture itself discusses it, in which case attribute it to the lecture. Do NOT introduce named technologies, algorithms, standards, sectors or practices the lecture did not mention: a student revising from this cannot tell your additions from the lecturer's, and the exam will test the lecturer's.
+   - If the lecture points nowhere and nothing is listed, write one plain sentence: "This lecture does not link to other material, and no other weeks were available to compare against." Do not pad.
 
 10. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: 1.*`
 

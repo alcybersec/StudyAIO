@@ -91,6 +91,71 @@ class TestDeterministicScoring:
         assert score.passed
 
 
+class TestConnectionsGrounding:
+    """GL#9: `## Connections` may only use what the prompt context provides."""
+
+    CASE = {
+        "id": "c",
+        "week": 5,
+        "pages": [{"page": 1, "text": "Hash tables. We will cover trees in Week 6."}],
+    }
+
+    def _with(self, connections: str) -> str:
+        sections = scoring.required_sections()
+        out = []
+        for h in sections:
+            body = connections if h == "Connections" else "x"
+            out.append(f"## {h}\n\n{body}")
+        return "\n\n".join(out) + "\n\n---\n*Sources: a. Version: 1.*"
+
+    def test_grounded_connections_are_clean(self):
+        text = self._with("The lecture says trees follow in Week 6. This is week 5.")
+        assert scoring.check_connections(self.CASE, text) == []
+
+    def test_a_week_nobody_provided_is_flagged(self):
+        text = self._with("This builds on Week 1's CIA triad.")
+        assert scoring.check_connections(self.CASE, text) == [
+            "references Week 1, which was not provided"
+        ]
+
+    def test_a_listed_other_week_is_allowed(self):
+        case = {**self.CASE, "other_weeks": ["Week 4: Arrays"]}
+        assert scoring.check_connections(case, self._with("Compare Week 4: Arrays.")) == []
+
+    def test_industry_framing_is_flagged(self):
+        text = self._with("In industry, hashing underpins every database market.")
+        found = scoring.check_connections(self.CASE, text)
+        assert any("'industry'" in v for v in found)
+        assert any("'market'" in v for v in found)
+
+    def test_industry_the_lecture_itself_used_is_allowed(self):
+        case = {**self.CASE, "pages": [{"page": 1, "text": "Industry uses hashing."}]}
+        assert (
+            scoring.check_connections(case, self._with("As the lecture says, industry does.")) == []
+        )
+
+    def test_only_the_connections_section_is_checked(self):
+        sections = scoring.required_sections()
+        text = "\n\n".join(
+            f"## {h}\n\n" + ("Week 9 industry" if h == "Key Concepts" else "x") for h in sections
+        )
+        assert scoring.check_connections(self.CASE, text) == []
+
+    def test_a_violation_fails_the_case(self):
+        text = self._with("Builds on Week 1.")
+        assert not scoring.score_deterministic(self.CASE, text).passed
+
+    def test_the_prompt_forbids_what_the_eval_checks(self):
+        prompt = (scoring.PROMPTS_DIR / "summarize.txt").read_text()
+        assert "NEVER state, summarise or imply what another week taught" in prompt
+        assert "write one plain sentence" in prompt
+        assert "In industry" in prompt  # named as forbidden
+
+    def test_the_section_list_is_unchanged(self):
+        assert scoring.required_sections()[-1] == "Connections"
+        assert len(scoring.required_sections()) == 8  # title is `#`, not `##`
+
+
 class TestRequiredSections:
     def test_derived_from_the_prompt_not_hardcoded(self):
         """Editing the prompt must not leave this checking a stale format.
