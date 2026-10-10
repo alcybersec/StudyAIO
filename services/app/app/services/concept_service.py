@@ -9,6 +9,7 @@ from app.agents.base import ConceptExtractionResult
 from app.core.utils import generate_id
 from app.models.concept import Concept
 from app.models.concept_relation import ConceptRelation
+from app.services import billing_service
 
 logger = structlog.get_logger()
 
@@ -105,6 +106,18 @@ async def extract_and_save_concepts(
     ai_result: ConceptExtractionResult = await agent.extract_concepts(
         text=extraction_text,
         existing_concepts=existing_names if existing_names else None,
+    )
+
+    # Meter the call (COST-01): this is request-time AI spend that used to be
+    # unrecorded. Real adapter tokens when reported, else an estimate from the
+    # text exchanged. Flushed here, committed with the concepts below. A failed
+    # call raises above and is not recorded.
+    await billing_service.record_ai_call(
+        session,
+        user_id,
+        agent=agent,
+        prompt_text=extraction_text,
+        output_text=" ".join(f"{c.name} {c.description}" for c in ai_result.concepts),
     )
 
     # Upsert concepts
