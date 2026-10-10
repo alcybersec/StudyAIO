@@ -28,17 +28,6 @@ class TestValidateSetting:
         with pytest.raises(ValueError, match="Unknown setting"):
             settings_service.validate_setting("nonexistent", "value")
 
-    def test_claude_model_valid(self):
-        """Valid model names are accepted."""
-        assert settings_service.validate_setting("claude_model", "opus") == "opus"
-        assert settings_service.validate_setting("claude_model", "sonnet") == "sonnet"
-        assert settings_service.validate_setting("claude_model", "haiku") == "haiku"
-
-    def test_claude_model_invalid(self):
-        """Invalid model names are rejected."""
-        with pytest.raises(ValueError, match="must be one of"):
-            settings_service.validate_setting("claude_model", "gpt4")
-
     def test_embedding_backend_is_not_a_user_setting(self):
         """embedding_backend is operator-only — the API must not accept it.
 
@@ -49,18 +38,6 @@ class TestValidateSetting:
         assert "embedding_backend" not in settings_service.ALLOWED_KEYS
         with pytest.raises(ValueError, match="Unknown setting"):
             settings_service.validate_setting("embedding_backend", "openai")
-
-    def test_claude_code_path_empty_string_raises(self):
-        """Empty path string is rejected."""
-        with pytest.raises(ValueError, match="non-empty string"):
-            settings_service.validate_setting("claude_code_path", "")
-
-    def test_claude_code_path_strips_whitespace(self):
-        """Path is stripped of whitespace."""
-        assert (
-            settings_service.validate_setting("claude_code_path", "  /usr/bin/claude  ")
-            == "/usr/bin/claude"
-        )
 
     def test_confidence_threshold_valid_range(self):
         """Threshold within 0-1 is accepted."""
@@ -124,13 +101,13 @@ class TestUpdateSettingsSync:
 
     def test_validates_then_returns_defaults(self):
         """Sync update validates but returns defaults (no DB persistence)."""
-        result = settings_service.update_settings({"claude_model": "sonnet"})
-        assert "claude_model" in result
+        result = settings_service.update_settings({"openai_model": "gpt-x"})
+        assert "openai_model" in result
 
     def test_update_invalid_value_raises(self):
         """Invalid values raise ValueError."""
         with pytest.raises(ValueError):
-            settings_service.update_settings({"claude_model": "invalid"})
+            settings_service.update_settings({"claude_model": "opus"})
 
 
 class TestGetEffectiveSetting:
