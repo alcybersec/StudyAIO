@@ -63,9 +63,11 @@ variables:
         sys.exit("FATAL: redis:6379 never became reachable")
     PY
 
+# cache:key:files allows at most 2 entries. The lock is generated from requirements-dev.txt
+# (which includes requirements.txt), so a requirements.txt change must change the lock.
 .pip-cache: &pip-cache
   key:
-    files: [services/app/requirements.txt, services/app/requirements-dev.txt, services/app/requirements.lock.txt]
+    files: [services/app/requirements.lock.txt, services/app/requirements-dev.txt]
     prefix: pip
   paths: [.cache/pip]
 
