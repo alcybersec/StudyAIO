@@ -57,6 +57,7 @@ from app.core.exceptions import (
     LastAdminError,
     ProviderCredentialError,
     QuotaExceededError,
+    RateLimiterUnavailableError,
     RegistrationClosedError,
     StudyAIOError,
     UserExistsError,
@@ -161,6 +162,32 @@ _DEFAULT_JWT_SECRET = "changeme-in-production-use-a-real-secret"
 #: Uvicorn's own default for --forwarded-allow-ips. Behind a reverse proxy on a
 #: different host, this means every forwarding header is discarded.
 _DEFAULT_FORWARDED_ALLOW_IPS = "127.0.0.1"
+
+
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def check_single_user_mode() -> None:
+    """Refuse to start "no login" mode on a reachable interface (SEC-05, GL#25).
+
+    Raises:
+        RuntimeError: `SINGLE_USER_MODE` is on, `BIND_HOST` is not loopback and
+            `I_UNDERSTAND_NO_AUTH` is not set.
+    """
+    if not settings.single_user_mode:
+        return
+    host = settings.bind_host.strip().lower()
+    if host in _LOOPBACK_HOSTS or host.startswith("127."):
+        return
+    if settings.i_understand_no_auth:
+        logger.warning("single_user_mode_exposed", bind_host=host)
+        return
+    raise RuntimeError(
+        "FATAL: SINGLE_USER_MODE=true disables login, and BIND_HOST "
+        f"({host or 'unset'}) is not a loopback address, so anyone who can reach "
+        "the API becomes the admin. Bind to 127.0.0.1, or set "
+        "I_UNDERSTAND_NO_AUTH=true if the network is already trusted/isolated."
+    )
 
 
 def warn_if_proxy_headers_untrusted() -> None:
@@ -270,6 +297,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))"'
         )
 
+    check_single_user_mode()
     warn_if_proxy_headers_untrusted()
     warn_if_embedding_provider_unavailable()
 
@@ -511,6 +539,18 @@ async def duplicate_file_handler(request: Request, exc: DuplicateFileError) -> J
             "detail": str(exc),
             "existing_artifact_id": exc.existing_artifact_id,
         },
+    )
+
+
+@app.exception_handler(RateLimiterUnavailableError)
+async def rate_limiter_unavailable_handler(
+    request: Request, exc: RateLimiterUnavailableError
+) -> JSONResponse:
+    """Fail closed (503) when the shared limiter store is down on an auth route."""
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Service temporarily unavailable. Please retry shortly."},
+        headers={"Retry-After": "5"},
     )
 
 

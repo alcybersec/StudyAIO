@@ -169,7 +169,7 @@ async def get_auth_config() -> AuthConfigResponse:
     mode = settings.registration_mode
     return AuthConfigResponse(
         self_hosted=settings.self_hosted,
-        registration_enabled=not settings.self_hosted and mode != "closed",
+        registration_enabled=not settings.single_user_mode and mode != "closed",
         oauth_providers=providers,
         demo_enabled=settings.demo_enabled,
         registration_mode=mode,

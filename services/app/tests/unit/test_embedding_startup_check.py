@@ -115,6 +115,8 @@ async def test_startup_actually_runs_the_check():
     with (
         patch("app.main.warn_if_embedding_provider_unavailable") as check,
         patch("app.main.configure_logging"),
+        # SEC-05: self_hosted now defaults to False, arming the JWT-secret refusal.
+        patch("app.main.settings.self_hosted", True),
     ):
         async with lifespan(app):
             pass

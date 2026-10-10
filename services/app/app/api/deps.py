@@ -127,11 +127,11 @@ async def get_current_user_or_default(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> User:
-    """Get the current authenticated user, or the default admin in self-hosted mode.
+    """Get the current authenticated user, or the default admin in single-user mode.
 
-    In self-hosted mode (settings.self_hosted=True), returns the default admin
-    user without requiring authentication. In SaaS mode, delegates to
-    get_current_user which requires a valid JWT cookie.
+    Only the explicit opt-in `settings.single_user_mode` (SEC-05, GL#25) returns
+    the default admin without authentication; `self_hosted` alone does not.
+    Otherwise delegates to get_current_user, which requires a valid JWT cookie.
 
     Returns:
         A User instance (always real, never None).
@@ -141,7 +141,7 @@ async def get_current_user_or_default(
         SessionRevokedError: In either mode, if the presented token was
             revoked by a password reset/change or MFA disable.
     """
-    if settings.self_hosted:
+    if settings.single_user_mode:
         # Try JWT auth first (user may have logged in even in self-hosted)
         try:
             return await get_current_user(request, session)

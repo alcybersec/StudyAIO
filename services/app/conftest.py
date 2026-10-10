@@ -182,6 +182,8 @@ TEST_DATA_DIR = _install_test_data_dir()
 # defaulted: an operator's real value must not leak into the run.
 os.environ["GLOBAL_MAX_AI_CALLS_PER_DAY"] = "0"
 os.environ["GLOBAL_MAX_AI_TOKENS_PER_DAY"] = "0"
+# SEC-10: the limiter is Redis-backed in production; tests must never open a socket.
+os.environ.setdefault("RATE_LIMIT_STORAGE_URI", "memory://")
 
 # Collection-time refusal. This runs at conftest import, so it aborts before a
 # single test module is imported — earlier than any fixture can.

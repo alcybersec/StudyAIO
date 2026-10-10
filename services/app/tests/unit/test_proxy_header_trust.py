@@ -91,6 +91,9 @@ async def test_startup_actually_runs_the_check():
         # Stubbed because it loads the embedding model for real; its own wiring
         # test lives in test_embedding_startup_check.py.
         patch("app.main.warn_if_embedding_provider_unavailable"),
+        # SEC-05: self_hosted defaults to False, which arms the default-JWT-secret
+        # refusal; that is not what this test is about.
+        patch("app.main.settings.self_hosted", True),
     ):
         async with lifespan(app):
             pass
