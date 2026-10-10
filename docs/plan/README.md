@@ -24,6 +24,7 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S3-QA-047 (date-dependent daily-challenge integration test) | `qa` | 2026-10-10 | isolated |
 | M32-S3-AI-041 (GL#8) | `ai` | 2026-10-10 | **held** `c85297b`/`f4e5c98` + veto fix `cca3e21` (+ safety `588c8b4`, devops compose `0bdf597`) — awaiting SAFETY-046 |
 | M32-S3-SAFETY-046 (re-review GL#8 fix; lift VETO?) | `safety` | 2026-10-10 | isolated |
 
@@ -36,7 +37,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
-| M32-S3-DEVOPS-042 (GL#7: CI installs from the lock with no resolver, one index per package; + GL#8 compose mount) | `devops` | `b389bbb` → `kit/retrofit` `5e9b87b`; compose `0bdf597` **held** with GL#8 | Root cause from job 2810 trace: index lookup for aiohttp returned nothing silently → pip backtracked 40 aiogram releases → fake ResolutionImpossible. Fix: `scripts/ci-pip-install.sh` (`--no-deps` from lock, torch from CPU index only, offline requirements check + `pip check`), same in 4 jobs; e2e uses a venv. `glab ci lint` valid. Pipeline proof pending push | 2026-10-10 |
+| M32-S3-DEVOPS-042 (GL#7: CI installs from the lock with no resolver, one index per package; + GL#8 compose mount) | `devops` | `b389bbb` → `kit/retrofit` `5e9b87b`; compose `0bdf597` **held** with GL#8 | Root cause from job 2810 trace: index lookup for aiohttp returned nothing silently → pip backtracked 40 aiogram releases → fake ResolutionImpossible. Fix: `scripts/ci-pip-install.sh` (`--no-deps` from lock, torch from CPU index only, offline requirements check + `pip check`), same in 4 jobs; e2e uses a venv. `glab ci lint` valid. Pipeline **#558** (`b1eff69`): all 4 backend jobs install via the script (`lock: 152 PyPI pins, 1 local-version pins`, `No broken requirements found`); `e2e-tests` `64 passed`. `integration-tests` failed on an unrelated date-dependent test (daily challenge) → QA-047 | 2026-10-10 |
 | M32-S3-SAFETY-045 (review GL#8 retry) | `safety` | `bf0ed9b` (held with GL#8) | **VETO**: on host-credential retry a CLI token refresh sets `refreshed_credentials` to the operator's tokens, which classify/summarize/assets persist into the calling user's row (floors 1/2). Red pin `test_floor2_host_credentials_are_never_handed_back_as_the_users_own` → back to `ai` (AI-041). Approved: redaction of fresh token (mutation-checked), exception chain, logs, temp dir, single retry, rmtree reclassified | 2026-10-10 |
 | M32-S3-AI-044 (R-024: wall-clock-dependent reminder test frozen; audit) | `ai` | `3aec19e` → `kit/retrofit` (see log) | Test-only. Agent harness: 147 tests × 5 UTC hours × 3 zones all pass; only one offender found. Orchestrator: file green | 2026-10-10 |
 | M32-S3-AI-043 (GL#9: summarize v2.2 — Connections only from provided context; no industry paragraph; eval `check_connections`) | `ai` | `969e09e` → `kit/retrofit` `a35a4ec` | Section list unchanged (golden green). Orchestrator: eval harness + golden `390 passed`; ruff clean. Offline eval flags v2.1-style Connections on all 3 synthetic cases, v2.2 clean. **Live-backend eval run not done** (needs AI credentials): `python -m evals -n 3`, plus real CSIT302 W2 / CSIT314 W2 | 2026-10-10 |
