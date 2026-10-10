@@ -81,6 +81,7 @@ class TestRegisterUser:
     """User registration."""
 
     @pytest.mark.asyncio
+    @patch("app.services.notification_service.seed_default_preferences", new=AsyncMock())
     async def test_register_creates_user(self):
         session = AsyncMock()
         # Both uniqueness checks return None (no duplicate)

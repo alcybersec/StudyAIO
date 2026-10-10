@@ -76,13 +76,10 @@ def test_stmt_is_window_scoped_and_requires_opt_in() -> None:
 async def test_find_candidates_maps_rows() -> None:
     session = AsyncMock()
     result = MagicMock()
-    result.all.return_value = [("u1", "Europe/Oslo", True), ("u2", None, False)]
+    result.all.return_value = [("u1", True), ("u2", False)]
     session.execute.return_value = result
     cands = await nudge_service.find_nudge_candidates(session)
-    assert [(c.user_id, c.timezone, c.has_uploads) for c in cands] == [
-        ("u1", "Europe/Oslo", True),
-        ("u2", None, False),
-    ]
+    assert [(c.user_id, c.has_uploads) for c in cands] == [("u1", True), ("u2", False)]
 
 
 def test_content_differs_by_progress() -> None:

@@ -26,7 +26,7 @@ from app.models.usage_record import UsageRecord
 from app.models.user import User
 from app.models.user_achievement import UserAchievement
 from app.models.user_xp import UserXP
-from app.services import account_service, quota_service, user_service
+from app.services import account_service, notification_service, quota_service, user_service
 
 logger = structlog.get_logger()
 
@@ -915,6 +915,7 @@ async def create_user(
     )
     session.add(user)
     await session.flush()
+    await notification_service.seed_default_preferences(session, user.id)
 
     minted = await user_service.request_password_reset(
         session, email, expires_in_hours=user_service.ACCOUNT_SETUP_TOKEN_HOURS

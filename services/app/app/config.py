@@ -177,7 +177,8 @@ class Settings(BaseSettings):
     stripe_portal_return_url: str = "http://localhost:3001/settings"
 
     # Notifications
-    notifications_enabled: bool = False
+    # On by default (PROD-03): per-user preferences still gate every send.
+    notifications_enabled: bool = True
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_webhook_url: str = ""
     smtp_host: str = ""

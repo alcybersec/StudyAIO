@@ -33,6 +33,7 @@ from app.core.utils import generate_id, normalize_email
 from app.models.magic_link import MagicLink
 from app.models.oauth_account import OAuthAccount
 from app.models.user import User
+from app.services import notification_service
 
 logger = structlog.get_logger()
 
@@ -123,6 +124,7 @@ async def register_user(
     )
     session.add(user)
     await session.flush()
+    await notification_service.seed_default_preferences(session, user.id)
     logger.info("user_registered", user_id=user.id, email=email)
     return user
 
@@ -855,6 +857,7 @@ async def create_or_link_oauth(
         )
         session.add(user)
         await session.flush()
+        await notification_service.seed_default_preferences(session, user.id)
         logger.info("user_created_via_oauth", user_id=user.id, provider=provider)
     elif avatar_url and not user.avatar_url:
         user.avatar_url = avatar_url

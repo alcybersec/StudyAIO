@@ -10,7 +10,7 @@ No value here is shaped like a real credential: provider tokens are the literal
 string "<test-placeholder>".
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -336,6 +336,7 @@ class TestProviderEmailMustBeVerified:
         assert returned is user
 
     @pytest.mark.asyncio
+    @patch("app.services.notification_service.seed_default_preferences", new=AsyncMock())
     async def test_new_user_created_from_oauth(self):
         session = AsyncMock()
         session.add = MagicMock()
@@ -375,6 +376,7 @@ class TestProviderEmailMustBeVerified:
         assert added_user.avatar_url == "https://example.com/avatar.png"
 
     @pytest.mark.asyncio
+    @patch("app.services.notification_service.seed_default_preferences", new=AsyncMock())
     async def test_new_user_username_dedup(self):
         session = AsyncMock()
         session.add = MagicMock()
