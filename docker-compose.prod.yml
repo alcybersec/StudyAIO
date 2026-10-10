@@ -42,8 +42,15 @@ services:
       - ./data:/app/data
       # Claude CLI comes from the image — never bind-mount a host binary here
       # (see the note in docker-compose.yml). Credentials only.
-      - ${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json:/root/.claude/.credentials.json:ro
-      - ${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json:/root/.claude/settings.json:ro
+      # Credentials come ONLY from the dedicated service-login directory
+      # (STUDYAIO_CLAUDE_LOGIN_DIR, see scripts/setup-claude-login.sh), never
+      # the operator's personal ~/.claude (R-025: transcripts, history and
+      # plugins must not be visible to a worker that feeds untrusted text to
+      # `claude -p`). Read-only on purpose: a writable mount would let a
+      # compromised worker plant hooks into the host's Claude config.
+      - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/.credentials.json:/root/.claude/.credentials.json:ro
+      - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/settings.json:/root/.claude/settings.json:ro
+      - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}:/run/claude-host:ro
 
   beat:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}

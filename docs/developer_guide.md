@@ -15,22 +15,19 @@ This guide covers everything needed to develop, test, and extend StudyAIO.
 
 ### Claude CLI Authentication
 
-The processing pipeline uses Claude Code CLI for classification, summarization, and asset generation. The CLI binary and credentials are bind-mounted from the host into the worker container.
+The processing pipeline uses the Claude Code CLI for classification, summarization, and asset generation. The CLI itself ships inside the worker image; only a login comes from the host, and it comes from a **dedicated service-login directory, never your personal `~/.claude`** (R-025: the worker feeds untrusted lecture text to `claude -p`, so it must not see your transcripts, history or plugins).
 
 ```bash
-# Install Claude Code CLI
-npm install -g @anthropic-ai/claude-code
-
-# Login (opens browser for OAuth)
-claude
+bash scripts/setup-claude-login.sh            # creates the dir (0700), copies nothing
+CLAUDE_CONFIG_DIR=/opt/studyaio/claude-login claude login   # one-time, as the deploy user
 ```
 
-This creates `~/.claude/.credentials.json`, which the worker container mounts.
-The CLI binary itself is installed in the image, so only the credentials (and
-optionally `~/.claude/settings.json`) come from the host. Do not bind-mount a
-host `claude` binary over `/usr/local/bin/claude` — that path is a symlink into
-the npm package, and Docker resolves it onto `bin/claude.exe`, which node then
-refuses to load.
+`STUDYAIO_CLAUDE_LOGIN_DIR` (default `/opt/studyaio/claude-login`) is mounted
+read-only into the worker only. See "Claude service login" in `docs/deployment.md`
+for rotation and what the worker can see. Do not bind-mount a host `claude`
+binary over `/usr/local/bin/claude` — that path is a symlink into the npm
+package, and Docker resolves it onto `bin/claude.exe`, which node then refuses
+to load.
 
 Per-user credentials configured in Settings → AI take precedence over the
 mounted file; they are written to a temporary `CLAUDE_CONFIG_DIR` per call.
@@ -46,7 +43,7 @@ Key variables:
 - `DB_PORT` — host port for Postgres (default: `5433`, avoids conflict with host Postgres)
 - `REDIS_PORT` — host port for Redis (default: `6380`)
 - `UI_PORT` — host port for the UI (default: `3001`)
-- `CLAUDE_CONFIG_DIR` — path to Claude config directory on host (default: `~/.claude`)
+- `STUDYAIO_CLAUDE_LOGIN_DIR` — host path of the dedicated Claude service-login directory (default: `/opt/studyaio/claude-login`); worker only, read-only
 - `AGENT_BACKEND` — which AI adapter to use: `claude_code` (default), `anthropic_api`, `openai`, or `ollama`. Each has its own key/model variables in `.env.example`. Credentials saved per user in Settings override these.
 - `SELF_HOSTED` — `true` (default) skips auth and uses a single default admin user; `false` enforces login
 
@@ -729,9 +726,9 @@ any stage; that is what `POST /api/uploads/{artifact_id}/retry` calls.
 1. Verify the CLI works *inside* the container: `docker compose exec worker claude --version`
    (if this fails with `ERR_UNKNOWN_FILE_EXTENSION ".exe"`, a host binary is
    being bind-mounted over `/usr/local/bin/claude` — remove that volume)
-2. Verify credentials exist: `ls ~/.claude/.credentials.json`
-3. Check `CLAUDE_CONFIG_DIR` in `.env`
-4. Re-authenticate: run `claude` on host, complete OAuth flow — or paste
+2. Verify credentials exist: `ls $STUDYAIO_CLAUDE_LOGIN_DIR/.credentials.json`
+3. Check `STUDYAIO_CLAUDE_LOGIN_DIR` in `.env`
+4. Re-authenticate: `CLAUDE_CONFIG_DIR=$STUDYAIO_CLAUDE_LOGIN_DIR claude login` on the host — or paste
    credentials per-user under Settings → AI
 
 ### Port Conflicts

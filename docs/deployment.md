@@ -466,6 +466,41 @@ curl https://your-domain.com/health
 
 ---
 
+## Claude service login
+
+The `claude_code` backend needs a Claude CLI login in the worker. It comes from a
+**dedicated directory**, not the operator's personal `~/.claude`.
+
+**One-time setup (on the server, as the deploy user, not root):**
+
+```bash
+bash scripts/setup-claude-login.sh              # creates /opt/studyaio/claude-login, 0700
+CLAUDE_CONFIG_DIR=/opt/studyaio/claude-login claude login
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d worker
+```
+
+To use another path, set `STUDYAIO_CLAUDE_LOGIN_DIR` in the deploy `.env` and pass
+it to the script. The script copies no existing credentials; it also writes an
+empty `settings.json` so Docker does not create a directory in its place.
+
+**Rotate:** re-run `CLAUDE_CONFIG_DIR=<dir> claude login` (use a dedicated
+account/plan you can revoke), then `docker compose ... restart worker`. To revoke,
+delete `<dir>/.credentials.json`.
+
+**What the worker can see:** only that directory, mounted read-only at
+`/run/claude-host` (with `CLAUDE_HOST_CREDENTIALS_FILE` pointing at its
+`.credentials.json`) plus its `.credentials.json` and `settings.json` over the
+same files in the image's `/root/.claude`. The image's `~/.claude` is not overlaid
+as a directory. The api and beat containers get nothing. The operator's personal
+`~/.claude` is never mounted.
+
+**Read-only on purpose:** a writable mount would let a compromised worker plant
+hooks or settings into a Claude config that a host-side `claude` may later load.
+The adapter never writes back to this directory (refreshed tokens live in a
+per-call temp dir); after an expiry, re-run the login above.
+
+---
+
 ## Environment Variable Reference
 
 | Variable | Default | Description |
