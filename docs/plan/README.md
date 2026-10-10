@@ -26,7 +26,7 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 |---|---|---|---|
 | M32-S3-AI-041 (GL#8: claude_code worker keeps revoked token) | `ai` | 2026-10-10 | isolated |
 | M32-S3-DEVOPS-042 (GL#7: e2e pip ResolutionImpossible) | `devops` | 2026-10-10 | isolated |
-| M32-S3-AI-043 (GL#9: summarize Connections invents context) | `ai` | 2026-10-10 | isolated |
+| M32-S3-AI-044 (wall-clock-dependent reminder unit test on main; audit for others) | `ai` | 2026-10-10 | isolated |
 
 ## Completed
 
@@ -37,6 +37,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S3-AI-043 (GL#9: summarize v2.2 — Connections only from provided context; no industry paragraph; eval `check_connections`) | `ai` | `969e09e` → `kit/retrofit` `a35a4ec` | Section list unchanged (golden green). Orchestrator: eval harness + golden `390 passed`; ruff clean. Offline eval flags v2.1-style Connections on all 3 synthetic cases, v2.2 clean. **Live-backend eval run not done** (needs AI credentials): `python -m evals -n 3`, plus real CSIT302 W2 / CSIT314 W2 | 2026-10-10 |
 | M32-S2-SAFETY-040 (re-review R-023; classify beat-job zone reads; VETO lifted) | `safety` | `ee1ce4a` → `kit/retrofit` `4d93261` | +4 floor tests; 6 mutants each red on its guard; clock.py mutants M1–M4 caught. **Orchestrator: `pytest tests/safety` → `159 passed`.** APPROVE all four floors | 2026-10-09 |
 | M32-S2-BACKEND-039 (clock: tzdata-only zone keys, guarded ZoneInfo; dashboard cache dropped on timezone PUT) | `backend` | `3859313` → `kit/retrofit` `06bb835` | SAFETY-037's 7 reds green. **Orchestrator `make test`: unit `88.12%`, `2894 passed`; floor `1 failed, 155 passed`** — the 1 = safety's column-read guard flagging AI-036's beat-job reads → SAFETY-040 | 2026-10-09 |
 | M32-S2-AI-036 + QA-038 (reminders/digest hourly at local 08:00 + integration tests) | `ai`, `qa` | `2f3f262` + `722c553` → `kit/retrofit` `2f5f37a`/`8935f30` | **Orchestrator: ruff clean; unit+golden+contracts `2892 passed`; `make test-integration` → `87.17%`, `531 passed`.** Red-check (Orchestrator): old pipeline `5 failed, 1 passed`. Note: deadline integration test seeds the real UTC date — could flake across UTC midnight | 2026-10-09 |
