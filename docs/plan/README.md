@@ -24,8 +24,7 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S3-DEVOPS-048 (dedicated Claude login dir, R-025) | `devops` | 2026-10-10 | **held** `bd82d86` — deploy-order dependency: operator must create the login dir on prod before this reaches main |
-| M32-S3-SAFETY-050 (review DEVOPS-048 + AI-049) | `safety` | 2026-10-10 | isolated |
+| M32-S3-DEVOPS-048 (dedicated Claude login dir, R-025) | `devops` | 2026-10-10 | **held** `bd82d86` + safety pins `79d478e` (APPROVE, SAFETY-050) — deploy-order dependency: operator must create the login dir on prod before this reaches main |
 
 ## Completed
 
