@@ -24,13 +24,7 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S3-DEVOPS-052 (setup-token flow, preflight, CLI pinned 2.1.286) | `devops` | 2026-10-10 | **held** `d4f2f6d`/`ad3de8a` — safety 171 passed (agent); runbook says hand-run `compose up` (to fix) |
-| M32-S3-SAFETY-053 → VETO (R-027) | `safety` | 2026-10-10 | `9bd4499` held: 8 red pins (CLI tools, child env, Sentry locals) + fixtures rename |
-| M32-S3-AI-054 (CLI `--tools ""`, allowlisted child env; rename secret-shaped fixtures) | `ai` | 2026-10-10 | isolated |
-| M32-S3-BACKEND-055 (Sentry no frame locals) | `backend` | 2026-10-10 | isolated |
-| M32-S3-DEVOPS-056 (preflight tests, placeholder, CI-only runbook) | `devops` | 2026-10-10 | isolated |
-| M32-S3-AI-051 (long-lived CLAUDE_CODE_OAUTH_TOKEN from host token file) | `ai` | 2026-10-10 | **held** `48c99a7` (on top of `bd82d86`/`79d478e`) — awaits DEVOPS-052 + safety review; agent: safety+agents+contracts `548 passed, 1 skipped`; CLI 2.1.286 has `setup-token` (Dockerfile unpinned → DEVOPS-052 pins) |
-| M32-S3-DEVOPS-048 (dedicated Claude login dir, R-025) | `devops` | 2026-10-10 | **held** `bd82d86` + safety pins `79d478e` (APPROVE, SAFETY-050) — deploy-order dependency: operator must create the login dir on prod before this reaches main |
+| M32-S3-SAFETY-057 (confirm R-027 fixes; lift VETO?) | `safety` | 2026-10-10 | isolated |
 
 ## Completed
 
@@ -41,6 +35,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S3 GL#8 + R-025/R-026/R-027 stack (dedicated login dir, long-lived token, CLI sandbox `--tools ""` + env allowlist, Sentry no frame locals, CLI pinned 2.1.286, CI-only runbook) | `devops`, `ai`, `backend`, `safety` | → `kit/retrofit` `1dbf4c6`..`465e14d` | **Orchestrator on `kit/retrofit`: ruff clean; `make test` → unit `88.17%`, `2940 passed`; floor `97.29%`, `189 passed, 1 skipped`; integration `86.89%`, `532 passed`.** Awaiting SAFETY-057 confirmation; prod needs the token file before merge | 2026-10-10 |
 | M32-S3-AI-049 (GL#8: no retry on expired host token; host retry log fixed) | `ai` | `10db45f` → `kit/retrofit` `67feb7e` | 7 new tests (agent: all red before fix). Orchestrator: safety+agents+contracts `530 passed`. Review in SAFETY-050 | 2026-10-10 |
 | M32-S3-AI-041 + SAFETY-045/046 (GL#8: claude_code re-reads host credentials, one retry; host creds never persisted as a user's; container token redacted) | `ai`, `safety` | → `kit/retrofit` `d8b4fa6`..`a6c05c2` | **Orchestrator: `pytest tests/safety tests/unit/agents` → `470 passed`; ruff clean.** safety APPROVE all floors, VETO lifted; 3 mutants red. **Inert until the compose mount lands** — `0bdf597` held on R-025 (whole `~/.claude` exposed to root worker) pending user decision | 2026-10-10 |
 | M32-S3-QA-047 (daily-challenge integration test date-independent) | `qa` | `c33a800` → `kit/retrofit` (see log) | Cause: template = `date.toordinal() % 7`; 2026-10-10 → `perfect_quiz` (target 1). Test now freezes `app.core.clock.utc_now`, parametrized over a target-10 and a target-1 day. Agent full integration `532 passed` | 2026-10-10 |
