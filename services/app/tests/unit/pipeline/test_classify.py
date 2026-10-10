@@ -263,3 +263,110 @@ class TestKnownCoursesScoping:
         compiled = session.execute.await_args.args[0].compile()
         assert "user_id" in str(compiled)
         assert "user-1" in compiled.params.values()
+
+
+def _scalar(value):
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = value
+    return result
+
+
+class TestCourseQuota:
+    """New courses are quota-checked against the artifact row's owner (GL#19)."""
+
+    async def test_existing_course_skips_quota_check(self):
+        from app.pipeline.classify import _get_or_create_course
+
+        existing = MagicMock()
+        session = AsyncMock()
+        session.add = MagicMock()
+        session.execute = AsyncMock(return_value=_scalar(existing))
+
+        with patch("app.pipeline.classify.check_course_quota", new=AsyncMock()) as quota:
+            course = await _get_or_create_course(session, "CSIT302", user_id="u-1")
+
+        assert course is existing
+        quota.assert_not_awaited()
+        session.add.assert_not_called()
+
+    async def test_below_limit_creates_course_with_owner_checked(self):
+        from app.pipeline.classify import _get_or_create_course
+
+        session = AsyncMock()
+        session.add = MagicMock()
+        session.execute = AsyncMock(side_effect=[_scalar(None), _scalar("free")])
+
+        with patch("app.pipeline.classify.check_course_quota", new=AsyncMock()) as quota:
+            course = await _get_or_create_course(session, "CSIT302", user_id="u-1")
+
+        quota.assert_awaited_once_with(session, "u-1", "free")
+        session.add.assert_called_once()
+        assert course.code == "CSIT302"
+        assert course.user_id == "u-1"
+
+    async def test_at_limit_raises_and_creates_nothing(self):
+        from app.core.exceptions import QuotaExceededError
+        from app.pipeline.classify import _get_or_create_course
+
+        session = AsyncMock()
+        session.add = MagicMock()
+        session.execute = AsyncMock(side_effect=[_scalar(None), _scalar("free")])
+        err = QuotaExceededError(resource="courses", limit=1, period="account")
+
+        with (
+            patch("app.pipeline.classify.check_course_quota", new=AsyncMock(side_effect=err)),
+            pytest.raises(QuotaExceededError),
+        ):
+            await _get_or_create_course(session, "NEW101", user_id="u-1")
+
+        session.add.assert_not_called()
+
+    @patch("app.pipeline.classify.get_agent")
+    @patch("app.pipeline.classify._extract_text_preview")
+    @patch("app.pipeline.classify.review_service")
+    @patch("app.pipeline.classify.async_session_factory")
+    async def test_classify_at_limit_goes_to_review(
+        self, mock_session_factory, mock_review_svc, mock_preview, mock_get_agent
+    ):
+        from app.core.exceptions import QuotaExceededError
+        from app.pipeline.classify import _classify
+
+        artifact = MagicMock()
+        artifact.id = "art-001"
+        artifact.user_id = "owner-1"
+        artifact.file_path = "/app/data/uploads/test.pdf"
+        artifact.file_type = "pdf"
+        artifact.original_filename = "NEW101_Week1.pdf"
+
+        session = AsyncMock()
+        session.add = MagicMock()
+        session.execute = AsyncMock(return_value=_scalar(artifact))
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
+        mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_preview.return_value = "NEW101 Week 1"
+        agent = AsyncMock()
+        agent.classify_lecture.return_value = ClassificationResult(
+            course_code="NEW101", week=1, title="Intro", confidence=0.95, reasoning="header"
+        )
+        mock_get_agent.return_value = agent
+        mock_review_svc.create_review_item = AsyncMock(return_value=MagicMock())
+        err = QuotaExceededError(resource="courses", limit=1, period="account")
+
+        with (
+            patch("app.pipeline.classify._get_known_courses", new=AsyncMock(return_value=[])),
+            patch(
+                "app.pipeline.classify._get_or_create_course", new=AsyncMock(side_effect=err)
+            ) as goc,
+        ):
+            result = await _classify("art-001")
+
+        assert goc.await_args.kwargs["user_id"] == "owner-1"
+        assert result["status"] == "waiting_review"
+        assert result["review_type"] == "classification_course"
+        assert artifact.status == "waiting_review"
+        assert artifact.course_id != "NEW101"
+        kwargs = mock_review_svc.create_review_item.await_args.kwargs
+        assert kwargs["entity_id"] == "art-001"
+        assert kwargs["payload"]["reason_code"] == "course_limit_reached"
+        assert "course limit" in kwargs["payload"]["reason"].lower()
+        assert kwargs["suggested_values"]["course_code"] == "NEW101"
