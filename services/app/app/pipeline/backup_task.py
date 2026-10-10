@@ -76,8 +76,11 @@ def run_backup(self) -> dict[str, str]:
                 countdown=300,
             )
 
-        logger.info("backup_completed", stdout=_scrub(result.stdout[-200:], password))
-        return {"status": "ok", "output": result.stdout[-200:]}
+        # Scrub the whole stream first: truncating first would let a password
+        # straddling the cut leak its tail. Celery logs the return value.
+        output = _scrub(result.stdout, password)[-200:]
+        logger.info("backup_completed", stdout=output)
+        return {"status": "ok", "output": output}
 
     except subprocess.TimeoutExpired:
         logger.error("backup_timeout")
