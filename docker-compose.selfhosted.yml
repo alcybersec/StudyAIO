@@ -49,8 +49,12 @@ services:
     restart: unless-stopped
     command: celery -A app.worker:celery_app beat --loglevel=info -s /tmp/celerybeat-schedule
 
+  # The base file publishes db/redis for local development; a public deployment
+  # must not (SEC-05). Services reach them over the compose network.
   db:
     restart: unless-stopped
+    ports: !override []
 
   redis:
     restart: unless-stopped
+    ports: !override []

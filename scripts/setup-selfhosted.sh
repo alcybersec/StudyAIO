@@ -65,7 +65,37 @@ prompt_config() {
     read -rp "Postgres password [studyaio]: " PG_PASS
     PG_PASS="${PG_PASS:-studyaio}"
 
+    # Always random, never the committed default: SELF_HOSTED still requires login,
+    # so a known key would let anyone forge an admin token.
     JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))")
+
+    # Encrypts per-user AI credentials at rest (SEC-06): a Fernet key, i.e. 32
+    # random bytes, url-safe base64. TODO: confirm the format against
+    # app/core/secret_box.py once SEC-06 lands on the integration branch.
+    SETTINGS_KEY=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null \
+        || openssl rand -base64 32 | tr '+/' '-_')
+
+    # Sign-up policy. Anyone who finds a public URL can register under "open".
+    echo ""
+    echo "Registration: invite = a code is required to sign up (recommended)"
+    echo "              open   = anyone with the URL can create an account"
+    echo "              closed = nobody can create an account"
+    read -rp "Registration mode [invite]: " REG_MODE
+    REG_MODE="${REG_MODE:-invite}"
+    case "$REG_MODE" in
+        invite|open|closed) ;;
+        *) err "Registration mode must be invite, open or closed."; exit 1 ;;
+    esac
+
+    # "No login" mode makes every caller the admin. Local, one-person use only.
+    SINGLE_USER="false"
+    echo ""
+    warn "Single-user mode removes login: EVERY caller becomes the admin."
+    warn "Use it only on a machine nobody else can reach. NEVER with a public domain/Traefik."
+    read -rp "Enable single-user (no login) mode, bound to 127.0.0.1? (y/N): " SU
+    if [[ "$SU" =~ ^[Yy] ]]; then
+        SINGLE_USER="true"
+    fi
 
     read -rp "Enable Prometheus metrics? (y/N): " PROM_ENABLED
     PROM_ENABLED=$([[ "$PROM_ENABLED" =~ ^[Yy] ]] && echo "true" || echo "false")
@@ -76,6 +106,9 @@ prompt_config() {
     echo "  Email:      $ACME_EMAIL"
     echo "  Postgres:   studyaio / ******"
     echo "  JWT Secret: (auto-generated)"
+    echo "  Settings encryption key: (auto-generated)"
+    echo "  Registration: $REG_MODE"
+    echo "  Single-user (no login): $SINGLE_USER"
     echo "  Prometheus: $PROM_ENABLED"
     echo ""
     read -rp "Proceed? (Y/n): " CONFIRM
@@ -119,6 +152,10 @@ CORS_ORIGINS=https://${DOMAIN}
 # === Auth ===
 JWT_SECRET_KEY=${JWT_SECRET}
 JWT_ALGORITHM=HS256
+SETTINGS_ENCRYPTION_KEY=${SETTINGS_KEY}
+REGISTRATION_MODE=${REG_MODE}
+SINGLE_USER_MODE=${SINGLE_USER}
+BIND_HOST=$([[ "$SINGLE_USER" == "true" ]] && echo 127.0.0.1 || echo 0.0.0.0)
 
 # === Observability ===
 PROMETHEUS_ENABLED=${PROM_ENABLED}
