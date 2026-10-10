@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { userErrorMessage } from '../../lib/userError'
 import { useTranslation } from 'react-i18next'
 import { Card } from '../ui'
 import {
@@ -190,10 +191,7 @@ export function CalendarSyncSection() {
       {connectMutation.isError && (
         <p className="mt-3 text-sm text-red-fg">
           {t('Failed to connect: {{error}}', {
-            error:
-              connectMutation.error instanceof Error
-                ? connectMutation.error.message
-                : t('Unknown error'),
+            error: userErrorMessage(connectMutation.error, t('Unknown error')),
           })}
         </p>
       )}

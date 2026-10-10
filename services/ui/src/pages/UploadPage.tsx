@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { userErrorMessage } from '../lib/userError'
 import i18n from '../i18n'
 import { useTranslation } from 'react-i18next'
 import { Lock, WifiOff } from 'lucide-react'
@@ -73,14 +74,14 @@ export function UploadPage() {
             if (r.status === 'duplicate') {
               return { ...f, status: 'duplicate' as const, artifactId: r.artifact_id || undefined }
             }
-            return { ...f, status: 'error' as const, error: r.error || 'Upload failed' }
+            return { ...f, status: 'error' as const, error: i18n.t('Upload failed') }
           })
         )
       } catch (err) {
         setQueue((prev) =>
           prev.map((f) =>
             toProcess.some(tp => tp.id === f.id)
-              ? { ...f, status: 'error' as const, error: err instanceof Error ? err.message : 'Batch upload failed' }
+              ? { ...f, status: 'error' as const, error: userErrorMessage(err, i18n.t('Upload failed')) }
               : f
           )
         )
@@ -105,7 +106,7 @@ export function UploadPage() {
           setQueue((prev) =>
             prev.map((f) =>
               f.id === item.id
-                ? { ...f, status: 'error' as const, error: err instanceof Error ? err.message : 'Upload failed' }
+                ? { ...f, status: 'error' as const, error: userErrorMessage(err, i18n.t('Upload failed')) }
                 : f
             )
           )

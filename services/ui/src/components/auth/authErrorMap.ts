@@ -1,3 +1,4 @@
+import { userErrorMessage } from '../../lib/userError'
 import { AppApiError, NetworkError, RateLimitError, ValidationError } from '../../api/errors'
 
 /**
@@ -20,7 +21,7 @@ export function classifyAuthError(err: unknown): AuthErrorOutcome {
     return { kind: 'rate_limited', retryAfterSeconds: err.retryAfterSeconds }
   }
   if (err instanceof ValidationError) {
-    return { kind: 'fields', fields: err.fields, message: err.message }
+    return { kind: 'fields', fields: err.fields, message: userErrorMessage(err) }
   }
   if (err instanceof NetworkError) {
     return { kind: 'network' }
@@ -30,8 +31,8 @@ export function classifyAuthError(err: unknown): AuthErrorOutcome {
     if (err.status === 403 && err.message.toLowerCase().includes('mfa')) {
       return { kind: 'mfa_required' }
     }
-    if (err.status === 409) return { kind: 'conflict', message: err.message }
-    return { kind: 'other', message: err.message }
+    if (err.status === 409) return { kind: 'conflict', message: userErrorMessage(err) }
+    return { kind: 'other', message: userErrorMessage(err) }
   }
-  return { kind: 'other', message: err instanceof Error ? err.message : 'Something went wrong' }
+  return { kind: 'other', message: userErrorMessage(err) }
 }

@@ -27,7 +27,7 @@ export function ErrorState({ title, detail, onRetry, compact }: ErrorStateProps)
             <RefreshCw size={12} aria-hidden /> {t('Retry')}
           </Button>
         )}
-        {detail && (
+        {import.meta.env.DEV && detail && (
           <details className="text-xs text-text-faint">
             <summary className="cursor-pointer hover:text-text-muted">{t('details')}</summary>
             <code className="font-mono text-[11px] block mt-1 max-w-md">{detail}</code>

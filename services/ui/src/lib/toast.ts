@@ -9,6 +9,8 @@ import {
   ValidationError,
 } from '../api/errors'
 
+import { userErrorMessage, logRawError } from './userError'
+
 export interface ToastContent {
   message: string
   description?: string
@@ -20,16 +22,17 @@ export interface ToastContent {
  * expanders, toasts stay human.
  */
 export function mutationErrorContent(err: unknown): ToastContent {
+  logRawError(err)
   if (err instanceof ValidationError) {
     const fieldMessages = Object.values(err.fields)
     return {
-      message: fieldMessages[0] ?? err.message,
+      message: fieldMessages[0] ?? i18n.t('The request was invalid'),
       description: fieldMessages.length > 1 ? i18n.t('Check the highlighted fields.') : undefined,
     }
   }
   if (err instanceof NotFoundError) {
     return {
-      message: err.message,
+      message: i18n.t('Not found'),
       description: i18n.t('It may have been removed — this item no longer exists.'),
     }
   }
@@ -51,7 +54,7 @@ export function mutationErrorContent(err: unknown): ToastContent {
     }
   }
   if (err instanceof AppApiError) {
-    return { message: err.message }
+    return { message: userErrorMessage(err) }
   }
   return { message: i18n.t('Something went wrong'), description: i18n.t('Please try again.') }
 }

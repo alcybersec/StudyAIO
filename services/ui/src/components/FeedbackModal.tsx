@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { userErrorMessage } from '../lib/userError'
 import i18n from '../i18n'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
@@ -83,9 +84,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
           // Kept in the modal rather than a toast: the text is still in the box,
           // and closing it over a failed send would lose what they wrote.
           setError(
-            err instanceof Error && err.message
-              ? err.message
-              : "Couldn't send that. Your text is still here — try again.",
+            userErrorMessage(err, i18n.t("Couldn't send that. Your text is still here — try again.")),
           )
         },
       },

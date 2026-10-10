@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { chatApi } from '../api/endpoints'
+import i18n from '../i18n'
+import { logRawError } from '../lib/userError'
 import type { ChatAction, MessageScope } from '../types'
 
 export type ChatConnectionState = 'idle' | 'streaming' | 'interrupted' | 'error'
@@ -18,6 +20,17 @@ interface StreamingState {
 
 const MAX_AUTO_RETRIES = 3
 const BASE_BACKOFF_MS = 1_000
+
+const STREAM_FAILED = 'stream_failed'
+
+function streamStatusMessage(status: number): string {
+  if (status === 401) return i18n.t('Please sign in again.')
+  if (status === 402) return i18n.t('This is over your plan limit.')
+  if (status === 403) return i18n.t("You don't have permission to do that.")
+  if (status === 404) return i18n.t('It may have been removed — this item no longer exists.')
+  if (status === 429) return i18n.t('Too many requests — try again shortly')
+  return status >= 500 ? i18n.t('The server hit a problem') : i18n.t('Stream request failed')
+}
 
 export function useStreamingChat(sessionId: string) {
   const [state, setState] = useState<StreamingState>({
@@ -66,11 +79,11 @@ export function useStreamingChat(sessionId: string) {
 
         if (!response.ok) {
           // The server rejected the request — retrying won't change that
-          const body = await response.json().catch(() => ({ detail: response.statusText }))
+          logRawError(await response.text().catch(() => response.statusText))
           setState((s) => ({
             ...s,
             isStreaming: false,
-            error: body.detail || 'Stream request failed',
+            error: streamStatusMessage(response.status),
             connectionState: 'error',
           }))
           return
@@ -115,11 +128,14 @@ export function useStreamingChat(sessionId: string) {
                     const action = parsed.action as ChatAction
                     setState((s) => ({ ...s, action }))
                   }
-                } catch {
-                  // Ignore parse errors
+                } catch (parseErr) {
+                  // Malformed final frame: the tokens already streamed are
+                  // the answer; the saved message is refetched below.
+                  logRawError(parseErr)
                 }
               } else if (eventType === 'error') {
-                throw new Error(data)
+                logRawError(data)
+                throw new Error(STREAM_FAILED)
               }
             }
           }
@@ -140,6 +156,7 @@ export function useStreamingChat(sessionId: string) {
           return
         }
 
+        logRawError(err)
         // The stream dropped mid-flight (network/proxy). Refresh whatever the
         // server persisted so far, then auto-retry with backoff.
         invalidateMessages()
@@ -161,7 +178,7 @@ export function useStreamingChat(sessionId: string) {
         setState((s) => ({
           ...s,
           isStreaming: false,
-          error: (err as Error).message || 'Streaming failed',
+          error: i18n.t('Streaming failed'),
           connectionState: 'error',
         }))
       } finally {

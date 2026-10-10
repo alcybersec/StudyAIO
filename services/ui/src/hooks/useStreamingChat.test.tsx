@@ -163,4 +163,43 @@ describe('useStreamingChat', () => {
     })
     expect(result.current.action).toBeNull()
   })
+
+  it('survives a malformed done frame and keeps the streamed tokens', async () => {
+    streamMessage.mockResolvedValue(
+      sseResponse('event: token\ndata: Hi\n\nevent: done\ndata: {not json\n\nevent: token\ndata: !\n\n'),
+    )
+    const { result } = renderHook(() => useStreamingChat('s1'), { wrapper })
+    await act(async () => {
+      await result.current.sendStreaming('hi')
+    })
+    expect(result.current.streamingText).toBe('Hi!')
+    expect(result.current.connectionState).toBe('idle')
+    expect(result.current.error).toBeNull()
+  })
+
+  it('shows a friendly message, not the server detail, on a rejected request', async () => {
+    streamMessage.mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'Traceback: KeyError session' }), { status: 500 }),
+    )
+    const { result } = renderHook(() => useStreamingChat('s1'), { wrapper })
+    await act(async () => {
+      await result.current.sendStreaming('hi')
+    })
+    expect(result.current.error).toBe('The server hit a problem')
+    expect(result.current.error).not.toContain('Traceback')
+  })
+
+  it('does not surface the raw payload of an SSE error event', async () => {
+    vi.useFakeTimers()
+    streamMessage.mockResolvedValue(sseResponse('event: error\ndata: ValueError: secret internals\n\n'))
+    const { result } = renderHook(() => useStreamingChat('s1'), { wrapper })
+    await act(async () => {
+      await result.current.sendStreaming('hi')
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+    expect(result.current.connectionState).toBe('error')
+    expect(result.current.error).toBe('Streaming failed')
+  })
 })
