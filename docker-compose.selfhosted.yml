@@ -13,6 +13,11 @@ services:
   api:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    environment:
+      # SEC-06: passed through from the environment / .env, deliberately no
+      # default -- the api and worker refuse to start without it unless
+      # SINGLE_USER_MODE=true. See docs/deployment.md.
+      SETTINGS_ENCRYPTION_KEY:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
     volumes: !override
       - ./data:/app/data
@@ -35,6 +40,10 @@ services:
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/settings.json:/root/.claude/settings.json:ro
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}:/run/claude-host:ro
     environment:
+      # SEC-06: passed through from the environment / .env, deliberately no
+      # default -- the api and worker refuse to start without it unless
+      # SINGLE_USER_MODE=true. See docs/deployment.md.
+      SETTINGS_ENCRYPTION_KEY:
       # Preferred login: a long-lived token (`claude setup-token`) stored as
       # <dir>/oauth-token (0600). The adapter reads it from this file and hands
       # it only to the CLI subprocess. .credentials.json stays as the fallback.

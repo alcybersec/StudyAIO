@@ -149,12 +149,31 @@ if [[ "$SINGLE_USER_MODE" == "true" ]]; then
             ;;
     esac
 else
-    # Without single-user mode the API will not start unless it can encrypt
-    # per-user AI credentials at rest (SEC-06).
-    if [[ -z "$(get_val SETTINGS_ENCRYPTION_KEY)" ]]; then
-        warn "SETTINGS_ENCRYPTION_KEY is unset — the API will refuse to start without it (unless SINGLE_USER_MODE=true). Generate: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+    # Without single-user mode the API and worker refuse to start unless they can
+    # encrypt per-user AI credentials at rest (SEC-06, app/core/secret_box.py).
+    # Format: one Fernet key (44 chars, url-safe base64 of 32 bytes), or a
+    # comma-separated list for rotation (first encrypts, all decrypt).
+    ENC_KEY=$(get_val SETTINGS_ENCRYPTION_KEY)
+    ENC_HINT='Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+    if [[ -z "${ENC_KEY//[[:space:]]/}" ]]; then
+        error "SETTINGS_ENCRYPTION_KEY is unset — the API and worker will refuse to start without it (unless SINGLE_USER_MODE=true). ${ENC_HINT}"
     else
-        ok "SETTINGS_ENCRYPTION_KEY is set"
+        ENC_BAD=0
+        ENC_COUNT=0
+        IFS=',' read -r -a ENC_PARTS <<< "$ENC_KEY"
+        for part in "${ENC_PARTS[@]}"; do
+            part="${part#"${part%%[![:space:]]*}"}"
+            part="${part%"${part##*[![:space:]]}"}"
+            [[ -z "$part" ]] && continue
+            ENC_COUNT=$((ENC_COUNT + 1))
+            [[ "$part" =~ ^[A-Za-z0-9_-]{43}=$ ]] || ENC_BAD=1
+        done
+        if [[ "$ENC_BAD" -eq 1 || "$ENC_COUNT" -eq 0 ]]; then
+            # The value is never echoed: it is a live secret.
+            error "SETTINGS_ENCRYPTION_KEY is malformed — each key must be 44 characters of url-safe base64 (a Fernet key); startup will refuse it. ${ENC_HINT}"
+        else
+            ok "SETTINGS_ENCRYPTION_KEY is set (${ENC_COUNT} key(s); first one encrypts)"
+        fi
     fi
 fi
 

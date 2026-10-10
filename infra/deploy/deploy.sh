@@ -101,6 +101,40 @@ echo "    ${AVAIL_GB}G available on ${DOCKER_ROOT}"
 echo "==> Pulling images..."
 $COMPOSE pull --quiet
 
+# SEC-06: an image that ships app/core/secret_box.py makes the api and worker
+# refuse to start without SETTINGS_ENCRYPTION_KEY (unless SINGLE_USER_MODE=true).
+# `up -d` would then crash-loop the api behind a "healthy" old stack that has
+# already been stopped, and the usual cause is that .env was regenerated from
+# the secret manager and the secret is missing there. So check the env the NEW image will
+# actually get -- in a one-off container, so compose's own resolution (env_file,
+# overlay, passthrough) is what is tested -- and abort before the dump,
+# migration or any restart. Nothing is printed except a verdict: the key is a
+# live secret and is never echoed. --no-deps: no db/redis needed; the one-off
+# publishes no ports and starts no app code beyond this snippet.
+echo "==> Checking SETTINGS_ENCRYPTION_KEY for the new image..."
+KEY_RC=0
+$COMPOSE run --rm --no-deps -T api python -c '
+import importlib.util, os, sys
+if importlib.util.find_spec("app.core.secret_box") is None:
+    print("    image predates SEC-06; key not required")
+    sys.exit(0)
+if os.environ.get("SINGLE_USER_MODE", "").strip().lower() == "true":
+    print("    SINGLE_USER_MODE=true; key not required")
+    sys.exit(0)
+if not os.environ.get("SETTINGS_ENCRYPTION_KEY", "").strip():
+    sys.exit(1)
+print("    SETTINGS_ENCRYPTION_KEY is present")
+' || KEY_RC=$?
+if [ "${KEY_RC}" -eq 1 ]; then
+    echo "refusing: this image requires SETTINGS_ENCRYPTION_KEY and the environment has none." >&2
+    echo "  The api and worker would crash-loop at startup. Nothing was dumped, migrated or restarted." >&2
+    echo "  Add the secret to the secret manager (see docs/deployment.md, SETTINGS_ENCRYPTION_KEY), re-export .env, and redeploy." >&2
+    exit 68
+elif [ "${KEY_RC}" -ne 0 ]; then
+    echo "refusing: could not run the SETTINGS_ENCRYPTION_KEY check (exit ${KEY_RC}); not continuing blind" >&2
+    exit 68
+fi
+
 # Migrate BEFORE any new app container exists. On the !34 deploy (2026-10-10,
 # R-028) `up -d` started the new worker/beat first, the hourly beat fired at once
 # and its tasks failed with "column user_settings.timezone does not exist" for the

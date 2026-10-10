@@ -69,9 +69,11 @@ prompt_config() {
     # so a known key would let anyone forge an admin token.
     JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))")
 
-    # Encrypts per-user AI credentials at rest (SEC-06): a Fernet key, i.e. 32
-    # random bytes, url-safe base64. TODO: confirm the format against
-    # app/core/secret_box.py once SEC-06 lands on the integration branch.
+    # Encrypts per-user AI credentials at rest (SEC-06). app/core/secret_box.py
+    # feeds each comma-separated entry to cryptography's Fernet(), which wants 32
+    # random bytes as 44-char url-safe base64 -- exactly what this produces
+    # (the openssl fallback is the same encoding with +/ mapped to -_). Losing
+    # this key makes every stored per-user credential unreadable: back it up.
     SETTINGS_KEY=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null \
         || openssl rand -base64 32 | tr '+/' '-_')
 
