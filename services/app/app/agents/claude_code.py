@@ -81,6 +81,21 @@ class _CliAuthError(AgentError):
     """An AgentError known to be an authentication failure (already redacted)."""
 
 
+# SAFETY-053: the only variables the CLI child inherits. Everything else in the
+# worker's environment (JWT secret, DB URL, instance AI keys) stays out of reach
+# of a prompt-injected lecture. The login (token or config dir) is added per call.
+_CHILD_ENV_ALLOWLIST = ("PATH", "HOME", "LANG", "LC_ALL")
+
+
+def _base_env() -> dict[str, str]:
+    """Build the CLI child's environment from the allowlist, never ``os.environ``.
+
+    Returns:
+        A new dict holding only the allowlisted variables that are set.
+    """
+    return {k: os.environ[k] for k in _CHILD_ENV_ALLOWLIST if k in os.environ}
+
+
 def _read_host_credentials() -> dict[str, Any] | None:
     """Read the host's credentials fresh from ``CLAUDE_HOST_CREDENTIALS_FILE``.
 
@@ -243,7 +258,10 @@ class ClaudeCodeAdapter(AgentAdapter):
         # The prompt goes on stdin, not argv: rendered lecture prompts routinely
         # exceed ARG_MAX and exec() then fails with "[Errno 7] Argument list too
         # long". `claude -p` with no positional prompt reads it from stdin.
-        cmd = [self._cli_path, "-p", "--output-format", "text"]
+        # SAFETY-053: ``--tools ""`` leaves the CLI with no tools. The prompt carries
+        # untrusted lecture text; with default tools an injected lecture could make
+        # the CLI Read /proc/self/environ or the mounted login into the summary.
+        cmd = [self._cli_path, "-p", "--output-format", "text", "--tools", ""]
         logger.info(
             "claude_code_call",
             prompt_length=len(prompt),
@@ -251,7 +269,7 @@ class ClaudeCodeAdapter(AgentAdapter):
             has_user_credentials=credentials is not None and not host,
         )
 
-        env = None
+        env = _base_env()
         temp_dir = None
 
         try:
@@ -264,13 +282,13 @@ class ClaudeCodeAdapter(AgentAdapter):
                 # Restrictive permissions: owner read/write only
                 os.chmod(creds_path, stat.S_IRUSR | stat.S_IWUSR)
 
-                env = {**os.environ, "CLAUDE_CONFIG_DIR": temp_dir}
+                env["CLAUDE_CONFIG_DIR"] = temp_dir
                 if not host:
                     logger.info("claude_code_using_user_credentials", config_dir=temp_dir)
 
             elif (token := _read_host_oauth_token()) is not None:
                 # R-026: the child's env only; never argv, never os.environ.
-                env = {**os.environ, "CLAUDE_CODE_OAUTH_TOKEN": token}
+                env["CLAUDE_CODE_OAUTH_TOKEN"] = token
                 logger.info("claude_code_using_host_oauth_token")
 
             process = await asyncio.create_subprocess_exec(

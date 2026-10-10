@@ -44,7 +44,7 @@ class TestStaleCredentialRetry:
 
         async def fake(*args, **kwargs):
             env = kwargs.get("env")
-            if env is None:
+            if "CLAUDE_CONFIG_DIR" not in env:
                 # first call: the container's own (stale) file; host refreshes meanwhile
                 seen.append(None)
                 _write_host(adapter.host, FRESH)

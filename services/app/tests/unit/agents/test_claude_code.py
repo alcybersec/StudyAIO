@@ -82,7 +82,7 @@ class TestRunClaudeCode:
 
         args = mock_exec.call_args[0]
         assert "test prompt" not in args
-        assert args == ("/usr/bin/claude", "-p", "--output-format", "text")
+        assert args == ("/usr/bin/claude", "-p", "--output-format", "text", "--tools", "")
         assert mock_exec.call_args[1]["stdin"] is asyncio.subprocess.PIPE
         assert mock_process.communicate.call_args[1]["input"] == b"test prompt"
 

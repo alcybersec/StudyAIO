@@ -49,9 +49,9 @@ class TestClaudeCodeCredentialFile:
         with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
             await adapter._run_claude_code("test prompt")
 
-            # env should be None (not custom env)
+            # no login override: allowlisted env only, no config dir
             call_kwargs = mock_exec.call_args[1]
-            assert call_kwargs.get("env") is None
+            assert "CLAUDE_CONFIG_DIR" not in call_kwargs["env"]
 
     async def test_runs_with_credentials_creates_temp_dir(self):
         """With credentials, subprocess gets CLAUDE_CONFIG_DIR env."""

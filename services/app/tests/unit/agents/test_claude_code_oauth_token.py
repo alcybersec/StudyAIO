@@ -9,8 +9,8 @@ import structlog
 from app.agents.claude_code import ClaudeCodeAdapter
 from app.core.exceptions import AgentError
 
-TOKEN = "sk-ant-oat01-SENTINEL-eeeeeeee5555"
-TOKEN2 = "sk-ant-oat01-ROTATED-ffffffff6666"
+TOKEN = "test-oauth-token-sentinel-eeeeeeee5555"
+TOKEN2 = "test-oauth-token-rotated-ffffffff6666"
 ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 
 
@@ -73,19 +73,19 @@ class TestHostOAuthToken:
         _token_file(tmp_path, monkeypatch, content)
         result, cap = await _run(_adapter(), _proc(0, b"OK"))
         assert result == "OK"
-        assert cap["env"] is None
+        assert ENV not in cap["env"] and "CLAUDE_CONFIG_DIR" not in cap["env"]
 
     async def test_missing_file_is_ignored(self, tmp_path, monkeypatch):
         monkeypatch.setenv("CLAUDE_HOST_OAUTH_TOKEN_FILE", str(tmp_path / "nope"))
         monkeypatch.delenv(ENV, raising=False)
         result, cap = await _run(_adapter(), _proc(0, b"OK"))
         assert result == "OK"
-        assert cap["env"] is None
+        assert ENV not in cap["env"] and "CLAUDE_CONFIG_DIR" not in cap["env"]
 
     async def test_unset_env_is_ignored(self, monkeypatch):
         monkeypatch.delenv("CLAUDE_HOST_OAUTH_TOKEN_FILE", raising=False)
         _, cap = await _run(_adapter(), _proc(0, b"OK"))
-        assert cap["env"] is None
+        assert ENV not in cap["env"] and "CLAUDE_CONFIG_DIR" not in cap["env"]
 
     async def test_token_is_reread_every_call(self, tmp_path, monkeypatch):
         f = _token_file(tmp_path, monkeypatch, TOKEN)
@@ -127,3 +127,63 @@ class TestHostOAuthToken:
             await _run(_adapter(), _proc(0, b"OK"))
         assert TOKEN not in repr(logs)
         assert any(entry["event"] == "claude_code_using_host_oauth_token" for entry in logs)
+
+
+@pytest.mark.asyncio
+class TestCliSandbox:
+    """SAFETY-053: the CLI child has no tools and an allowlisted environment."""
+
+    @staticmethod
+    def _tools_value(args):
+        assert "--tools" in args
+        return args[args.index("--tools") + 1]
+
+    async def test_no_tools_flag_in_every_mode(self, tmp_path, monkeypatch):
+        _token_file(tmp_path, monkeypatch, TOKEN)
+        _, cap = await _run(_adapter(), _proc(0, b"OK"))
+        assert self._tools_value(cap["args"]) == ""
+        monkeypatch.delenv("CLAUDE_HOST_OAUTH_TOKEN_FILE")
+        _, cap = await _run(_adapter(), _proc(0, b"OK"))
+        assert self._tools_value(cap["args"]) == ""
+        user = {"claudeAiOauth": {"accessToken": "user-token-SENTINEL-1234567890"}}
+        _, cap = await _run(_adapter(user), _proc(0, b"OK"))
+        assert self._tools_value(cap["args"]) == ""
+
+    async def test_env_is_allowlist_only(self, tmp_path, monkeypatch):
+        _token_file(tmp_path, monkeypatch, TOKEN)
+        for k, v in {
+            "PATH": "/usr/bin",
+            "HOME": "/home/w",
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "JWT_SECRET_KEY": "canary-jwt",
+            "DATABASE_URL": "canary-db",
+            "ANTHROPIC_API_KEY": "canary-key",
+            "UNLISTED_CANARY": "canary-x",
+        }.items():
+            monkeypatch.setenv(k, v)
+        _, cap = await _run(_adapter(), _proc(0, b"OK"))
+        assert cap["env"] == {
+            "PATH": "/usr/bin",
+            "HOME": "/home/w",
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            ENV: TOKEN,
+        }
+
+    async def test_env_never_none_and_skips_unset_vars(self, monkeypatch):
+        for k in ("LANG", "LC_ALL", "CLAUDE_HOST_OAUTH_TOKEN_FILE", "CLAUDE_HOST_CREDENTIALS_FILE"):
+            monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv("PATH", "/usr/bin")
+        monkeypatch.setenv("HOME", "/home/w")
+        monkeypatch.setenv("OTHER_CANARY", "x")
+        _, cap = await _run(_adapter(), _proc(0, b"OK"))
+        assert cap["env"] == {"PATH": "/usr/bin", "HOME": "/home/w"}
+
+    async def test_per_user_env_has_config_dir_and_no_token(self, tmp_path, monkeypatch):
+        _token_file(tmp_path, monkeypatch, TOKEN)
+        monkeypatch.setenv("JWT_SECRET_KEY", "canary-jwt")
+        user = {"claudeAiOauth": {"accessToken": "user-token-SENTINEL-1234567890"}}
+        _, cap = await _run(_adapter(user), _proc(0, b"OK"))
+        assert set(cap["env"]) <= {"PATH", "HOME", "LANG", "LC_ALL", "CLAUDE_CONFIG_DIR"}
+        assert "CLAUDE_CONFIG_DIR" in cap["env"]
