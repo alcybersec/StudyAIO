@@ -126,6 +126,50 @@ def filters_on_user(statement: Any, user_id: str) -> bool:
     )
 
 
+def inserts_for_caller(statement: Any, user_id: str) -> bool:
+    """True if ``statement`` is an INSERT that writes only rows owned by the caller.
+
+    Every ``user_id`` value it inserts (each row of a multi-row VALUES) must be
+    the caller; an ``INSERT ... SELECT`` has no literal owner and never counts.
+    An ``ON CONFLICT DO UPDATE`` counts only when its conflict target is a
+    unique key that includes ``user_id`` and it has no extra ``WHERE``: then
+    the conflicting row, the only one it can update, has the caller's id too.
+    GL#19 made ``record_usage`` such an upsert on ``uq_usage_user_date``.
+    """
+    import re
+
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.sql.dml import Insert
+
+    if not isinstance(statement, Insert) or getattr(statement, "select", None) is not None:
+        return False
+    if "user_id" not in statement.table.c:
+        return False
+    params = statement.compile(dialect=postgresql.dialect()).params
+    owners = [v for k, v in params.items() if re.fullmatch(r"user_id(_m\d+)?", k)]
+    if not owners or any(v != user_id for v in owners):
+        return False
+    conflict = getattr(statement, "_post_values_clause", None)
+    if conflict is None:
+        return True
+    if getattr(conflict, "update_whereclause", None) is not None:
+        return False
+    target = getattr(conflict, "constraint_target", None)
+    if isinstance(target, str):
+        keys = [
+            {c.name for c in con.columns}
+            for con in statement.table.constraints
+            if getattr(con, "name", None) == target and hasattr(con, "columns")
+        ]
+        keys += [
+            {c.name for c in ix.columns} for ix in statement.table.indexes if ix.name == target
+        ]
+        cols = keys[0] if keys else set()
+    else:
+        cols = {getattr(e, "name", e) for e in (conflict.inferred_target_elements or [])}
+    return "user_id" in cols
+
+
 def bind_values(statement: Any) -> list[Any]:
     """Every bound value in a statement, ``IN`` lists flattened."""
     values: list[Any] = []

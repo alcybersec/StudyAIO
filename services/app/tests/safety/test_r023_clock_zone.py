@@ -185,10 +185,56 @@ async def test_r023_usage_day_is_utc_whatever_the_zone(instant, utc_date):
         await billing_service.record_usage(session, "caller", ai_calls=1)
 
     compared = [d for stmt in executed for d in _record_dates(stmt)]
-    assert len(compared) >= 3, "the quota and usage reads stopped filtering on record_date"
+    assert len(compared) >= 2, "the quota and usage reads stopped filtering on record_date"
     assert set(compared) == {utc_date}, compared
-    added = [c.args[0] for c in session.add.call_args_list]
-    assert [r.record_date for r in added] == [utc_date]
+    writes = usage_writes(session, executed)
+    assert writes == [("caller", utc_date)], (
+        f"usage must be written once, for the caller, on the UTC day: {writes}"
+    )
+
+
+def usage_writes(session, executed) -> list[tuple]:
+    """``(user_id, record_date)`` of every usage row written, however it is written.
+
+    Covers ``session.add(UsageRecord(...))`` and an executed ``INSERT`` (the
+    GL#19 atomic upsert). An upsert must conflict on ``(user_id, record_date)``
+    (constraint ``uq_usage_user_date``), so its UPDATE can only reach the row
+    whose ``user_id`` it inserted; anything else is reported as a write to
+    ``"<unbounded upsert>"`` so the caller's assertion fails.
+    """
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.sql.dml import Insert, Update
+
+    from app.models.usage_record import UsageRecord
+
+    out = []
+    for call in session.add.call_args_list:
+        obj = call.args[0]
+        if isinstance(obj, UsageRecord):
+            out.append((obj.user_id, obj.record_date))
+    for stmt in executed:
+        if isinstance(stmt, Update) and stmt.table.name == "usage_records":
+            out.append(("<bulk update>", None))
+        if not isinstance(stmt, Insert) or stmt.table.name != "usage_records":
+            continue
+        params = stmt.compile(dialect=postgresql.dialect()).params
+        conflict = getattr(stmt, "_post_values_clause", None)
+        if conflict is not None:
+            target = getattr(conflict, "constraint_target", None)
+            elements = {getattr(e, "name", e) for e in (conflict.inferred_target_elements or [])}
+            bounded = target == "uq_usage_user_date" or elements == {"user_id", "record_date"}
+            if bounded:
+                uq = next(
+                    c
+                    for c in UsageRecord.__table__.constraints
+                    if getattr(c, "name", None) == "uq_usage_user_date"
+                )
+                bounded = {c.name for c in uq.columns} == {"user_id", "record_date"}
+            if not bounded or conflict.update_whereclause is not None:
+                out.append(("<unbounded upsert>", params.get("record_date")))
+                continue
+        out.append((params.get("user_id"), params.get("record_date")))
+    return out
 
 
 @pytest.mark.asyncio
