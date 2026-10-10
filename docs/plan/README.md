@@ -27,9 +27,7 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S4-BACKEND-023 (GL#31: chat scope carried across turns; week-only clarifies) | `backend` | 2026-10-10 | isolated |
 | M32-S4-AI-024 (GL#14 adapter use-time URL check + no redirects; GL#15 nudge beat job) | `ai` | 2026-10-10 | isolated |
-| M32-S4-FRONTEND-025 (GL#11/14 operator-only fields read-only; GL#15 nudge toggle) | `frontend` | 2026-10-10 | isolated |
 | M32-S4-SAFETY-026 (review wave 1: SEC-01/03, AGENT-01, PROD-03) | `safety` | 2026-10-10 | isolated |
 | M32-S4-BACKEND-009 (GL#19 QUOTA-01 + COST-01 + beta-Pro CLI) | `backend` | 2026-10-10 | isolated |
 
@@ -46,6 +44,9 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S4-BACKEND-023 (GL#31: chat scope carried across turns, caller-scoped; bare week → clarifying question; quiz action uses carried course) | `backend` | `5c51323` → `kit/retrofit` `423b178` | **Orchestrator red-check** (agent not red-first): old chat_service → `11 failed`; fixed + safety → `206 passed, 1 skipped`. Agent unit+safety `2872 passed`. Relevance floor (AI-06) not included. Review added to SAFETY-026 | 2026-10-10 |
+| M32-S4-DATA-027 (GL#15 backfill: opt-out defaults for users who never touched preferences; migration `b7d1f4a82c35`) | `data` | `5284105` → `kit/retrofit` `079d08c` | Throwaway pg16: no-rows → 18/4; untouched → 4 enabled; changed / toggled-off / inactive unchanged; idempotent; downgrade no-op. Single head. Seeds the placeholder system user too (harmless) | 2026-10-10 |
+| M32-S4-FRONTEND-025 (GL#11/14 operator-only fields read-only, Ollama disabled when hosted; GL#15 nudge toggle + inbox icon) | `frontend` | `c5edc49` → `kit/retrofit` `e206e07` | **Orchestrator: vitest `643 passed`.** Event names match backend (`study_nudge`, `nudge`) | 2026-10-10 |
 | M32-S4-DEVOPS-022 (GL#12 image: `claudecli` uid 10001, worker `CLAUDE_CLI_UID/GID`, image `/app/data` 0750) | `devops` | `ca73af1` → `kit/retrofit` `1b16ded` | Local image: `-u 10001 claude --version` → 2.1.286; `/app/data`, `/root`, `/proc/1/environ` denied. **Prod host `/opt/studyaio/data` is 755 (subdirs 755)** → bind mount overrides the image mode; **fixed on prod 2026-10-10**: now `drwxr-x---`; api rw ok, worker ok, `-u 10001 ls /app/data` denied, health 200 | 2026-10-10 |
 | M32-S4-BACKEND-005 (GL#15 PROD-03: reminders opt-out by default, seeded at signup, day-2 nudge service, unsubscribe footer) | `backend` | `67db94d`/`b70da9d` → `kit/retrofit` `ebae1cb` | **Orchestrator: unit+safety+contracts `2914 passed, 1 skipped`; ruff clean.** Follow-ups: ai beat job (AI-024), frontend toggle (FRONTEND-025), existing-user backfill (user decision), prod `NOTIFICATIONS_ENABLED`/SMTP | 2026-10-10 |
 | M32-S4-BACKEND-001 + 004 (GL#11 SEC-01 operator-only `claude_code_path`/`claude_model`; GL#14 SEC-03 base URLs operator-only when not self-hosted, `core/url_safety.py`) | `backend` | `d276921` → `kit/retrofit` `a5f3255` | 29 tests red-first (agent). **Orchestrator: unit+safety+contracts `2904 passed, 1 skipped`.** Use-time check + redirects → AI-024; UI → FRONTEND-025; review → SAFETY-026 | 2026-10-10 |
