@@ -92,7 +92,8 @@ note without a pasted run is not evidence and the Orchestrator re-runs the tests
 | ID | Name | Status |
 |---|---|---|
 | M31 | Maintenance | closed 2026-10-08 (CONDITIONAL; C1–C6 → M32) |
-| M32 | Next feature | open |
+| M32 | Safe to grow (audit S1 + security/money/integrity S2) | open |
+| M33 | Trust and retention (audit AI quality, usage, onboarding, strategic bet) | not started |
 
 ## 11. Task graph
 
@@ -139,7 +140,7 @@ M31-S1-ARCH-001 has somewhere to put its contract test.
 **Gate additions:** the floor tier must be non-empty and green, and every floor in §6 must map to a
 named test.
 
-### M32 — Next feature
+### M32 — Safe to grow
 
 **Entry conditions**
 
@@ -177,19 +178,53 @@ is paused until S4 wave 1 closes. Finding IDs are the audit's.
 | M32-S4-FRONTEND-008 | `frontend` | UX-06: Study hub tab bar overflows on phones | Scrolls horizontally at 375px; e2e at mobile width |
 | M32-S4-BACKEND-009 | `backend` (+`safety`) | QUOTA-01 + COST-01 — **after the user decides PROD-08** | Every bypass route checks quota; non-zero global ceilings; chat/Q&A/stream/concepts record usage; `top_k` bounded; counter race fixed |
 
-*Wave 2 — remaining S2 (audit §3)*: TECH-04 (transient AI errors, time limits, stuck-item recovery), UX-01
-(pipeline progress survives navigation), AI-01 (model choice / caching per backend), AI-07 + AI-10
-(summary faithfulness, citations, evals in CI, user feedback), SEC-06 (encrypt per-user credentials at rest),
-TECH-05 (summarize race), TECH-06 (backup in image; migrate-with-dump — overlaps R-028), BILL-01 (Stripe webhook
-dedupe/ordering, `trialing`), AI-06 (relevance floor; follow-up retrieval), SEC-05 (harden self-hosted defaults).
-Task IDs assigned when wave 1 closes.
+*Wave 2 — security, money and data-integrity S2 (M32)*
 
-*Wave 3 — S3/S4 debt and polish*: the remaining rows of audit §3.
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M32-S4-BACKEND-010 | `backend`, `data` (+`safety`) | SEC-06: per-user AI keys / Claude tokens plaintext in JSONB (R-033) | Encrypted at rest with a key from the environment; migration re-encrypts existing rows; floor-2 pins stay green |
+| M32-S4-BACKEND-011 | `backend` | BILL-01: Stripe webhook no dedupe/ordering; `trialing` unmapped (R-034) | Idempotent by event id; out-of-order events can't downgrade; `trialing` mapped; integration tests |
+| M32-S4-AI-012 | `ai` | TECH-04: transient AI error = permanent failure; no time limits; stuck items never recover | Retries with backoff for transient errors; per-stage time limits; a beat job requeues or fails stuck items visibly |
+| M32-S4-AI-013 | `ai`, `backend` | TECH-05: concurrent summarize of the same week races | Per-(course, week) lock or serialisation; both artifacts succeed; integration test with two parallel uploads |
+| M32-S4-DEVOPS-014 | `devops` | TECH-06: documented auto-backup can't run in the image; deploy migrates without a dump (R-028 fixed the order) | Backup runs in prod (verified on the VM); `deploy.sh` takes a DB dump before migrating |
+| M32-S4-BACKEND-015 | `backend`, `devops` (+`safety`) | SEC-05: self-hosted default makes unauthenticated callers admin; Postgres/Redis published (R-035) | Secure-by-default self-host: explicit opt-in for single-user mode, no published DB/Redis ports |
+| M32-S4-FRONTEND-016 | `frontend`, `backend` | UX-05: raw server/exception strings shown to users | User-facing errors are mapped messages; raw text only in logs |
+| M32-S4-DEVOPS-017 | `devops`, `safety` | SEC-07: vulnerable deps (starlette, python-multipart, transformers, react-router) | Upgraded; a dependency audit step in CI |
+| M32-S4-BACKEND-018 | `backend` | SEC-10: rate limits per process (2× looser) | Limits shared via Redis across processes |
+| M32-S4-DEVOPS-019 | `devops` | SEC-11: unused Terraform with plaintext secrets, Redis without auth | Removed or fixed |
+| M32-S4-QA-020 | `frontend`, `qa` | UX-08: non-semantic click targets; SSE `JSON.parse` unguarded | Semantic buttons/links; guarded parse; e2e |
 
-*Validation track (audit §6), user-owned*: usage events + D7/D30 (PROD-10), fake-door Pro, shared-course
-seed, instructor interviews. Strategic bets (audit §5) need a user decision before any task is cut.
+**User decision before M32-S4-BACKEND-009:** PROD-08 free-tier limits (generous limits, or Pro for beta users).
 
-**Gate additions:** C1–C6 closed; floor tier non-empty and green; 0 strict xfails pinning R-016.
+**Gate additions:** C1–C6 closed; floor tier non-empty and green; 0 strict xfails pinning R-016. From the
+audit: every S1 (SEC-01, AGENT-01) closed with a floor pin shown red on the hole; QUOTA-01/COST-01 enforced
+on every AI-spending route with non-zero ceilings in prod; no open audit S2 in security, money or data
+integrity (SEC-03, SEC-05, SEC-06, BILL-01, TECH-04, TECH-05, TECH-06); `safety` APPROVE.
+
+### M33 — Trust and retention (outline; tasks cut at the M32 gate)
+
+Source: `docs/audits/2026-10-10-product-audit.md`. Theme: make the AI measurably trustworthy and learn
+whether people come back, before building more.
+
+- **AI trust:** AI-07 (summary faithfulness, slide citations, no outside material), AI-10 (eval set beyond
+  3 cases, evals in CI, user feedback on AI output), AI-06 (relevance floor; follow-up retrieval),
+  AI-01 (per-backend model choice, no full-week re-summarise per upload, prompt caching), AI-12 (prompt/model
+  version on rows; drop drifted inline prompts), AI-09 (structured output, retry on malformed replies).
+- **Usage and retention:** PROD-10 (per-feature usage events, D7/D30), PROD-06 (onboarding; no empty
+  dashboard), UX-01 (pipeline progress survives navigation), PROD-05 (edit/delete/add AI flashcards and quiz
+  items), PROD-07 (course/week picker on upload).
+- **Compliance:** SEC-08 (AI-processing disclosure/consent; no emails in logs).
+- **Debt:** TECH-07 (async embedding; no DB connection across LLM calls), TECH-09 (separate queues),
+  TECH-11 (type checker; easier integration tier; slimmer images), UX-02, UX-03, UX-04, UX-07, PROD-09
+  (OCR, URL import), PROD-11 (README).
+- **One strategic bet, chosen by the user at the M32 gate** (audit §5): trust as the wedge, weak-spot
+  engine, shared course spaces (PROD-04), self-host/BYO-model, Arabic/RTL, or certification prep.
+- **Validation track (audit §6), user-owned:** D7/D30 on the current users, fake-door Pro, shared-course
+  seed, instructor interviews.
+
+**Gate additions (draft):** summary faithfulness measured on ≥ 20 cases in CI with a baseline and a
+non-regression threshold; Q&A and summary citations grounded and pinned; per-feature usage events live in
+prod with a D7/D30 readout for the current users.
 
 ### Later milestones (outline only, not yet scoped)
 
