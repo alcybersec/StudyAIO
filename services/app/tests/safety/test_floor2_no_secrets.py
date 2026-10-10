@@ -963,3 +963,180 @@ def test_floor2_sentinels_are_not_secret_shaped():
     for s in _all_sentinels():
         for label, pattern in HIGH_CONFIDENCE_SECRETS.items():
             assert not pattern.search(s.encode()), (s, label)
+
+
+# ── GL#8: claude_code re-reads host credentials and retries once ────────
+#
+# A user with no per-user Claude credentials runs on the host's own
+# ``claude login``. When that token is revoked, the adapter re-reads the host
+# file (``CLAUDE_HOST_CREDENTIALS_FILE``) and retries once in a fresh
+# ``CLAUDE_CONFIG_DIR``. Two things must hold for the operator's credential:
+# a CLI failure that quotes it reaches no response, log, pipeline_runs row or
+# exception chain; and it is never handed back as ``refreshed_credentials``,
+# which classify, summarize and assets persist as the calling user's
+# ``user_settings.claude_cli_credentials``.
+
+HOST_SENTINEL = "floor2-sentinel-host-oauth-token-5e1d"
+
+
+def _host_credentials_file(tmp_path: pathlib.Path) -> pathlib.Path:
+    path = tmp_path / "host" / ".credentials.json"
+    path.parent.mkdir()
+    oauth = {"accessToken": HOST_SENTINEL, "refreshToken": HOST_SENTINEL + "-r"}
+    path.write_text(json.dumps({"claudeAiOauth": oauth}))
+    return path
+
+
+class _RevokedThenEcho:
+    """``claude`` CLI: the container's own login is revoked; the retry echoes its token.
+
+    The first call (no ``CLAUDE_CONFIG_DIR``) fails as GL#8 did. The second
+    reads the credentials it was handed and fails quoting the access token,
+    so a redaction gap on the retry path shows up as the host sentinel.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[str | None] = []
+
+    def fake(self):
+        echo = self
+
+        async def create_subprocess_exec(*_cmd, env=None, **_k):
+            config_dir = (env or {}).get("CLAUDE_CONFIG_DIR")
+            echo.calls.append(config_dir)
+            token = ""
+            if config_dir:
+                creds = json.loads((pathlib.Path(config_dir) / ".credentials.json").read_text())
+                token = creds["claudeAiOauth"]["accessToken"]
+            process = MagicMock()
+            process.returncode = 1
+            process.communicate = AsyncMock(
+                return_value=(
+                    f"401 OAuth access token {token} has been revoked".encode(),
+                    b"",
+                )
+            )
+            return process
+
+        return create_subprocess_exec
+
+
+def _host_login_classify(subprocess_fake) -> tuple[BaseException | None, list[str]]:
+    """Run classify for a user on the host login (no stored Claude credentials)."""
+    import asyncio
+
+    from app.models.artifact import LectureArtifact
+    from app.models.pipeline_run import PipelineRun
+    from app.pipeline import classify
+
+    artifact = SimpleNamespace(
+        id="a1",
+        user_id="u1",
+        file_path="uploads/u1/a1.pdf",
+        file_type="pdf",
+        original_filename="CSIT302_week1.pdf",
+        status="ingested",
+        course_id=None,
+        week=None,
+    )
+    session = _WorkerSession({"lecture_artifacts": artifact}, {LectureArtifact: artifact})
+    with (
+        patch.object(classify, "async_session_factory", return_value=session),
+        patch.object(classify, "publish_pipeline_event_sync", MagicMock()),
+        patch.object(classify, "_extract_text_preview", return_value="CSIT302 week 1"),
+        patch.object(classify, "_get_known_courses", new=AsyncMock(return_value=[])),
+        patch(
+            "app.services.settings_service.get_user_agent_config",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("app.agents.factory.get_effective_setting", return_value="claude_code"),
+        patch.object(asyncio, "create_subprocess_exec", subprocess_fake),
+    ):
+        result = classify.classify_artifact.apply(args=({"artifact_id": "a1", "user_id": "u1"},))
+    raised = result.result if isinstance(result.result, BaseException) else None
+    runs = [o for o in session.added if isinstance(o, PipelineRun) and o.status == "failed"]
+    return raised, [f"pipeline_runs.error_message={r.error_message!r}" for r in runs]
+
+
+def test_floor2_host_credential_retry_failure_never_stores_or_logs_the_token(
+    tmp_path, monkeypatch, caplog
+):
+    """Revoked container login, then a retry that echoes the re-read host token.
+
+    The token must reach neither ``pipeline_runs.error_message``, the logs,
+    nor the exception the task ends with *including its cause chain*
+    (``_run_claude_code`` raises ``second from first``; Celery renders the
+    whole chain in its "Task ... raised" line).
+    """
+    import traceback
+
+    monkeypatch.setenv("CLAUDE_HOST_CREDENTIALS_FILE", str(_host_credentials_file(tmp_path)))
+    cli = _RevokedThenEcho()
+    caplog.set_level(logging.DEBUG)
+    with structlog.testing.capture_logs() as events:
+        raised, stored = _host_login_classify(cli.fake())
+
+    assert len(cli.calls) == 2, f"expected exactly one retry, got CLI calls {cli.calls}"
+    assert cli.calls[0] is None and cli.calls[1], "the retry did not use a fresh config dir"
+    assert stored, "classify recorded no failed pipeline_runs row, so this test proves nothing"
+    assert raised is not None, "the task did not fail, so this test proves nothing"
+    chain = "".join(traceback.format_exception(raised))
+    for text, where in (
+        ("\n".join(stored), "pipeline_runs.error_message"),
+        (repr(events), "structlog events"),
+        (caplog.text, "stdlib log records"),
+        (chain, "the task's exception and its cause chain"),
+    ):
+        assert HOST_SENTINEL not in text, f"Floor 2: the host OAuth token appears in {where}"
+    assert not pathlib.Path(cli.calls[1]).exists(), "the retry's CLAUDE_CONFIG_DIR was not removed"
+
+
+@pytest.mark.asyncio
+async def test_floor2_host_credentials_are_never_handed_back_as_the_users_own(
+    tmp_path, monkeypatch
+):
+    """A CLI token refresh during the host-credential retry must not become the user's.
+
+    ``refreshed_credentials`` is the adapter's statement "these are the
+    caller's credentials, refreshed": classify, summarize and assets write it
+    to the caller's ``user_settings.claude_cli_credentials``. On the GL#8
+    retry the CLI ran on the *operator's* login, so anything it refreshed is
+    the operator's, and persisting it copies the operator's OAuth tokens into
+    the row of every user on the host login (floors 1 and 2).
+    """
+    import asyncio
+
+    from app.agents.claude_code import ClaudeCodeAdapter
+
+    monkeypatch.setenv("CLAUDE_HOST_CREDENTIALS_FILE", str(_host_credentials_file(tmp_path)))
+    calls: list[str | None] = []
+
+    async def create_subprocess_exec(*_cmd, env=None, **_k):
+        config_dir = (env or {}).get("CLAUDE_CONFIG_DIR")
+        calls.append(config_dir)
+        process = MagicMock()
+        if not config_dir:
+            process.returncode = 1
+            process.communicate = AsyncMock(
+                return_value=(b"401 OAuth access token has been revoked", b"")
+            )
+            return process
+        # The CLI refreshes the token it was handed, in place.
+        rotated = {"claudeAiOauth": {"accessToken": HOST_SENTINEL + "-rotated"}}
+        (pathlib.Path(config_dir) / ".credentials.json").write_text(json.dumps(rotated))
+        process.returncode = 0
+        process.communicate = AsyncMock(return_value=(b'{"course_code": "CSIT302"}', b""))
+        return process
+
+    with patch("app.agents.claude_code.get_effective_setting", return_value="claude"):
+        adapter = ClaudeCodeAdapter()
+    with patch.object(asyncio, "create_subprocess_exec", create_subprocess_exec):
+        await adapter._run_claude_code("p")
+
+    assert len(calls) == 2 and calls[1], "the host-credential retry did not run"
+    exposed = json.dumps(adapter.refreshed_credentials or {})
+    assert HOST_SENTINEL not in exposed, (
+        "Floor 1/2: the operator's refreshed host credentials are exposed as "
+        "refreshed_credentials, which classify/summarize/assets persist into the "
+        "calling user's user_settings.claude_cli_credentials"
+    )
