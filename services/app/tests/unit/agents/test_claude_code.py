@@ -90,6 +90,10 @@ class TestRunClaudeCode:
             "text",
             "--strict-mcp-config",
             "--no-session-persistence",
+            "--model",
+            adapter._model,
+            "--system-prompt",
+            claude_code._SYSTEM_PROMPT,
             "--tools",
             "",
         )

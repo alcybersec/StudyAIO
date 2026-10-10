@@ -90,7 +90,8 @@ class TestGetAgentWithUserSettings:
             agent = get_agent(user_settings=user_settings)
             assert isinstance(agent, ClaudeCodeAdapter)
             assert agent._credentials_json == creds
-            assert agent._model == "sonnet"
+            # GL#12: the per-user model never reaches the CLI.
+            assert agent._model == "test"
 
     def test_user_settings_claude_code_empty_credentials_is_refused(self):
         """Empty credentials would fall through to the host's own `claude login`."""
