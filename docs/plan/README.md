@@ -26,7 +26,6 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S3-DEVOPS-060 (R-028: migrate before starting new api/worker/beat) | `devops` | 2026-10-10 | isolated |
 
 ## Completed
 
@@ -37,6 +36,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S3-DEVOPS-060 (R-028: migrate in a one-off container from the new image before `up -d`; failed migration leaves old stack serving) | `devops` | `10f9d9b` → `kit/retrofit` (see log) | `bash -n` ok; `glab ci lint` valid. Agent ran the exact new lines on a throwaway stack: failing migration → exit 1, old api untouched; passing → migrate then recreate. **Not live yet:** prod's `/opt/studyaio/deploy.sh` is installed by hand (SSH forced command) — needs install per docs/deployment.md "Updating deploy.sh" | 2026-10-10 |
 | M32-S3-AI-058 + DEVOPS-059 (CLI `--strict-mcp-config` `--no-session-persistence`, `--tools ""` last; preflight requires login settings.json `{}`; rotation needs no recreate; IMAGE_TAG check before emergency path) | `ai`, `devops` | `26c8f43` → `e630609`; `ece363c` → `kit/retrofit` (see log) | Orchestrator red-check of argv test: old code → `1 failed`; agents+safety `523 passed`; preflight tests green; ruff clean | 2026-10-10 |
 | M32-S3-SAFETY-057 (confirm R-027 fixes; VETO lifted) | `safety` | `1f487de` → `kit/retrofit` `888448c` | Mutation-checked: dropping `--tools ""`, widening the env allowlist, or removing either Sentry layer → red. +6 pins (exact allowlist; each Sentry layer alone). **Orchestrator: floor `195 passed, 1 skipped`.** Non-blocking hardening → AI-058, DEVOPS-059 | 2026-10-10 |
 | M32-S3 GL#8 + R-025/R-026/R-027 stack (dedicated login dir, long-lived token, CLI sandbox `--tools ""` + env allowlist, Sentry no frame locals, CLI pinned 2.1.286, CI-only runbook) | `devops`, `ai`, `backend`, `safety` | → `kit/retrofit` `1dbf4c6`..`465e14d` | **Orchestrator on `kit/retrofit`: ruff clean; `make test` → unit `88.17%`, `2940 passed`; floor `97.29%`, `189 passed, 1 skipped`; integration `86.89%`, `532 passed`.** Awaiting SAFETY-057 confirmation; prod needs the token file before merge | 2026-10-10 |
