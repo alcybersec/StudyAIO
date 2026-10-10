@@ -155,9 +155,29 @@ integration-tests:
     - ./scripts/ci-pip-install.sh
     - cd services/app
   script:
+    # Throwaway per-job key for credential encryption (SEC-06); never committed.
+    - export SETTINGS_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
     # Gate = the `integration` tier in pyproject's [tool.studyaio.coverage-tiers].
     - python -m pytest tests/integration -x -v --cov=app --cov-report=term-missing
       --cov-fail-under=$(python ../../scripts/coverage-tier.py integration)
+
+# Known-vulnerable dependencies (SEC-07 / GL#27): pip-audit over the pinned lock
+# and `npm audit --audit-level=high`. Justified exceptions live in
+# infra/audit-allowlist.txt; anything else fails the job. Advisories appear
+# upstream without a commit here, so a red run on an unchanged tree is a real
+# finding, not flakiness.
+dependency-audit:
+  stage: test
+  image: node:20-slim
+  needs: []
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-pip python3-venv
+    - python3 -m venv "$CI_PROJECT_DIR/.venv-audit"
+    - export PATH="$CI_PROJECT_DIR/.venv-audit/bin:$PATH"
+    - pip install pip-audit
+  script:
+    - ./scripts/audit-deps.sh
 
 frontend-checks:
   stage: test
@@ -215,6 +235,11 @@ e2e-tests:
     DATABASE_URL_SYNC: postgresql://studyaio:studyaio@postgres:5432/studyaio
     REDIS_URL: redis://redis:6379/0
     SELF_HOSTED: "true"
+    # SELF_HOSTED no longer skips login (SEC-05). The suite drives the API as the
+    # default admin, which now needs the explicit no-login mode; BIND_HOST mirrors
+    # the `uvicorn --host 127.0.0.1` below, which is what lets startup accept it.
+    SINGLE_USER_MODE: "true"
+    BIND_HOST: "127.0.0.1"
     JWT_SECRET_KEY: e2e-ephemeral-secret-not-used-outside-ci
     DATA_DIR: $CI_PROJECT_DIR/e2e-data
     LOG_FORMAT: json

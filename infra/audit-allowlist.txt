@@ -1,0 +1,14 @@
+# Justified exceptions for scripts/audit-deps.sh (SEC-07 / GL#27).
+#
+# One entry per line:   <pip|npm>:<advisory id>   # why it is accepted, and when to drop it
+# An entry is a debt, not a resting place: every one names the change that removes it.
+# Anything not listed here fails the CI `dependency-audit` job.
+
+# pytest <= 9.0.2 (CVE-2025-71176 / GHSA-6w46-j5rx-g56g): predictable /tmp/pytest-of-<user>
+# directory lets a *local* user on a shared UNIX host cause DoS or escalate. pytest is a
+# test-only tool here, run in throwaway CI containers and on single-user dev machines; it is
+# never reachable from the network. The fix is 9.0.3, but pytest >= 8.4 breaks
+# services/app/tests/unit/core/test_data_dir_isolation.py (reads the pre-8.4 fixture marker
+# `_pytestfixturefunction`). Drop this entry once that test is ported and requirements.txt
+# is bumped to pytest>=9.0.3.
+pip:PYSEC-2026-1845
