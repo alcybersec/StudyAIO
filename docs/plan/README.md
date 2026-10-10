@@ -24,7 +24,8 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S3-SAFETY-057 (confirm R-027 fixes; lift VETO?) | `safety` | 2026-10-10 | isolated |
+| M32-S3-AI-058 (CLI `--strict-mcp-config`, `--no-session-persistence`, argv order) | `ai` | 2026-10-10 | isolated |
+| M32-S3-DEVOPS-059 (preflight: login settings.json must be `{}`; rotation docs; IMAGE_TAG check) | `devops` | 2026-10-10 | isolated |
 
 ## Completed
 
@@ -35,6 +36,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S3-SAFETY-057 (confirm R-027 fixes; VETO lifted) | `safety` | `1f487de` → `kit/retrofit` `888448c` | Mutation-checked: dropping `--tools ""`, widening the env allowlist, or removing either Sentry layer → red. +6 pins (exact allowlist; each Sentry layer alone). **Orchestrator: floor `195 passed, 1 skipped`.** Non-blocking hardening → AI-058, DEVOPS-059 | 2026-10-10 |
 | M32-S3 GL#8 + R-025/R-026/R-027 stack (dedicated login dir, long-lived token, CLI sandbox `--tools ""` + env allowlist, Sentry no frame locals, CLI pinned 2.1.286, CI-only runbook) | `devops`, `ai`, `backend`, `safety` | → `kit/retrofit` `1dbf4c6`..`465e14d` | **Orchestrator on `kit/retrofit`: ruff clean; `make test` → unit `88.17%`, `2940 passed`; floor `97.29%`, `189 passed, 1 skipped`; integration `86.89%`, `532 passed`.** Awaiting SAFETY-057 confirmation; prod needs the token file before merge | 2026-10-10 |
 | M32-S3-AI-049 (GL#8: no retry on expired host token; host retry log fixed) | `ai` | `10db45f` → `kit/retrofit` `67feb7e` | 7 new tests (agent: all red before fix). Orchestrator: safety+agents+contracts `530 passed`. Review in SAFETY-050 | 2026-10-10 |
 | M32-S3-AI-041 + SAFETY-045/046 (GL#8: claude_code re-reads host credentials, one retry; host creds never persisted as a user's; container token redacted) | `ai`, `safety` | → `kit/retrofit` `d8b4fa6`..`a6c05c2` | **Orchestrator: `pytest tests/safety tests/unit/agents` → `470 passed`; ruff clean.** safety APPROVE all floors, VETO lifted; 3 mutants red. **Inert until the compose mount lands** — `0bdf597` held on R-025 (whole `~/.claude` exposed to root worker) pending user decision | 2026-10-10 |
