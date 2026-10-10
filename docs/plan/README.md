@@ -31,7 +31,6 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 |---|---|---|---|
 | M32-S4-AI-007 (AI-03 GL#17: chunk size fits embedder, setting capped, re-embed task) | `ai` | 2026-10-10 | isolated |
 | M32-S4-BACKEND-010 (SEC-06 GL#20: encrypt per-user secrets at rest) | `backend` | 2026-10-10 | isolated |
-| M32-S4-BACKEND-011 (BILL-01 GL#21: Stripe webhook idempotent/ordered, `trialing`) | `backend` | 2026-10-10 | isolated |
 | M32-S4-AI-012 + 013 (TECH-04 GL#22 retries/time limits/stuck recovery; TECH-05 GL#23 summarize race) | `ai` | 2026-10-10 | isolated |
 | M32-S4-DEVOPS-014 + 017 + 019 (TECH-06 GL#24 backups + pre-migrate dump; SEC-07 GL#27 deps + CI audit; SEC-11 GL#29 dead Terraform) | `devops` | 2026-10-10 | isolated |
 | M32-S4-BACKEND-015 + 018 (SEC-05 GL#25 secure self-host default; SEC-10 GL#28 Redis-backed rate limits) | `backend` | 2026-10-10 | isolated |
@@ -50,6 +49,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S4-BACKEND-011 (BILL-01 GL#21: Stripe webhook idempotent by event id, ordered per customer, `trialing`/`past_due` → Pro, stale/foreign-subscription deletes ignored) | `backend` | `7bc20ea`/`028f6fe` → `kit/retrofit` `b7974d1` | 18 tests red-first. **Orchestrator: `make test-integration` → 85.36%, `533 passed`** (agent's `test_user_with_deadline_only_is_deleted` failure not reproduced — likely the full Docker disk). Ordering state in Redis (durable column = optional data follow-up). `safety` review pending | 2026-10-10 |
 | M32-S4-QA-030 + QA-032 (golden event set incl. `study_nudge`; ruff format test_notifications) | `qa` | `a217c69` → `d375e40`; `6ac629c` → `kit/retrofit` (see log) | **Orchestrator full run on kit/retrofit:** ruff check clean, `ruff format --check` clean; `make test` → unit 88.66% `3105 passed`, floor 97.36% `351 passed, 1 skipped` (0 failed); integration 85.38% `532 passed`; frontend `643 passed`, tsc clean, lint 0 errors. **M32 wave 1 complete except AI-03 (AI-007)** | 2026-10-10 |
 | M32-S4-DATA-031 (insert missing `study_nudge` rows for users with existing prefs; migration `c8e2a5f93d16`) | `data` | `1ad74c5` → `kit/retrofit` (see log) | Throwaway pg16: untouched user → email on; touched → all off; existing nudge rows / system user / inactive unchanged; idempotent. Single head | 2026-10-10 |
 | M32-S4-AI-025 (SAFETY-026 VETO reds: factory ignores user cli_path/model; uid-mode host copy redacted; `extra_groups=[]`; uid 0 treated as unset + warning) | `ai` | `db1f09e` → `kit/retrofit` `045f85c` | **Orchestrator: safety+agents+contracts `756 passed, 1 skipped`, 0 failed** — both VETO pins green with no test edits (safety's stated lift condition); ruff clean | 2026-10-10 |
