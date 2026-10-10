@@ -160,6 +160,9 @@ class TestCheckoutAndPortal:
 
 class TestWebhook:
     async def _post(self, client_factory, payload, **kw):
+        # Event ids are deduped in Redis, which outlives a test run: make them unique.
+        payload = {**payload, "id": f"{payload['id']}_{generate_id()}"}
+        payload.setdefault("created", int(time.time()))
         body, headers = _signed(payload, **kw)
         return await client_factory().post("/api/billing/webhook", content=body, headers=headers)
 
@@ -217,6 +220,18 @@ class TestWebhook:
         )
         assert past_due.status_code == 200
         await db_session.refresh(user)
+        assert user.tier == "pro"  # dunning grace (R-034)
+
+        unpaid = await self._post(
+            client_factory,
+            {
+                "id": "evt_2b",
+                "type": "customer.subscription.updated",
+                "data": {"object": {"id": "sub_1", "customer": "cus_life", "status": "unpaid"}},
+            },
+        )
+        assert unpaid.status_code == 200
+        await db_session.refresh(user)
         assert user.tier == "free"
 
         deleted = await self._post(
@@ -230,6 +245,41 @@ class TestWebhook:
         assert deleted.status_code == 200
         await db_session.refresh(sub)
         assert (sub.plan, sub.status, sub.stripe_subscription_id) == ("free", "canceled", None)
+
+    async def test_replay_and_stale_events_cannot_downgrade(
+        self, client_factory, make_user, db_session, saas
+    ):
+        user = await make_user(tier="free")
+        await _subscription(db_session, user, customer="cus_order")
+        now = int(time.time())
+
+        def event(status, created):
+            return {
+                "id": "x",
+                "created": created,
+                "type": "customer.subscription.updated",
+                "data": {"object": {"id": "sub_o", "customer": "cus_order", "status": status}},
+            }
+
+        # trialing maps to Pro
+        assert (await self._post(client_factory, event("trialing", now))).status_code == 200
+        await db_session.refresh(user)
+        assert user.tier == "pro"
+        # an older cancel arriving late is ignored
+        assert (await self._post(client_factory, event("canceled", now - 500))).status_code == 200
+        await db_session.refresh(user)
+        assert user.tier == "pro"
+
+        # a replayed event id (same signed body twice) is applied once
+        stale = {**event("canceled", now + 10), "id": f"evt_replay_{generate_id()}"}
+        for _ in range(2):
+            body, headers = _signed(stale)
+            resp = await client_factory().post(
+                "/api/billing/webhook", content=body, headers=headers
+            )
+            assert resp.status_code == 200
+        await db_session.refresh(user)
+        assert user.tier == "free"
 
     async def test_unknown_customer_and_ignored_events_are_acknowledged(self, client_factory, saas):
         for event_type, obj in (
