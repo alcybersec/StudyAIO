@@ -1140,3 +1140,103 @@ async def test_floor2_host_credentials_are_never_handed_back_as_the_users_own(
         "refreshed_credentials, which classify/summarize/assets persist into the "
         "calling user's user_settings.claude_cli_credentials"
     )
+
+
+CONTAINER_SENTINEL = "floor2-sentinel-container-oauth-token-9b4c"
+
+
+@pytest.mark.asyncio
+async def test_floor2_container_login_token_is_redacted_from_cli_failures(tmp_path, monkeypatch):
+    """The worker's own ``~/.claude`` login is a credential too (SAFETY-045 residual).
+
+    A user on the host login runs the CLI with no ``CLAUDE_CONFIG_DIR``, so it
+    reads the container's ``~/.claude/.credentials.json`` (the operator's
+    token, single-file mounted). A failure that quotes that token must be
+    redacted like any other credential: the message becomes
+    ``pipeline_runs.error_message`` and, on the GL#8 retry, the ``__cause__``
+    Celery renders. No host file is configured here, so no retry masks it.
+    """
+    import asyncio
+    import traceback
+
+    from app.agents.claude_code import ClaudeCodeAdapter
+    from app.core.exceptions import AgentError
+
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    oauth = {"accessToken": CONTAINER_SENTINEL, "refreshToken": CONTAINER_SENTINEL + "-r"}
+    (home / ".claude" / ".credentials.json").write_text(json.dumps({"claudeAiOauth": oauth}))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("CLAUDE_HOST_CREDENTIALS_FILE", raising=False)
+
+    async def create_subprocess_exec(*_cmd, env=None, **_k):
+        assert not (env or {}).get("CLAUDE_CONFIG_DIR"), "host-login run got a config dir"
+        process = MagicMock()
+        process.returncode = 1
+        process.communicate = AsyncMock(
+            return_value=(
+                f"401 OAuth access token {CONTAINER_SENTINEL} has been revoked".encode(),
+                f"refresh {CONTAINER_SENTINEL}-r rejected".encode(),
+            )
+        )
+        return process
+
+    with patch("app.agents.claude_code.get_effective_setting", return_value="claude"):
+        adapter = ClaudeCodeAdapter()
+    with (
+        structlog.testing.capture_logs() as events,
+        patch.object(asyncio, "create_subprocess_exec", create_subprocess_exec),
+        pytest.raises(AgentError) as info,
+    ):
+        await adapter._run_claude_code("p")
+
+    chain = "".join(traceback.format_exception(info.value))
+    assert "401" in chain, "the failure text was dropped, so this test proves nothing"
+    for text, where in ((chain, "the raised error and its chain"), (repr(events), "logs")):
+        assert CONTAINER_SENTINEL not in text, (
+            f"Floor 2: the container's own ~/.claude OAuth token appears in {where}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_floor2_host_credential_retry_is_not_logged_as_user_credentials(
+    tmp_path, monkeypatch
+):
+    """The retry runs on the operator's login; logs must not attribute it to the user.
+
+    ``claude_code_using_user_credentials`` is how an operator tells a
+    per-user-credential run from a host-login run when auditing which
+    credential an AI call spent. Firing it on the host retry would record
+    the operator's credential as the user's own.
+    """
+    import asyncio
+
+    from app.agents.claude_code import ClaudeCodeAdapter
+
+    monkeypatch.setenv("CLAUDE_HOST_CREDENTIALS_FILE", str(_host_credentials_file(tmp_path)))
+    calls: list[str | None] = []
+
+    async def create_subprocess_exec(*_cmd, env=None, **_k):
+        config_dir = (env or {}).get("CLAUDE_CONFIG_DIR")
+        calls.append(config_dir)
+        process = MagicMock()
+        process.returncode = 0 if config_dir else 1
+        out = b"ok" if config_dir else b"401 OAuth access token has been revoked"
+        process.communicate = AsyncMock(return_value=(out, b""))
+        return process
+
+    with patch("app.agents.claude_code.get_effective_setting", return_value="claude"):
+        adapter = ClaudeCodeAdapter()
+    with (
+        structlog.testing.capture_logs() as events,
+        patch.object(asyncio, "create_subprocess_exec", create_subprocess_exec),
+    ):
+        await adapter._run_claude_code("p")
+
+    assert len(calls) == 2 and calls[1], "the host-credential retry did not run"
+    names = [e.get("event") for e in events]
+    assert "claude_code_auth_failed_retrying_with_host_credentials" in names, names
+    assert "claude_code_using_user_credentials" not in names, (
+        "the host-credential retry was logged as a per-user-credential run"
+    )
+    assert adapter.refreshed_credentials is None
