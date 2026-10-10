@@ -27,7 +27,9 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S4-SAFETY-026 (review wave 1: SEC-01/03, AGENT-01, PROD-03) | `safety` | 2026-10-10 | isolated |
+| M32-S4-AI-025 (lift SAFETY-026 VETO: factory ignores user cli_path/model; uid-mode host copy redacted; extra_groups=[]; refuse uid 0) | `ai` | 2026-10-10 | isolated |
+| M32-S4-QA-030 (golden notification event set incl. `study_nudge`) | `qa` | 2026-10-10 | isolated |
+| M32-S4-DATA-031 (insert missing `study_nudge` rows for users with existing prefs) | `data` | 2026-10-10 | isolated |
 
 **GL#31 (2026-10-10):** chat follow-ups lose course/week scope (prod repro; CSCI369 W3 has 8 indexed chunks) — pulled into M32 wave 1 as M32-S4-BACKEND-023 (audit AI-06 overlap).
 
@@ -42,6 +44,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S4-SAFETY-026 (review all of M32 wave 1) | `safety` | `56aea80`/`0aabf09`/`89525b2` → `kit/retrofit` `d63d7e1`/`8053908`/`d2f29f3` | ~150 new floor cases; 40 mutants, 36 caught, 4 by design. **Orchestrator: floor `2 failed, 349 passed, 1 skipped`** — the 2 = VETO reds (ai, AI-025). APPROVE: SEC-01 (API), SEC-03 (48 bypass spellings), AI-024, AGENT-01, PROD-03, GL#31, GL#19 (upsert pins adapted), AI-029, backfill. Found: golden red since GL#15 (QA-030); existing users lack `study_nudge` rows (DATA-031) | 2026-10-10 |
 | M32-S4-AI-029 (GL#19: classify checks course quota for new courses, row owner's tier; at limit → review item `course_limit_reached`, artifact waiting_review) | `ai` | `334ec6d` → `kit/retrofit` `447efb4` | 4 tests red-first (agent). **Orchestrator: `make test-integration` → 85.41%, `532 passed`.** Floor review in SAFETY-026 | 2026-10-10 |
 | M32-S4-QA-028 (integration tier aligned with GL#16 prose streaming, GL#15 defaults, GL#14 URL check, nudge result key, prefs FK in teardown) | `qa` | `e2daa91` → `kit/retrofit` `bc981d2` | Test-only (4 integration files). 20 failed + 2 errors before. **Orchestrator: `make test-integration` → `Required test coverage of 70% reached. Total coverage: 85.43%`, `532 passed`** | 2026-10-10 |
 | M32-S4-BACKEND-009 (GL#19 QUOTA-01 + COST-01: quota on batch/retry/reclassify/merge/review-resolve/CourseOps; atomic usage upsert; default ceilings 2000 calls / 10M tokens per day; chat/Q&A/concepts metered; `top_k` 1..30; `grant-pro` CLI) | `backend` | `e38fd1a`..`c8fb793` → `kit/retrofit` `ac1234d` | **Orchestrator: unit+safety+contracts `3 failed, 2975 passed`** — the 3 = safety pins that read `session.add` / sweep a WHERE-less INSERT; routed to SAFETY-026. Agent integration: 8 reds pre-existing on kit/retrofit (GL#16, GL#15 tests) → QA-028. Classify course quota → AI-029. **Operator:** run `grant-pro` on prod (dry-run first) | 2026-10-10 |
