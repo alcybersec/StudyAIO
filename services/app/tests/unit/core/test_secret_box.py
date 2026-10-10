@@ -112,6 +112,46 @@ class TestSecretBox:
             secret_box.check_startup()
 
 
+class TestWellKnownTestKey:
+    """The all-zero key the root conftest uses protects nothing; prod must refuse it."""
+
+    ZERO_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+    @pytest.fixture
+    def outside_tests(self, monkeypatch):
+        monkeypatch.setattr(secret_box, "_running_under_pytest", lambda: False)
+
+    def test_multi_user_startup_refuses_test_key(self, monkeypatch, outside_tests):
+        monkeypatch.setattr(settings, "settings_encryption_key", SecretStr(self.ZERO_KEY))
+        monkeypatch.setattr(settings, "single_user_mode", False)
+        with pytest.raises(RuntimeError, match="well-known"):
+            secret_box.check_startup()
+
+    def test_refused_when_listed_among_rotation_keys(self, monkeypatch, outside_tests):
+        monkeypatch.setattr(
+            settings, "settings_encryption_key", SecretStr(f"{KEY_A}, {self.ZERO_KEY}")
+        )
+        monkeypatch.setattr(settings, "single_user_mode", False)
+        with pytest.raises(RuntimeError, match="well-known"):
+            secret_box.check_startup()
+
+    def test_single_user_mode_tolerates_test_key(self, monkeypatch, outside_tests):
+        monkeypatch.setattr(settings, "settings_encryption_key", SecretStr(self.ZERO_KEY))
+        monkeypatch.setattr(settings, "single_user_mode", True)
+        secret_box.check_startup()
+
+    def test_real_key_passes_outside_tests(self, monkeypatch, outside_tests):
+        monkeypatch.setattr(settings, "settings_encryption_key", SecretStr(KEY_A))
+        monkeypatch.setattr(settings, "single_user_mode", False)
+        secret_box.check_startup()
+
+    def test_test_key_allowed_under_pytest(self, monkeypatch):
+        """The suite itself starts the lifespan in multi-user mode with this key."""
+        monkeypatch.setattr(settings, "settings_encryption_key", SecretStr(self.ZERO_KEY))
+        monkeypatch.setattr(settings, "single_user_mode", False)
+        secret_box.check_startup()
+
+
 def _row(overrides):
     return SimpleNamespace(
         user_id="u1",
