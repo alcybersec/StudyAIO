@@ -40,6 +40,10 @@ services:
     command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=4
     volumes: !override
       - ./data:/app/data
+      # See docker-compose.yml: run_backup needs the script and a persistent
+      # destination, neither of which the image carries. GL#24.
+      - ./scripts/backup.sh:/app/scripts/backup.sh:ro
+      - ./backups:/app/backups
       # Claude CLI comes from the image — never bind-mount a host binary here
       # (see the note in docker-compose.yml). Credentials only.
       # Credentials come ONLY from the dedicated service-login directory

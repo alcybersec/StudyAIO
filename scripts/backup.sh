@@ -23,6 +23,9 @@ info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 ok()   { echo -e "${GREEN}[OK]${NC} $*"; }
 err()  { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
+# A dead or unresolvable DB host must fail the run, not hang the Celery slot.
+export PGCONNECT_TIMEOUT="${PGCONNECT_TIMEOUT:-15}"
+
 mkdir -p "$BACKUP_DIR"
 
 # ── Database dump ──────────────────────────────────────────────────
@@ -30,13 +33,26 @@ mkdir -p "$BACKUP_DIR"
 DB_DUMP="${BACKUP_DIR}/${BACKUP_NAME}_db.sql.gz"
 
 info "Dumping database..."
+# Dump to a .partial name and rename only on success, so a failed run (pipefail
+# makes a pg_dump error fail the pipeline) can never leave a file that retention
+# or restore would mistake for a backup.
 if [[ -n "${PGHOST:-}" ]]; then
-    # Running inside Docker backup sidecar
-    pg_dump | gzip > "$DB_DUMP"
+    # Inside the worker container (run_backup) or a sidecar: libpq reads
+    # PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE from the environment.
+    command -v pg_dump >/dev/null || { err "pg_dump not found in PATH"; exit 1; }
+    pg_dump | gzip > "${DB_DUMP}.partial" || { err "pg_dump failed"; rm -f "${DB_DUMP}.partial"; exit 1; }
 else
     # Running on host — connect via Docker
-    docker compose exec -T db pg_dump -U "${POSTGRES_USER:-studyaio}" "${POSTGRES_DB:-studyaio}" | gzip > "$DB_DUMP"
+    docker compose exec -T db pg_dump -U "${POSTGRES_USER:-studyaio}" "${POSTGRES_DB:-studyaio}" | gzip > "${DB_DUMP}.partial" \
+        || { err "pg_dump failed"; rm -f "${DB_DUMP}.partial"; exit 1; }
 fi
+# An empty gzip stream is 20 bytes; a real pg_dump header alone is far larger.
+if [[ "$(stat -c %s "${DB_DUMP}.partial")" -lt 100 ]]; then
+    err "Database dump is empty"
+    rm -f "${DB_DUMP}.partial"
+    exit 1
+fi
+mv "${DB_DUMP}.partial" "$DB_DUMP"
 ok "Database dump: $DB_DUMP ($(du -h "$DB_DUMP" | cut -f1))"
 
 # Verify the dump is valid
@@ -55,7 +71,16 @@ DATA_TAR="${BACKUP_DIR}/${BACKUP_NAME}_data.tar.gz"
 
 if [[ -d "$DATA_DIR" ]]; then
     info "Archiving data directory..."
-    tar czf "$DATA_TAR" -C "$(dirname "$DATA_DIR")" "$(basename "$DATA_DIR")" 2>/dev/null || true
+    # tar exits 1 when a file changed while being read (live uploads) -- the
+    # archive is still usable. Anything higher is a real failure, which this
+    # used to swallow with `|| true`.
+    rc=0
+    tar czf "$DATA_TAR" -C "$(dirname "$DATA_DIR")" "$(basename "$DATA_DIR")" || rc=$?
+    if [[ "$rc" -gt 1 ]]; then
+        err "Data archive failed (tar exit $rc)"
+        rm -f "$DATA_TAR"
+        exit 1
+    fi
     ok "Data archive: $DATA_TAR ($(du -h "$DATA_TAR" | cut -f1))"
 else
     info "No data directory found at $DATA_DIR — skipping"

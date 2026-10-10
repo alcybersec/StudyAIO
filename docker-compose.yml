@@ -65,6 +65,12 @@ services:
       # you only notice if the numbers refuse to move.
       - ./services/app/evals:/app/evals
       - ./data:/app/data
+      # run_backup (beat, BACKUP_ENABLED=true) execs /app/scripts/backup.sh and
+      # writes to /app/backups. Neither is in the image (build context is
+      # services/app), and the container filesystem is lost on redeploy, so both
+      # come from the host. GL#24.
+      - ./scripts/backup.sh:/app/scripts/backup.sh:ro
+      - ./backups:/app/backups
       # The Claude CLI is installed in the image (see services/app/Dockerfile) —
       # do NOT bind-mount a host binary over /usr/local/bin/claude. That path is
       # a symlink to .../claude-code/bin/claude.exe; Docker resolves the symlink

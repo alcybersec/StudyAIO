@@ -116,6 +116,33 @@ $COMPOSE pull --quiet
 echo "==> Ensuring db and redis are up..."
 $COMPOSE up -d --no-build --wait db redis
 
+# Dump BEFORE migrating (GL#24 / TECH-06): a migration is the one step that can
+# damage data in place, and until now a deploy took no backup of its own. The
+# dump is gzip-compressed, timestamped, written via .partial and renamed only on
+# success, and a failure (pg_dump error, empty file, gzip -t failing) aborts the
+# deploy here -- set -e plus the explicit exit -- with the old stack untouched.
+# pg_dump runs INSIDE the db container (server-matched version, no host client
+# needed); credentials come from the container's own POSTGRES_* env, never argv.
+# Dumps land in backups/ (untracked, survives `checkout --force`) alongside the
+# beat backups; keep the newest PREDEPLOY_KEEP of them (default 7).
+echo "==> Dumping database before migration..."
+PREDEPLOY_KEEP="${PREDEPLOY_KEEP:-7}"
+mkdir -p backups
+DUMP="backups/predeploy_$(date +%Y%m%d_%H%M%S)_${TAG}.sql.gz"
+if ! $COMPOSE exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > "${DUMP}.partial" \
+        || [ "$(stat -c %s "${DUMP}.partial")" -lt 100 ] \
+        || ! gzip -t "${DUMP}.partial"; then
+    rm -f "${DUMP}.partial"
+    echo "refusing: pre-migration database dump failed; nothing was migrated or restarted" >&2
+    exit 67
+fi
+mv "${DUMP}.partial" "${DUMP}"
+echo "    ${DUMP} ($(du -h "${DUMP}" | cut -f1))"
+# Retention: only this script's own predeploy_* files, newest N kept.
+ls -1t backups/predeploy_*.sql.gz 2>/dev/null | tail -n +"$((PREDEPLOY_KEEP + 1))" | while read -r old; do
+    rm -f -- "$old"
+done
+
 echo "==> Running migrations (one-off container, new image)..."
 $COMPOSE run --rm --no-deps -T api alembic upgrade head
 
