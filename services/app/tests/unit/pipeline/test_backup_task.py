@@ -86,3 +86,40 @@ class TestBackupNoLeak:
             backup_task.run_backup.run()
         assert PASSWORD not in repr(logs) + str(exc.value)
         assert ENCODED not in repr(logs) + str(exc.value)
+
+
+class TestBackupTruncationAndReturn:
+    def _run(self, stdout="", stderr="", returncode=0):
+        proc = SimpleNamespace(returncode=returncode, stderr=stderr, stdout=stdout)
+        task = backup_task.run_backup
+        retry = MagicMock(side_effect=RuntimeError("retry"))
+        with (
+            patch.object(settings, "backup_enabled", True),
+            patch.object(settings, "database_url_sync", URL),
+            patch("app.pipeline.backup_task.subprocess.run", return_value=proc),
+            structlog.testing.capture_logs() as logs,
+            patch.object(task, "retry", retry, create=True),
+        ):
+            if returncode:
+                with pytest.raises(RuntimeError):
+                    task.run()
+                return None, logs, retry
+            return task.run(), logs, retry
+
+    def test_returned_output_scrubs_password_in_stdout(self):
+        result, _, _ = self._run(stdout=f"connected with {PASSWORD} and {ENCODED}")
+        assert PASSWORD not in repr(result) and ENCODED not in repr(result)
+        assert result["status"] == "ok"
+
+    def test_stdout_password_straddling_tail_cut_does_not_leak(self):
+        stdout = "A" * 50 + PASSWORD + "B" * 196  # raw [-200:] keeps last 4 chars of it
+        result, logs, _ = self._run(stdout=stdout)
+        blob = repr(result) + repr(logs)
+        assert PASSWORD[-4:] not in blob
+        assert len(result["output"]) <= 200
+
+    def test_stderr_password_straddling_head_cut_does_not_leak(self):
+        stderr = "A" * 194 + PASSWORD + "B" * 50  # raw [:200] keeps first 6 chars of it
+        _, logs, retry = self._run(stderr=stderr, returncode=1)
+        blob = repr(logs) + repr(retry.call_args)
+        assert PASSWORD[:6] not in blob
