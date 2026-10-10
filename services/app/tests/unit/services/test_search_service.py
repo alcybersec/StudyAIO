@@ -35,6 +35,7 @@ class TestSearchChunks:
             session=session,
             query_embedding=[0.1] * 384,
             top_k=10,
+            user_id="user-1",
         )
 
         assert len(results) == 1
@@ -61,6 +62,7 @@ class TestSearchChunks:
         results = await search_chunks(
             session=session,
             query_embedding=[0.1] * 384,
+            user_id="user-1",
         )
 
         assert results == []
@@ -91,6 +93,7 @@ class TestSearchChunks:
         results = await search_chunks(
             session=session,
             query_embedding=[0.1] * 384,
+            user_id="user-1",
         )
 
         assert results[0]["similarity"] == 1.0
@@ -109,6 +112,7 @@ class TestSearchChunks:
         results = await search_chunks(
             session=session,
             query_embedding=[0.1] * 384,
+            user_id="user-1",
         )
 
         assert results == []

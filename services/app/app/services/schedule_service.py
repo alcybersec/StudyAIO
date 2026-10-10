@@ -1,11 +1,13 @@
 """Adaptive study schedule generation based on exam proximity."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import timedelta
 
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import user_now, user_today
+from app.core.localday import local_day_end_utc
 from app.models.exam import Exam
 from app.models.flashcard import Flashcard
 from app.models.flashcard_review import FlashcardReview
@@ -36,7 +38,9 @@ async def generate_study_schedule(
     session: AsyncSession,
     exam_id: str,
     days_ahead: int = 7,
-    user_id: str | None = None,
+    *,
+    user_id: str,
+    tz: str | None = None,
 ) -> list[dict] | None:
     """Generate an adaptive daily study plan for the next N days.
 
@@ -50,24 +54,17 @@ async def generate_study_schedule(
         session: Database session.
         exam_id: Exam UUID.
         days_ahead: Number of days to plan (default 7).
-        user_id: If provided, only build a schedule for an exam owned by this
-            user. Endpoints reaching an exam by a caller-supplied id MUST
-            pass this; omitting it plans against the exam regardless of owner
-            and is only appropriate for trusted internal callers.
+        user_id: Owner user UUID; only an exam this user owns is planned.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         List of daily plan dicts, or None if exam not found (or not owned).
     """
-    query = select(Exam).where(Exam.id == exam_id)
-    if user_id is not None:
-        query = query.where(Exam.user_id == user_id)
+    query = select(Exam).where(Exam.id == exam_id, Exam.user_id == user_id)
     result = await session.execute(query)
     exam = result.scalar_one_or_none()
     if not exam:
         return None
-
-    now = datetime.now(UTC)
-    max(0, (exam.exam_date - now).days)
 
     # Total due cards in scope
     due_count_result = await session.execute(
@@ -76,7 +73,9 @@ async def generate_study_schedule(
         .where(
             Flashcard.course_id == exam.course_id,
             Flashcard.week.in_(exam.weeks_scope),
-            (FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at <= now),
+            Flashcard.archived_at.is_(None),
+            (FlashcardReview.id.is_(None))
+            | (FlashcardReview.next_review_at < local_day_end_utc(tz)),
         )
     )
     total_due = due_count_result.scalar() or 0
@@ -87,11 +86,13 @@ async def generate_study_schedule(
     strong_weeks = [w for w in exam.weeks_scope if w not in weak_weeks]
 
     schedule = []
-    today = date.today()
+    today = user_today(tz)
+
+    exam_day = exam.exam_date.astimezone(user_now(tz).tzinfo).date()
 
     for day_offset in range(days_ahead):
         plan_date = today + timedelta(days=day_offset)
-        days_until_exam = max(0, (exam.exam_date.date() - plan_date).days)
+        days_until_exam = max(0, (exam_day - plan_date).days)
 
         priority_label, multiplier = _get_priority(days_until_exam)
 
@@ -134,20 +135,22 @@ async def generate_study_schedule(
 async def get_daily_study_plan(
     session: AsyncSession,
     exam_id: str,
-    user_id: str | None = None,
+    *,
+    user_id: str,
+    tz: str | None = None,
 ) -> dict | None:
     """Get today's study plan for an exam.
 
     Args:
         session: Database session.
         exam_id: Exam UUID.
-        user_id: If provided, only build a plan for an exam owned by this
-            user. Endpoints exposing this by id MUST pass it.
+        user_id: Owner user UUID; only an exam this user owns is planned.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Today's plan dict, or None if exam not found (or not owned).
     """
-    schedule = await generate_study_schedule(session, exam_id, days_ahead=1, user_id=user_id)
+    schedule = await generate_study_schedule(session, exam_id, days_ahead=1, user_id=user_id, tz=tz)
     if not schedule:
         return None
     return schedule[0]

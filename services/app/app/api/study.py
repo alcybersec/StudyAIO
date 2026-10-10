@@ -2,10 +2,9 @@
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, get_user_tz
 from app.api.study_schemas import (
     DueCardResponse,
     PlanDay,
@@ -21,8 +20,6 @@ from app.api.study_schemas import (
     WeekPlanResponse,
 )
 from app.core.database import get_session
-from app.models.flashcard import Flashcard
-from app.models.quiz import QuizQuestion
 from app.models.user import User
 from app.services import (
     challenge_service,
@@ -50,10 +47,13 @@ async def get_due_cards(
     week: int | None = Query(None, description="Week number filter"),
     limit: int = Query(20, ge=1, le=100, description="Max cards to return"),
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> list[DueCardResponse]:
     """Get flashcards due for review."""
-    cards = await srs_service.get_due_cards(session, course_code, week, limit, user_id=user.id)
+    cards = await srs_service.get_due_cards(
+        session, course_code, week, limit, user_id=user.id, tz=tz
+    )
     return [DueCardResponse.model_validate(c) for c in cards]
 
 
@@ -66,12 +66,12 @@ async def get_due_cards(
 async def post_review(
     body: ReviewRequest,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> ReviewResponse:
     """Record a flashcard review."""
-    # Verify flashcard exists
-    result = await session.execute(select(Flashcard).where(Flashcard.id == body.flashcard_id))
-    if not result.scalar_one_or_none():
+    # Verify the flashcard exists AND belongs to the caller (foreign == not found)
+    if not await srs_service.get_owned_flashcard(session, body.flashcard_id, user_id=user.id):
         raise HTTPException(status_code=404, detail="Flashcard not found")
 
     review = await srs_service.record_review(
@@ -82,7 +82,7 @@ async def post_review(
     # Award XP (best-effort)
     try:
         await xp_service.award_xp(session, user.id, "card_reviewed")
-        await challenge_service.update_challenge_progress(session, user.id, "review_cards")
+        await challenge_service.update_challenge_progress(session, user.id, "review_cards", tz=tz)
     except Exception:
         logger.warning("gamification_xp_failed", exc_info=True)
 
@@ -99,10 +99,11 @@ async def get_stats(
     course_code: str | None = Query(None, description="Course code filter"),
     week: int | None = Query(None, description="Week number filter"),
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> StudyStatsResponse:
     """Get study statistics for a scope."""
-    stats = await srs_service.get_study_stats(session, course_code, week, user_id=user.id)
+    stats = await srs_service.get_study_stats(session, course_code, week, user_id=user.id, tz=tz)
     return StudyStatsResponse(
         total=stats.total,
         due_today=stats.due_today,
@@ -122,15 +123,17 @@ async def get_stats(
 async def post_quiz_attempt(
     body: QuizAttemptRequest,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> QuizAttemptResponse:
     """Record a quiz attempt."""
-    # Verify quiz question exists
-    result = await session.execute(
-        select(QuizQuestion).where(QuizQuestion.id == body.quiz_question_id)
-    )
-    if not result.scalar_one_or_none():
+    # Verify the question (and optional exam) exist AND belong to the caller
+    if not await exam_service.get_owned_quiz_question(
+        session, body.quiz_question_id, user_id=user.id
+    ):
         raise HTTPException(status_code=404, detail="Quiz question not found")
+    if body.exam_id and not await exam_service.get_exam(session, body.exam_id, user_id=user.id):
+        raise HTTPException(status_code=404, detail="Exam not found")
 
     attempt = await exam_service.record_quiz_attempt(
         session,
@@ -146,7 +149,9 @@ async def post_quiz_attempt(
     try:
         if body.is_correct:
             await xp_service.award_xp(session, user.id, "quiz_correct")
-            await challenge_service.update_challenge_progress(session, user.id, "quiz_correct")
+            await challenge_service.update_challenge_progress(
+                session, user.id, "quiz_correct", tz=tz
+            )
     except Exception:
         logger.warning("gamification_xp_failed", exc_info=True)
 
@@ -162,10 +167,11 @@ async def post_quiz_attempt(
 async def get_streak(
     course_id: str | None = Query(None, description="Optional course ID filter"),
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> StreakResponse:
     """Get study streak data."""
-    data = await streak_service.get_streak(session, course_id, user_id=user.id)
+    data = await streak_service.get_streak(session, course_id, user_id=user.id, tz=tz)
     return StreakResponse(**data)
 
 
@@ -186,6 +192,7 @@ async def generate_timed_plan(
         total_minutes=body.minutes,
         course_code=body.course_code,
         exam_id=body.exam_id,
+        user_id=user.id,
     )
     return TimedPlanResponse(
         total_minutes=plan.total_minutes,
@@ -208,10 +215,11 @@ async def generate_timed_plan(
 )
 async def get_week_plan(
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> WeekPlanResponse:
     """Get the weekly study plan for the current user."""
-    plan = await study_service.build_week_plan(session, user.id)
+    plan = await study_service.build_week_plan(session, user.id, tz=tz)
     return WeekPlanResponse(
         days=[
             PlanDay(

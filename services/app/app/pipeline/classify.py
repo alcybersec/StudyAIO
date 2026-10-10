@@ -16,6 +16,7 @@ from app.extractors.archive import check_archive_bounds
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.pipeline_run import PipelineRun
+from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
 from app.pipeline.failures import record_stage_failure
 from app.services import review_service
 from app.services.event_service import publish_pipeline_event_sync
@@ -85,6 +86,9 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
                     texts.append(para.text)
             return "\n".join(texts[:50])
 
+        elif file_type == "txt":
+            return path.read_bytes()[:20_000].decode("utf-8", errors="replace").strip()
+
         elif file_type == "pptx":
             from pptx import Presentation
 
@@ -106,13 +110,17 @@ def _extract_text_preview(file_path: str, file_type: str) -> str:
     return ""
 
 
-async def _get_known_courses(session) -> list[str]:
-    """Get all existing course codes."""
-    result = await session.execute(select(Course.code))
+async def _get_known_courses(session, user_id: str) -> list[str]:
+    """Get the course codes owned by ``user_id``.
+
+    Scoped to the artifact's owner: the codes are sent to the AI provider, so
+    another user's courses must never be included (R-015, floor 1).
+    """
+    result = await session.execute(select(Course.code).where(Course.user_id == user_id))
     return [row[0] for row in result.all()]
 
 
-async def _get_or_create_course(session, course_code: str, user_id: str = "") -> Course:
+async def _get_or_create_course(session, course_code: str, user_id: str) -> Course:
     """Get existing course or create a new one.
 
     Args:
@@ -123,9 +131,9 @@ async def _get_or_create_course(session, course_code: str, user_id: str = "") ->
     Returns:
         Course instance.
     """
-    query = select(Course).where(Course.code == course_code)
-    if user_id:
-        query = query.where(Course.user_id == user_id)
+    if not user_id:
+        raise ValueError("user_id is required to resolve a course")
+    query = select(Course).where(Course.code == course_code, Course.user_id == user_id)
     result = await session.execute(query)
     course = result.scalar_one_or_none()
     if course:
@@ -153,6 +161,10 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
         if not artifact:
             raise ClassificationError(f"Artifact {artifact_id} not found")
 
+        warn_on_owner_mismatch(
+            "classify", artifact_id, artifact.user_id, user_id or artifact.user_id
+        )
+
         # Update status
         artifact.status = "classifying"
         await session.commit()
@@ -177,12 +189,12 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
                 )
 
             # Get known courses
-            known_courses = await _get_known_courses(session)
+            known_courses = await _get_known_courses(session, artifact.user_id)
 
             # Call AI agent with per-user settings
             from app.services.settings_service import get_user_agent_config
 
-            user_agent_config = await get_user_agent_config(session, user_id or artifact.user_id)
+            user_agent_config = await get_user_agent_config(session, artifact.user_id)
             # No output_language: this stage's output is parsed, not read.
             # See AgentAdapter.with_language.
             agent = get_agent(user_settings=user_agent_config)
@@ -196,7 +208,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
             # here records every request this stage made.
             from app.services.billing_service import record_agent_usage
 
-            await record_agent_usage(session, user_id or artifact.user_id, agent)
+            await record_agent_usage(session, artifact.user_id, agent)
 
             # Persist refreshed CLI credentials if applicable
             if hasattr(agent, "refreshed_credentials") and agent.refreshed_credentials:
@@ -205,7 +217,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
 
                     await update_user_settings(
                         session,
-                        user_id or artifact.user_id,
+                        artifact.user_id,
                         {"claude_cli_credentials": json.dumps(agent.refreshed_credentials)},
                     )
                 except Exception:
@@ -224,7 +236,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
             if classification.confidence >= threshold:
                 # High confidence — apply classification
                 course = await _get_or_create_course(
-                    session, classification.course_code, user_id=user_id or artifact.user_id
+                    session, classification.course_code, user_id=artifact.user_id
                 )
                 artifact.course_id = course.id
                 artifact.week = classification.week
@@ -241,7 +253,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
 
                 return {
                     "artifact_id": artifact_id,
-                    "user_id": user_id or artifact.user_id,
+                    "user_id": artifact.user_id,
                     "status": "classified",
                     "course_code": classification.course_code,
                     "week": classification.week,
@@ -298,7 +310,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
 
                 return {
                     "artifact_id": artifact_id,
-                    "user_id": user_id or artifact.user_id,
+                    "user_id": artifact.user_id,
                     "status": "waiting_review",
                     "confidence": classification.confidence,
                     "review_type": review_type,
@@ -351,19 +363,20 @@ def classify_artifact(self, input_value: str | dict) -> dict:
         raise ClassificationError("No artifact_id provided")
 
     logger.info("classify_task_started", artifact_id=artifact_id, user_id=user_id)
-    publish_pipeline_event_sync(artifact_id, "classify", "started", user_id=user_id)
+    event_user_id = resolve_event_owner("classify", artifact_id, user_id)
+    publish_pipeline_event_sync(artifact_id, "classify", "started", user_id=event_user_id)
     try:
         result = run_async(_classify(artifact_id, user_id=user_id))
         publish_pipeline_event_sync(
-            artifact_id, "classify", result.get("status", "completed"), user_id=user_id
+            artifact_id, "classify", result.get("status", "completed"), user_id=event_user_id
         )
         return result
     except (ClassificationError, AgentError):
-        publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=user_id)
+        publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=event_user_id)
         raise  # Don't retry on classification/agent errors
     except Exception as exc:
         # str(exc) stays operator-side: it can carry filenames and storage
         # paths, and the published event is client-facing (#69).
         logger.error("classify_task_error", error=str(exc), artifact_id=artifact_id)
-        publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=user_id)
+        publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=event_user_id)
         raise self.retry(exc=exc) from exc

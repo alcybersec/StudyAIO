@@ -30,8 +30,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.ai_settings import (  # noqa: F401  (re-exported for existing importers)
+    BACKEND_REQUIRED_KEY,
+    STUDYAIO_BACKEND,
+    _defaults,
+    get_effective_setting,
+)
+from app.core.clock import valid_timezone
 from app.core.utils import generate_id
 from app.models.user_settings import UserSettings
+
+#: Zone used when a user has stored none (matches the column default).
+_DEFAULT_TIMEZONE = "UTC"
 
 logger = structlog.get_logger()
 
@@ -68,9 +78,6 @@ SUPPORTED_LANGUAGES = {"en", "ru"}
 #: a user asks for another *and* opts their study material in.
 DEFAULT_LANGUAGE = "en"
 
-#: "StudyAIO provided" — use the instance's configured backend and credentials.
-STUDYAIO_BACKEND = "studyaio"
-
 VALID_BACKENDS = {STUDYAIO_BACKEND, "claude_code", "anthropic_api", "openai", "zai", "ollama"}
 
 #: Deliberately absent from ALLOWED_KEYS: `embedding_backend`. It is instance-wide
@@ -92,19 +99,6 @@ SECRET_KEYS = frozenset(
         "claude_cli_credentials",
     }
 )
-
-#: What a user must supply for each provider they select explicitly. Absent it,
-#: the agent factory refuses rather than reaching for the instance credential.
-#: Ollama has no API key, so its endpoint plays the part: pointing at the
-#: instance's own Ollama would be spending the operator's hardware under a
-#: selection that claims to be the user's own.
-BACKEND_REQUIRED_KEY = {
-    "claude_code": "claude_cli_credentials",
-    "anthropic_api": "anthropic_api_key",
-    "openai": "openai_api_key",
-    "zai": "zai_api_key",
-    "ollama": "ollama_base_url",
-}
 
 #: Resolved from the user's own settings only — never from instance defaults.
 USER_ONLY_KEYS = frozenset(SECRET_KEYS | {"ollama_base_url"})
@@ -130,29 +124,6 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
     "chunk_overlap_tokens": (int, 0, 500),
     "max_upload_size_mb": (int, 1, 1000),
 }
-
-
-def _defaults() -> dict[str, Any]:
-    """Return default values from env-based config."""
-    return {
-        "claude_code_path": settings.claude_code_path,
-        "claude_model": settings.claude_model,
-        "agent_backend": settings.agent_backend,
-        "anthropic_api_key": settings.anthropic_api_key.get_secret_value(),
-        "openai_api_key": settings.openai_api_key.get_secret_value(),
-        "openai_model": settings.openai_model,
-        "zai_api_key": settings.zai_api_key.get_secret_value(),
-        "zai_model": settings.zai_model,
-        "zai_base_url": settings.zai_base_url,
-        "ollama_base_url": settings.ollama_base_url,
-        "ollama_model": settings.ollama_model,
-        "classification_confidence_threshold": settings.classification_confidence_threshold,
-        "flashcard_count_per_week": settings.flashcard_count_per_week,
-        "quiz_question_count_per_week": settings.quiz_question_count_per_week,
-        "chunk_size_tokens": settings.chunk_size_tokens,
-        "chunk_overlap_tokens": settings.chunk_overlap_tokens,
-        "max_upload_size_mb": settings.max_upload_size_mb,
-    }
 
 
 def validate_setting(key: str, value: Any) -> Any:
@@ -290,6 +261,91 @@ async def _get_or_create_user_settings(session: AsyncSession, user_id: str) -> U
     return user_settings
 
 
+REDACTED = "[redacted]"
+_MIN_SECRET_LEN = 6
+
+
+def strip_secret_keys(settings_json: dict[str, Any] | None) -> dict[str, Any]:
+    """Return a copy of a ``settings_json`` blob without any credential key.
+
+    Args:
+        settings_json: Stored per-user overrides.
+
+    Returns:
+        The blob minus every key in ``SECRET_KEYS``.
+    """
+    return {k: v for k, v in (settings_json or {}).items() if k not in SECRET_KEYS}
+
+
+def _string_leaves(value: Any) -> list[str]:
+    """Collect every string inside a (possibly JSON-encoded) credential value."""
+    if isinstance(value, str):
+        leaves = [value]
+        try:
+            decoded = json.loads(value)
+        except ValueError:
+            return leaves
+        if isinstance(decoded, (dict, list)):
+            leaves.extend(_string_leaves(decoded))
+        return leaves
+    if isinstance(value, dict):
+        return [leaf for v in value.values() for leaf in _string_leaves(v)]
+    if isinstance(value, list):
+        return [leaf for v in value for leaf in _string_leaves(v)]
+    return []
+
+
+async def redact_user_secrets(session: AsyncSession, user_id: str, text: str) -> str:
+    """Remove this user's stored credential values (and the instance's) from ``text``.
+
+    Provider SDK errors can echo the key that was sent. Anything about to be
+    logged or returned from a provider failure goes through here first.
+
+    Args:
+        session: Database session.
+        user_id: The user whose stored credentials to scrub.
+        text: Message to scrub.
+
+    Returns:
+        ``text`` with each credential value, and each string inside a JSON
+        credential, replaced by ``[redacted]``.
+    """
+    result = await session.execute(select(UserSettings).where(UserSettings.user_id == user_id))
+    row = result.scalar_one_or_none()
+    stored = (row.settings_json or {}) if row else {}
+    values: list[str] = []
+    for key in SECRET_KEYS:
+        values.extend(_string_leaves(stored.get(key)))
+    for env_secret in (
+        settings.anthropic_api_key,
+        settings.openai_api_key,
+        settings.zai_api_key,
+    ):
+        values.append(env_secret.get_secret_value())
+    # Longest first so a value containing another is fully removed.
+    for value in sorted({v for v in values if len(v) >= _MIN_SECRET_LEN}, key=len, reverse=True):
+        text = text.replace(value, REDACTED)
+    return text
+
+
+async def redacted_error(session: AsyncSession, user_id: str, exc: BaseException) -> str:
+    """Render ``exc`` as text that is safe to log or return.
+
+    Args:
+        session: Database session.
+        user_id: The user whose stored credentials to scrub.
+        exc: The provider failure.
+
+    Returns:
+        ``str(exc)`` with credential values removed. If the scrub itself
+        fails the text is withheld entirely rather than risk echoing a key.
+    """
+    try:
+        return await redact_user_secrets(session, user_id, str(exc))
+    except Exception:
+        return f"{type(exc).__name__} (details withheld)"
+
+
 def _public_view(overrides: dict[str, Any]) -> dict[str, Any]:
     """Build the credential-free settings view for a set of user overrides.
 
@@ -341,6 +397,9 @@ async def get_user_settings(session: AsyncSession, user_id: str) -> dict[str, An
     merged["theme"] = user_settings.theme
     merged["language"] = user_settings.language
     merged["content_language"] = user_settings.content_language
+    merged["timezone"] = getattr(user_settings, "timezone", None) or _DEFAULT_TIMEZONE
+    # getattr: tolerant of lightweight settings stand-ins; the column defaults to False
+    merged["leaderboard_opt_in"] = bool(getattr(user_settings, "leaderboard_opt_in", False))
     merged["dashboard_layout"] = user_settings.dashboard_layout
     return merged
 
@@ -367,6 +426,8 @@ async def update_user_settings(
     theme = updates.pop("theme", None)
     language = updates.pop("language", None)
     content_language = updates.pop("content_language", None)
+    timezone = updates.pop("timezone", None)
+    leaderboard_opt_in = updates.pop("leaderboard_opt_in", None)
     dashboard_layout = updates.pop("dashboard_layout", None)
     clear_secrets = updates.pop("clear_secrets", None) or []
 
@@ -411,10 +472,20 @@ async def update_user_settings(
             )
         user_settings.language = language
 
+    if timezone is not None:
+        if not valid_timezone(timezone):
+            raise ValueError(f"timezone must be a valid IANA time zone name, got '{timezone}'")
+        user_settings.timezone = timezone
+
     if content_language is not None:
         if not isinstance(content_language, bool):
             raise ValueError("content_language must be a boolean")
         user_settings.content_language = content_language
+
+    if leaderboard_opt_in is not None:
+        if not isinstance(leaderboard_opt_in, bool):
+            raise ValueError("leaderboard_opt_in must be a boolean")
+        user_settings.leaderboard_opt_in = leaderboard_opt_in
 
     # Update dashboard layout
     if dashboard_layout is not None:
@@ -482,6 +553,22 @@ async def _get_row(session: AsyncSession, user_id: str) -> UserSettings | None:
     """
     result = await session.execute(select(UserSettings).where(UserSettings.user_id == user_id))
     return result.scalar_one_or_none()
+
+
+async def get_user_timezone(session: AsyncSession, user_id: str) -> str:
+    """Get the IANA time zone a user's "today" is computed in.
+
+    Look this up once per request and pass it down; do not call it in a loop.
+
+    Args:
+        session: Database session.
+        user_id: User UUID.
+
+    Returns:
+        The stored zone, or "UTC" when the user has no settings row.
+    """
+    row = await _get_row(session, user_id)
+    return (getattr(row, "timezone", None) if row else None) or _DEFAULT_TIMEZONE
 
 
 async def _get_overrides(session: AsyncSession, user_id: str) -> dict[str, Any]:
@@ -644,22 +731,6 @@ def _agent_config_from_overrides(overrides: dict[str, Any]) -> dict[str, Any] | 
 
 
 # ── Sync fallback for pipeline consumers ──────────────────────────────
-
-
-def get_effective_setting(key: str) -> Any:
-    """Get the effective value of a setting using env defaults only.
-
-    This is the sync fallback used by pipeline tasks that don't have
-    a DB session or user_id readily available. Returns env defaults.
-
-    Args:
-        key: Setting key name.
-
-    Returns:
-        The default value from environment config.
-    """
-    defaults = _defaults()
-    return defaults.get(key, getattr(settings, key, None))
 
 
 # ── Backward compatibility ────────────────────────────────────────────

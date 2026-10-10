@@ -19,12 +19,14 @@ import { SyncChip } from '../ui/SyncChip'
 import { PWAUpdateNotify } from '../pwa/PWAUpdateNotify'
 import { PageTransition } from '../ui/PageTransition'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
+import { useAutoTimeZone } from '../../hooks/useUserTimeZone'
 import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 
 export function AppLayout() {
   const { t } = useTranslation()
   const { isDemo } = useAuth()
+  useAutoTimeZone()
   const location = useLocation()
   const matches = useMatches()
   const [shortcutOverlayOpen, setShortcutOverlayOpen] = useState(false)

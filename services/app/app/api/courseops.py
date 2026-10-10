@@ -17,7 +17,7 @@ from app.api.courseops_schemas import (
     DeadlineResponse,
     DeadlineUpdateRequest,
 )
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, get_user_tz
 from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import CourseOpsError
@@ -96,8 +96,8 @@ async def upload_course_document(
             user_id=user.id,
         )
     except CourseOpsError as e:
-        # Clean up file on error
-        await storage.delete(storage_key)
+        # Clean up the blob only if no existing document references it
+        await courseops_service.discard_failed_upload_blob(session, user.id, storage_key, storage)
         raise HTTPException(status_code=409, detail=str(e)) from e
 
     # Dispatch Celery task for AI extraction
@@ -242,7 +242,7 @@ async def upload_assessment_document(
         user_id=user.id,
     )
     if not doc:
-        await storage.delete(storage_key)
+        await courseops_service.discard_failed_upload_blob(session, user.id, storage_key, storage)
         raise HTTPException(status_code=404, detail="Assessment not found")
 
     return CourseDocumentResponse.model_validate(doc)
@@ -343,11 +343,12 @@ async def list_deadlines(
     course_code: str = Query(..., description="Course code"),
     upcoming: bool = Query(False, description="Only show future deadlines"),
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> list[DeadlineResponse]:
     """List deadlines for a course."""
     deadlines = await courseops_service.list_deadlines(
-        session, course_code, upcoming_only=upcoming, user_id=user.id
+        session, course_code, upcoming_only=upcoming, user_id=user.id, tz=tz
     )
     return [DeadlineResponse.model_validate(d) for d in deadlines]
 
@@ -454,10 +455,11 @@ async def export_calendar(
 async def export_task_plan(
     course_code: str,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """Download a markdown task plan with deadlines and study recommendations."""
-    result = await generate_task_plan_md(session, course_code, user_id=user.id)
+    result = await generate_task_plan_md(session, course_code, user_id=user.id, tz=tz)
     if not result:
         raise HTTPException(status_code=404, detail="Course not found")
 

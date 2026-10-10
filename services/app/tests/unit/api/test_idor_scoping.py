@@ -28,7 +28,7 @@ class TestExamsIdorScoping:
     async def test_get_exam_progress_404_for_other_user(self, async_client, default_test_user):
         """GET /api/exams/{id} must not return user A's progress to user B."""
 
-        async def scoped(session, exam_id, user_id=None):
+        async def scoped(session, exam_id, user_id=None, tz=None):
             return {"id": exam_id} if user_id == OWNER_A else None
 
         mock = AsyncMock(side_effect=scoped)
@@ -83,7 +83,7 @@ class TestExamsIdorScoping:
     async def test_schedule_404_for_other_user(self, async_client, default_test_user):
         """GET /api/exams/{id}/schedule must not plan against user A's exam."""
 
-        async def scoped(session, exam_id, days_ahead=7, user_id=None):
+        async def scoped(session, exam_id, days_ahead=7, user_id=None, tz=None):
             return [] if user_id == OWNER_A else None
 
         mock = AsyncMock(side_effect=scoped)
@@ -96,7 +96,7 @@ class TestExamsIdorScoping:
     async def test_today_404_for_other_user(self, async_client, default_test_user):
         """GET /api/exams/{id}/today must not plan against user A's exam."""
 
-        async def scoped(session, exam_id, user_id=None):
+        async def scoped(session, exam_id, user_id=None, tz=None):
             return {} if user_id == OWNER_A else None
 
         mock = AsyncMock(side_effect=scoped)
@@ -172,6 +172,38 @@ class TestReviewItemsIdorScoping:
         # The state change and the pipeline restart must not have happened.
         mock_resolve.assert_not_awaited()
         mock_resume.assert_not_called()
+
+    async def test_resolve_review_item_scopes_the_course_lookup(
+        self, async_client, mock_session, default_test_user
+    ):
+        """WRITE: the classification applied on resolve must look the course up
+        among the caller's courses -- course codes repeat across users, so an
+        unscoped code lookup can attach the artifact to another user's course."""
+        item = MagicMock(entity_type="lecture_artifact", entity_id="art-1", status="pending")
+        artifact_result = MagicMock()
+        artifact_result.scalar_one_or_none.return_value = MagicMock()
+        mock_session.execute = AsyncMock(return_value=artifact_result)
+
+        with (
+            patch(
+                "app.api.review_items.review_service.get_review_item",
+                new=AsyncMock(return_value=item),
+            ),
+            patch(
+                "app.api.review_items.artifact_service.apply_classification",
+                new_callable=AsyncMock,
+            ) as mock_apply,
+            patch(
+                "app.api.review_items.review_service.resolve_review_item",
+                new=AsyncMock(side_effect=ValueError("stop here")),
+            ),
+        ):
+            await async_client.post(
+                "/api/review-items/r1/resolve",
+                json={"resolution": {"course_code": "CSIT302", "week": 5}},
+            )
+
+        assert mock_apply.await_args.kwargs.get("user_id") == default_test_user.id
 
     async def test_dismiss_review_item_scopes_by_user(self, async_client, default_test_user):
         """WRITE: POST .../dismiss must thread user.id so a foreign item is
@@ -467,7 +499,7 @@ class TestCourseOpsIdorScoping:
     async def test_list_deadlines_scoped_to_user(self, async_client, default_test_user):
         """Sharing a course code with user A must not list their deadlines."""
 
-        async def scoped(session, course_code, upcoming_only=False, user_id=None):
+        async def scoped(session, course_code, upcoming_only=False, user_id=None, tz=None):
             return [MagicMock()] if user_id == OWNER_A else []
 
         mock = AsyncMock(side_effect=scoped)
@@ -500,7 +532,7 @@ class TestCourseOpsIdorScoping:
     ):
         """Same for the markdown plan: assessments, weights and deadlines."""
 
-        async def scoped(session, course_code, user_id=None):
+        async def scoped(session, course_code, user_id=None, tz=None):
             return (io.BytesIO(b"# plan"), "x.md") if user_id == OWNER_A else None
 
         mock = AsyncMock(side_effect=scoped)
@@ -525,7 +557,7 @@ class TestExamHistoryIdorScoping:
     async def test_history_scoped_to_the_caller(self, async_client, default_test_user):
         """GET /api/exams/{id}/history must not report user A's study days."""
 
-        async def scoped(session, exam_id=None, days=30, user_id=None):
+        async def scoped(session, exam_id=None, days=30, user_id=None, tz=None):
             return (
                 [{"date": "2026-03-01", "minutes": 45.0, "cards": 20, "sessions": 2}]
                 if user_id == OWNER_A

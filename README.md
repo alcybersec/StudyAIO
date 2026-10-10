@@ -143,7 +143,7 @@ make migrate
 ```bash
 make up          # Start all Docker services
 make down        # Stop all services
-make test        # Run all backend tests
+make test        # Backend unit + golden + contracts (builds services/app/.venv first)
 make migrate     # Run Alembic migrations
 make shell       # Open bash in API container
 make db          # Open psql shell
@@ -170,11 +170,12 @@ cd infra/cloud/aws && terraform apply
 ## Testing
 
 ```bash
-# Backend unit + golden tests
+# Backend unit + golden + contract tests. From a clean clone this one command
+# builds services/app/.venv (needs python3.12 or uv) and runs them.
 make test
 
-# Integration tests (requires Docker services)
-docker compose exec api pytest tests/integration -v
+# Integration tests (starts throwaway Postgres + Redis; needs Docker)
+make test-integration
 
 # Frontend E2E tests (requires running stack)
 cd services/ui && npx playwright test

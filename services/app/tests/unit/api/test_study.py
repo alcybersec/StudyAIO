@@ -59,12 +59,8 @@ class TestGetDueCards:
 class TestPostReview:
     """Tests for POST /api/study/review."""
 
-    async def test_records_review_success(self, async_client):
+    async def test_records_review_success(self, async_client, default_test_user):
         """Records a review and returns updated state."""
-        mock_flashcard = MagicMock()
-        mock_flashcard_result = MagicMock()
-        mock_flashcard_result.scalar_one_or_none.return_value = mock_flashcard
-
         mock_review = MagicMock()
         mock_review.id = "rev-001"
         mock_review.flashcard_id = "fc-001"
@@ -76,27 +72,16 @@ class TestPostReview:
 
         with (
             patch(
+                "app.api.study.srs_service.get_owned_flashcard",
+                new_callable=AsyncMock,
+                return_value=MagicMock(),
+            ) as lookup,
+            patch(
                 "app.api.study.srs_service.record_review",
                 new_callable=AsyncMock,
                 return_value=mock_review,
-            ),
-            patch(
-                "app.api.study.select",
-            ),
+            ) as record,
         ):
-            # Mock the flashcard existence check
-            async_client._transport.app.dependency_overrides  # noqa: B018
-            from app.core.database import get_session
-            from app.main import app
-
-            mock_session = AsyncMock()
-            mock_session.execute = AsyncMock(return_value=mock_flashcard_result)
-            mock_session.commit = AsyncMock()
-
-            async def override():
-                yield mock_session
-
-            app.dependency_overrides[get_session] = override
             response = await async_client.post(
                 "/api/study/review",
                 json={"flashcard_id": "fc-001", "quality": 4},
@@ -106,26 +91,20 @@ class TestPostReview:
         data = response.json()
         assert data["flashcard_id"] == "fc-001"
         assert data["interval_days"] == 1
+        assert lookup.await_args.kwargs.get("user_id") == default_test_user.id
+        assert record.await_args.kwargs.get("user_id") == default_test_user.id
 
     async def test_review_404_for_missing_flashcard(self, async_client):
-        """Returns 404 when flashcard doesn't exist."""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-
-        from app.core.database import get_session
-        from app.main import app
-
-        mock_session = AsyncMock()
-        mock_session.execute = AsyncMock(return_value=mock_result)
-
-        async def override():
-            yield mock_session
-
-        app.dependency_overrides[get_session] = override
-        response = await async_client.post(
-            "/api/study/review",
-            json={"flashcard_id": "nonexistent", "quality": 3},
-        )
+        """Returns 404 when flashcard doesn't exist (or isn't the caller's)."""
+        with patch(
+            "app.api.study.srs_service.get_owned_flashcard",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = await async_client.post(
+                "/api/study/review",
+                json={"flashcard_id": "nonexistent", "quality": 3},
+            )
 
         assert response.status_code == 404
 

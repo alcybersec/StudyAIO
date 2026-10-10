@@ -220,7 +220,10 @@ class TestGetEmbeddingProvider:
         """
         with (
             patch("app.config.settings") as mock_settings,
-            patch("app.services.settings_service.get_effective_setting") as mock_effective,
+            patch("app.core.ai_settings.get_effective_setting") as mock_effective,
+            patch(
+                "app.agents.embeddings.get_effective_setting", create=True
+            ) as mock_module_effective,
         ):
             mock_settings.embedding_backend = "sentence_transformers"
             mock_settings.embedding_model = "all-MiniLM-L6-v2"
@@ -228,6 +231,7 @@ class TestGetEmbeddingProvider:
             get_embedding_provider()
 
         mock_effective.assert_not_called()
+        mock_module_effective.assert_not_called()
 
 
 class TestDimensionGuard:

@@ -16,6 +16,8 @@ import pytest
 
 from app.services.export_service import generate_obsidian_vault
 
+OWNER_ID = "00000000-0000-0000-0000-00000000000a"
+
 # ── Fixtures ────────────────────────────────────────────────────────
 
 
@@ -25,6 +27,7 @@ def _make_course(code: str = "CSIT302", name: str = "Cybersecurity") -> MagicMoc
     course.id = "course-001"
     course.code = code
     course.name = name
+    course.user_id = OWNER_ID
     return course
 
 
@@ -135,7 +138,7 @@ class TestVaultStructure:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         assert result is not None
         buf, filename = result
 
@@ -159,7 +162,7 @@ class TestVaultStructure:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         buf, _ = result
 
         with zipfile.ZipFile(buf) as zf:
@@ -176,7 +179,7 @@ class TestFrontmatterFormat:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         buf, _ = result
 
         with zipfile.ZipFile(buf) as zf:
@@ -197,7 +200,7 @@ class TestFrontmatterFormat:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         buf, _ = result
 
         with zipfile.ZipFile(buf) as zf:
@@ -217,7 +220,7 @@ class TestWikiLinksPresent:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         buf, _ = result
 
         with zipfile.ZipFile(buf) as zf:
@@ -231,7 +234,7 @@ class TestWikiLinksPresent:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         buf, _ = result
 
         wiki_link_pattern = re.compile(r"\[\[.+?\|.+?\]\]")
@@ -261,7 +264,7 @@ class TestFlashcardCalloutFormat:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         buf, _ = result
 
         callout_pattern = re.compile(r">\s*\[!question\]\s+.+")
@@ -277,7 +280,7 @@ class TestFlashcardCalloutFormat:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         buf, _ = result
 
         with zipfile.ZipFile(buf) as zf:
@@ -301,7 +304,7 @@ class TestQuizAnswerFormat:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         buf, _ = result
 
         with zipfile.ZipFile(buf) as zf:
@@ -317,7 +320,7 @@ class TestQuizAnswerFormat:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         buf, _ = result
 
         bold_answer_pattern = re.compile(r">\s+\*\*.+\*\*")
@@ -335,7 +338,7 @@ class TestQuizAnswerFormat:
         course, summaries, flashcards, quizzes = sample_vault_data
         session = _build_mock_session(course, summaries, flashcards, quizzes)
 
-        result = await generate_obsidian_vault(session, "CSIT302")
+        result = await generate_obsidian_vault(session, "CSIT302", user_id=OWNER_ID)
         buf, _ = result
 
         with zipfile.ZipFile(buf) as zf:

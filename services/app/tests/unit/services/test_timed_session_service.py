@@ -49,7 +49,7 @@ class TestBudgetCalculation:
             new_callable=AsyncMock,
             return_value=cards,
         ):
-            plan = await generate_timed_plan(session, total_minutes=30)
+            plan = await generate_timed_plan(session, total_minutes=30, user_id="user-1")
 
         assert len(plan.card_ids) == 9
         assert len(plan.quiz_ids) == 4
@@ -74,7 +74,7 @@ class TestBudgetCalculation:
             new_callable=AsyncMock,
             return_value=cards,
         ):
-            plan = await generate_timed_plan(session, total_minutes=15)
+            plan = await generate_timed_plan(session, total_minutes=15, user_id="user-1")
 
         assert len(plan.card_ids) == 4
         assert len(plan.quiz_ids) == 2
@@ -98,7 +98,7 @@ class TestBudgetCalculation:
             new_callable=AsyncMock,
             return_value=cards,
         ):
-            plan = await generate_timed_plan(session, total_minutes=5)
+            plan = await generate_timed_plan(session, total_minutes=5, user_id="user-1")
 
         assert len(plan.card_ids) == 1
         assert len(plan.quiz_ids) == 1
@@ -124,7 +124,9 @@ class TestScoping:
             new_callable=AsyncMock,
             return_value=cards,
         ) as mock_get_due:
-            plan = await generate_timed_plan(session, total_minutes=30, course_code="CSIT302")
+            plan = await generate_timed_plan(
+                session, total_minutes=30, course_code="CSIT302", user_id="user-1"
+            )
 
         # Verify course_code was passed through
         mock_get_due.assert_called_once()
@@ -163,7 +165,9 @@ class TestScoping:
             new_callable=AsyncMock,
             return_value=cards,
         ) as mock_get_due:
-            plan = await generate_timed_plan(session, total_minutes=30, exam_id="exam-001")
+            plan = await generate_timed_plan(
+                session, total_minutes=30, exam_id="exam-001", user_id="user-1"
+            )
 
         assert plan.course_code == "CSIT302"
         assert plan.exam_id == "exam-001"
@@ -196,7 +200,9 @@ class TestScoping:
             new_callable=AsyncMock,
             return_value=[],
         ):
-            plan = await generate_timed_plan(session, total_minutes=30, exam_id="exam-002")
+            plan = await generate_timed_plan(
+                session, total_minutes=30, exam_id="exam-002", user_id="user-1"
+            )
 
         assert plan.course_code == "CSIT314"
 
@@ -232,7 +238,9 @@ class TestScoping:
             new_callable=AsyncMock,
             return_value=[card_w5, card_w1, card_w3, card_w2],
         ):
-            plan = await generate_timed_plan(session, total_minutes=30, exam_id="exam-001")
+            plan = await generate_timed_plan(
+                session, total_minutes=30, exam_id="exam-001", user_id="user-1"
+            )
 
         # Exam-week cards (w1, w3, w2) should come before non-exam card (w5)
         exam_week_ids = {"fc-w1", "fc-w3", "fc-w2"}
@@ -263,7 +271,7 @@ class TestEdgeCases:
             new_callable=AsyncMock,
             return_value=[],
         ):
-            plan = await generate_timed_plan(session, total_minutes=30)
+            plan = await generate_timed_plan(session, total_minutes=30, user_id="user-1")
 
         assert plan.card_ids == []
         assert len(plan.quiz_ids) == 4
@@ -285,7 +293,7 @@ class TestEdgeCases:
             new_callable=AsyncMock,
             return_value=cards,
         ):
-            plan = await generate_timed_plan(session, total_minutes=30)
+            plan = await generate_timed_plan(session, total_minutes=30, user_id="user-1")
 
         assert len(plan.card_ids) == 9
         assert plan.quiz_ids == []
@@ -308,7 +316,7 @@ class TestEdgeCases:
             new_callable=AsyncMock,
             return_value=cards,
         ):
-            plan = await generate_timed_plan(session, total_minutes=30)
+            plan = await generate_timed_plan(session, total_minutes=30, user_id="user-1")
 
         assert plan.estimated_card_minutes == 5 * MINUTES_PER_CARD
         assert plan.estimated_quiz_minutes == 3 * MINUTES_PER_QUIZ
@@ -327,7 +335,7 @@ class TestEdgeCases:
             new_callable=AsyncMock,
             return_value=[],
         ):
-            plan = await generate_timed_plan(session, total_minutes=30)
+            plan = await generate_timed_plan(session, total_minutes=30, user_id="user-1")
 
         assert isinstance(plan, TimedSessionPlan)
         assert isinstance(plan.total_minutes, int)

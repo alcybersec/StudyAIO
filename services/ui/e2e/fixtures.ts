@@ -1,10 +1,12 @@
-import { test as base, expect, type Page } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
+import path from 'node:path'
+import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test'
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:8000'
 
 /** Generate a unique test email */
 export function testEmail(): string {
-  return `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@test.local`
+  return `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@example.com`
 }
 
 /** Register a new user via the API and return credentials */
@@ -61,6 +63,38 @@ export async function seedCourse(
   expect(resp.ok()).toBeTruthy()
   const data = await resp.json()
   return { courseId: data.course_id || data.id }
+}
+
+/**
+ * Run e2e/seed_e2e.py for rows the public API cannot create (a course exists
+ * only as a side effect of the classify stage; the CI job runs no worker).
+ * Needs DATABASE_URL_SYNC in the environment, as the e2e-tests job provides.
+ * Fails loudly -- a missing seed must never turn into a skipped test.
+ */
+export function seedDb(...args: string[]): void {
+  const script = path.resolve(process.cwd(), 'e2e', 'seed_e2e.py')
+  try {
+    execFileSync(process.env.E2E_PYTHON || 'python3', [script, ...args], {
+      stdio: 'pipe',
+      env: process.env,
+    })
+  } catch (err) {
+    const e = err as { stderr?: Buffer; message: string }
+    throw new Error(`seed_e2e.py ${args.join(' ')} failed: ${e.stderr?.toString() || e.message}`)
+  }
+}
+
+/** Seed a course (and optional concepts) owned by the self-hosted default user. */
+export function seedCourseRow(code: string, concepts = 0): void {
+  seedDb('course', code, '--concepts', String(concepts))
+}
+
+/** Delete a seeded course (and its children) through the public API. */
+export async function deleteCourse(request: APIRequestContext, code: string): Promise<void> {
+  const resp = await request.delete(`${API_URL}/api/courses/${code}`, {
+    headers: { 'X-Confirm': code },
+  })
+  expect([200, 404]).toContain(resp.status())
 }
 
 /** Build a minimal valid PDF for upload tests */

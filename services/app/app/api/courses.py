@@ -141,8 +141,12 @@ async def get_week_detail(
     if not course:
         raise HTTPException(status_code=404, detail=f"Course {course_code} not found")
 
-    artifacts = await artifact_service.list_artifacts(session, course_id=course.id, week=week)
-    summary = await summary_service.get_summary_for_week(session, course_code, week)
+    artifacts = await artifact_service.list_artifacts(
+        session, user_id=user.id, course_id=course.id, week=week
+    )
+    summary = await summary_service.get_summary_for_week(
+        session, course_code, week, user_id=user.id
+    )
 
     return WeekDetailResponse(
         course=CourseResponse.model_validate(course),

@@ -4,11 +4,13 @@ from app.extractors.base import BaseExtractor, ExtractionResult, ImageInfo, Page
 from app.extractors.docx import DocxExtractor
 from app.extractors.pdf import PdfExtractor
 from app.extractors.pptx import PptxExtractor
+from app.extractors.txt import TxtExtractor
 
 _EXTRACTORS: dict[str, type[BaseExtractor]] = {
     "pdf": PdfExtractor,
     "docx": DocxExtractor,
     "pptx": PptxExtractor,
+    "txt": TxtExtractor,
 }
 
 

@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 import { useExams } from '../../hooks/useApi'
 import { useCalendarStatus, useSyncCalendar } from '../../hooks/useCalendar'
 import { LoadingSpinner, ErrorBanner, EmptyState } from '../ui'
@@ -15,7 +16,25 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
   const { t } = useTranslation()
 
   const { data: exams, isLoading, error, refetch } = useExams(undefined, 'active')
-  const [showCreate, setShowCreate] = useState(false)
+  // /study?tab=exams&create=1&course=CODE&week=N opens the builder preselected
+  // (deep link from the Ask page's quiz-builder action).
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [showCreate, setShowCreate] = useState(() => searchParams.get('create') === '1')
+  const [prefill] = useState(() => {
+    const week = parseInt(searchParams.get('week') ?? '', 10)
+    return {
+      courseCode: searchParams.get('course') ?? '',
+      week: Number.isNaN(week) || week < 1 ? null : week,
+    }
+  })
+  const closeCreate = () => {
+    setShowCreate(false)
+    if (searchParams.has('create')) {
+      const next = new URLSearchParams(searchParams)
+      for (const k of ['create', 'course', 'week']) next.delete(k)
+      setSearchParams(next, { replace: true })
+    }
+  }
   const now = useMemo(() => Date.now(), []) // eslint-disable-line react-hooks/purity
   const { data: calStatus } = useCalendarStatus()
   const syncCalendar = useSyncCalendar()
@@ -66,7 +85,9 @@ export function ExamsTab({ selectedExamId, onSelectExam }: ExamsTabProps) {
       {showCreate && (
         <div className="mb-6">
           <ExamCreateForm
-            onClose={() => setShowCreate(false)}
+            onClose={closeCreate}
+            initialCourseCode={prefill.courseCode}
+            initialWeek={prefill.week}
             onCreated={() => refetch()}
           />
         </div>

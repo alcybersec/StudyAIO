@@ -34,6 +34,7 @@ class TestReviewAwardsXP:
         mock_review.created_at = MagicMock()
         mock_review.created_at.isoformat = MagicMock(return_value="2026-03-05T10:00:00")
         mock_srs.record_review = AsyncMock(return_value=mock_review)
+        mock_srs.get_owned_flashcard = AsyncMock(return_value=mock_flashcard)
 
         mock_xp.award_xp = AsyncMock(return_value=(MagicMock(), MagicMock(), []))
         mock_challenge.update_challenge_progress = AsyncMock(return_value=None)
@@ -70,6 +71,7 @@ class TestReviewAwardsXP:
         mock_review.created_at = MagicMock()
         mock_review.created_at.isoformat = MagicMock(return_value="2026-03-05T10:00:00")
         mock_srs.record_review = AsyncMock(return_value=mock_review)
+        mock_srs.get_owned_flashcard = AsyncMock(return_value=mock_flashcard)
 
         # XP service throws
         mock_xp.award_xp = AsyncMock(side_effect=Exception("XP DB error"))
@@ -108,6 +110,7 @@ class TestQuizAwardsXP:
         mock_attempt.created_at = MagicMock()
         mock_attempt.created_at.isoformat = MagicMock(return_value="2026-03-05T10:00:00")
         mock_exam.record_quiz_attempt = AsyncMock(return_value=mock_attempt)
+        mock_exam.get_owned_quiz_question = AsyncMock(return_value=mock_quiz)
 
         mock_xp.award_xp = AsyncMock(return_value=(MagicMock(), MagicMock(), []))
         mock_challenge.update_challenge_progress = AsyncMock(return_value=None)
@@ -146,6 +149,7 @@ class TestQuizAwardsXP:
         mock_attempt.created_at = MagicMock()
         mock_attempt.created_at.isoformat = MagicMock(return_value="2026-03-05T10:00:00")
         mock_exam.record_quiz_attempt = AsyncMock(return_value=mock_attempt)
+        mock_exam.get_owned_quiz_question = AsyncMock(return_value=mock_quiz)
 
         resp = await async_client.post(
             "/api/study/quiz-attempt",

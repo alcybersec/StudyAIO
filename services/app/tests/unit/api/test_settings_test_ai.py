@@ -34,10 +34,6 @@ class TestTestAIEndpoint:
                 "app.agents.factory.get_agent",
                 return_value=mock_agent,
             ),
-            patch(
-                "app.services.settings_service.get_effective_setting",
-                return_value="claude_code",
-            ),
         ):
             response = await async_client.post("/api/settings/test-ai")
 
@@ -63,10 +59,6 @@ class TestTestAIEndpoint:
             patch(
                 "app.agents.factory.get_agent",
                 return_value=mock_agent,
-            ),
-            patch(
-                "app.services.settings_service.get_effective_setting",
-                return_value="anthropic_api",
             ),
         ):
             response = await async_client.post("/api/settings/test-ai")

@@ -82,9 +82,6 @@ GUARDED_ELSEWHERE: dict[str, str] = {
     "uploads:retry_pipeline:pipeline_service.get_artifact_pipeline_runs": (
         "guarded by get_artifact(..., user_id=user.id) at the top of the handler"
     ),
-    "courses:get_week_detail:summary_service.get_summary_for_week": (
-        "guarded by get_course_by_code(..., user_id=user.id) three lines earlier"
-    ),
     # Admin-only routes: authorisation is the role check, not object ownership.
     "admin:revoke_invite:invite_service.revoke_invite": (
         "admin-only route behind require_role('admin'); invites have no per-user owner"

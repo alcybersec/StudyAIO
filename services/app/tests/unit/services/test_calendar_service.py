@@ -63,7 +63,7 @@ class TestGenerateIcs:
 
         session.execute = AsyncMock(side_effect=[course_result, dl_result])
 
-        result = await generate_ics(session, "CSIT302")
+        result = await generate_ics(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, filename = result
         assert filename == "CSIT302_deadlines.ics"
@@ -83,7 +83,7 @@ class TestGenerateIcs:
         mock_result.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await generate_ics(session, "FAKE")
+        result = await generate_ics(session, "FAKE", user_id="user-1")
         assert result is None
 
     @pytest.mark.asyncio
@@ -103,7 +103,7 @@ class TestGenerateIcs:
 
         session.execute = AsyncMock(side_effect=[course_result, dl_result])
 
-        result = await generate_ics(session, "CSIT302")
+        result = await generate_ics(session, "CSIT302", user_id="user-1")
         content = result[0].read().decode("utf-8")
         # ICS uses line folding (\r\n + space), so unfold before checking
         unfolded = content.replace("\r\n ", "")
@@ -142,7 +142,7 @@ class TestGenerateTaskPlanMd:
 
         session.execute = AsyncMock(side_effect=[course_result, assess_result, dl_result])
 
-        result = await generate_task_plan_md(session, "CSIT302")
+        result = await generate_task_plan_md(session, "CSIT302", user_id="user-1")
         assert result is not None
         buf, filename = result
         assert filename == "CSIT302_task_plan.md"
@@ -163,5 +163,5 @@ class TestGenerateTaskPlanMd:
         mock_result.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await generate_task_plan_md(session, "FAKE")
+        result = await generate_task_plan_md(session, "FAKE", user_id="user-1")
         assert result is None

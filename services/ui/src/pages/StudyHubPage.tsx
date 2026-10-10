@@ -22,8 +22,13 @@ const tabLabels: Record<TabValue, string> = {
   history: 'History',
 }
 
-// ?exam= is scoped to the exams tab; switching elsewhere clears it.
-const TAB_SCOPED_PARAMS: Record<string, TabValue> = { exam: 'exams' }
+// ?exam=, ?create=, ?course= and ?week= are scoped to the exams tab; switching elsewhere clears it.
+const TAB_SCOPED_PARAMS: Record<string, TabValue> = {
+  exam: 'exams',
+  create: 'exams',
+  course: 'exams',
+  week: 'exams',
+}
 
 export function StudyHubPage() {
   const { t } = useTranslation()

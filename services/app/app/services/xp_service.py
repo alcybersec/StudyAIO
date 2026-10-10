@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.utils import generate_id
 from app.models.user import User
+from app.models.user_settings import UserSettings
 from app.models.user_xp import UserXP
 from app.models.xp_event import XPEvent
 
@@ -203,12 +204,17 @@ async def get_xp_summary(session: AsyncSession, user_id: str) -> dict:
     }
 
 
-async def get_leaderboard(session: AsyncSession, limit: int = 10) -> list[dict]:
-    """Get top users by XP.
+async def get_leaderboard(session: AsyncSession, limit: int = 10, *, user_id: str) -> list[dict]:
+    """Get top users by XP who have opted in to the leaderboard.
+
+    Hidden by default (R-007, floor 1): a user appears only when
+    ``user_settings.leaderboard_opt_in`` is true. The caller always sees their
+    own row, opted in or not, so the board never looks like it forgot them.
 
     Args:
         session: Database session.
         limit: Max entries to return.
+        user_id: The caller, who is always included.
 
     Returns:
         List of dicts with user_id, username, total_xp, level.
@@ -216,6 +222,8 @@ async def get_leaderboard(session: AsyncSession, limit: int = 10) -> list[dict]:
     result = await session.execute(
         select(UserXP, User.username)
         .join(User, UserXP.user_id == User.id)
+        .outerjoin(UserSettings, UserSettings.user_id == UserXP.user_id)
+        .where((UserSettings.leaderboard_opt_in.is_(True)) | (UserXP.user_id == user_id))
         .order_by(UserXP.total_xp.desc())
         .limit(limit)
     )

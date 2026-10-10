@@ -8,6 +8,7 @@ from app.core.database import async_session_factory, run_async
 from app.core.exceptions import DuplicateFileError
 from app.core.utils import generate_id
 from app.models.pipeline_run import PipelineRun
+from app.pipeline._owner import resolve_event_owner
 from app.pipeline.failures import record_stage_failure
 from app.services import artifact_service
 from app.services.event_service import publish_pipeline_event_sync
@@ -152,14 +153,28 @@ def ingest_file(self, input_value: str | dict) -> dict:
     )
     # Uploads always pass the real id here. Only a caller that has not created
     # the artifact yet falls back to the placeholder, which no client filters on.
+    # Owner for events: the artifact row's owner when the row exists. Before the
+    # row exists (no pre-created artifact) there is nothing to look up;
+    # `ingest_file` creates it owned by the payload user, so that user is the
+    # owner by construction and the only one these two events can go to.
+    event_user_id = (
+        resolve_event_owner("ingest", known_artifact_id, user_id) if known_artifact_id else user_id
+    )
     publish_pipeline_event_sync(
-        known_artifact_id or "pending", "ingest", "started", user_id=user_id
+        known_artifact_id or "pending", "ingest", "started", user_id=event_user_id
     )
     try:
         result = run_async(_ingest(file_path, user_id=user_id, artifact_id=known_artifact_id))
         artifact_id = result.get("artifact_id") or known_artifact_id or "unknown"
+        # Re-resolve for the id the run produced: a duplicate result names an
+        # earlier row, and a freshly created row is only known now.
+        result_user_id = (
+            event_user_id
+            if artifact_id == known_artifact_id
+            else resolve_event_owner("ingest", artifact_id, user_id)
+        )
         publish_pipeline_event_sync(
-            artifact_id, "ingest", result.get("status", "completed"), user_id=user_id
+            artifact_id, "ingest", result.get("status", "completed"), user_id=result_user_id
         )
         return result
     except (DuplicateFileError, FileNotFoundError, ValueError):
@@ -175,6 +190,6 @@ def ingest_file(self, input_value: str | dict) -> dict:
             user_id=user_id,
         )
         publish_pipeline_event_sync(
-            known_artifact_id or "unknown", "ingest", "failed", user_id=user_id
+            known_artifact_id or "unknown", "ingest", "failed", user_id=event_user_id
         )
         raise self.retry(exc=exc) from exc

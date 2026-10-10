@@ -18,8 +18,8 @@ from app.agents.base import (
     QuizQuestionData,
     SummaryResult,
 )
+from app.core.ai_settings import get_effective_setting
 from app.core.exceptions import AgentError
-from app.services.settings_service import get_effective_setting
 
 logger = structlog.get_logger()
 
@@ -112,7 +112,7 @@ class OpenAIAdapter(AgentAdapter):
         try:
             response = await client.chat.completions.create(**request_kwargs)
         except Exception as e:
-            raise AgentError(f"{self.provider_name} API call failed: {e}") from e
+            raise self._agent_error(f"{self.provider_name} API call failed: {e}") from None
 
         choice = response.choices[0]
         result = (choice.message.content or "").strip()
@@ -466,7 +466,7 @@ Respond with ONLY a JSON object:
                 if delta and delta.content:
                     yield delta.content
         except Exception as e:
-            raise AgentError(f"OpenAI streaming failed: {e}") from e
+            raise self._agent_error(f"OpenAI streaming failed: {e}") from None
 
     async def extract_course_ops(
         self, document_text: str, course_code: str, document_type: str

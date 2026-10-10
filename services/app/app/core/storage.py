@@ -59,6 +59,18 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
+    async def list_keys(self, prefix: str) -> list[str]:
+        """List every object key under a key prefix (empty if none).
+
+        Args:
+            prefix: Key prefix, e.g. "ledger/deleted-courses/<user_id>".
+
+        Returns:
+            Full keys, relative to the storage root.
+        """
+        ...
+
+    @abstractmethod
     async def delete(self, key: str) -> None:
         """Delete *key*. No error if it doesn't exist."""
 
@@ -183,6 +195,19 @@ class LocalStorageBackend(StorageBackend):
         if path.is_file():
             path.unlink()
 
+    async def list_keys(self, prefix: str) -> list[str]:
+        target = self._resolve(prefix)
+        try:
+            target.resolve().relative_to(self._base.resolve())
+        except ValueError:
+            logger.warning("storage_list_prefix_escaped_root", prefix=prefix)
+            return []
+        if target.is_file():
+            return [str(target.relative_to(self._base))]
+        if not target.is_dir():
+            return []
+        return sorted(str(p.relative_to(self._base)) for p in target.rglob("*") if p.is_file())
+
     async def delete_prefix(self, prefix: str) -> int:
         target = self._resolve(prefix)
         # Refuse to walk outside the storage root, whatever the caller passed.
@@ -296,6 +321,23 @@ class S3StorageBackend(StorageBackend):
                 Bucket=settings.s3_bucket,
                 Key=self._full_key(key),
             )
+
+    async def list_keys(self, prefix: str) -> list[str]:
+        keys: list[str] = []
+        root = settings.s3_prefix.strip("/")
+        strip = len(root) + 1 if root else 0
+        # A listing failure is raised, not turned into []: "nothing there" and
+        # "could not look" must not look alike to a caller deciding what to delete.
+        try:
+            paginator = self._get_client().get_paginator("list_objects_v2")
+            for page in paginator.paginate(
+                Bucket=settings.s3_bucket, Prefix=self._full_key(prefix)
+            ):
+                keys.extend(obj["Key"][strip:] for obj in page.get("Contents", []))
+        except Exception:
+            logger.warning("storage_list_keys_failed", prefix=prefix, exc_info=True)
+            raise
+        return keys
 
     async def delete_prefix(self, prefix: str) -> int:
         deleted = 0

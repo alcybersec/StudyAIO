@@ -38,6 +38,15 @@ class ChatSessionListResponse(BaseModel):
     sessions: list[ChatSessionSummary]
 
 
+class ChatAction(BaseModel):
+    """Structured follow-up the UI can offer on an assistant message."""
+
+    type: str  # currently only "open_quiz_builder"
+    course_code: str | None = None
+    course_id: str | None = None
+    week: int | None = None
+
+
 class ChatMessageResponse(BaseModel):
     """Response for a single chat message."""
 
@@ -46,6 +55,7 @@ class ChatMessageResponse(BaseModel):
     role: str
     content: str
     citations_json: list[dict] | None = None
+    action: ChatAction | None = None
     created_at: str
 
 

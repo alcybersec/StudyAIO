@@ -43,6 +43,7 @@ def _stub_user_settings(overrides: dict | None = None) -> MagicMock:
     stub.theme = "system"
     stub.language = "en"
     stub.content_language = False
+    stub.timezone = "UTC"
     stub.dashboard_layout = None
     return stub
 

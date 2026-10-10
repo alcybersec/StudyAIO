@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Button, Card, Input } from '../../ui'
 import { authApi } from '../../../api/auth'
 import { useAuth } from '../../../hooks/useAuth'
+import { LeaderboardPrivacyCard } from './LeaderboardPrivacyCard'
 
 /**
  * Data & Privacy: download everything this account owns, or delete it.
@@ -60,19 +61,24 @@ export function DataPrivacySection() {
 
   if (isSelfHosted || !user) {
     return (
-      <Card>
-        <h2 className="text-[13px] font-semibold text-text mb-2">{t('Data & Privacy')}</h2>
-        <p className="text-xs text-text-muted max-w-md">
-          {t('This instance runs in self-hosted mode — your data already lives entirely on your own machine, under the')}{' '}
-          <code className="text-text-faint">{t('data/')}</code> {t('directory.')}
-        </p>
-      </Card>
+      <div className="space-y-4">
+        <LeaderboardPrivacyCard />
+        <Card>
+          <h2 className="text-[13px] font-semibold text-text mb-2">{t('Data & Privacy')}</h2>
+          <p className="text-xs text-text-muted max-w-md">
+            {t('This instance runs in self-hosted mode — your data already lives entirely on your own machine, under the')}{' '}
+            <code className="text-text-faint">{t('data/')}</code> {t('directory.')}
+          </p>
+        </Card>
+      </div>
     )
   }
 
   const canDelete = hasPassword ? password.length > 0 : confirmUsername === user.username
 
   return (
+    <div className="space-y-4">
+    <LeaderboardPrivacyCard />
     <Card>
       <h2 className="text-[13px] font-semibold text-text mb-4">{t('Data & Privacy')}</h2>
 
@@ -166,5 +172,6 @@ export function DataPrivacySection() {
         </div>
       </div>
     </Card>
+    </div>
   )
 }

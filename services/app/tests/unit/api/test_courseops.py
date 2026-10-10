@@ -388,6 +388,7 @@ class TestListDeadlines:
             "CSIT302",
             upcoming_only=True,
             user_id=default_test_user.id,
+            tz="UTC",
         )
 
 

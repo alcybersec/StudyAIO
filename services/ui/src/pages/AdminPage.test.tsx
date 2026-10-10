@@ -147,7 +147,7 @@ describe('AdminPage section isolation', () => {
   })
 
   it('retries only the metrics query from the metrics ErrorState', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const refetchMetrics = vi.fn()
     const refetchUsers = vi.fn()
     mockMetrics.mockReturnValue(asResult({ data: undefined, isLoading: false, isError: true, refetch: refetchMetrics }))
@@ -212,7 +212,7 @@ function setupRow(overrides: Partial<typeof sampleUser> = {}) {
     }),
   )
   renderPage()
-  return { user: userEvent.setup(), mutate }
+  return { user: userEvent.setup({ delay: null }), mutate }
 }
 
 async function pickRole(user: ReturnType<typeof userEvent.setup>, from: string, to: string) {
@@ -331,7 +331,7 @@ describe('AdminPage success toasts', () => {
       }),
     )
     renderPage()
-    return userEvent.setup()
+    return userEvent.setup({ delay: null })
   }
 
   it('says the user was signed out when the server revoked their sessions', async () => {

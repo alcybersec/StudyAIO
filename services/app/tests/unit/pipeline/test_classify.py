@@ -229,3 +229,37 @@ class TestClassifyStage:
         assert run.status == "failed"
         assert run.error_message != "art-001"
         assert "Could not extract text preview" in run.error_message
+
+
+class TestTxtPreview:
+    """Quick capture stores file_type='txt'; classify must preview it (R-016)."""
+
+    def test_txt_preview_returns_text(self, tmp_path):
+        from app.core.storage import LocalStorageBackend
+        from app.pipeline import classify
+
+        (tmp_path / "uploads").mkdir()
+        (tmp_path / "uploads" / "cap.txt").write_text("Packets are routed hop by hop.")
+        storage = LocalStorageBackend(str(tmp_path))
+        with patch.object(classify, "get_storage", return_value=storage):
+            preview = classify._extract_text_preview("uploads/cap.txt", "txt")
+        assert "hop by hop" in preview
+
+
+class TestKnownCoursesScoping:
+    """_get_known_courses only offers the artifact owner's course codes (R-015)."""
+
+    async def test_query_filters_on_user_id(self):
+        from app.pipeline.classify import _get_known_courses
+
+        session = MagicMock()
+        result = MagicMock()
+        result.all.return_value = [("A101",)]
+        session.execute = AsyncMock(return_value=result)
+
+        codes = await _get_known_courses(session, "user-1")
+
+        assert codes == ["A101"]
+        compiled = session.execute.await_args.args[0].compile()
+        assert "user_id" in str(compiled)
+        assert "user-1" in compiled.params.values()

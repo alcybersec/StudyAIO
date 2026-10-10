@@ -450,7 +450,7 @@ async def pull_events(
         if cal_sync.sync_token:
             kwargs["syncToken"] = cal_sync.sync_token
         else:
-            kwargs["timeMin"] = datetime.now(UTC).isoformat() + "Z"
+            kwargs["timeMin"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         events_result = service.events().list(**kwargs).execute()
     except Exception as e:

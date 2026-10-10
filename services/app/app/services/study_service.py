@@ -6,6 +6,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import user_today
 from app.models.course import Course
 from app.models.study_session import StudySession
 from app.services import exam_service, schedule_service
@@ -15,7 +16,9 @@ logger = structlog.get_logger()
 PLAN_DAYS = 7
 
 
-async def build_week_plan(session: AsyncSession, user_id: str) -> list[dict]:
+async def build_week_plan(
+    session: AsyncSession, user_id: str, *, tz: str | None = None
+) -> list[dict]:
     """Build a 7-day study plan across all active exams for a user.
 
     Wraps the existing adaptive schedule algorithm (priority multipliers by
@@ -25,12 +28,13 @@ async def build_week_plan(session: AsyncSession, user_id: str) -> list[dict]:
     Args:
         session: Database session.
         user_id: The user's UUID.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         List of 7 day dicts: {"day": ISO date, "items": [{course_code,
         kind ("cards" | "quiz" | "mock"), target, done}]}.
     """
-    today = date.today()
+    today = user_today(tz)
     days = [today + timedelta(days=i) for i in range(PLAN_DAYS)]
     plan: list[dict] = [{"day": d.isoformat(), "items": []} for d in days]
 
@@ -68,7 +72,7 @@ async def build_week_plan(session: AsyncSession, user_id: str) -> list[dict]:
     for exam in exams:
         course_code = code_by_course.get(exam.course_id, "")
         schedule = await schedule_service.generate_study_schedule(
-            session, exam.id, days_ahead=PLAN_DAYS, user_id=user_id
+            session, exam.id, days_ahead=PLAN_DAYS, user_id=user_id, tz=tz
         )
         if not schedule:
             continue

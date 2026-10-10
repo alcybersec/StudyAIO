@@ -182,6 +182,17 @@ kbd {
 .react-grid-item > .react-resizable-handle {
   display: none;
 }
+/* Sonner fades a toast in over 0.4s, and its text is only AA-contrast
+   (sage-fg 5.6:1) once opaque; mid-fade it composites to ~3.4:1, which axe
+   flags when a scan lands inside the window (the "Ready to work offline"
+   toast on /upload). Keep the slide-in, drop the opacity fade on entry. The
+   exit transition (removed state, higher specificity) is untouched. */
+[data-sonner-toaster] [data-sonner-toast] {
+  transition: transform 0.4s, height 0.4s, box-shadow 0.2s;
+}
+[data-sonner-toaster] [data-sonner-toast]:not([data-visible='false']):not([data-removed='true']) {
+  opacity: 1;
+}
 .react-grid-item.react-grid-placeholder {
   background: var(--t-peri) !important;
   opacity: 0.1 !important;

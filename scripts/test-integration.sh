@@ -24,6 +24,12 @@
 #   scripts/test-integration.sh                  # whole suite
 #   scripts/test-integration.sh -k test_health   # extra args go to pytest
 #
+# Coverage: the default (no-argument) run measures app coverage and fails below the
+# integration tier in services/app/pyproject.toml ([tool.studyaio.coverage-tiers],
+# read through scripts/coverage-tier.py). Any argument = a targeted run, whose
+# coverage is meaningless, so the gate is off; pass --cov=app --cov-fail-under=N
+# yourself to keep it.
+#
 # If DATABASE_URL is already set (CI, or your own long-lived services), no
 # containers are started and your environment is used as-is. DATA_DIR is the
 # exception: an existing value is only honoured when it is already a temp path,
@@ -146,7 +152,8 @@ cd "$APP_DIR"
 if [ "$#" -gt 0 ]; then
     pytest_args=("$@")
 else
-    pytest_args=(-x -v)
+    tier="$(python3 "$REPO_ROOT/scripts/coverage-tier.py" integration)"
+    pytest_args=(-x -v --cov=app --cov-report=term-missing "--cov-fail-under=$tier")
 fi
 
 echo "==> Running: $PYTEST tests/integration ${pytest_args[*]}"

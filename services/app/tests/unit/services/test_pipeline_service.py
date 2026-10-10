@@ -17,7 +17,7 @@ class TestGetRecentActivity:
         mock_result.unique.return_value.scalars.return_value.all.return_value = []
         mock_session.execute.return_value = mock_result
 
-        result = await pipeline_service.get_recent_activity(mock_session)
+        result = await pipeline_service.get_recent_activity(mock_session, user_id="user-1")
         assert result == []
 
     async def test_returns_activity_with_artifact_info(self, mock_session):
@@ -41,7 +41,7 @@ class TestGetRecentActivity:
         mock_result.unique.return_value.scalars.return_value.all.return_value = [mock_run]
         mock_session.execute.return_value = mock_result
 
-        result = await pipeline_service.get_recent_activity(mock_session)
+        result = await pipeline_service.get_recent_activity(mock_session, user_id="user-1")
         assert len(result) == 1
         assert result[0]["filename"] == "lecture.pdf"
         assert result[0]["stage"] == "ingest"

@@ -17,3 +17,30 @@ ignore = ["E501", "B008", "SIM115"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
+
+# --- Coverage tiers (docs/strategy.md section 3) ---------------------------
+# Single source of truth for the per-tier coverage floors, in percent. Raising a
+# number is a task, not a drive-by edit (strategy.md section 3).
+#
+# Only the unit tier can live in coverage.py's own config, because `fail_under`
+# is one number and is applied whenever --cov is active. The other tiers are
+# passed per run as --cov-fail-under=<value> by the Makefile / CI, reading from
+# here (see tests/unit/test_coverage_tiers.py, which pins these values).
+# Deliberately NOT in pytest addopts: that would make every targeted run
+# (a single file, the contract tier, make test-integration) fail coverage.
+[tool.studyaio.coverage-tiers]
+unit = 75
+integration = 70
+# Tier lands with M31-S1-SAFETY-003 (services/app/tests/safety/); recorded only.
+floor = 95
+
+[tool.coverage.run]
+source = ["app"]
+# SQLAlchemy async runs coroutines on greenlets; without this the C tracer drops every
+# line after the first awaited DB call (integration read 73% vs 88% measured).
+concurrency = ["greenlet", "thread"]
+
+[tool.coverage.report]
+# Unit tier; matches the --cov-fail-under=75 in .gitlab-ci.yml.
+fail_under = 75
+show_missing = true

@@ -50,6 +50,7 @@ class TestUploadCourseDocument:
             file_type="pdf",
             sha256="abc123",
             file_size_bytes=1024,
+            user_id="user-1",
         )
 
         session.add.assert_called_once()
@@ -75,6 +76,7 @@ class TestUploadCourseDocument:
                 file_type="pdf",
                 sha256="abc",
                 file_size_bytes=100,
+                user_id="user-1",
             )
 
     @pytest.mark.asyncio
@@ -99,6 +101,7 @@ class TestUploadCourseDocument:
                 file_type="pdf",
                 sha256="abc",
                 file_size_bytes=100,
+                user_id="user-1",
             )
 
 
@@ -211,11 +214,13 @@ class TestUpdateDeadline:
         mock_deadline = MagicMock()
         mock_deadline.title = "Old Title"
         mock_deadline.is_confirmed = False
-        session.get = AsyncMock(return_value=mock_deadline)
+        _finds(session, mock_deadline)
         session.commit = AsyncMock()
         session.refresh = AsyncMock()
 
-        result = await update_deadline(session, "dl-001", title="New Title", is_confirmed=True)
+        result = await update_deadline(
+            session, "dl-001", title="New Title", is_confirmed=True, user_id="user-1"
+        )
 
         assert result.title == "New Title"
         assert result.is_confirmed is True
@@ -223,10 +228,9 @@ class TestUpdateDeadline:
     @pytest.mark.asyncio
     async def test_returns_none_for_missing(self):
         """Returns None when deadline not found."""
-        session = AsyncMock()
-        session.get = AsyncMock(return_value=None)
+        session = _misses(AsyncMock())
 
-        result = await update_deadline(session, "bad-id", title="X")
+        result = await update_deadline(session, "bad-id", title="X", user_id="user-1")
         assert result is None
 
 
@@ -237,20 +241,19 @@ class TestDeleteDeadline:
     async def test_deletes_existing(self):
         """Deletes a deadline and returns True."""
         session = AsyncMock()
-        session.get = AsyncMock(return_value=MagicMock())
+        _finds(session, MagicMock())
         session.delete = AsyncMock()
         session.commit = AsyncMock()
 
-        assert await delete_deadline(session, "dl-001") is True
+        assert await delete_deadline(session, "dl-001", user_id="user-1") is True
         session.delete.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_returns_false_for_missing(self):
         """Returns False when deadline not found."""
-        session = AsyncMock()
-        session.get = AsyncMock(return_value=None)
+        session = _misses(AsyncMock())
 
-        assert await delete_deadline(session, "bad-id") is False
+        assert await delete_deadline(session, "bad-id", user_id="user-1") is False
 
 
 class TestCreateExamFromDeadline:
@@ -270,17 +273,13 @@ class TestCreateExamFromDeadline:
         mock_assessment = MagicMock()
         mock_assessment.weeks_relevant = [1, 2, 3, 4, 5]
 
-        session.get = AsyncMock(
-            side_effect=lambda model, id: {
-                "dl-001": mock_deadline,
-                "assess-001": mock_assessment,
-            }.get(id)
-        )
+        _finds(session, mock_deadline)
+        session.get = AsyncMock(return_value=mock_assessment)
         session.add = MagicMock()
         session.commit = AsyncMock()
         session.refresh = AsyncMock()
 
-        exam = await create_exam_from_deadline(session, "dl-001")
+        exam = await create_exam_from_deadline(session, "dl-001", user_id="user-1")
         assert exam is not None
         session.add.assert_called_once()
         assert mock_deadline.is_confirmed is True
@@ -288,10 +287,9 @@ class TestCreateExamFromDeadline:
     @pytest.mark.asyncio
     async def test_returns_none_for_missing(self):
         """Returns None when deadline not found."""
-        session = AsyncMock()
-        session.get = AsyncMock(return_value=None)
+        session = _misses(AsyncMock())
 
-        assert await create_exam_from_deadline(session, "bad-id") is None
+        assert await create_exam_from_deadline(session, "bad-id", user_id="user-1") is None
 
 
 class TestListFunctions:
@@ -305,7 +303,7 @@ class TestListFunctions:
         mock_result.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await list_course_documents(session, "FAKE")
+        result = await list_course_documents(session, "FAKE", user_id="user-1")
         assert result == []
 
     @pytest.mark.asyncio
@@ -316,7 +314,7 @@ class TestListFunctions:
         mock_result.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await list_assessments(session, "FAKE")
+        result = await list_assessments(session, "FAKE", user_id="user-1")
         assert result == []
 
     @pytest.mark.asyncio
@@ -327,8 +325,19 @@ class TestListFunctions:
         mock_result.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await list_deadlines(session, "FAKE")
+        result = await list_deadlines(session, "FAKE", user_id="user-1")
         assert result == []
+
+
+def _finds(session, *rows):
+    """Wire a session whose owner-scoped query returns ``rows`` in order, then nothing."""
+    results = []
+    for row in rows:
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = row
+        results.append(result)
+    session.execute = AsyncMock(side_effect=results)
+    return session
 
 
 def _misses(session):
@@ -419,14 +428,10 @@ class TestOwnerScopedLookups:
         assert "courses.user_id" in _sql(session)
 
     @pytest.mark.asyncio
-    async def test_unscoped_callers_still_resolve_by_id(self):
-        """user_id=None is the documented trusted-internal-caller path.
+    async def test_caller_is_required_and_never_resolves_by_id_alone(self):
+        """R-021: there is no unscoped path -- omitting the caller is a TypeError."""
+        session = _misses(AsyncMock())
 
-        The extraction pipeline has no request user; it must keep working.
-        """
-        session = AsyncMock()
-        session.get = AsyncMock(return_value=None)
-        session.execute = AsyncMock(side_effect=AssertionError("should not build a scoped query"))
-
-        assert await update_deadline(session, "dl-001", title="X") is None
-        session.get.assert_awaited_once()
+        with pytest.raises(TypeError):
+            await update_deadline(session, "dl-001", title="X")
+        session.execute.assert_not_awaited()

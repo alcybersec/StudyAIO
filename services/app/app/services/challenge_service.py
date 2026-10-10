@@ -6,6 +6,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import user_today
 from app.core.utils import generate_id
 from app.models.daily_challenge import DailyChallenge
 from app.models.user_daily_challenge import UserDailyChallenge
@@ -26,6 +27,8 @@ CHALLENGE_TEMPLATES = [
 async def get_or_create_daily_challenge(
     session: AsyncSession,
     target_date: date | None = None,
+    *,
+    tz: str | None = None,
 ) -> DailyChallenge:
     """Get or create the daily challenge for a given date.
 
@@ -34,12 +37,13 @@ async def get_or_create_daily_challenge(
 
     Args:
         session: Database session.
-        target_date: Date for the challenge (defaults to today).
+        target_date: Date for the challenge (defaults to the caller's local today).
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         The DailyChallenge record.
     """
-    target_date = target_date or date.today()
+    target_date = target_date or user_today(tz)
 
     result = await session.execute(
         select(DailyChallenge).where(DailyChallenge.challenge_date == target_date)
@@ -77,18 +81,21 @@ async def get_user_challenge_progress(
     session: AsyncSession,
     user_id: str,
     target_date: date | None = None,
+    *,
+    tz: str | None = None,
 ) -> dict:
     """Get today's challenge and user's progress.
 
     Args:
         session: Database session.
         user_id: User UUID.
-        target_date: Date for the challenge (defaults to today).
+        target_date: Date for the challenge (defaults to the caller's local today).
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Dict with challenge info and user progress.
     """
-    challenge = await get_or_create_daily_challenge(session, target_date)
+    challenge = await get_or_create_daily_challenge(session, target_date, tz=tz)
 
     result = await session.execute(
         select(UserDailyChallenge).where(
@@ -120,6 +127,8 @@ async def update_challenge_progress(
     user_id: str,
     challenge_type: str,
     increment: int = 1,
+    *,
+    tz: str | None = None,
 ) -> UserDailyChallenge | None:
     """Update progress on today's challenge if it matches the given type.
 
@@ -128,11 +137,12 @@ async def update_challenge_progress(
         user_id: User UUID.
         challenge_type: The type of activity (review_cards, quiz_correct, etc.).
         increment: Amount to add to progress.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Updated UserDailyChallenge if matched, None otherwise.
     """
-    challenge = await get_or_create_daily_challenge(session)
+    challenge = await get_or_create_daily_challenge(session, tz=tz)
 
     if challenge.challenge_type != challenge_type:
         return None

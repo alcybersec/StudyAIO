@@ -169,7 +169,25 @@ def _run_migrations(_verify_app_wiring, _require_env):
     # async engine. The migration target is therefore whatever the environment
     # said at import time — which _verify_app_wiring has already checked.
     alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "..", "..", "alembic.ini"))
-    command.upgrade(alembic_cfg, "head")
+
+    # alembic/env.py drives its async engine with `asyncio.run()`, which on exit
+    # unsets this thread's current event loop. Put back whatever was current, or
+    # the next async test fails with "There is no current event loop" whenever a
+    # loop-bound test ran before the first one that needed the database.
+    import asyncio
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        try:
+            current_loop = asyncio.get_event_loop_policy().get_event_loop()
+        except RuntimeError:
+            current_loop = None
+    try:
+        command.upgrade(alembic_cfg, "head")
+    finally:
+        if current_loop is not None and not current_loop.is_closed():
+            asyncio.set_event_loop(current_loop)
 
     # Seed a test user for integration tests (multi-tenant FK requirement)
     engine2 = sqlalchemy.create_engine(sync_url)
@@ -314,3 +332,214 @@ async def integration_client(db_session, test_user_id):
     ) as client:
         yield client
     app.dependency_overrides.clear()
+
+
+# ── Real-auth clients and user factories ──────────────────────────────
+#
+# `integration_client` above short-circuits authentication with a fixed user.
+# The fixtures below do the opposite: requests carry a real signed access-token
+# cookie, so the whole `get_current_user` chain (JWT decode, user lookup,
+# role/tier checks) runs, and a test can hold several users at once. That is
+# what tenant-isolation tests need, and the only way to reach role-gated routes
+# such as /api/admin/*, which depend on `get_current_user` directly.
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def make_user(db_session):
+    """Factory: insert a real user row (inside the test's SAVEPOINT) and return it."""
+    from app.core.auth import hash_password
+    from app.core.utils import generate_id
+    from app.models.user import User
+
+    hashes: dict[str, str] = {}  # Argon2 is deliberately slow; hash each distinct password once
+
+    async def _make(
+        *,
+        email: str | None = None,
+        username: str | None = None,
+        password: str = "correct-horse-battery",
+        role: str = "user",
+        tier: str = "free",
+        email_verified: bool = True,
+        is_active: bool = True,
+    ) -> User:
+        uid = generate_id()
+        user = User(
+            id=uid,
+            email=email or f"u-{uid[-12:]}@example.com",
+            username=username or f"user_{uid[-12:]}",
+            hashed_password=hashes.setdefault(password, hash_password(password)),
+            role=role,
+            tier=tier,
+            is_active=is_active,
+            email_verified=email_verified,
+            mfa_enabled=False,
+        )
+        db_session.add(user)
+        await db_session.flush()
+        return user
+
+    return _make
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def client_factory(db_session):
+    """Factory for HTTP clients on the real auth path.
+
+    `client_factory(user)` returns a client holding that user's access-token
+    cookie; `client_factory()` returns an anonymous one. Only `get_session` is
+    overridden (to share the test SAVEPOINT); the auth dependencies are real.
+    The per-IP rate limiter is reset so tests do not trip each other's limits.
+    """
+    import httpx
+
+    from app.core.auth import ACCESS_TOKEN_COOKIE, create_access_token
+    from app.core.database import get_session
+    from app.core.rate_limit import limiter
+    from app.main import app
+
+    async def override_session():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_session
+    limiter.reset()
+    clients: list[httpx.AsyncClient] = []
+
+    def _make(user=None) -> httpx.AsyncClient:
+        client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+        if user is not None:
+            client.cookies.set(
+                ACCESS_TOKEN_COOKIE, create_access_token(user.id, user.role, user.tier)
+            )
+        clients.append(client)
+        return client
+
+    yield _make
+    for client in clients:
+        await client.aclose()
+    app.dependency_overrides.clear()
+    limiter.reset()
+
+
+# ── Embeddings ────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _fixed_embeddings():
+    """Never load a real sentence-transformers model in the integration suite.
+
+    The provider is bound by name into several modules at import time, so each
+    binding is patched. Tests that need different behaviour patch on top of this.
+    """
+    from tests.integration._support import FixedEmbeddings
+
+    provider = FixedEmbeddings()
+    targets = (
+        "app.agents.embeddings.get_embedding_provider",
+        "app.api.qa.get_embedding_provider",
+        "app.services.chat_service.get_embedding_provider",
+        "app.pipeline.index.get_embedding_provider",
+    )
+    patches = [patch(t, return_value=provider) for t in targets]
+    for p in patches:
+        p.start()
+    try:
+        yield provider
+    finally:
+        for p in patches:
+            p.stop()
+
+
+# ── Shared two-tenant world ───────────────────────────────────────────
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def two_tenants(make_user, db_session):
+    """Two users who each own a 'NET101' course with distinct content."""
+    from tests.integration._support import seed_course
+
+    alice, bob = await make_user(), await make_user()
+    a = await seed_course(db_session, alice.id, code="NET101", week=3)
+    b = await seed_course(db_session, bob.id, code="NET101", week=3, flashcards=1, quizzes=1)
+    # Make the content distinguishable by owner.
+    a.summary.content_md = "# ALICE-ONLY summary of sockets"
+    b.summary.content_md = "# BOB-ONLY summary of sockets"
+    a.flashcards[0].front = "ALICE card"
+    b.flashcards[0].front = "BOB card"
+    await db_session.flush()
+    return alice, bob, a, b
+
+
+# ── Committed users (for code that opens its own sessions) ─────────────
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def committed_user():
+    """Factory for users that really exist in the database (committed).
+
+    Celery tasks and scheduled jobs open their own sessions, so they cannot see
+    rows living inside the `db_session` SAVEPOINT. Everything created here is
+    deleted, with all data the user owns, when the test ends.
+    """
+    from app.core.database import async_session_factory
+    from app.core.utils import generate_id
+    from app.models.user import User
+    from app.services import account_service
+
+    created: list[str] = []
+
+    async def _make(*, tier: str = "free", role: str = "user") -> User:
+        uid = generate_id()
+        async with async_session_factory() as session:
+            user = User(
+                id=uid,
+                email=f"c-{uid[-12:]}@example.com",
+                username=f"c_{uid[-12:]}",
+                role=role,
+                tier=tier,
+                is_active=True,
+                email_verified=True,
+                mfa_enabled=False,
+            )
+            session.add(user)
+            await session.commit()
+        created.append(uid)
+        return user
+
+    yield _make
+
+    for uid in created:
+        async with async_session_factory() as session:
+            # delete_user_account cannot yet cope with course documents/assessments
+            # (see test_account_deletion_courseops.py); clear them first.
+            from sqlalchemy import text
+
+            for table in ("deadlines", "assessments", "course_documents"):
+                await session.execute(
+                    text(
+                        f"DELETE FROM {table} WHERE course_id IN "
+                        "(SELECT id FROM courses WHERE user_id = :u)"
+                    ),
+                    {"u": uid},
+                )
+            await session.commit()
+            await account_service.delete_user_account(session, uid)
+            await session.commit()
+
+
+# ── Event-loop anchor ─────────────────────────────────────────────────
+
+
+@pytest_asyncio.fixture(loop_scope="session", scope="session", autouse=True)
+async def _session_loop_anchor():
+    """Create the session-scoped event loop before the first test runs.
+
+    Every async test here declares `loop_scope="session"`. pytest-asyncio only
+    builds that loop when a session-scoped async fixture asks for it, which until
+    now happened as a side effect of the first test that used `db_session`. A test
+    with no such fixture that happened to run first (a pure-logic test, `-k`, a
+    reordered run) ran fine, and then every later test failed with "There is no
+    current event loop". Anchoring the loop here makes the suite independent of
+    which test runs first.
+    """
+    yield

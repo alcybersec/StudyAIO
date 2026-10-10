@@ -1,12 +1,14 @@
 """Admin service — user management and system metrics."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.clock import utc_today
+from app.core.constants import DEFAULT_ADMIN_ID
 from app.core.exceptions import LastAdminError, UserExistsError
 from app.core.utils import generate_id, normalize_email
 from app.models.artifact import LectureArtifact
@@ -379,7 +381,7 @@ async def get_beta_funnel(session: AsyncSession, include_admins: bool = False) -
     )
     returned = (await session.execute(select(func.count()).select_from(active_days))).scalar_one()
 
-    week_ago = date.today() - timedelta(days=7)
+    week_ago = utc_today() - timedelta(days=7)
     active_7d = (
         await session.execute(
             select(func.count(func.distinct(UsageRecord.user_id))).where(
@@ -603,7 +605,7 @@ async def get_user_details(session: AsyncSession, user_id: str) -> dict | None:
     # Usage (best-effort)
     usage = None
     try:
-        today = date.today()
+        today = utc_today()
         thirty_days_ago = today - timedelta(days=30)
 
         today_result = await session.execute(
@@ -961,10 +963,6 @@ async def ensure_admin(
             On the create path (no existing admin), also raised if
             `username` collides with an existing account.
     """
-    # Layering: the service layer should not import the API layer at module
-    # scope, so this stays a local import even though there is no cycle.
-    from app.api.deps import DEFAULT_ADMIN_ID
-
     user = await session.get(User, DEFAULT_ADMIN_ID)
     if user is None:
         result = await session.execute(

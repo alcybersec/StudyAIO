@@ -34,6 +34,7 @@ def _mock_message_obj(
     role: str = "user",
     content: str = "Hello",
     citations_json: list | None = None,
+    action_json: dict | None = None,
 ) -> MagicMock:
     """Create a mock ChatMessage."""
     m = MagicMock(spec=ChatMessage)
@@ -42,6 +43,7 @@ def _mock_message_obj(
     m.role = role
     m.content = content
     m.citations_json = citations_json
+    m.action_json = action_json
     m.token_count = None
     m.created_at = datetime(2026, 3, 5, 10, 0, 0)
     return m
@@ -156,6 +158,28 @@ class TestGetMessages:
         data = response.json()
         assert len(data["messages"]) == 2
         assert data["messages"][0]["role"] == "user"
+
+    async def test_get_messages_action_round_trips(self, async_client, mock_session):
+        """A stored action dict is returned as the message's action."""
+        action = {"type": "open_quiz_builder", "course_code": "CSIT302", "week": 3}
+        mock_msgs = [
+            _mock_message_obj(id="m-001", role="assistant", action_json=action),
+            _mock_message_obj(id="m-002", role="assistant"),
+        ]
+
+        with patch(
+            "app.api.chat.chat_service.get_messages",
+            new_callable=AsyncMock,
+            return_value=mock_msgs,
+        ):
+            response = await async_client.get("/api/chat/sessions/session-001/messages")
+
+        assert response.status_code == 200
+        msgs = response.json()["messages"]
+        assert msgs[0]["action"]["type"] == "open_quiz_builder"
+        assert msgs[0]["action"]["course_code"] == "CSIT302"
+        assert msgs[0]["action"]["week"] == 3
+        assert msgs[1]["action"] is None
 
     async def test_get_messages_not_found(self, async_client, mock_session):
         """Returns 404 for unknown session."""

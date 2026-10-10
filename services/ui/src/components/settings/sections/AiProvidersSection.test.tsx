@@ -40,7 +40,9 @@ function settings(overrides: Partial<Settings> = {}): Settings {
     chunk_overlap_tokens: 50,
     language: 'en',
     content_language: false,
+    leaderboard_opt_in: false,
     dashboard_layout: null,
+    timezone: 'UTC',
     ...overrides,
   }
 }

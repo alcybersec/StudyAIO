@@ -30,7 +30,7 @@ docstring before adding a namespace.
 real database — the unit tests can only check the shape of the predicates.
 """
 
-import warnings
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -38,6 +38,7 @@ from typing import Any
 import structlog
 from sqlalchemy import Select, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.schema import sort_tables
 
 from app.core.database import Base
 from app.core.storage import StorageBackend, get_storage
@@ -48,9 +49,18 @@ from app.models.course import Course
 from app.models.exam import Exam
 from app.models.quiz import QuizQuestion
 from app.models.user import User
-from app.services import courseops_service, preview_service, summary_service
+from app.services import (
+    course_service,
+    courseops_service,
+    preview_service,
+    settings_service,
+    summary_service,
+)
 
 logger = structlog.get_logger()
+
+#: A course id as ``generate_id`` mints it (a UUID); anything else in the ledger is not one.
+_COURSE_ID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 # Tables that belong to nobody: shared catalogs, and `users` itself (deleted
 # last, by primary key). Anything not here and not user-scoped is a bug.
@@ -70,16 +80,21 @@ GLOBAL_TABLES = frozenset(
 def _ordered_tables() -> list[Any]:
     """All mapped tables, parents first.
 
-    SQLAlchemy warns that it cannot fully sort the schema: `assessments` and
-    `course_documents` reference each other, as do `users` and `invite_codes`.
-    Both cycles are safe to ignore here because every edge in them is
-    ON DELETE SET NULL or CASCADE — never RESTRICT — so either order works.
+    `assessments` <-> `course_documents` and `users` <-> `invite_codes` form FK
+    cycles. `Base.metadata.sorted_tables` falls back to an arbitrary order for a
+    cyclic graph, which put both courseops tables *before* `courses` and so
+    deleted `courses` while they still referenced it (R-016). Each cycle has one
+    ON DELETE SET NULL edge, so those edges are skipped when sorting: the
+    remainder is acyclic and the order is exact.
     `test_cyclic_foreign_keys_are_nullable_or_cascading` holds that property in
-    place; if someone adds a RESTRICT edge to a cycle, that test fails.
+    place; if someone makes a cycle of non-SET-NULL edges, the sort warns again.
     """
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message=".*unresolvable cycles.*")
-        return list(Base.metadata.sorted_tables)
+    return list(
+        sort_tables(
+            Base.metadata.tables.values(),
+            skip_fn=lambda fk: fk.ondelete == "SET NULL",
+        )
+    )
 
 
 # ── Ownership ────────────────────────────────────────────────────────
@@ -281,7 +296,34 @@ async def purge_user_storage(
         keys.extend(preview_service.preview_keys_for_artifact(artifact_id))
         prefixes.append(f"extractions/{artifact_id}")
     prefixes.extend(summary_service.summary_key_prefix_for_course(cid) for cid in course_ids)
+
+    # Courses deleted earlier: their rows (and ids) are gone, but the ledger
+    # `course_service.delete_course` left behind still names them. This is the
+    # only route to those summary / summary-version blobs (R-020).
+    ledger_prefix = course_service.deleted_course_ledger_prefix(user_id)
+    # The listing is storage input, not trusted: an S3 folder placeholder
+    # ("<prefix>/") has an empty last segment and would turn the sweep into
+    # `summaries/` (every user), so only id-shaped segments name a course. A
+    # failed listing keeps the ledger: sweeping it unread would leave the
+    # deleted-course blobs unattributable forever.
+    ledger_readable = True
+    try:
+        ledger_keys = await store.list_keys(ledger_prefix)
+    except Exception:
+        ledger_readable = False
+        ledger_keys = []
+        logger.warning(
+            "purge_ledger_listing_failed", user_id=user_id, prefix=ledger_prefix, exc_info=True
+        )
+    for key in ledger_keys:
+        segment = key.rsplit("/", 1)[-1]
+        if not _COURSE_ID_RE.fullmatch(segment):
+            logger.warning("purge_ledger_entry_skipped", user_id=user_id, key=key)
+            continue
+        prefixes.append(summary_service.summary_key_prefix_for_course(segment))
     prefixes.append(courseops_service.courseops_key_prefix_for_user(user_id))
+    if ledger_readable:
+        prefixes.append(ledger_prefix)  # last: sweep the markers once they are used
 
     deleted = 0
     for key in keys:
@@ -393,6 +435,18 @@ EXPORT_EXCLUDED_COLUMNS = frozenset(
 )
 
 
+def _export_value(column: str, value: Any) -> Any:
+    """Scrub credentials nested inside a JSON column before export.
+
+    ``EXPORT_EXCLUDED_COLUMNS`` filters by column name, but the per-user AI
+    credentials live as keys inside ``user_settings.settings_json``. The set of
+    credential keys is owned by ``settings_service.SECRET_KEYS``.
+    """
+    if column == "settings_json" and isinstance(value, dict):
+        return settings_service.strip_secret_keys(value)
+    return value
+
+
 async def export_user_data(session: AsyncSession, user_id: str) -> dict[str, Any]:
     """Export everything a user owns as a JSON-serializable dict.
 
@@ -418,7 +472,7 @@ async def export_user_data(session: AsyncSession, user_id: str) -> dict[str, Any
         result = await session.execute(select(table).where(predicate))
         rows = [
             {
-                key: _serialize(value)
+                key: _serialize(_export_value(key, value))
                 for key, value in row._mapping.items()
                 if key not in EXPORT_EXCLUDED_COLUMNS
             }

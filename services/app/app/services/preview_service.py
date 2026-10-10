@@ -101,7 +101,8 @@ async def _convert_to_pdf(src: Path, out_dir: Path) -> Path | None:
 async def ensure_preview_pdf(
     session: AsyncSession,
     artifact_id: str,
-    user_id: str | None = None,
+    *,
+    user_id: str,
 ) -> str | None:
     """Return a storage key for the artifact's preview PDF, converting if needed.
 

@@ -9,6 +9,23 @@ from app.models.course import Course
 from app.services import artifact_service, course_service, review_service
 
 
+async def _owned_artifact(db_session, user_id: str) -> LectureArtifact:
+    """A real artifact owned by `user_id`; review-item ownership resolves through it."""
+    artifact = LectureArtifact(
+        id=generate_id(),
+        user_id=user_id,
+        original_filename=f"{generate_id()}.pdf",
+        file_path="/data/uploads/review-subject.pdf",
+        file_type="pdf",
+        sha256=generate_id().replace("-", "").ljust(64, "0")[:64],
+        file_size_bytes=1,
+        status="ingested",
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    return artifact
+
+
 @pytest.mark.asyncio(loop_scope="session")
 class TestArtifactService:
     """Test artifact_service with a real database."""
@@ -26,7 +43,7 @@ class TestArtifactService:
         assert len(artifact.sha256) == 64
 
         # Verify it's in the DB
-        fetched = await artifact_service.get_artifact(db_session, artifact.id)
+        fetched = await artifact_service.get_artifact(db_session, artifact.id, user_id=test_user_id)
         assert fetched is not None
         assert fetched.sha256 == artifact.sha256
 
@@ -49,13 +66,13 @@ class TestArtifactService:
 class TestReviewService:
     """Test review_service lifecycle with a real database."""
 
-    async def test_create_and_list(self, db_session):
+    async def test_create_and_list(self, db_session, test_user_id):
         """Create a review item, verify it appears in pending list."""
         item = await review_service.create_review_item(
             db_session,
             review_type="classification_course",
             entity_type="lecture_artifact",
-            entity_id=generate_id(),
+            entity_id=(await _owned_artifact(db_session, test_user_id)).id,
             payload={"filename": "test.pdf"},
             suggested_values={"course_code": "CSIT302"},
         )
@@ -63,23 +80,23 @@ class TestReviewService:
 
         assert item.status == "pending"
 
-        pending = await review_service.list_pending_reviews(db_session)
+        pending = await review_service.list_pending_reviews(db_session, user_id=test_user_id)
         assert any(r.id == item.id for r in pending)
 
-    async def test_resolve_lifecycle(self, db_session):
+    async def test_resolve_lifecycle(self, db_session, test_user_id):
         """Create → resolve → verify status and resolution."""
         item = await review_service.create_review_item(
             db_session,
             review_type="classification_course",
             entity_type="lecture_artifact",
-            entity_id=generate_id(),
+            entity_id=(await _owned_artifact(db_session, test_user_id)).id,
             payload={},
             suggested_values={},
         )
         await db_session.commit()
 
         resolved = await review_service.resolve_review_item(
-            db_session, item.id, {"course_code": "CSIT314"}
+            db_session, item.id, {"course_code": "CSIT314"}, user_id=test_user_id
         )
         await db_session.commit()
 
@@ -87,41 +104,43 @@ class TestReviewService:
         assert resolved.resolution_json == {"course_code": "CSIT314"}
         assert resolved.resolved_at is not None
 
-    async def test_dismiss_lifecycle(self, db_session):
+    async def test_dismiss_lifecycle(self, db_session, test_user_id):
         """Create → dismiss → verify status."""
         item = await review_service.create_review_item(
             db_session,
             review_type="classification_course",
             entity_type="lecture_artifact",
-            entity_id=generate_id(),
+            entity_id=(await _owned_artifact(db_session, test_user_id)).id,
             payload={},
             suggested_values={},
         )
         await db_session.commit()
 
-        dismissed = await review_service.dismiss_review_item(db_session, item.id)
+        dismissed = await review_service.dismiss_review_item(
+            db_session, item.id, user_id=test_user_id
+        )
         await db_session.commit()
 
         assert dismissed.status == "dismissed"
         assert dismissed.resolved_at is not None
 
-    async def test_double_resolve_raises(self, db_session):
+    async def test_double_resolve_raises(self, db_session, test_user_id):
         """Resolving an already-resolved item raises ValueError."""
         item = await review_service.create_review_item(
             db_session,
             review_type="classification_course",
             entity_type="lecture_artifact",
-            entity_id=generate_id(),
+            entity_id=(await _owned_artifact(db_session, test_user_id)).id,
             payload={},
             suggested_values={},
         )
         await db_session.commit()
 
-        await review_service.resolve_review_item(db_session, item.id, {})
+        await review_service.resolve_review_item(db_session, item.id, {}, user_id=test_user_id)
         await db_session.commit()
 
         with pytest.raises(ValueError, match="already"):
-            await review_service.resolve_review_item(db_session, item.id, {})
+            await review_service.resolve_review_item(db_session, item.id, {}, user_id=test_user_id)
 
 
 @pytest.mark.asyncio(loop_scope="session")

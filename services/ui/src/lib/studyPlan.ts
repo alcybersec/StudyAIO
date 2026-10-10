@@ -1,3 +1,4 @@
+import { calendarDayIn } from './timezone'
 import type { StudyPlanDay, StudyPlanItem } from '../types'
 
 /** Parse a plan day's ISO date (YYYY-MM-DD) as a local date, or null. */
@@ -15,14 +16,15 @@ export function formatPlanDayLabel(iso: string): string {
   return date.toLocaleDateString('en-US', { weekday: 'short' })
 }
 
-/** Whether a plan day is today (local time). */
-export function isPlanToday(iso: string, now: Date = new Date()): boolean {
+/** Whether a plan day is today, in the user's zone when given (else local). */
+export function isPlanToday(iso: string, now: Date = new Date(), timeZone?: string): boolean {
   const date = parsePlanDate(iso)
   if (!date) return false
+  const today = calendarDayIn(now, timeZone)
   return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
+    date.getFullYear() === today.getUTCFullYear() &&
+    date.getMonth() === today.getUTCMonth() &&
+    date.getDate() === today.getUTCDate()
   )
 }
 

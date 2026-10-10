@@ -1,13 +1,14 @@
 """Calendar service — generate .ics files and markdown task plans from deadlines."""
 
 import io
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from icalendar import Calendar, Event
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import user_today
 from app.models.assessment import Assessment
 from app.models.deadline import Deadline
 from app.services import course_service
@@ -18,18 +19,17 @@ logger = structlog.get_logger()
 async def generate_ics(
     session: AsyncSession,
     course_code: str,
-    user_id: str | None = None,
+    *,
+    user_id: str,
 ) -> tuple[io.BytesIO, str] | None:
     """Generate an .ics calendar file with all deadlines for a course.
 
     Args:
         session: Database session.
         course_code: Course code.
-        user_id: If provided, only match the course owned by this user.
-            Course codes are unique *per user* (uq_courses_code_user), so a
-            code like "CSIT302" resolves to a different course for every
-            user. Endpoints exporting by a caller-supplied code MUST pass
-            this; omitting it exports whichever user's course the code hits.
+        user_id: Owner user UUID. Course codes are unique *per user*
+            (uq_courses_code_user), so the code only resolves within this
+            user's courses.
 
     Returns:
         Tuple of (ics_bytes_io, filename), or None if no course with that code
@@ -85,18 +85,19 @@ async def generate_ics(
 async def generate_task_plan_md(
     session: AsyncSession,
     course_code: str,
-    user_id: str | None = None,
+    *,
+    user_id: str,
+    tz: str | None = None,
 ) -> tuple[io.BytesIO, str] | None:
     """Generate a markdown task plan from deadlines and assessments.
 
     Args:
         session: Database session.
         course_code: Course code.
-        user_id: If provided, only match the course owned by this user.
-            Course codes are unique *per user* (uq_courses_code_user), so a
-            code like "CSIT302" resolves to a different course for every
-            user. Endpoints exporting by a caller-supplied code MUST pass
-            this; omitting it exports whichever user's course the code hits.
+        user_id: Owner user UUID. Course codes are unique *per user*
+            (uq_courses_code_user), so the code only resolves within this
+            user's courses.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Tuple of (md_bytes_io, filename), or None if no course with that code
@@ -119,7 +120,7 @@ async def generate_task_plan_md(
     )
     deadlines = list(deadlines_result.scalars().all())
 
-    today = date.today()
+    today = user_today(tz)
     lines = [
         f"# {course_code} — Task Plan",
         "",

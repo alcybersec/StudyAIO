@@ -357,6 +357,10 @@ class SettingsResponse(BaseModel):
     language: str = "en"
     #: Whether `language` also applies to AI-generated study material.
     content_language: bool = False
+    #: IANA time zone the user's "today" is computed in (R-023). Always present.
+    timezone: str = "UTC"
+    #: Opt-in to the XP leaderboard. Hidden (False) unless the user turns it on.
+    leaderboard_opt_in: bool = False
     dashboard_layout: dict | None = None
 
 
@@ -384,6 +388,8 @@ class SettingsUpdateRequest(BaseModel):
     theme: str | None = None
     language: str | None = None
     content_language: bool | None = None
+    timezone: str | None = None
+    leaderboard_opt_in: bool | None = None
     dashboard_layout: dict | None = None
     #: Credentials to remove. An empty or omitted secret above means "leave
     #: unchanged" — the UI cannot echo back a value it is never sent — so

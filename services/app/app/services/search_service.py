@@ -160,6 +160,7 @@ async def search_all(
         .join(Course, Flashcard.course_id == Course.id)
         .where(
             Course.user_id == user_id,
+            Flashcard.archived_at.is_(None),
             Flashcard.front.ilike(pattern, escape=_LIKE_ESCAPE_CHAR),
         )
         .order_by(Course.code, Flashcard.week)
@@ -217,7 +218,8 @@ async def search_chunks(
     top_k: int | None = None,
     course_id: str | None = None,
     week: int | None = None,
-    user_id: str | None = None,
+    *,
+    user_id: str,
 ) -> list[dict]:
     """Search for similar chunks using pgvector cosine distance.
 
@@ -229,6 +231,7 @@ async def search_chunks(
         top_k: Maximum results to return (default from settings).
         course_id: Optional course UUID to filter by.
         week: Optional week number to filter by (requires course_id).
+        user_id: Owner user UUID; only this user's chunks are searched.
 
     Returns:
         List of dicts with chunk text, metadata, and similarity score.
@@ -253,12 +256,10 @@ async def search_chunks(
         )
         .join(LectureArtifact, Chunk.artifact_id == LectureArtifact.id)
         .join(Course, LectureArtifact.course_id == Course.id)
-        .where(Chunk.embedding.isnot(None))
+        .where(Chunk.embedding.isnot(None), LectureArtifact.user_id == user_id)
     )
 
     # Apply scope filters
-    if user_id:
-        stmt = stmt.where(LectureArtifact.user_id == user_id)
     if course_id:
         stmt = stmt.where(LectureArtifact.course_id == course_id)
     if week is not None:

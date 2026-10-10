@@ -139,7 +139,7 @@ async def ingest_file(
         FileNotFoundError: If source file doesn't exist.
     """
     if artifact_id:
-        artifact = await get_artifact(session, artifact_id, user_id=user_id or None)
+        artifact = await get_artifact(session, artifact_id, user_id=user_id)
         if artifact is None:
             raise ValueError(f"Pre-created artifact not found: {artifact_id}")
         logger.info(
@@ -291,21 +291,21 @@ async def ingest_text_capture(
 
 
 async def get_artifact(
-    session: AsyncSession, artifact_id: str, user_id: str | None = None
+    session: AsyncSession, artifact_id: str, *, user_id: str
 ) -> LectureArtifact | None:
-    """Get a single artifact by ID, optionally scoped by user.
+    """Get a single artifact by ID, scoped to its owner.
 
     Args:
         session: Database session.
         artifact_id: Artifact UUID.
-        user_id: If provided, only return artifact owned by this user.
+        user_id: Owner user UUID; only an artifact this user owns is returned.
 
     Returns:
         LectureArtifact if found, None otherwise.
     """
-    query = select(LectureArtifact).where(LectureArtifact.id == artifact_id)
-    if user_id is not None:
-        query = query.where(LectureArtifact.user_id == user_id)
+    query = select(LectureArtifact).where(
+        LectureArtifact.id == artifact_id, LectureArtifact.user_id == user_id
+    )
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
@@ -316,12 +316,13 @@ async def apply_classification(
     course_code: str | None = None,
     week: int | None = None,
     title: str | None = None,
-    user_id: str | None = None,
+    *,
+    user_id: str,
 ) -> Course | None:
     """Apply classification fields to an artifact (shared move logic).
 
     Used by review-item resolution and reclassification. Resolves the
-    course by code (optionally scoped to a user) and updates the artifact's
+    course by code (scoped to the caller) and updates the artifact's
     course/week/title in place.
 
     Args:
@@ -330,16 +331,14 @@ async def apply_classification(
         course_code: Target course code (skipped if not found).
         week: Target week number.
         title: New display title.
-        user_id: If provided, the course lookup is scoped to this user.
+        user_id: Owner user UUID; the course lookup is scoped to this user.
 
     Returns:
         The resolved Course, or None if course_code was absent/not found.
     """
     course = None
     if course_code:
-        query = select(Course).where(Course.code == course_code)
-        if user_id is not None:
-            query = query.where(Course.user_id == user_id)
+        query = select(Course).where(Course.code == course_code, Course.user_id == user_id)
         result = await session.execute(query)
         course = result.scalar_one_or_none()
         if course:
@@ -458,7 +457,8 @@ async def reclassify(
 
 async def list_artifacts(
     session: AsyncSession,
-    user_id: str | None = None,
+    *,
+    user_id: str,
     course_id: str | None = None,
     week: int | None = None,
 ) -> list[LectureArtifact]:
@@ -466,16 +466,14 @@ async def list_artifacts(
 
     Args:
         session: Database session.
-        user_id: Filter by owner user UUID.
+        user_id: Owner user UUID (required).
         course_id: Filter by course UUID.
         week: Filter by week number.
 
     Returns:
         List of matching LectureArtifact records.
     """
-    query = select(LectureArtifact)
-    if user_id is not None:
-        query = query.where(LectureArtifact.user_id == user_id)
+    query = select(LectureArtifact).where(LectureArtifact.user_id == user_id)
     if course_id is not None:
         query = query.where(LectureArtifact.course_id == course_id)
     if week is not None:

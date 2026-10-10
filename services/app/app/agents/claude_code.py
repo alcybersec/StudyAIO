@@ -21,8 +21,8 @@ from app.agents.base import (
     QuizQuestionData,
     SummaryResult,
 )
+from app.core.ai_settings import get_effective_setting
 from app.core.exceptions import AgentError
-from app.services.settings_service import get_effective_setting
 
 logger = structlog.get_logger()
 
@@ -194,7 +194,7 @@ class ClaudeCodeAdapter(AgentAdapter):
             # stdout first: `claude -p` writes its answer, and its refusal to
             # produce one, there. stderr is where warnings go.
             error_text = _describe_failure(stdout, stderr)
-            raise AgentError(f"Claude Code failed (exit {process.returncode}): {error_text}")
+            raise self._agent_error(f"Claude Code failed (exit {process.returncode}): {error_text}")
 
         result = stdout.decode().strip()
         # The CLI runs with --output-format text and reports no token usage, so

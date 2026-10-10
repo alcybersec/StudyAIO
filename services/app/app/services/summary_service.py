@@ -14,6 +14,7 @@ from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.extraction import Extraction
 from app.models.summary import Summary
+from app.models.summary_version import SummaryVersion
 
 logger = structlog.get_logger()
 
@@ -95,6 +96,58 @@ async def get_existing_summary(session: AsyncSession, course_id: str, week: int)
     return result.scalar_one_or_none()
 
 
+async def snapshot_summary(
+    session: AsyncSession, summary: Summary, storage: StorageBackend | None = None
+) -> SummaryVersion:
+    """Retain the current state of ``summary`` as an immutable ``SummaryVersion``.
+
+    Floor 4: a re-summarize (or a merge ``keep_source``) never destroys the
+    version it replaces. Call this *before* mutating ``summary``. The row is
+    the source of truth for the text, so the blob is (re)written from
+    ``content_md`` to ``Week<N>.v<version>.md`` -- even when the pipeline has
+    already overwritten the unversioned key the row points at. An existing
+    key is never put over.
+
+    Args:
+        session: Database session.
+        summary: The summary about to be replaced, still holding its old state.
+        storage: Storage backend, defaulting to the configured singleton.
+
+    Returns:
+        The snapshot row (added to the session, not committed).
+    """
+    store = storage if storage is not None else get_storage()
+    owner = await session.scalar(select(Course.user_id).where(Course.id == summary.course_id))
+    key = build_summary_storage_key(summary.course_id, summary.week, version=summary.version)
+    try:
+        if not await store.exists(key):
+            await store.put(key, (summary.content_md or "").encode("utf-8"))
+    except Exception:
+        # The text is retained in the row below; a missing blob copy is
+        # recoverable from it, a failed re-summarize is not worth that.
+        logger.warning("summary_version_blob_failed", summary_id=summary.id, key=key, exc_info=True)
+
+    snapshot = SummaryVersion(
+        id=generate_id(),
+        user_id=owner,
+        course_id=summary.course_id,
+        week=summary.week,
+        version=summary.version,
+        content_md=summary.content_md,
+        file_path=key,
+        source_artifacts=list(summary.source_artifacts or []),
+        generated_at=summary.updated_at,
+    )
+    session.add(snapshot)
+    logger.info(
+        "summary_version_retained",
+        course_id=summary.course_id,
+        week=summary.week,
+        version=summary.version,
+    )
+    return snapshot
+
+
 async def create_or_update_summary(
     session: AsyncSession,
     course_id: str,
@@ -105,8 +158,9 @@ async def create_or_update_summary(
 ) -> Summary:
     """Create a new summary or update an existing one.
 
-    If a summary already exists for the course+week, increments version
-    and updates content. Otherwise creates a new one.
+    If a summary already exists for the course+week, the old state is first
+    retained as a ``SummaryVersion`` (see :func:`snapshot_summary`), then the
+    version is incremented and the content updated. Otherwise creates a new one.
 
     Args:
         session: Database session.
@@ -122,6 +176,8 @@ async def create_or_update_summary(
     existing = await get_existing_summary(session, course_id, week)
 
     if existing:
+        await snapshot_summary(session, existing)
+
         # Merge source artifact IDs (avoid duplicates)
         current_sources = existing.source_artifacts or []
         merged_sources = list(set(current_sources + source_artifact_ids))
@@ -163,9 +219,9 @@ async def create_or_update_summary(
 
 
 async def get_summary_by_id(
-    session: AsyncSession, summary_id: str, user_id: str | None = None
+    session: AsyncSession, summary_id: str, *, user_id: str
 ) -> Summary | None:
-    """Get a summary by its ID, optionally scoped by owner.
+    """Get a summary by its ID, scoped to its owner.
 
     Summary has no user_id column of its own; ownership runs through the
     course it belongs to.
@@ -173,23 +229,23 @@ async def get_summary_by_id(
     Args:
         session: Database session.
         summary_id: Summary UUID.
-        user_id: If provided, only return the summary when its course belongs
-            to this user. Endpoints exposing summaries by id MUST pass this;
-            omitting it returns the summary regardless of owner and is only
-            appropriate for trusted internal callers.
+        user_id: Owner user UUID (required). Only a summary whose course
+            belongs to this user is returned.
 
     Returns:
         Summary if found, None otherwise.
     """
-    query = select(Summary).where(Summary.id == summary_id)
-    if user_id is not None:
-        query = query.join(Course, Summary.course_id == Course.id).where(Course.user_id == user_id)
+    query = (
+        select(Summary)
+        .join(Course, Summary.course_id == Course.id)
+        .where(Summary.id == summary_id, Course.user_id == user_id)
+    )
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
 
 async def get_summary_for_week(
-    session: AsyncSession, course_code: str, week: int
+    session: AsyncSession, course_code: str, week: int, *, user_id: str
 ) -> Summary | None:
     """Get the summary for a specific course code + week.
 
@@ -197,17 +253,24 @@ async def get_summary_for_week(
         session: Database session.
         course_code: Course code (e.g., "CSIT302").
         week: Week number.
+        user_id: The caller. Course codes are unique per user, not globally,
+            so the code alone can match several users' summaries.
 
     Returns:
         Summary if found, None otherwise.
     """
     from app.models.course import Course as CourseModel
 
-    result = await session.execute(
+    query = (
         select(Summary)
         .join(CourseModel, Summary.course_id == CourseModel.id)
-        .where(CourseModel.code == course_code, Summary.week == week)
+        .where(
+            CourseModel.code == course_code,
+            Summary.week == week,
+            CourseModel.user_id == user_id,
+        )
     )
+    result = await session.execute(query)
     return result.scalar_one_or_none()
 
 
@@ -262,7 +325,7 @@ def summary_key_prefix_for_course(course_id: str) -> str:
     return f"{SUMMARY_KEY_PREFIX}/{course_id}"
 
 
-def build_summary_storage_key(course_id: str, week: int) -> str:
+def build_summary_storage_key(course_id: str, week: int, version: int | None = None) -> str:
     """Build the storage key for a summary markdown file.
 
     Keyed on the course **id**, not its code (#92). Course codes are unique
@@ -282,11 +345,15 @@ def build_summary_storage_key(course_id: str, week: int) -> str:
     Args:
         course_id: Course UUID.
         week: Week number.
+        version: When given, the key of that specific version
+            (``Week<N>.v<version>.md``). Versioned keys are written once and
+            never put over, which is how a superseded summary's blob survives.
 
     Returns:
-        Key like ``summaries/0192c4d5-.../Week3.md``
+        Key like ``summaries/0192c4d5-.../Week3.md`` (or ``.../Week3.v2.md``).
     """
-    return f"{summary_key_prefix_for_course(course_id)}/Week{week}.md"
+    suffix = f".v{version}" if version is not None else ""
+    return f"{summary_key_prefix_for_course(course_id)}/Week{week}{suffix}.md"
 
 
 async def backfill_summary_storage_keys(

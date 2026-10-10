@@ -4,7 +4,7 @@ import structlog
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, get_user_tz
 from app.api.gamification_schemas import (
     AchievementItem,
     AchievementsListResponse,
@@ -74,10 +74,11 @@ async def get_achievements(
 async def get_daily_challenge(
     request: Request,
     user: User = Depends(get_current_user_or_default),
+    tz: str = Depends(get_user_tz),
     session: AsyncSession = Depends(get_session),
 ) -> DailyChallengeResponse:
     """Get today's challenge with progress."""
-    progress = await challenge_service.get_user_challenge_progress(session, user.id)
+    progress = await challenge_service.get_user_challenge_progress(session, user.id, tz=tz)
     return DailyChallengeResponse(**progress)
 
 
@@ -85,7 +86,7 @@ async def get_daily_challenge(
     "/gamification/leaderboard",
     response_model=LeaderboardResponse,
     summary="Get XP leaderboard",
-    description="Returns top users ranked by total XP.",
+    description="Returns opted-in users ranked by total XP, plus the caller.",
 )
 @limiter.limit("30/minute")
 async def get_leaderboard(
@@ -94,7 +95,7 @@ async def get_leaderboard(
     session: AsyncSession = Depends(get_session),
 ) -> LeaderboardResponse:
     """Get global XP leaderboard."""
-    entries = await xp_service.get_leaderboard(session)
+    entries = await xp_service.get_leaderboard(session, user_id=user.id)
     return LeaderboardResponse(
         entries=[LeaderboardEntry(**e) for e in entries],
     )
@@ -131,5 +132,5 @@ async def mark_achievements_notified(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Mark achievements as notified."""
-    await achievement_service.mark_notified(session, body.user_achievement_ids)
+    await achievement_service.mark_notified(session, body.user_achievement_ids, user_id=user.id)
     await session.commit()

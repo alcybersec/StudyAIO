@@ -82,10 +82,8 @@ async def create_review_item(
     return review
 
 
-async def list_pending_reviews(
-    session: AsyncSession, user_id: str | None = None
-) -> list[ReviewItem]:
-    """Get all pending review items, optionally scoped by owner.
+async def list_pending_reviews(session: AsyncSession, *, user_id: str) -> list[ReviewItem]:
+    """Get all pending review items, scoped by owner.
 
     Ownership is resolved with _owned_by, the same predicate the
     id-addressed paths use. This used to be an inner join onto
@@ -97,8 +95,8 @@ async def list_pending_reviews(
 
     Args:
         session: Database session.
-        user_id: If provided, only items whose referenced entity belongs to
-            this user. Endpoints MUST pass it.
+        user_id: Owner user UUID (required); only items whose referenced entity belongs to
+            this user.
 
     Returns:
         List of pending ReviewItem records, newest first.
@@ -108,16 +106,15 @@ async def list_pending_reviews(
         .where(ReviewItem.status == "pending")
         .order_by(ReviewItem.created_at.desc())
     )
-    if user_id is not None:
-        query = query.where(_owned_by(user_id))
+    query = query.where(_owned_by(user_id))
     result = await session.execute(query)
     return list(result.scalars().all())
 
 
 async def list_reviews_by_status(
-    session: AsyncSession, status: str, user_id: str | None = None
+    session: AsyncSession, status: str, *, user_id: str
 ) -> list[ReviewItem]:
-    """List review items with a given status, optionally scoped by owner.
+    """List review items with a given status, scoped by owner.
 
     The non-pending counterpart to list_pending_reviews. It exists so the
     API layer does not have to hand-roll the ownership join -- the version
@@ -127,8 +124,8 @@ async def list_reviews_by_status(
     Args:
         session: Database session.
         status: Review status to filter on (e.g. "resolved", "dismissed").
-        user_id: If provided, only items whose referenced entity belongs to
-            this user. Endpoints MUST pass it.
+        user_id: Owner user UUID (required); only items whose referenced entity belongs to
+            this user.
 
     Returns:
         List of ReviewItem records, newest first.
@@ -136,8 +133,7 @@ async def list_reviews_by_status(
     query = (
         select(ReviewItem).where(ReviewItem.status == status).order_by(ReviewItem.created_at.desc())
     )
-    if user_id is not None:
-        query = query.where(_owned_by(user_id))
+    query = query.where(_owned_by(user_id))
     result = await session.execute(query)
     return list(result.scalars().all())
 
@@ -186,9 +182,9 @@ def _owned_by(user_id: str):
 
 
 async def get_review_item(
-    session: AsyncSession, review_id: str, user_id: str | None = None
+    session: AsyncSession, review_id: str, *, user_id: str
 ) -> ReviewItem | None:
-    """Get a single review item by ID, optionally scoped by owner.
+    """Get a single review item by ID, scoped by owner.
 
     ReviewItem has no user_id column of its own; ownership runs through the
     entity it references. See _owned_by for the per-entity-type mapping.
@@ -196,17 +192,14 @@ async def get_review_item(
     Args:
         session: Database session.
         review_id: ReviewItem UUID.
-        user_id: If provided, only return the item when the entity it
-            references belongs to this user. Endpoints exposing review items
-            by id MUST pass this; omitting it returns the item regardless of
-            owner and is only appropriate for trusted internal callers.
+        user_id: Owner user UUID (required); only return the item when the entity it
+            references belongs to this user.
 
     Returns:
         ReviewItem if found, None otherwise.
     """
     query = select(ReviewItem).where(ReviewItem.id == review_id)
-    if user_id is not None:
-        query = query.where(_owned_by(user_id))
+    query = query.where(_owned_by(user_id))
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
@@ -215,7 +208,8 @@ async def resolve_review_item(
     session: AsyncSession,
     review_id: str,
     resolution: dict,
-    user_id: str | None = None,
+    *,
+    user_id: str,
 ) -> ReviewItem:
     """Resolve a pending review item with a resolution.
 
@@ -223,7 +217,7 @@ async def resolve_review_item(
         session: Database session.
         review_id: ReviewItem UUID.
         resolution: Resolution data dict.
-        user_id: If provided, only resolve an item whose artifact belongs to
+        user_id: Owner user UUID (required); only resolve an item whose artifact belongs to
             this user; a foreign item is reported as not found. Endpoints
             MUST pass this -- resolving mutates state and resumes a pipeline.
 
@@ -253,15 +247,13 @@ async def resolve_review_item(
     return item
 
 
-async def dismiss_review_item(
-    session: AsyncSession, review_id: str, user_id: str | None = None
-) -> ReviewItem:
+async def dismiss_review_item(session: AsyncSession, review_id: str, *, user_id: str) -> ReviewItem:
     """Dismiss a pending review item.
 
     Args:
         session: Database session.
         review_id: ReviewItem UUID.
-        user_id: If provided, only dismiss an item whose artifact belongs to
+        user_id: Owner user UUID (required); only dismiss an item whose artifact belongs to
             this user; a foreign item is reported as not found. Endpoints
             MUST pass this -- dismissing mutates state.
 
@@ -285,8 +277,8 @@ async def dismiss_review_item(
     return item
 
 
-async def count_pending_reviews(session: AsyncSession, user_id: str | None = None) -> int:
-    """Count pending review items, optionally scoped by owner.
+async def count_pending_reviews(session: AsyncSession, *, user_id: str) -> int:
+    """Count pending review items, scoped by owner.
 
     Uses the same _owned_by predicate as list_pending_reviews. The two must
     agree: this count is what the inbox badge shows, and a badge that
@@ -294,14 +286,13 @@ async def count_pending_reviews(session: AsyncSession, user_id: str | None = Non
 
     Args:
         session: Database session.
-        user_id: If provided, only count items whose referenced entity
+        user_id: Owner user UUID (required); only count items whose referenced entity
             belongs to this user.
 
     Returns:
         Number of pending reviews.
     """
     query = select(func.count(ReviewItem.id)).where(ReviewItem.status == "pending")
-    if user_id is not None:
-        query = query.where(_owned_by(user_id))
+    query = query.where(_owned_by(user_id))
     result = await session.execute(query)
     return result.scalar_one()

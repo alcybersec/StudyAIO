@@ -39,6 +39,8 @@ async def generate_timed_plan(
     total_minutes: int,
     course_code: str | None = None,
     exam_id: str | None = None,
+    *,
+    user_id: str,
 ) -> TimedSessionPlan:
     """Generate a time-budgeted study plan.
 
@@ -47,6 +49,8 @@ async def generate_timed_plan(
         total_minutes: Total available study time in minutes (5-180).
         course_code: Optional course code to scope the session.
         exam_id: Optional exam ID to scope to exam's course/weeks.
+        user_id: The caller. Every query is filtered to this user's rows;
+            the API always passes it.
 
     Returns:
         TimedSessionPlan with card and quiz IDs.
@@ -56,7 +60,8 @@ async def generate_timed_plan(
     if exam_id:
         from app.models.exam import Exam
 
-        exam_result = await session.execute(select(Exam).where(Exam.id == exam_id))
+        exam_query = select(Exam).where(Exam.id == exam_id, Exam.user_id == user_id)
+        exam_result = await session.execute(exam_query)
         exam = exam_result.scalar_one_or_none()
         if exam:
             # Resolve course_code from exam
@@ -76,7 +81,7 @@ async def generate_timed_plan(
 
     # Fetch due flashcards
     cards = await srs_service.get_due_cards(
-        session, course_code=course_code, week=None, limit=card_budget
+        session, course_code=course_code, week=None, limit=card_budget, user_id=user_id
     )
 
     # If exam_weeks specified, prefer cards from those weeks
@@ -87,6 +92,7 @@ async def generate_timed_plan(
 
     # Fetch quiz questions
     quiz_query = select(QuizQuestion).join(Course, QuizQuestion.course_id == Course.id)
+    quiz_query = quiz_query.where(QuizQuestion.archived_at.is_(None), Course.user_id == user_id)
     if course_code:
         quiz_query = quiz_query.where(Course.code == course_code)
     if exam_weeks:

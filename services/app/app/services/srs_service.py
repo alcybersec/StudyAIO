@@ -7,6 +7,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.localday import local_day_end_utc
 from app.core.utils import generate_id
 from app.models.course import Course
 from app.models.flashcard import Flashcard
@@ -83,7 +84,9 @@ async def get_due_cards(
     course_code: str | None = None,
     week: int | None = None,
     limit: int = 20,
-    user_id: str | None = None,
+    *,
+    user_id: str,
+    tz: str | None = None,
 ) -> list[Flashcard]:
     """Get flashcards due for review.
 
@@ -95,17 +98,22 @@ async def get_due_cards(
         course_code: Optional course code filter.
         week: Optional week filter.
         limit: Maximum cards to return.
+        user_id: Owner user UUID; only this user's cards are returned.
+        tz: IANA zone of the caller; cards due any time today (their day) are due.
 
     Returns:
         List of Flashcard objects due for review.
     """
-    now = datetime.now(UTC)
+    cutoff = local_day_end_utc(tz)
 
     query = (
         select(Flashcard)
         .outerjoin(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
         .join(Course, Flashcard.course_id == Course.id)
-        .where((FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at <= now))
+        .where(
+            Flashcard.archived_at.is_(None),
+            (FlashcardReview.id.is_(None)) | (FlashcardReview.next_review_at < cutoff),
+        )
         .order_by(
             # New cards (no review) first, then most overdue
             FlashcardReview.next_review_at.asc().nulls_first()
@@ -113,8 +121,7 @@ async def get_due_cards(
         .limit(limit)
     )
 
-    if user_id:
-        query = query.where(Course.user_id == user_id)
+    query = query.where(Course.user_id == user_id)
     if course_code:
         query = query.where(Course.code == course_code)
     if week is not None:
@@ -124,11 +131,41 @@ async def get_due_cards(
     return list(result.scalars().all())
 
 
+async def get_owned_flashcard(
+    session: AsyncSession, flashcard_id: str, *, user_id: str
+) -> Flashcard | None:
+    """Fetch a flashcard only if its course belongs to ``user_id``.
+
+    Flashcards carry no user_id of their own; ownership is the course's.
+    Archived cards are treated as absent: they are not reviewable as active
+    study (their history stays readable through the list/stat queries).
+
+    Args:
+        session: Database session.
+        flashcard_id: Flashcard UUID (caller supplied).
+        user_id: The caller.
+
+    Returns:
+        The flashcard, or None when absent or owned by someone else.
+    """
+    result = await session.execute(
+        select(Flashcard)
+        .join(Course, Flashcard.course_id == Course.id)
+        .where(
+            Flashcard.id == flashcard_id,
+            Course.user_id == user_id,
+            Flashcard.archived_at.is_(None),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def record_review(
     session: AsyncSession,
     flashcard_id: str,
     quality: int,
-    user_id: str | None = None,
+    *,
+    user_id: str,
 ) -> FlashcardReview:
     """Record a flashcard review and update scheduling via SM-2.
 
@@ -138,6 +175,7 @@ async def record_review(
         session: Database session.
         flashcard_id: The flashcard being reviewed.
         quality: Rating 0-5.
+        user_id: Owner user UUID; the review is looked up and stored under it.
 
     Returns:
         Updated FlashcardReview record.
@@ -145,9 +183,9 @@ async def record_review(
     now = datetime.now(UTC)
 
     # Find existing review
-    result = await session.execute(
-        select(FlashcardReview).where(FlashcardReview.flashcard_id == flashcard_id)
-    )
+    review_query = select(FlashcardReview).where(FlashcardReview.flashcard_id == flashcard_id)
+    review_query = review_query.where(FlashcardReview.user_id == user_id)
+    result = await session.execute(review_query)
     review = result.scalar_one_or_none()
 
     if review:
@@ -164,7 +202,7 @@ async def record_review(
         sm2 = calculate_sm2(quality)
         review = FlashcardReview(
             id=generate_id(),
-            user_id=user_id or "",
+            user_id=user_id,
             flashcard_id=flashcard_id,
             ease_factor=sm2.ease_factor,
             interval_days=sm2.interval_days,
@@ -193,7 +231,9 @@ async def get_study_stats(
     session: AsyncSession,
     course_code: str | None = None,
     week: int | None = None,
-    user_id: str | None = None,
+    *,
+    user_id: str,
+    tz: str | None = None,
 ) -> StudyStats:
     """Get study statistics for a scope.
 
@@ -201,16 +241,20 @@ async def get_study_stats(
         session: Database session.
         course_code: Optional course code filter.
         week: Optional week filter.
+        tz: IANA zone of the caller; due_today counts through the end of their day.
 
     Returns:
         StudyStats with total, due_today, mastered, learning, new counts.
     """
-    now = datetime.now(UTC)
+    cutoff = local_day_end_utc(tz)
 
     # Base query for total flashcards in scope
-    base = select(Flashcard).join(Course, Flashcard.course_id == Course.id)
-    if user_id:
-        base = base.where(Course.user_id == user_id)
+    base = (
+        select(Flashcard)
+        .join(Course, Flashcard.course_id == Course.id)
+        .where(Flashcard.archived_at.is_(None))
+    )
+    base = base.where(Course.user_id == user_id)
     if course_code:
         base = base.where(Course.code == course_code)
     if week is not None:
@@ -225,9 +269,9 @@ async def get_study_stats(
         select(Flashcard.id, FlashcardReview.interval_days, FlashcardReview.next_review_at)
         .join(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
         .join(Course, Flashcard.course_id == Course.id)
+        .where(Flashcard.archived_at.is_(None))
     )
-    if user_id:
-        reviewed_base = reviewed_base.where(Course.user_id == user_id)
+    reviewed_base = reviewed_base.where(Course.user_id == user_id)
     if course_code:
         reviewed_base = reviewed_base.where(Course.code == course_code)
     if week is not None:
@@ -245,7 +289,7 @@ async def get_study_stats(
             mastered += 1
         else:
             learning += 1
-        if next_review <= now:
+        if next_review < cutoff:
             due_today += 1
 
     new_count = total - len(reviewed_rows)
@@ -261,35 +305,38 @@ async def get_study_stats(
     )
 
 
-async def get_global_study_stats(session: AsyncSession, user_id: str | None = None) -> StudyStats:
+async def get_global_study_stats(
+    session: AsyncSession, *, user_id: str, tz: str | None = None
+) -> StudyStats:
     """Get study statistics across all courses.
 
     Returns:
         StudyStats aggregated across the entire flashcard pool.
     """
-    return await get_study_stats(session, user_id=user_id)
+    return await get_study_stats(session, user_id=user_id, tz=tz)
 
 
 async def get_per_course_due_counts(
     session: AsyncSession,
-    user_id: str | None = None,
+    *,
+    user_id: str,
+    tz: str | None = None,
 ) -> list[dict]:
     """Get due card counts grouped by course.
 
     Returns:
         List of dicts with course_code and due_count.
     """
-    now = datetime.now(UTC)
+    cutoff = local_day_end_utc(tz)
 
     # New cards (no review record) per course
     new_query = (
         select(Course.code, func.count(Flashcard.id))
         .join(Flashcard, Course.id == Flashcard.course_id)
         .outerjoin(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
-        .where(FlashcardReview.id.is_(None))
+        .where(FlashcardReview.id.is_(None), Flashcard.archived_at.is_(None))
     )
-    if user_id:
-        new_query = new_query.where(Course.user_id == user_id)
+    new_query = new_query.where(Course.user_id == user_id)
     new_query = new_query.group_by(Course.code)
     new_result = await session.execute(new_query)
     new_counts = {code: count for code, count in new_result.all()}
@@ -299,10 +346,9 @@ async def get_per_course_due_counts(
         select(Course.code, func.count(Flashcard.id))
         .join(Flashcard, Course.id == Flashcard.course_id)
         .join(FlashcardReview, Flashcard.id == FlashcardReview.flashcard_id)
-        .where(FlashcardReview.next_review_at <= now)
+        .where(FlashcardReview.next_review_at < cutoff, Flashcard.archived_at.is_(None))
     )
-    if user_id:
-        overdue_query = overdue_query.where(Course.user_id == user_id)
+    overdue_query = overdue_query.where(Course.user_id == user_id)
     overdue_query = overdue_query.group_by(Course.code)
     overdue_result = await session.execute(overdue_query)
     overdue_counts = {code: count for code, count in overdue_result.all()}

@@ -66,3 +66,6 @@ services/app/alembic/versions/__pycache__/
 # Local-only dev tooling — removed from the public repo, kept for local dev
 /CLAUDE.md
 /.claude/
+
+# parallel coverage runs (xdist / pytest-cov) leave per-process data files
+.coverage.*

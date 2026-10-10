@@ -22,13 +22,14 @@ never blocked mid-run, so an accepted upload always finishes rather than leaving
 an artifact with a summary and no flashcards.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.clock import utc_today
 from app.core.exceptions import GlobalCeilingError, QuotaExceededError
 from app.models.course import Course
 from app.models.usage_record import UsageRecord
@@ -80,7 +81,7 @@ async def get_usage_today(session: AsyncSession, user_id: str) -> UsageRecord | 
     result = await session.execute(
         select(UsageRecord).where(
             UsageRecord.user_id == user_id,
-            UsageRecord.record_date == date.today(),
+            UsageRecord.record_date == utc_today(),
         )
     )
     return result.scalar_one_or_none()
@@ -96,7 +97,7 @@ async def get_monthly_upload_count(session: AsyncSession, user_id: str) -> int:
     Returns:
         Total uploads this month.
     """
-    today = date.today()
+    today = utc_today()
     month_start = today.replace(day=1)
 
     result = await session.execute(
@@ -154,7 +155,7 @@ async def get_global_usage_today(session: AsyncSession) -> tuple[int, int]:
         .select_from(UsageRecord)
         .outerjoin(UserSettings, UserSettings.user_id == UsageRecord.user_id)
         .where(
-            UsageRecord.record_date == date.today(),
+            UsageRecord.record_date == utc_today(),
             or_(selected.is_(None), selected == settings_service.STUDYAIO_BACKEND),
         )
     )

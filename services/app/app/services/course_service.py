@@ -6,12 +6,13 @@ import structlog
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.storage import get_storage, normalize_storage_key
+from app.core.storage import StorageBackend, get_storage, normalize_storage_key
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.flashcard import Flashcard
 from app.models.quiz import QuizQuestion
 from app.models.summary import Summary
+from app.models.summary_version import SummaryVersion
 from app.services import summary_service
 
 logger = structlog.get_logger()
@@ -19,22 +20,21 @@ logger = structlog.get_logger()
 
 async def list_courses(
     session: AsyncSession,
-    user_id: str | None = None,
+    *,
+    user_id: str,
     include_archived: bool = False,
 ) -> list[Course]:
-    """Get all courses, optionally filtered by user, ordered by code.
+    """Get the user's courses, ordered by code.
 
     Args:
         session: Database session.
-        user_id: Filter by owner user UUID.
+        user_id: Owner user UUID (required; the query is always scoped to it).
         include_archived: If False (default), archived courses are excluded.
 
     Returns:
         List of courses ordered alphabetically by code.
     """
-    query = select(Course)
-    if user_id is not None:
-        query = query.where(Course.user_id == user_id)
+    query = select(Course).where(Course.user_id == user_id)
     if not include_archived:
         query = query.where(Course.archived_at.is_(None))
     query = query.order_by(Course.code)
@@ -42,30 +42,24 @@ async def list_courses(
     return list(result.scalars().all())
 
 
-async def get_course_by_code(
-    session: AsyncSession, code: str, user_id: str | None = None
-) -> Course | None:
-    """Get a course by its code, optionally scoped by user.
+async def get_course_by_code(session: AsyncSession, code: str, *, user_id: str) -> Course | None:
+    """Get a course by its code, scoped to its owner.
 
     Args:
         session: Database session.
         code: Course code (e.g., "CSIT302").
-        user_id: If provided, only return course owned by this user.
+        user_id: Owner user UUID; only a course this user owns is returned.
 
     Returns:
         Course if found, None otherwise.
     """
-    query = select(Course).where(Course.code == code)
-    if user_id is not None:
-        query = query.where(Course.user_id == user_id)
+    query = select(Course).where(Course.code == code, Course.user_id == user_id)
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
 
-async def get_course_by_id(
-    session: AsyncSession, course_id: str, user_id: str | None = None
-) -> Course | None:
-    """Get a course by its id, optionally scoped by user.
+async def get_course_by_id(session: AsyncSession, course_id: str, *, user_id: str) -> Course | None:
+    """Get a course by its id, scoped to its owner.
 
     Course *codes* are unique only per user (``uq_courses_code_user``), so
     anything that has to be unique across the whole instance -- a storage key,
@@ -75,28 +69,27 @@ async def get_course_by_id(
     Args:
         session: Database session.
         course_id: Course UUID.
-        user_id: If provided, only return the course if this user owns it.
+        user_id: Owner user UUID; only a course this user owns is returned.
 
     Returns:
-        Course if found (and owned, when ``user_id`` is given), None otherwise.
+        Course if found (and owned by ``user_id``), None otherwise.
     """
-    query = select(Course).where(Course.id == course_id)
-    if user_id is not None:
-        query = query.where(Course.user_id == user_id)
+    query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
 
 async def list_courses_with_stats(
     session: AsyncSession,
-    user_id: str | None = None,
+    *,
+    user_id: str,
     include_archived: bool = False,
 ) -> list[dict]:
     """Get all courses with aggregate stats in O(1) queries.
 
     Args:
         session: Database session.
-        user_id: Filter by owner user UUID.
+        user_id: Owner user UUID (required; the query is always scoped to it).
         include_archived: If False (default), archived courses are excluded.
 
     Returns:
@@ -189,7 +182,7 @@ async def get_course_weeks(session: AsyncSession, course_id: str) -> list[dict]:
             Flashcard.week,
             func.count(Flashcard.id).label("fc_count"),
         )
-        .where(Flashcard.course_id == course_id)
+        .where(Flashcard.course_id == course_id, Flashcard.archived_at.is_(None))
         .group_by(Flashcard.week)
     )
     flashcard_data = {row.week: row.fc_count for row in fc_rows}
@@ -200,7 +193,7 @@ async def get_course_weeks(session: AsyncSession, course_id: str) -> list[dict]:
             QuizQuestion.week,
             func.count(QuizQuestion.id).label("qq_count"),
         )
-        .where(QuizQuestion.course_id == course_id)
+        .where(QuizQuestion.course_id == course_id, QuizQuestion.archived_at.is_(None))
         .group_by(QuizQuestion.week)
     )
     quiz_data = {row.week: row.qq_count for row in qq_rows}
@@ -318,16 +311,41 @@ async def archive_course(session: AsyncSession, user_id: str, code: str) -> Cour
     return course
 
 
-async def delete_course(session: AsyncSession, user_id: str, code: str) -> dict:
+def deleted_course_ledger_prefix(user_id: str) -> str:
+    """Storage prefix of the deleted-course ledger for one user.
+
+    Deleting a course removes its ``summaries``/``summary_versions`` rows but
+    keeps their blobs (ADR 0004), after which the course id is recorded nowhere
+    in the database. The ledger is a zero-byte marker per deleted course, so the
+    account purge can still find ``summaries/<course_id>`` later (R-020).
+    """
+    return f"ledger/deleted-courses/{user_id}"
+
+
+def deleted_course_ledger_key(user_id: str, course_id: str) -> str:
+    """Ledger marker key for one deleted course (last segment is the course id)."""
+    return f"{deleted_course_ledger_prefix(user_id)}/{course_id}"
+
+
+async def delete_course(
+    session: AsyncSession,
+    user_id: str,
+    code: str,
+    storage: StorageBackend | None = None,
+) -> dict:
     """Delete a course and all its database children.
 
     Storage blobs (uploads, extractions, summaries on disk) are deliberately
-    left untouched — only database rows are removed.
+    left untouched — only database rows are removed. The one storage *write* is
+    a ledger marker recording the course id, so the account purge can still
+    reach this course's summary blobs once its rows are gone (R-020). Nothing
+    is deleted from storage here (floor 4 / ADR 0004).
 
     Args:
         session: Database session.
         user_id: Owner user UUID.
         code: Course code.
+        storage: Storage backend for the ledger marker, defaulting to the singleton.
 
     Returns:
         Dict of deleted row counts per entity.
@@ -352,6 +370,11 @@ async def delete_course(session: AsyncSession, user_id: str, code: str) -> dict:
     from app.models.study_session import StudySession
 
     course = await _get_owned_course(session, user_id, code)
+
+    # Record the id before the rows go; harmless if the transaction rolls back
+    # (the account purge would just sweep an extra, empty prefix).
+    store = storage if storage is not None else get_storage()
+    await store.put(deleted_course_ledger_key(user_id, course.id), b"")
 
     artifact_ids_result = await session.execute(
         select(LectureArtifact.id).where(LectureArtifact.course_id == course.id)
@@ -385,6 +408,8 @@ async def delete_course(session: AsyncSession, user_id: str, code: str) -> dict:
     counts["quiz_questions"] = (
         await session.execute(delete(QuizQuestion).where(QuizQuestion.course_id == course.id))
     ).rowcount or 0
+    # Retained summary versions go with an explicit course delete (ADR 0004).
+    await session.execute(delete(SummaryVersion).where(SummaryVersion.course_id == course.id))
     counts["summaries"] = (
         await session.execute(delete(Summary).where(Summary.course_id == course.id))
     ).rowcount or 0
@@ -423,7 +448,14 @@ async def delete_course(session: AsyncSession, user_id: str, code: str) -> dict:
 MERGE_CONFLICT_POLICIES = frozenset({"regenerate", "keep_target", "keep_source"})
 
 
-async def _sync_summary_blob(storage, summary: Summary, course_id: str) -> None:
+async def _sync_summary_blob(
+    storage,
+    summary: Summary,
+    course_id: str,
+    *,
+    version: int | None = None,
+    delete_old: bool = True,
+) -> None:
     """Make the stored markdown match the row, under the key its course implies.
 
     Called after either half of a summary changes: its course (a moved week) or
@@ -456,13 +488,17 @@ async def _sync_summary_blob(storage, summary: Summary, course_id: str) -> None:
         storage: Storage backend.
         summary: The summary row, already carrying its final course and content.
         course_id: The course the summary now belongs to.
+        version: Write to that version's own key instead of the unversioned
+            one, so no existing blob is put over (``keep_source``).
+        delete_old: Delete the previous key afterwards. False when the previous
+            key is a retained version's blob.
     """
     old_key = normalize_storage_key(summary.file_path or "")
-    new_key = summary_service.build_summary_storage_key(course_id, summary.week)
+    new_key = summary_service.build_summary_storage_key(course_id, summary.week, version=version)
     summary.file_path = new_key
     try:
         await storage.put(new_key, summary.content_md.encode("utf-8"))
-        if old_key and old_key != new_key:
+        if delete_old and old_key and old_key != new_key:
             await storage.delete(old_key)
     except Exception:
         logger.warning(
@@ -532,8 +568,8 @@ async def merge_courses(
       Spends nothing.
     * ``keep_source`` — the source summary's content replaces the target's
       (version bumped, ``source_artifacts`` merged). Spends nothing. The
-      target's previous text is lost, but every artifact behind it survives the
-      merge, so a later ``regenerate`` can rebuild it.
+      target's previous text is retained first as a ``SummaryVersion`` (row and
+      its own blob key), exactly as a re-summarize retains it.
 
     A discarded source summary is deleted outright — both the row and its
     stored markdown. Its artifacts are *not* deleted; they move to the target
@@ -614,6 +650,18 @@ async def merge_courses(
         existing = target_summaries.get(summary.week)
         if existing is None:
             summary.course_id = target.id
+            # Floor 4: the week's retained versions move with it, or a later
+            # delete of the archived source would destroy them. Scoped to this
+            # week so a keep_source conflict week cannot collide on
+            # uq_summary_versions_course_week_ver.
+            await session.execute(
+                update(SummaryVersion)
+                .where(
+                    SummaryVersion.course_id == source.id,
+                    SummaryVersion.week == summary.week,
+                )
+                .values(course_id=target.id)
+            )
             await _sync_summary_blob(storage, summary, target.id)
             moved_summaries += 1
             continue
@@ -621,13 +669,18 @@ async def merge_courses(
         conflict_weeks.append(summary.week)
 
         if on_conflict == "keep_source":
+            # Floor 4 (R-007): the target's text is about to be replaced, so
+            # retain it as a version first.
+            await summary_service.snapshot_summary(session, existing, storage)
             existing.content_md = summary.content_md
             existing.version = existing.version + 1
             existing.source_artifacts = list(
                 set((existing.source_artifacts or []) + (summary.source_artifacts or []))
             )
             existing.updated_at = datetime.now(UTC)
-            await _sync_summary_blob(storage, existing, target.id)
+            await _sync_summary_blob(
+                storage, existing, target.id, version=existing.version, delete_old=False
+            )
         elif on_conflict == "regenerate":
             regenerated_weeks.append(summary.week)
 

@@ -32,6 +32,7 @@ class TestRecordStudySession:
             quiz_questions_answered=5,
             quiz_correct=4,
             duration_seconds=600,
+            user_id="user-1",
         )
 
         session.add.assert_called_once()
@@ -63,6 +64,7 @@ class TestRecordStudySession:
             quiz_questions_answered=5,
             quiz_correct=4,
             duration_seconds=600,
+            user_id="user-1",
         )
 
         assert result.cards_reviewed == 15  # 5 + 10
@@ -82,7 +84,7 @@ class TestGetStreak:
         mock_result.all.return_value = []
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await get_streak(session)
+        result = await get_streak(session, user_id="user-1")
         assert result["current_streak"] == 0
         assert result["longest_streak"] == 0
         assert result["last_study_date"] is None
@@ -102,7 +104,7 @@ class TestGetStreak:
         mock_result.all.return_value = dates
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await get_streak(session)
+        result = await get_streak(session, user_id="user-1")
         assert result["current_streak"] == 3
         assert result["longest_streak"] == 3
 
@@ -121,7 +123,7 @@ class TestGetStreak:
         mock_result.all.return_value = dates
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await get_streak(session)
+        result = await get_streak(session, user_id="user-1")
         assert result["current_streak"] == 1  # only today
         assert result["longest_streak"] == 2  # the 2-day block
 
@@ -139,7 +141,7 @@ class TestGetStreak:
         mock_result.all.return_value = dates
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await get_streak(session)
+        result = await get_streak(session, user_id="user-1")
         assert result["current_streak"] == 2
 
     @pytest.mark.asyncio
@@ -153,7 +155,7 @@ class TestGetStreak:
         mock_result.all.return_value = dates
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await get_streak(session)
+        result = await get_streak(session, user_id="user-1")
         assert result["current_streak"] == 1
         assert result["longest_streak"] == 1
 
@@ -184,7 +186,7 @@ class TestGetStudyHistory:
         )
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await get_study_history(session, days=7)
+        result = await get_study_history(session, days=7, user_id="user-1")
         assert len(result) == 1
         assert result[0]["date"] == today.isoformat()
         assert result[0]["cards_reviewed"] == 20
@@ -197,5 +199,5 @@ class TestGetStudyHistory:
         mock_result.__iter__ = MagicMock(return_value=iter([]))
         session.execute = AsyncMock(return_value=mock_result)
 
-        result = await get_study_history(session, days=30)
+        result = await get_study_history(session, days=30, user_id="user-1")
         assert result == []

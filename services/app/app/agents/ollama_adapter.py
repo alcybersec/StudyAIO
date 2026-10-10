@@ -15,8 +15,7 @@ from app.agents.base import (
     QuizQuestionData,
     SummaryResult,
 )
-from app.core.exceptions import AgentError
-from app.services.settings_service import get_effective_setting
+from app.core.ai_settings import get_effective_setting
 
 logger = structlog.get_logger()
 
@@ -60,7 +59,7 @@ class OllamaAdapter(AgentAdapter):
                 options={"num_predict": num_predict},
             )
         except Exception as e:
-            raise AgentError(f"Ollama API call failed: {e}") from e
+            raise self._agent_error(f"Ollama API call failed: {e}") from None
 
         result = (response.message.content or "").strip()
         # Local inference costs no API spend, but the call is still counted so

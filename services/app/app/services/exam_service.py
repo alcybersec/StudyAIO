@@ -6,6 +6,7 @@ import structlog
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import user_now, user_today
 from app.core.utils import generate_id
 from app.models.course import Course
 from app.models.exam import Exam
@@ -19,6 +20,21 @@ from app.services import readiness_service
 logger = structlog.get_logger()
 
 
+def days_until(exam_date: datetime, tz: str | None) -> int:
+    """Whole calendar days from the user's today to the exam's local date.
+
+    Args:
+        exam_date: The exam instant (naive values are read as UTC).
+        tz: IANA time zone of the caller (UTC if None).
+
+    Returns:
+        Days remaining, never negative.
+    """
+    aware = exam_date if exam_date.tzinfo else exam_date.replace(tzinfo=UTC)
+    local_day = aware.astimezone(user_now(tz).tzinfo).date()
+    return max(0, (local_day - user_today(tz)).days)
+
+
 async def create_exam(
     session: AsyncSession,
     course_code: str,
@@ -26,7 +42,8 @@ async def create_exam(
     exam_date: datetime,
     weeks_scope: list[int],
     target_mastery_pct: int = 80,
-    user_id: str | None = None,
+    *,
+    user_id: str,
 ) -> Exam:
     """Create an exam for a course.
 
@@ -37,6 +54,7 @@ async def create_exam(
         exam_date: Exam date/time.
         weeks_scope: List of week numbers covered.
         target_mastery_pct: Target mastery percentage (default 80).
+        user_id: Owner user UUID; the course is resolved among this user's courses.
 
     Returns:
         Created Exam.
@@ -44,9 +62,7 @@ async def create_exam(
     Raises:
         ValueError: If course not found or date is in the past.
     """
-    query = select(Course).where(Course.code == course_code)
-    if user_id:
-        query = query.where(Course.user_id == user_id)
+    query = select(Course).where(Course.code == course_code, Course.user_id == user_id)
     result = await session.execute(query)
     course = result.scalar_one_or_none()
     if not course:
@@ -59,7 +75,7 @@ async def create_exam(
 
     exam = Exam(
         id=generate_id(),
-        user_id=user_id or course.user_id,
+        user_id=user_id,
         course_id=course.id,
         title=title,
         exam_date=aware_exam_date,
@@ -74,23 +90,18 @@ async def create_exam(
     return exam
 
 
-async def get_exam(session: AsyncSession, exam_id: str, user_id: str | None = None) -> Exam | None:
+async def get_exam(session: AsyncSession, exam_id: str, *, user_id: str) -> Exam | None:
     """Get an exam by ID. Auto-completes if exam_date has passed.
 
     Args:
         session: Database session.
         exam_id: Exam UUID.
-        user_id: If provided, only return exam owned by this user. Any
-            endpoint that reaches an exam by a caller-supplied id MUST pass
-            this; omitting it returns the exam regardless of owner and is
-            only appropriate for trusted internal callers.
+        user_id: Owner user UUID; only an exam this user owns is returned.
 
     Returns:
         Exam if found, None otherwise.
     """
-    query = select(Exam).where(Exam.id == exam_id)
-    if user_id is not None:
-        query = query.where(Exam.user_id == user_id)
+    query = select(Exam).where(Exam.id == exam_id, Exam.user_id == user_id)
     result = await session.execute(query)
     exam = result.scalar_one_or_none()
     if exam and exam.status == "active" and exam.exam_date < datetime.now(UTC):
@@ -104,21 +115,21 @@ async def list_exams(
     session: AsyncSession,
     course_code: str | None = None,
     status: str | None = None,
-    user_id: str | None = None,
+    *,
+    user_id: str,
 ) -> list[Exam]:
-    """List exams with optional filters.
+    """List the caller's exams with optional filters.
 
     Args:
         session: Database session.
+        user_id: Owner user UUID (required).
         course_code: Optional course code filter.
         status: Optional status filter (active/completed/archived).
 
     Returns:
         List of Exam objects ordered by exam_date.
     """
-    query = select(Exam).join(Course, Exam.course_id == Course.id)
-    if user_id:
-        query = query.where(Exam.user_id == user_id)
+    query = select(Exam).join(Course, Exam.course_id == Course.id).where(Exam.user_id == user_id)
     if course_code:
         query = query.where(Course.code == course_code)
     if status:
@@ -143,7 +154,7 @@ async def update_exam(
     session: AsyncSession,
     exam_id: str,
     *,
-    user_id: str | None = None,
+    user_id: str,
     **kwargs,
 ) -> Exam | None:
     """Update exam fields.
@@ -151,9 +162,7 @@ async def update_exam(
     Args:
         session: Database session.
         exam_id: Exam UUID.
-        user_id: If provided, only update an exam owned by this user; a
-            foreign exam is reported as not-found. Endpoints exposing this
-            by id MUST pass it -- otherwise any caller can mutate any exam.
+        user_id: Owner user UUID; a foreign exam is reported as not-found.
         **kwargs: Fields to update (title, exam_date, weeks_scope, target_mastery_pct).
 
     Returns:
@@ -172,15 +181,13 @@ async def update_exam(
     return exam
 
 
-async def delete_exam(session: AsyncSession, exam_id: str, user_id: str | None = None) -> bool:
+async def delete_exam(session: AsyncSession, exam_id: str, *, user_id: str) -> bool:
     """Archive an exam (soft delete).
 
     Args:
         session: Database session.
         exam_id: Exam UUID.
-        user_id: If provided, only archive an exam owned by this user; a
-            foreign exam is reported as not-found. Endpoints exposing this
-            by id MUST pass it -- otherwise any caller can archive any exam.
+        user_id: Owner user UUID; a foreign exam is reported as not-found.
 
     Returns:
         True if archived, False if not found (or not owned by user_id).
@@ -193,6 +200,33 @@ async def delete_exam(session: AsyncSession, exam_id: str, user_id: str | None =
     await session.flush()
     logger.info("exam_archived", exam_id=exam.id)
     return True
+
+
+async def get_owned_quiz_question(
+    session: AsyncSession, quiz_question_id: str, *, user_id: str
+) -> QuizQuestion | None:
+    """Fetch a quiz question only if its course belongs to ``user_id``.
+
+    Archived questions are treated as absent (not answerable as active study).
+
+    Args:
+        session: Database session.
+        quiz_question_id: Quiz question UUID (caller supplied).
+        user_id: The caller.
+
+    Returns:
+        The question, or None when absent or owned by someone else.
+    """
+    result = await session.execute(
+        select(QuizQuestion)
+        .join(Course, QuizQuestion.course_id == Course.id)
+        .where(
+            QuizQuestion.id == quiz_question_id,
+            Course.user_id == user_id,
+            QuizQuestion.archived_at.is_(None),
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 async def record_quiz_attempt(
@@ -279,15 +313,17 @@ async def get_weak_topics(
 async def get_exam_progress(
     session: AsyncSession,
     exam_id: str,
-    user_id: str | None = None,
+    *,
+    user_id: str,
+    tz: str | None = None,
 ) -> dict | None:
     """Get comprehensive exam progress data.
 
     Args:
         session: Database session.
         exam_id: Exam UUID.
-        user_id: If provided, only return progress for an exam owned by this
-            user. Endpoints exposing this by id MUST pass it.
+        user_id: Owner user UUID; only an exam this user owns is reported.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         Dict with progress data or None if exam not found (or not owned).
@@ -296,8 +332,7 @@ async def get_exam_progress(
     if not exam:
         return None
 
-    now = datetime.now(UTC)
-    days_remaining = max(0, (exam.exam_date - now).days)
+    days_remaining = days_until(exam.exam_date, tz)
 
     # Quiz accuracy across exam scope
     quiz_result = await session.execute(
@@ -309,6 +344,7 @@ async def get_exam_progress(
         .where(
             QuizQuestion.course_id == exam.course_id,
             QuizQuestion.week.in_(exam.weeks_scope),
+            QuizQuestion.archived_at.is_(None),
         )
     )
     quiz_row = quiz_result.one()
@@ -323,6 +359,7 @@ async def get_exam_progress(
         ).where(
             Flashcard.course_id == exam.course_id,
             Flashcard.week.in_(exam.weeks_scope),
+            Flashcard.archived_at.is_(None),
         )
     )
     fc_total = fc_result.scalar() or 0
@@ -333,6 +370,7 @@ async def get_exam_progress(
         .where(
             Flashcard.course_id == exam.course_id,
             Flashcard.week.in_(exam.weeks_scope),
+            Flashcard.archived_at.is_(None),
             FlashcardReview.interval_days > 21,
         )
     )

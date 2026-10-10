@@ -1,6 +1,6 @@
 """Tests for artifact_service."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -85,6 +85,21 @@ class TestIngestFile:
 
 
 @pytest.mark.asyncio
+class TestIngestAdoptionIsScoped:
+    """The pipeline hands ``user_id or ""`` to ingest_file: an empty owner must scope, not unscope."""
+
+    @pytest.mark.asyncio
+    async def test_adopting_with_empty_user_id_stays_scoped(self, mock_session, simple_pdf):
+        with patch(
+            "app.services.artifact_service.get_artifact", new_callable=AsyncMock, return_value=None
+        ) as get:
+            with pytest.raises(ValueError):
+                await artifact_service.ingest_file(
+                    mock_session, str(simple_pdf), user_id="", artifact_id="a-1"
+                )
+        assert get.await_args.kwargs["user_id"] == ""
+
+
 class TestIngestTextCapture:
     """Tests for ingest_text_capture."""
 
@@ -170,6 +185,7 @@ class TestApplyClassification:
             course_code="CSIT302",
             week=5,
             title="Network Security",
+            user_id="user-1",
         )
 
         assert result is course
@@ -186,7 +202,7 @@ class TestApplyClassification:
         artifact = MagicMock()
         artifact.course_id = "original"
         result = await artifact_service.apply_classification(
-            mock_session, artifact, course_code="NOPE", week=2
+            mock_session, artifact, course_code="NOPE", week=2, user_id="user-1"
         )
 
         assert result is None

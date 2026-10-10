@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload
 from app.core.database import async_session_factory, run_async
 from app.models.artifact import LectureArtifact
 from app.models.extraction import Extraction
+from app.pipeline._owner import warn_on_owner_mismatch
 from app.services.summary_service import merge_extractions
 from app.worker import celery_app
 
@@ -37,10 +38,14 @@ async def _extract_concepts_for_artifact(artifact_id: str, user_id: str | None =
         if not artifact:
             raise ValueError(f"Artifact {artifact_id} not found")
 
+        warn_on_owner_mismatch(
+            "concepts", artifact_id, artifact.user_id, user_id or artifact.user_id
+        )
+
         if not artifact.course_id or artifact.week is None:
             raise ValueError(f"Artifact {artifact_id} not classified")
 
-        effective_user_id = user_id or artifact.user_id
+        effective_user_id = artifact.user_id
 
         # Load extraction text
         ext_result = await session.execute(

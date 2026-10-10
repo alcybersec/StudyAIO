@@ -19,6 +19,7 @@ async def _evaluate_criteria(
     session: AsyncSession,
     user_id: str,
     criteria: dict,
+    tz: str | None = None,
 ) -> bool:
     """Evaluate whether a user meets achievement criteria.
 
@@ -26,6 +27,7 @@ async def _evaluate_criteria(
         session: Database session.
         user_id: User UUID.
         criteria: Criteria dict with type and threshold.
+        tz: IANA time zone of the caller; "today" is their local day (UTC if None).
 
     Returns:
         True if criteria are met.
@@ -46,7 +48,7 @@ async def _evaluate_criteria(
     elif criteria_type == "streak":
         from app.services import streak_service
 
-        streak_data = await streak_service.get_streak(session, user_id=user_id)
+        streak_data = await streak_service.get_streak(session, user_id=user_id, tz=tz)
         return streak_data.get("current_streak", 0) >= threshold
 
     elif criteria_type == "total_xp":
@@ -84,9 +86,17 @@ async def check_achievements(
 
     newly_earned: list[UserAchievement] = []
 
+    # Streaks are counted in the user's local days; look the zone up once, and
+    # only when a streak achievement is actually still in play.
+    tz: str | None = None
+    if any((a.criteria_json or {}).get("type") == "streak" for a in unearned):
+        from app.services.settings_service import get_user_timezone
+
+        tz = await get_user_timezone(session, user_id)
+
     for achievement in unearned:
         criteria = achievement.criteria_json
-        if await _evaluate_criteria(session, user_id, criteria):
+        if await _evaluate_criteria(session, user_id, criteria, tz):
             ua = UserAchievement(
                 id=generate_id(),
                 user_id=user_id,
@@ -129,12 +139,12 @@ async def check_achievements(
                     session,
                     user_id,
                     kind="achievement",
-                    title=f"Achievement unlocked: {achievement.name}",
+                    title=f"Achievement unlocked: {achievement.title}",
                     body=achievement.description,
                     href="/achievements",
                 )
             except Exception:
-                logger.warning(
+                logger.error(
                     "achievement_inbox_notification_failed",
                     achievement_code=achievement.code,
                     exc_info=True,
@@ -226,19 +236,23 @@ async def get_unnotified(session: AsyncSession, user_id: str) -> list[dict]:
     ]
 
 
-async def mark_notified(session: AsyncSession, user_achievement_ids: list[str]) -> None:
+async def mark_notified(
+    session: AsyncSession, user_achievement_ids: list[str], *, user_id: str
+) -> None:
     """Mark achievements as notified.
 
     Args:
         session: Database session.
         user_achievement_ids: List of UserAchievement IDs to mark.
+        user_id: The caller; rows owned by anyone else are left untouched.
     """
     if not user_achievement_ids:
         return
 
-    result = await session.execute(
-        select(UserAchievement).where(UserAchievement.id.in_(user_achievement_ids))
+    query = select(UserAchievement).where(
+        UserAchievement.id.in_(user_achievement_ids), UserAchievement.user_id == user_id
     )
+    result = await session.execute(query)
     for ua in result.scalars().all():
         ua.notified = True
     await session.flush()
