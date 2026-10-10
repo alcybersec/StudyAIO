@@ -28,10 +28,14 @@ def get_agent(
         user_settings: Per-user AI config from get_user_agent_config(), or
             None for "StudyAIO provided" — the instance backend and its
             environment-configured credentials.
-            Keys: agent_backend, claude_code_path, claude_model,
-            anthropic_api_key, openai_api_key, openai_model,
+            Keys: agent_backend, anthropic_api_key, openai_api_key, openai_model,
             zai_api_key, zai_model, zai_base_url,
             ollama_base_url, ollama_model, claude_cli_credentials.
+            `claude_code_path` and `claude_model` are operator-only
+            (SEC-01, GL#11): they are stripped before a config reaches here
+            and come from the environment, never from a user.
+            Base URLs (`zai_base_url`, `ollama_base_url`) are user-supplied
+            and re-validated by the adapter at use time (SEC-03, GL#14).
         output_language: Language for generated study material, from
             `settings_service.get_user_output_language()`. None means English.
 
@@ -105,6 +109,7 @@ def _build_agent(user_settings: dict[str, Any] | None) -> AgentAdapter:
                 api_key=user_settings["zai_api_key"],
                 model=user_settings.get("zai_model", ""),
                 base_url=user_settings.get("zai_base_url", ""),
+                user_supplied_url=bool(user_settings.get("zai_base_url")),
             )
         return ZaiAdapter()
 
@@ -115,6 +120,7 @@ def _build_agent(user_settings: dict[str, Any] | None) -> AgentAdapter:
             return OllamaAdapter(
                 base_url=user_settings.get("ollama_base_url", ""),
                 model=user_settings.get("ollama_model", ""),
+                user_supplied_url=bool(user_settings.get("ollama_base_url")),
             )
         return OllamaAdapter()
 

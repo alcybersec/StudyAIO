@@ -27,7 +27,14 @@ class ZaiAdapter(OpenAIAdapter):
 
     provider_name = "Z.ai"
 
-    def __init__(self, api_key: str = "", model: str = "", base_url: str = "", thinking: str = ""):
+    def __init__(
+        self,
+        api_key: str = "",
+        model: str = "",
+        base_url: str = "",
+        thinking: str = "",
+        user_supplied_url: bool = False,
+    ):
         """Configure the adapter.
 
         Args:
@@ -36,6 +43,8 @@ class ZaiAdapter(OpenAIAdapter):
             base_url: Override the endpoint. Falls back to `zai_base_url`,
                 then Z.ai's public endpoint — self-hosted GLM deployments and
                 regional endpoints exist, so this stays configurable.
+            user_supplied_url: True when ``base_url`` came from a user's own
+                config; it is then validated at use time (SEC-03, GL#14).
             thinking: GLM thinking mode, "disabled" or "enabled". Falls back
                 to the `zai_thinking` setting, then "disabled".
 
@@ -57,6 +66,8 @@ class ZaiAdapter(OpenAIAdapter):
         self._api_key = api_key or get_effective_setting("zai_api_key") or ""
         self._model = model or get_effective_setting("zai_model") or ZAI_DEFAULT_MODEL
         self._base_url = base_url or get_effective_setting("zai_base_url") or ZAI_BASE_URL
+        # Only an explicitly passed (user-config) URL is untrusted.
+        self._user_supplied_url = bool(user_supplied_url and base_url)
         self._thinking = thinking or get_effective_setting("zai_thinking") or "disabled"
 
         logger.debug(

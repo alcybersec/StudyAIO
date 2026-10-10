@@ -3,7 +3,7 @@
 from collections.abc import AsyncIterator
 
 import structlog
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 
 from app.agents import parsing
 from app.agents.answer_stream import plain_answer_stream, render_stream_prompt
@@ -21,6 +21,7 @@ from app.agents.base import (
 )
 from app.core.ai_settings import get_effective_setting
 from app.core.exceptions import AgentError
+from app.core.url_safety import UnsafeURLError, validate_outbound_url
 
 logger = structlog.get_logger()
 
@@ -40,17 +41,42 @@ class OpenAIAdapter(AgentAdapter):
     #: Shown in errors, so a misconfigured provider names itself.
     provider_name = "OpenAI"
 
-    def __init__(self, api_key: str = "", model: str = "", base_url: str = ""):
+    def __init__(
+        self,
+        api_key: str = "",
+        model: str = "",
+        base_url: str = "",
+        user_supplied_url: bool = False,
+    ):
         self._api_key = api_key or get_effective_setting("openai_api_key")
         self._model = model or get_effective_setting("openai_model")
         # Empty means "the SDK default", i.e. api.openai.com.
         self._base_url = base_url or ""
+        # Only a URL a user typed is untrusted; the operator's env default is
+        # private by design. Validated at use time (SEC-03, GL#14).
+        self._user_supplied_url = bool(user_supplied_url and self._base_url)
 
     def _client(self) -> AsyncOpenAI:
-        """Build a client, pointed at a custom base URL when one is set."""
+        """Build a client, pointed at a custom base URL when one is set.
+
+        A user-supplied base URL is validated immediately before the client is
+        built, and redirects are never followed, so a validated host cannot
+        bounce the request to a private one.
+
+        Raises:
+            AgentError: If a user-supplied base URL is not a public endpoint.
+        """
+        if self._user_supplied_url:
+            try:
+                validate_outbound_url(self._base_url)
+            except UnsafeURLError as e:
+                raise AgentError(f"{self.provider_name} base URL refused: {e}") from None
+        http_client = DefaultAsyncHttpxClient(follow_redirects=False)
         if self._base_url:
-            return AsyncOpenAI(api_key=self._api_key, base_url=self._base_url)
-        return AsyncOpenAI(api_key=self._api_key)
+            return AsyncOpenAI(
+                api_key=self._api_key, base_url=self._base_url, http_client=http_client
+            )
+        return AsyncOpenAI(api_key=self._api_key, http_client=http_client)
 
     def _require_api_key(self) -> None:
         """Raise a provider-specific error when no key is configured."""
