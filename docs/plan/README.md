@@ -24,6 +24,8 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S3-DEVOPS-052 (setup-token flow, preflight, CLI pinned 2.1.286) | `devops` | 2026-10-10 | **held** `d4f2f6d`/`ad3de8a` — safety 171 passed (agent); runbook says hand-run `compose up` (to fix) |
+| M32-S3-SAFETY-053 (review AI-051 + DEVOPS-052; CLI env inheritance) | `safety` | 2026-10-10 | isolated |
 | M32-S3-AI-051 (long-lived CLAUDE_CODE_OAUTH_TOKEN from host token file) | `ai` | 2026-10-10 | **held** `48c99a7` (on top of `bd82d86`/`79d478e`) — awaits DEVOPS-052 + safety review; agent: safety+agents+contracts `548 passed, 1 skipped`; CLI 2.1.286 has `setup-token` (Dockerfile unpinned → DEVOPS-052 pins) |
 | M32-S3-DEVOPS-048 (dedicated Claude login dir, R-025) | `devops` | 2026-10-10 | **held** `bd82d86` + safety pins `79d478e` (APPROVE, SAFETY-050) — deploy-order dependency: operator must create the login dir on prod before this reaches main |
 
