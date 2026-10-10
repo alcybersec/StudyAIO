@@ -918,6 +918,12 @@ UNSCOPED_FUNCTION_ALLOWED = {
         "row, and a miss or error fails closed to None (event dropped). Pinned by "
         "test_floor1_owner_routing.py"
     ),
+    ("app/pipeline/recovery.py", "_recover"): (
+        "beat task (TECH-04, GL#22): requeues every user's stuck artifacts by design; each "
+        "requeue is resumed with that artifact row's own user_id, it writes only pipeline_runs "
+        "rows and a status, never a delete, and only app/worker.py names it. Pinned by "
+        "test_floor1_worker_jobs.py (SAFETY-027)"
+    ),
     ("app/services/asset_service.py", "save_flashcards"): (
         "pipeline write path (pipeline/assets.py) with ids the worker resolved from its artifact"
     ),

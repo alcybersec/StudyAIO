@@ -77,19 +77,26 @@ def _calls_resolver(value: ast.AST | None) -> bool:
     )
 
 
+def _kwonly_params(fn: ast.AST) -> set[str]:
+    return {a.arg for a in fn.args.kwonlyargs}
+
+
 def test_floor1_pipeline_events_publish_to_a_resolved_owner():
     """Every pipeline publish names an owner that went through resolve_event_owner.
 
     The recipient must be a local whose every assignment calls
-    ``resolve_event_owner`` (the row-owner lookup). Handing the publisher the
+    ``resolve_event_owner`` (the row-owner lookup), or a keyword-only parameter
+    of a relay helper whose every call site passes such a local (SAFETY-027:
+    ``resilience.handle_retryable``). Handing the publisher the
     payload ``user_id`` directly — the R-022 bug — fails here, as does a new
     stage that never resolves. Publishing is confined to ``app/pipeline/`` and
     the publisher module itself.
     """
     bad, seen, outside = [], 0, []
-    for path in app_modules():
-        module = rel(path)
-        for fn, call in _publish_calls(parse(path)):
+    trees = {rel(path): parse(path) for path in app_modules()}
+    relays: dict[str, str] = {}  # relay function name -> its recipient parameter
+    for module, tree in trees.items():
+        for fn, call in _publish_calls(tree):
             if module == "app/services/event_service.py":
                 continue  # the publisher and its sync wrapper
             if not module.startswith("app/pipeline/"):
@@ -97,10 +104,38 @@ def test_floor1_pipeline_events_publish_to_a_resolved_owner():
                 continue
             seen += 1
             kw = next((k.value for k in call.keywords if k.arg == "user_id"), None)
+            if isinstance(kw, ast.Name) and kw.id in _kwonly_params(fn):
+                # A relay (TECH-04 ``handle_retryable``): the recipient is the
+                # caller's to resolve, so every call site is checked below.
+                if _assigned_values(fn, kw.id):
+                    bad.append(f"{module}::{fn.name} line {call.lineno} (relay reassigns)")
+                relays[fn.name] = kw.id
+                continue
             values = _assigned_values(fn, kw.id) if isinstance(kw, ast.Name) else []
             if not values or not all(_calls_resolver(v) for v in values):
                 bad.append(f"{module}::{fn.name} line {call.lineno}")
+    relay_calls = 0
+    for module, tree in trees.items():
+        for fn in ast.walk(tree):
+            if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            for call in ast.walk(fn):
+                if not isinstance(call, ast.Call):
+                    continue
+                name = dotted(call.func).split(".")[-1]
+                if name not in relays or fn.name == name:
+                    continue
+                relay_calls += 1
+                where = f"{module}::{fn.name} line {call.lineno} -> {name}"
+                if not module.startswith("app/pipeline/"):
+                    outside.append(where)
+                    continue
+                kw = next((k.value for k in call.keywords if k.arg == relays[name]), None)
+                values = _assigned_values(fn, kw.id) if isinstance(kw, ast.Name) else []
+                if not values or not all(_calls_resolver(v) for v in values):
+                    bad.append(where)
     assert seen >= 20, f"detector went blind: saw only {seen} pipeline publish calls"
+    assert not relays or relay_calls, f"relay(s) {sorted(relays)} found but no call site seen"
     assert not outside, f"pipeline events published outside the worker: {outside}"
     assert not bad, (
         "Floor 1: pipeline event published to an owner that was not resolved from the "
