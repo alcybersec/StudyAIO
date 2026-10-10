@@ -24,6 +24,9 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S3-AI-041 (GL#8: claude_code worker keeps revoked token) | `ai` | 2026-10-10 | isolated |
+| M32-S3-DEVOPS-042 (GL#7: e2e pip ResolutionImpossible) | `devops` | 2026-10-10 | isolated |
+| M32-S3-AI-043 (GL#9: summarize Connections invents context) | `ai` | 2026-10-10 | isolated |
 
 ## Completed
 
@@ -76,6 +79,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Blocked on | Since |
 |---|---|---|---|
+| Merge MR !33 + prod deploy | Orchestrator | pre-merge prod DB backup — Orchestrator's SSH key from memory (`~/.ssh/the ops key`) is gone; user to run the backup or waive it | 2026-10-10 |
 
 ## Open gates
 
