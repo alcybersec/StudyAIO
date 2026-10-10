@@ -15,7 +15,7 @@ Orchestrator updates here.
 
 ## Next task
 
-**M32-S1 + R-023 complete (2026-10-09).** Pipeline **#553** on `12408ba`, all 6 jobs success by name: `backend-tests` `2524 passed` + golden `317` + contracts `53`; `test-floor` 97.48% / `159 passed`; `integration-tests` 87.16% / `531 passed`; `e2e-tests` `64 passed`; `frontend-checks` `636 passed`; `python-lint` success. MR !33 marked ready. **Open:** M32's feature not yet named by the user.
+**M32-S1 + R-023 complete (2026-10-09).** Pipeline **#553** on `12408ba`, all 6 jobs success by name: `backend-tests` `2524 passed` + golden `317` + contracts `53`; `test-floor` 97.48% / `159 passed`; `integration-tests` 87.16% / `531 passed`; `e2e-tests` `64 passed`; `frontend-checks` `636 passed`; `python-lint` success. MR !33 **merged** 2026-10-10 (merge commit `d9df2fc`, user waived the pre-merge backup; nightly backup only). Prod deploy result not yet read by the Orchestrator — the auto-mode classifier denied polling the main pipeline; user to confirm `deploy-selfhosted` by job name. **Open:** M32's feature not yet named by the user.
 
 **Integration branch.** `kit/retrofit` @ `2f3296d`+ (code `8d9de14`, pipeline #537 green) — pushed,
 not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
@@ -79,7 +79,6 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Blocked on | Since |
 |---|---|---|---|
-| Merge MR !33 + prod deploy | Orchestrator | pre-merge prod DB backup — Orchestrator's SSH key from memory (`~/.ssh/the ops key`) is gone; user to run the backup or waive it | 2026-10-10 |
 
 ## Open gates
 
