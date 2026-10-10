@@ -29,6 +29,13 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S4-AI-007 (AI-03 GL#17: chunk size fits embedder, setting capped, re-embed task) | `ai` | 2026-10-10 | isolated |
+| M32-S4-BACKEND-010 (SEC-06 GL#20: encrypt per-user secrets at rest) | `backend` | 2026-10-10 | isolated |
+| M32-S4-BACKEND-011 (BILL-01 GL#21: Stripe webhook idempotent/ordered, `trialing`) | `backend` | 2026-10-10 | isolated |
+| M32-S4-AI-012 + 013 (TECH-04 GL#22 retries/time limits/stuck recovery; TECH-05 GL#23 summarize race) | `ai` | 2026-10-10 | isolated |
+| M32-S4-DEVOPS-014 + 017 + 019 (TECH-06 GL#24 backups + pre-migrate dump; SEC-07 GL#27 deps + CI audit; SEC-11 GL#29 dead Terraform) | `devops` | 2026-10-10 | isolated |
+| M32-S4-BACKEND-015 + 018 (SEC-05 GL#25 secure self-host default; SEC-10 GL#28 Redis-backed rate limits) | `backend` | 2026-10-10 | isolated |
+| M32-S4-FRONTEND-016 + QA-020 (UX-05 GL#26 user-facing errors; UX-08 GL#30 semantic targets, guarded SSE parse) | `frontend` | 2026-10-10 | isolated |
 
 **GL#31 (2026-10-10):** chat follow-ups lose course/week scope (prod repro; CSCI369 W3 has 8 indexed chunks) — pulled into M32 wave 1 as M32-S4-BACKEND-023 (audit AI-06 overlap).
 
