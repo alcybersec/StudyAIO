@@ -29,12 +29,8 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S4-AI-007 (AI-03 GL#17: chunk size fits embedder, setting capped, re-embed task) | `ai` | 2026-10-10 | isolated |
-| M32-S4-BACKEND-010 (SEC-06 GL#20: encrypt per-user secrets at rest) | `backend` | 2026-10-10 | isolated |
-| M32-S4-AI-012 + 013 (TECH-04 GL#22 retries/time limits/stuck recovery; TECH-05 GL#23 summarize race) | `ai` | 2026-10-10 | isolated |
-| M32-S4-DEVOPS-014 + 017 + 019 (TECH-06 GL#24 backups + pre-migrate dump; SEC-07 GL#27 deps + CI audit; SEC-11 GL#29 dead Terraform) | `devops` | 2026-10-10 | isolated |
-| M32-S4-BACKEND-015 + 018 (SEC-05 GL#25 secure self-host default; SEC-10 GL#28 Redis-backed rate limits) | `backend` | 2026-10-10 | isolated |
-| M32-S4-FRONTEND-016 + QA-020 (UX-05 GL#26 user-facing errors; UX-08 GL#30 semantic targets, guarded SSE parse) | `frontend` | 2026-10-10 | isolated |
+| M32-S4-SAFETY-029 (route sweep under new starlette: courseops multipart routes; non-vacuous route-count guard) | `safety` | 2026-10-11 | isolated |
+| M32-S4-BACKEND-032 (refuse all-zero Fernet key outside tests; port data-dir fixture test to pytest ≥8.4) | `backend` | 2026-10-11 | isolated |
 
 **GL#31 (2026-10-10):** chat follow-ups lose course/week scope (prod repro; CSCI369 W3 has 8 indexed chunks) — pulled into M32 wave 1 as M32-S4-BACKEND-023 (audit AI-06 overlap).
 
@@ -49,6 +45,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S4 wave 2 (GL#17, #20, #22–#30): AI-007 AI-03 rechunk+re-embed `92387f1`; BACKEND-015/018 SEC-05+SEC-10 `33c7d1d`; FRONTEND-016/QA-020 UX-05+UX-08 `2d737ed`/`f6f33b9`; AI-012/013 TECH-04/05 `b011c3d`; DEVOPS-014/019 TECH-06 backups `50d769f` + SEC-11 Terraform removal `a9c880a`; DEVOPS-028 SEC-07 deps+CI audit `7e4a008`..`cb17ab1`; BACKEND-031 SEC-06 at-rest encryption + SEC-05 veto fix `7c1fc3f`..`8356b15`; fix-ups AI-008 `97ce0cd`-pick, AI-009/010 backup PG env+scrub, BACKEND-030 date helpers+chunk caps, QA-033/034, DEVOPS-029 key ops `95ce227`-pick | various | worktrees → `kit/retrofit` | **Orchestrator full run on kit/retrofit `cb17ab1` (new SEC-07 deps):** ruff clean; unit+golden+contracts 88.96% `3282 passed`; safety `1 failed, 366 passed, 1 skipped` (route sweep → SAFETY-029); integration 83.46% `537 passed`; frontend lint 0 errors, tsc clean, vitest `660 passed`. Safety: SAFETY-027 (VETO SEC-05 floor 2) → lifted by SAFETY-028; all wave-2 items PASS / PASS-with-notes. Week-lock revert check by Orchestrator: lock removed → concurrency test fails; restored → `9 passed`. Caps: fastapi <0.137 (lazy routers empty route guards), pytest 8.3.5 (allowlisted PYSEC-2026-1845 until BACKEND-032). **Operator before deploy:** the secret manager `SETTINGS_ENCRYPTION_KEY`, `BACKUP_ENABLED=true`, re-install `infra/deploy/deploy.sh` on the prod host; after deploy `encrypt-user-secrets` dry-run→`--apply`, re-embed dry-run | 2026-10-11 |
 | M32-S4-BACKEND-011 (BILL-01 GL#21: Stripe webhook idempotent by event id, ordered per customer, `trialing`/`past_due` → Pro, stale/foreign-subscription deletes ignored) | `backend` | `7bc20ea`/`028f6fe` → `kit/retrofit` `b7974d1` | 18 tests red-first. **Orchestrator: `make test-integration` → 85.36%, `533 passed`** (agent's `test_user_with_deadline_only_is_deleted` failure not reproduced — likely the full Docker disk). Ordering state in Redis (durable column = optional data follow-up). `safety` review pending | 2026-10-10 |
 | M32-S4-QA-030 + QA-032 (golden event set incl. `study_nudge`; ruff format test_notifications) | `qa` | `a217c69` → `d375e40`; `6ac629c` → `kit/retrofit` (see log) | **Orchestrator full run on kit/retrofit:** ruff check clean, `ruff format --check` clean; `make test` → unit 88.66% `3105 passed`, floor 97.36% `351 passed, 1 skipped` (0 failed); integration 85.38% `532 passed`; frontend `643 passed`, tsc clean, lint 0 errors. **M32 wave 1 complete except AI-03 (AI-007)** | 2026-10-10 |
 | M32-S4-DATA-031 (insert missing `study_nudge` rows for users with existing prefs; migration `c8e2a5f93d16`) | `data` | `1ad74c5` → `kit/retrofit` (see log) | Throwaway pg16: untouched user → email on; touched → all off; existing nudge rows / system user / inactive unchanged; idempotent. Single head | 2026-10-10 |
