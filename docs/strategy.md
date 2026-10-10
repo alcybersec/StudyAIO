@@ -159,6 +159,36 @@ second milestone and becomes a BLOCK.
 | M32-S1-BACKEND-006 | `backend`, `safety` | C6 / R-021: `user_id` required on scoped service functions, or the floor check fails on a `None` default | floor tier | A scoped function with `user_id=None` default reddens the floor tier |
 | M32-S1-ARCH-007 | `architect` | C1: ADR 0002 accepted or amended per the user's review | contract tests | ADR 0002 Status is Accepted |
 
+**S4 — audit remediation** (source: [`docs/audits/2026-10-10-product-audit.md`](audits/2026-10-10-product-audit.md);
+the user's direction for M32, logged 2026-10-10). Quick wins first, in the audit's order; new-feature work
+is paused until S4 wave 1 closes. Finding IDs are the audit's.
+
+*Wave 1 — S1 and quick wins (audit §4)*
+
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M32-S4-BACKEND-001 | `backend` (+`safety` pin) | SEC-01: `claude_code_path` (and `claude_model` unless needed) user-settable → server executes it | Both keys removed from user `ALLOWED_KEYS`, operator-only; stored values ignored; floor pin that no user setting reaches an exec path |
+| M32-S4-AI-002 | `ai` (+`safety`) | AGENT-01 remainder: temp cwd (not `/app`), honour `--model`, non-root, system prompt | CLI runs in an empty per-call cwd, as a non-root uid, with the configured model; pins for each |
+| M32-S4-BACKEND-003 | `backend` | AI-05: `/api/qa/ask` citations from model output | Reuses chat's deterministic `build_sources`; every `[n]` maps to a retrieved chunk |
+| M32-S4-BACKEND-004 | `backend` (+`safety`) | SEC-03: SSRF via user `ollama_base_url` / `zai_base_url` | Private/link-local/loopback ranges refused (incl. after DNS resolution), or operator-only when not self-hosted |
+| M32-S4-BACKEND-005 | `backend`, `ai` | PROD-03: reminders off by default twice; no day-2 trigger | New users opted in (opt-out), global flag on in prod config, day-2 nudge |
+| M32-S4-AI-006 | `ai`, `frontend` | AI-04: streaming chat shows raw JSON | Stream plain text; structure attached at the end; no JSON in the UI |
+| M32-S4-AI-007 | `ai`, `data` | AI-03: chunks exceed MiniLM's 256 word-piece limit; user-settable up to 5000 | ~200-token chunks, user setting capped, re-embed job for existing data (or a longer-context embedder, by ADR) |
+| M32-S4-FRONTEND-008 | `frontend` | UX-06: Study hub tab bar overflows on phones | Scrolls horizontally at 375px; e2e at mobile width |
+| M32-S4-BACKEND-009 | `backend` (+`safety`) | QUOTA-01 + COST-01 — **after the user decides PROD-08** | Every bypass route checks quota; non-zero global ceilings; chat/Q&A/stream/concepts record usage; `top_k` bounded; counter race fixed |
+
+*Wave 2 — remaining S2 (audit §3)*: TECH-04 (transient AI errors, time limits, stuck-item recovery), UX-01
+(pipeline progress survives navigation), AI-01 (model choice / caching per backend), AI-07 + AI-10
+(summary faithfulness, citations, evals in CI, user feedback), SEC-06 (encrypt per-user credentials at rest),
+TECH-05 (summarize race), TECH-06 (backup in image; migrate-with-dump — overlaps R-028), BILL-01 (Stripe webhook
+dedupe/ordering, `trialing`), AI-06 (relevance floor; follow-up retrieval), SEC-05 (harden self-hosted defaults).
+Task IDs assigned when wave 1 closes.
+
+*Wave 3 — S3/S4 debt and polish*: the remaining rows of audit §3.
+
+*Validation track (audit §6), user-owned*: usage events + D7/D30 (PROD-10), fake-door Pro, shared-course
+seed, instructor interviews. Strategic bets (audit §5) need a user decision before any task is cut.
+
 **Gate additions:** C1–C6 closed; floor tier non-empty and green; 0 strict xfails pinning R-016.
 
 ### Later milestones (outline only, not yet scoped)
