@@ -67,6 +67,17 @@ COPY --from=builder /install /usr/local
 # Create non-root user
 RUN groupadd -r studyaio && useradd -r -g studyaio -d /app -s /sbin/nologin studyaio
 
+# Unprivileged identity for the Claude CLI child (GL#12 / AGENT-01, R-030). The
+# worker stays root (credential mounts, chown of per-call scratch dirs) and the
+# adapter drops the child to CLAUDE_CLI_UID/GID (set on the worker service only
+# in compose). Fixed numeric ids, a group of its own, no home, no login shell,
+# and deliberately NOT a member of `studyaio`: group membership would reopen the
+# data dir below. The CLI and node live under /usr/local and /usr/bin, which are
+# world-readable/executable; /root stays 0700, so the child cannot reach the
+# root-side credential mounts.
+RUN groupadd -g 10001 claudecli \
+    && useradd -u 10001 -g claudecli -M -d /nonexistent -s /usr/sbin/nologin claudecli
+
 # === Bake the sentence-transformers embedding model into the image ===
 #
 # Why bake it. The api container runs as `studyaio`, whose home is `/app`, which
@@ -150,8 +161,12 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 COPY . .
 
-# Ensure data dir is writable by studyaio
-RUN mkdir -p /app/data && chown -R studyaio:studyaio /app/data
+# Ensure data dir is writable by studyaio, and closed to everyone else (0750,
+# no group membership for claudecli): uploads and summaries of every tenant live
+# here, so the unprivileged CLI child must not be able to list or read them. A
+# bind-mounted ./data takes the HOST's mode, not this one -- see
+# docs/deployment.md "Claude CLI isolation".
+RUN mkdir -p /app/data && chown -R studyaio:studyaio /app/data && chmod 0750 /app/data
 
 USER studyaio
 

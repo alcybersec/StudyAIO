@@ -552,6 +552,21 @@ mounts have a source). The image's `~/.claude` is not overlaid as a directory.
 The api and beat containers get nothing. The operator's personal `~/.claude` is
 never mounted.
 
+**Claude CLI isolation (GL#12, R-030):** the worker stays root, but the adapter
+spawns `claude -p` as uid/gid 10001 (`claudecli`, created in
+`services/app/Dockerfile`; set by `CLAUDE_CLI_UID`/`CLAUDE_CLI_GID` on the worker
+service in every compose file). The worker keeps its default capabilities
+(CAP_SETUID/SETGID/CHOWN are needed; do not add `cap_drop: ALL`).
+uid 10001 **can** run `claude`/node and read `/app` code and the baked
+`/opt/models` cache (no secrets in either) and its own per-call scratch dir.
+It **cannot** read: `/app/data` (uploads, extractions, summaries), `/root`
+(including `/root/.claude`), `/run/claude-host` (0700 owned by the host operator
+uid), or `/proc/1/environ` of the worker. The OAuth token reaches it only
+through the child's environment. In the image `/app/data` is 0750
+`studyaio:studyaio`, but compose bind-mounts `./data` over it, so **the host
+directory's mode is what counts**: keep `./data` without "other" access
+(`chmod o-rwx data`) and never make it world-readable or group 10001.
+
 **Read-only on purpose:** a writable mount would let a compromised worker plant
 hooks or settings into a Claude config that a host-side `claude` may later load.
 The adapter never writes back to this directory.
