@@ -252,7 +252,9 @@ class TestHourlyLocalSend:
     async def test_invalid_timezone_falls_back_to_utc(self):
         from app.pipeline import notification_tasks
 
-        assert notification_tasks._is_send_time("Not/AZone") is False
+        # Invalid tz -> UTC. 12:00 UTC is not a send hour; 08:00 UTC is.
+        with freeze(datetime(2026, 10, 9, 12, 0, tzinfo=UTC)):
+            assert notification_tasks._is_send_time("Not/AZone") is False
         with freeze(NOON_UTC):
             assert notification_tasks._is_send_time("Not/AZone") is True
 
