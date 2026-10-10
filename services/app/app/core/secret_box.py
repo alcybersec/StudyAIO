@@ -16,6 +16,8 @@ warning at startup); a multi-user one refuses to start.
 Nothing here logs or returns a plaintext value.
 """
 
+import sys
+
 import structlog
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
@@ -27,6 +29,15 @@ logger = structlog.get_logger()
 PREFIX = "enc:v1:"
 
 ENV_VAR = "SETTINGS_ENCRYPTION_KEY"
+
+#: The all-zero Fernet key the root conftest installs so the suite can start the
+#: lifespan in multi-user mode. It is public, so it protects nothing.
+WELL_KNOWN_TEST_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+
+def _running_under_pytest() -> bool:
+    """Test-mode signal that no environment variable can fake in production."""
+    return "pytest" in sys.modules
 
 
 class SecretBoxError(Exception):
@@ -145,3 +156,14 @@ def check_startup() -> None:
         _keys()
     except SecretBoxError as exc:
         raise RuntimeError(f"FATAL: {ENV_VAR} is malformed: {exc}") from exc
+    raw = settings.settings_encryption_key.get_secret_value()
+    if (
+        not settings.single_user_mode
+        and not _running_under_pytest()
+        and WELL_KNOWN_TEST_KEY in (p.strip() for p in raw.split(","))
+    ):
+        raise RuntimeError(
+            f"FATAL: {ENV_VAR} is the well-known all-zero test key. Generate a real one "
+            'with: python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"'
+        )
