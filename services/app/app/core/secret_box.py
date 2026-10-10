@@ -10,8 +10,8 @@ or a comma-separated list. The FIRST key encrypts; every key decrypts, which is
 how a key is rotated (prepend the new one, run ``python -m app.cli
 encrypt-user-secrets --apply``, then drop the old one).
 
-Without a key: a self-hosted instance keeps storing plaintext (and logs a
-warning at startup); a non-self-hosted one refuses to start.
+Without a key: a single-user-mode instance keeps storing plaintext (and logs a
+warning at startup); a multi-user one refuses to start.
 
 Nothing here logs or returns a plaintext value.
 """
@@ -64,15 +64,22 @@ def encrypt(plaintext: str) -> str:
 
     Returns:
         ``enc:v1:<token>``; the value unchanged when no key is set on a
-        self-hosted instance.
+        single-user instance.
 
     Raises:
-        SecretBoxError: No key is set and the instance is not self-hosted.
+        SecretBoxError: No key is set and the instance is not in single-user mode, or
+            no key is set and the value looks like ciphertext (it would be
+            misread on the way back).
     """
-    if is_encrypted(plaintext):
-        return plaintext
+    # No pass-through for values that merely look like ciphertext: a user can
+    # submit "enc:v1:..." as their API key, and storing it verbatim would make it
+    # unreadable (or, worse, trusted as already-protected). Always encrypt.
     if not is_configured():
-        if settings.self_hosted:
+        if settings.single_user_mode:
+            if is_encrypted(plaintext):
+                raise SecretBoxError(
+                    "a credential may not start with the reserved prefix 'enc:v1:'"
+                )
             return plaintext
         raise SecretBoxError(f"{ENV_VAR} is not set; refusing to store a credential in plaintext")
     token = MultiFernet(_keys()).encrypt(plaintext.encode()).decode()
@@ -120,10 +127,10 @@ def check_startup() -> None:
     """Fail fast on a missing or malformed key.
 
     Raises:
-        RuntimeError: Key malformed, or missing on a non-self-hosted instance.
+        RuntimeError: Key malformed, or missing on a multi-user instance.
     """
     if not is_configured():
-        if not settings.self_hosted:
+        if not settings.single_user_mode:
             raise RuntimeError(
                 f"FATAL: {ENV_VAR} is not set. User AI credentials must be encrypted at "
                 'rest in SaaS mode. Generate one with: python -c "from '

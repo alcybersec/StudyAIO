@@ -233,7 +233,6 @@ class TestDeliverEmailVerification:
             assert "tok" not in everything_logged
             assert "verify-email?token" not in everything_logged
 
-
     @pytest.mark.asyncio
     async def test_self_hosted_multi_user_never_logs_link(self) -> None:
         """SEC-05: SELF_HOSTED is authenticated; only single_user_mode may log the link."""

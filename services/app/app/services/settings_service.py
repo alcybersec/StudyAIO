@@ -544,7 +544,10 @@ async def update_user_settings(
 
     # Credentials are encrypted before they touch the row (SEC-06).
     for key in SECRET_KEYS & validated.keys():
-        validated[key] = secret_box.encrypt(validated[key])
+        try:
+            validated[key] = secret_box.encrypt(validated[key])
+        except secret_box.SecretBoxError as e:
+            raise ValueError(f"{key} cannot be stored: {e}") from e
 
     # Update settings_json
     if validated or clear_secrets:

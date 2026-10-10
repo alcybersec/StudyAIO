@@ -209,7 +209,7 @@ def warn_if_proxy_headers_untrusted() -> None:
     This only warns. The correct value depends on deployment topology, so
     guessing one would be worse than saying clearly that it is unset.
     """
-    if settings.self_hosted:
+    if settings.single_user_mode:
         return
 
     configured = os.environ.get("FORWARDED_ALLOW_IPS", "").strip()
@@ -287,9 +287,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application startup and shutdown events."""
     configure_logging(settings.log_level)
 
-    # Refuse to start with default JWT secret in SaaS mode
+    # Refuse the committed JWT secret whenever login is on. SELF_HOSTED is an
+    # authenticated mode since SEC-05; only single-user mode signs no tokens.
     if (
-        not settings.self_hosted
+        not settings.single_user_mode
         and settings.jwt_secret_key.get_secret_value() == _DEFAULT_JWT_SECRET
     ):
         raise RuntimeError(
