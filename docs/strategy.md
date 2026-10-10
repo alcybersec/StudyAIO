@@ -176,6 +176,7 @@ is paused until S4 wave 1 closes. Finding IDs are the audit's.
 | M32-S4-AI-006 | `ai`, `frontend` | AI-04: streaming chat shows raw JSON | Stream plain text; structure attached at the end; no JSON in the UI |
 | M32-S4-AI-007 | `ai`, `data` | AI-03: chunks exceed MiniLM's 256 word-piece limit; user-settable up to 5000 | ~200-token chunks, user setting capped, re-embed job for existing data (or a longer-context embedder, by ADR) |
 | M32-S4-FRONTEND-008 | `frontend` | UX-06: Study hub tab bar overflows on phones | Scrolls horizontally at 375px; e2e at mobile width |
+| M32-S4-BACKEND-023 | `backend` | GL#31 / AI-06 (pulled forward): chat follow-ups lose course/week scope and retrieve from the wrong course | Scope carried across turns, caller-scoped; week-only asks which course; empty scoped retrieval says so; quiz action uses carried course |
 | M32-S4-BACKEND-009 | `backend` (+`safety`) | QUOTA-01 + COST-01 — **after the user decides PROD-08** | Every bypass route checks quota; non-zero global ceilings; chat/Q&A/stream/concepts record usage; `top_k` bounded; counter race fixed |
 
 *Wave 2 — security, money and data-integrity S2 (M32)*

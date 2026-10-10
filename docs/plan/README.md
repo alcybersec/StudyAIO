@@ -27,9 +27,13 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S4-BACKEND-001 + 004 (SEC-01 GL#11, SEC-03 GL#14) | `backend` | 2026-10-10 | isolated |
-| M32-S4-DEVOPS-022 (AGENT-01 image/compose: unprivileged CLI uid 10001, data dir not readable by it, GL#12) | `devops` | 2026-10-10 | isolated |
-| M32-S4-BACKEND-005 (PROD-03 GL#15) | `backend` | 2026-10-10 | isolated |
+| M32-S4-BACKEND-023 (GL#31: chat scope carried across turns; week-only clarifies) | `backend` | 2026-10-10 | isolated |
+| M32-S4-AI-024 (GL#14 adapter use-time URL check + no redirects; GL#15 nudge beat job) | `ai` | 2026-10-10 | isolated |
+| M32-S4-FRONTEND-025 (GL#11/14 operator-only fields read-only; GL#15 nudge toggle) | `frontend` | 2026-10-10 | isolated |
+| M32-S4-SAFETY-026 (review wave 1: SEC-01/03, AGENT-01, PROD-03) | `safety` | 2026-10-10 | isolated |
+| M32-S4-BACKEND-009 (GL#19 QUOTA-01 + COST-01 + beta-Pro CLI) | `backend` | 2026-10-10 | isolated |
+
+**GL#31 (2026-10-10):** chat follow-ups lose course/week scope (prod repro; CSCI369 W3 has 8 indexed chunks) — pulled into M32 wave 1 as M32-S4-BACKEND-023 (audit AI-06 overlap).
 
 **M32 GitLab issues (2026-10-10):** GL#11–#30 = M32-S4-BACKEND-001 … M32-S4-QA-020 in §11 order (labels `M32`, `audit-2026-10`). Queued: AI-007 (AI-03, after wave 1), BACKEND-009 (QUOTA-01/COST-01; PROD-08 decided: beta users get Pro).
 
@@ -42,6 +46,9 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M32-S4-DEVOPS-022 (GL#12 image: `claudecli` uid 10001, worker `CLAUDE_CLI_UID/GID`, image `/app/data` 0750) | `devops` | `ca73af1` → `kit/retrofit` `1b16ded` | Local image: `-u 10001 claude --version` → 2.1.286; `/app/data`, `/root`, `/proc/1/environ` denied. **Prod host `/opt/studyaio/data` is 755 (subdirs 755)** → bind mount overrides the image mode; needs `chmod o-rwx /opt/studyaio/data` (pending user OK) | 2026-10-10 |
+| M32-S4-BACKEND-005 (GL#15 PROD-03: reminders opt-out by default, seeded at signup, day-2 nudge service, unsubscribe footer) | `backend` | `67db94d`/`b70da9d` → `kit/retrofit` `ebae1cb` | **Orchestrator: unit+safety+contracts `2914 passed, 1 skipped`; ruff clean.** Follow-ups: ai beat job (AI-024), frontend toggle (FRONTEND-025), existing-user backfill (user decision), prod `NOTIFICATIONS_ENABLED`/SMTP | 2026-10-10 |
+| M32-S4-BACKEND-001 + 004 (GL#11 SEC-01 operator-only `claude_code_path`/`claude_model`; GL#14 SEC-03 base URLs operator-only when not self-hosted, `core/url_safety.py`) | `backend` | `d276921` → `kit/retrofit` `a5f3255` | 29 tests red-first (agent). **Orchestrator: unit+safety+contracts `2904 passed, 1 skipped`.** Use-time check + redirects → AI-024; UI → FRONTEND-025; review → SAFETY-026 | 2026-10-10 |
 | M32-S4-AI-006 (AI-04 GL#16: streamed chat emits plain prose; JSON guard; new `answer_question_stream.txt`) | `ai` | `ef4364d` → `kit/retrofit` `a20564f` | Cause: zai/openai and anthropic `stream_answer` used the JSON prompt and forwarded tokens verbatim. **Orchestrator red-check:** old adapters → `1 failed, 8 passed` (the mocked-stream test); fixed + golden → `326 passed`. Agent unit+golden+safety `3099 passed`. Live GLM output with the new prompt unverified | 2026-10-10 |
 | M32-S4-QA-021 (Study hub mobile e2e, GL#18) | `qa` | `5e6503a` → `kit/retrofit` `96acc9d` | Agent local CI-mirror: `28 passed`; with pre-fix page → `12 failed, 16 passed` (catches the bug) | 2026-10-10 |
 | M32-S4-BACKEND-003 (AI-05 GL#13: Q&A citations from retrieved chunks via `build_sources`) | `backend` | `76ce786`/`5e50173` → `kit/retrofit` (see log) | Red-first (5 tests). Agent: unit+safety `2778 passed, 1 skipped`; Q&A integration files `38 passed`; ruff clean. No frontend change | 2026-10-10 |
