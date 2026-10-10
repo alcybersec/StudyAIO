@@ -25,7 +25,7 @@ from app.api.schemas import (
 from app.config import settings
 from app.core.cache import cache_delete, dashboard_cache_key
 from app.core.database import async_session_factory, get_session
-from app.core.exceptions import DuplicateFileError
+from app.core.exceptions import DuplicateFileError, GlobalCeilingError, QuotaExceededError
 from app.core.rate_limit import limiter
 from app.core.utils import (
     compute_sha256_from_bytes,
@@ -284,6 +284,24 @@ async def batch_upload(
             duplicates += 1
             continue
 
+        # Quota, per new file: the single-file endpoint checks before it stores
+        # anything and the batch path used to skip it entirely (QUOTA-01), so
+        # three or more files — the UI default — dodged every plan limit. A
+        # duplicate is not charged (it was handled above), and the file that
+        # tips the limit fails alone rather than sinking the whole request.
+        try:
+            await quota_service.check_upload_quota(session, user.id, user.tier)
+            await quota_service.check_ai_quota(
+                session,
+                user.id,
+                user.tier,
+                calls=quota_service.PIPELINE_AI_CALLS_PER_UPLOAD,
+            )
+        except (QuotaExceededError, GlobalCeilingError) as e:
+            results.append(BatchUploadFileResult(filename=filename, status="error", error=str(e)))
+            failed += 1
+            continue
+
         # Store the file and create the artifact row
         try:
             artifact = await artifact_service.create_upload_artifact(
@@ -339,6 +357,12 @@ async def batch_upload(
                 )
             )
             succeeded += 1
+            # Count it now, so the next file in this same request sees it.
+            try:
+                await billing_service.record_usage(session, user.id, uploads=1)
+                await session.commit()
+            except Exception:
+                logger.warning("usage_record_batch_failed", exc_info=True)
         except Exception as e:
             logger.error("batch_upload_pipeline_failed", filename=filename, error=str(e))
             results.append(
@@ -500,6 +524,12 @@ async def retry_pipeline(
             status_code=400,
             detail=f"Artifact status is '{artifact.status}', not 'failed'. Only failed artifacts can be retried.",
         )
+
+    # A retry re-spends AI; an unmetered one lets a failing artifact be looped
+    # for free (QUOTA-01). Checked before any state is changed.
+    await quota_service.check_ai_quota(
+        session, user.id, user.tier, calls=quota_service.PIPELINE_AI_CALLS_PER_UPLOAD
+    )
 
     # Find the latest failed pipeline run to determine which stage failed
     runs = await pipeline_service.get_artifact_pipeline_runs(session, artifact_id)

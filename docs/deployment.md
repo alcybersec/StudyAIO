@@ -140,8 +140,17 @@ GitLab CI (`.gitlab-ci.yml`) runs five stages — `lint`, `test`, `e2e`, `build`
    - Sends **only the commit SHA** over SSH. The deploy key on the server is
      command-restricted to `/opt/studyaio/deploy.sh`, which reads it from
      `SSH_ORIGINAL_COMMAND` — CI cannot run an arbitrary command on the host.
-   - `deploy.sh` checks free disk, pins the host `.env` to that tag, pulls, runs
-     `alembic upgrade head`, and restarts the stack.
+   - `deploy.sh` checks free disk, pins the host `.env` to that tag, pulls, starts
+     db/redis, runs `alembic upgrade head` in a one-off container from the new api
+     image, and only then recreates api/worker/beat/ui. A failed migration aborts
+     the deploy with the old containers still running.
+
+   **Migrations must stay additive and backwards-compatible for one release**
+   (new nullable/defaulted columns, new tables; no drops, renames or type
+   changes in the same release as the code that stops using them). The old
+   containers keep serving against the new schema while the migration applies and
+   until `up -d` recreates them. A destructive change must be split across two
+   releases (stop using, then drop). Origin: R-028, the !34 deploy.
 
 ### Updating `deploy.sh`
 
@@ -542,6 +551,21 @@ files in the image's `/root/.claude` (kept as placeholders so the single-file
 mounts have a source). The image's `~/.claude` is not overlaid as a directory.
 The api and beat containers get nothing. The operator's personal `~/.claude` is
 never mounted.
+
+**Claude CLI isolation (GL#12, R-030):** the worker stays root, but the adapter
+spawns `claude -p` as uid/gid 10001 (`claudecli`, created in
+`services/app/Dockerfile`; set by `CLAUDE_CLI_UID`/`CLAUDE_CLI_GID` on the worker
+service in every compose file). The worker keeps its default capabilities
+(CAP_SETUID/SETGID/CHOWN are needed; do not add `cap_drop: ALL`).
+uid 10001 **can** run `claude`/node and read `/app` code and the baked
+`/opt/models` cache (no secrets in either) and its own per-call scratch dir.
+It **cannot** read: `/app/data` (uploads, extractions, summaries), `/root`
+(including `/root/.claude`), `/run/claude-host` (0700 owned by the host operator
+uid), or `/proc/1/environ` of the worker. The OAuth token reaches it only
+through the child's environment. In the image `/app/data` is 0750
+`studyaio:studyaio`, but compose bind-mounts `./data` over it, so **the host
+directory's mode is what counts**: keep `./data` without "other" access
+(`chmod o-rwx data`) and never make it world-readable or group 10001.
 
 **Read-only on purpose:** a writable mount would let a compromised worker plant
 hooks or settings into a Claude config that a host-side `claude` may later load.

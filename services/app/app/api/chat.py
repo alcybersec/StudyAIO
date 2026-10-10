@@ -193,11 +193,14 @@ async def send_message(
         logger.error("chat_send_error", error=str(e), session_id=session_id)
         raise HTTPException(status_code=500, detail="Failed to process message") from e
 
-    # Record AI usage (best-effort)
-    try:
-        await billing_service.record_usage(session, user.id, ai_calls=1)
-    except Exception:
-        logger.warning("usage_record_chat_failed", exc_info=True)
+    # Record AI usage (best-effort). The adapter is not visible from here, so
+    # tokens are an estimate from the text exchanged (billing_service.record_ai_call).
+    await billing_service.record_ai_call(
+        session,
+        user.id,
+        prompt_text=body.content,
+        output_text=str(getattr(assistant_msg, "content", "") or ""),
+    )
 
     await session.commit()
 
@@ -227,6 +230,7 @@ async def stream_message(
     scope_course_id = await _resolve_scope_course(session, user, body.course_code)
 
     async def event_generator():
+        streamed: list[str] = []
         try:
             async for event in chat_service.stream_message(
                 session=session,
@@ -238,6 +242,8 @@ async def stream_message(
             ):
                 event_type = event["event"]
                 data = event["data"]
+                if event_type == "token" and isinstance(data, str):
+                    streamed.append(data)
                 if isinstance(data, dict):
                     yield {"event": event_type, "data": json.dumps(data)}
                 else:
@@ -248,11 +254,10 @@ async def stream_message(
             logger.error("chat_stream_error", error=str(e), session_id=session_id)
             yield {"event": "error", "data": "Failed to process message"}
 
-        # Record AI usage (best-effort)
-        try:
-            await billing_service.record_usage(session, user.id, ai_calls=1)
-        except Exception:
-            logger.warning("usage_record_stream_failed", exc_info=True)
+        # Record AI usage (best-effort); tokens estimated from the text streamed.
+        await billing_service.record_ai_call(
+            session, user.id, prompt_text=body.content, output_text="".join(streamed)
+        )
 
         await session.commit()
 

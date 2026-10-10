@@ -25,7 +25,7 @@ from app.core.rate_limit import limiter
 from app.core.storage import get_storage
 from app.core.utils import read_upload_with_limit, sanitize_filename
 from app.models.user import User
-from app.services import courseops_service
+from app.services import billing_service, courseops_service, quota_service
 from app.services.calendar_service import generate_ics, generate_task_plan_md
 
 logger = structlog.get_logger()
@@ -68,6 +68,12 @@ async def upload_course_document(
             detail="document_type must be one of: outline, rubric, handbook, other",
         )
 
+    # An outline upload stores a blob and queues AI extraction: it counts as an
+    # upload and needs one AI call of headroom (QUOTA-01). Checked before the
+    # body is read or stored.
+    await quota_service.check_upload_quota(session, user.id, user.tier)
+    await quota_service.check_ai_quota(session, user.id, user.tier)
+
     # Save file to storage backend
     storage = get_storage()
     await storage.ensure_dir(courseops_service.courseops_key_prefix_for_user(user.id))
@@ -104,6 +110,12 @@ async def upload_course_document(
     from app.pipeline.courseops_task import process_course_document
 
     process_course_document.delay(doc.id)
+
+    try:
+        await billing_service.record_usage(session, user.id, uploads=1)
+        await session.commit()
+    except Exception:
+        logger.warning("usage_record_courseops_failed", exc_info=True)
 
     return CourseDocumentResponse.model_validate(doc)
 
@@ -217,6 +229,9 @@ async def upload_assessment_document(
             detail="document_type must be one of: brief, rubric, guideline, handbook, other",
         )
 
+    # Storage only, no AI — but unmetered blobs are unbounded disk (QUOTA-01).
+    await quota_service.check_upload_quota(session, user.id, user.tier)
+
     storage = get_storage()
     await storage.ensure_dir(courseops_service.courseops_key_prefix_for_user(user.id))
 
@@ -244,6 +259,12 @@ async def upload_assessment_document(
     if not doc:
         await courseops_service.discard_failed_upload_blob(session, user.id, storage_key, storage)
         raise HTTPException(status_code=404, detail="Assessment not found")
+
+    try:
+        await billing_service.record_usage(session, user.id, uploads=1)
+        await session.commit()
+    except Exception:
+        logger.warning("usage_record_courseops_failed", exc_info=True)
 
     return CourseDocumentResponse.model_validate(doc)
 

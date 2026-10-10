@@ -22,7 +22,8 @@
       {% block content %}{% endblock %}
     </div>
     <div class="footer">
-      StudyAIO &mdash; Your AI Study Workspace
+      StudyAIO &mdash; Your AI Study Workspace<br>
+      {% if preferences_url %}<a href="{{ preferences_url }}">Unsubscribe or change email preferences</a>{% endif %}
     </div>
   </div>
 </body>

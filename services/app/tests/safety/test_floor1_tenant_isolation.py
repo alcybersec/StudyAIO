@@ -65,6 +65,7 @@ from tests.safety._tenant import (
     bind_values,
     filters_by_id_list,
     filters_on_user,
+    inserts_for_caller,
     is_planted,
     primary_key_values,
     tables_in,
@@ -356,6 +357,8 @@ async def _run_sweep(async_client, mock_session, caller_id: str, *, owned_parent
                 if filters_on_user(statement, caller_id):
                     vetted |= primary_key_values(statement)
                     continue
+                if inserts_for_caller(statement, caller_id):
+                    continue  # writes only caller-owned rows (GL#19 usage upsert)
                 if owned_parent:
                     values = bind_values(statement)
                     unvetted = [v for v in values if is_planted(v) and v not in vetted]
@@ -1162,6 +1165,55 @@ def test_floor1_unscoped_query_detector_needs_a_predicate_not_a_mention():
         "Floor 1 detector blind spot: a join on / select of Model.user_id counted as a "
         f"user_id predicate. Flagged only: {sorted(names)}"
     )
+
+
+def test_floor1_insert_detector_accepts_only_caller_owned_writes():
+    """``inserts_for_caller`` (SAFETY-026, GL#19) accepts the caller's upsert and nothing wider.
+
+    Rejected: another user's id, a multi-row VALUES with one foreign row, an
+    ``INSERT ... SELECT``, an upsert whose conflict key lacks ``user_id``, and
+    one with an extra update ``WHERE``.
+    """
+    from datetime import date
+
+    import sqlalchemy as sa
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.models.usage_record import UsageRecord
+
+    caller, victim = "caller-id", "victim-id"
+    today = date(2026, 10, 10)
+
+    def row(owner):
+        return {"id": f"r-{owner}", "user_id": owner, "record_date": today, "ai_calls_count": 1}
+
+    def upsert(owner, **kw):
+        stmt = pg_insert(UsageRecord).values(**row(owner))
+        return stmt.on_conflict_do_update(
+            set_={"ai_calls_count": UsageRecord.ai_calls_count + 1}, **kw
+        )
+
+    accepted = {
+        "plain": pg_insert(UsageRecord).values(**row(caller)),
+        "upsert_named": upsert(caller, constraint="uq_usage_user_date"),
+        "upsert_elements": upsert(caller, index_elements=["user_id", "record_date"]),
+    }
+    rejected = {
+        "foreign": pg_insert(UsageRecord).values(**row(victim)),
+        "multi_one_foreign": pg_insert(UsageRecord).values([row(caller), row(victim)]),
+        "from_select": pg_insert(UsageRecord).from_select(
+            ["id", "user_id"], sa.select(UsageRecord.id, UsageRecord.user_id)
+        ),
+        "upsert_on_id": upsert(caller, index_elements=["id"]),
+        "upsert_on_date_only": upsert(caller, index_elements=["record_date"]),
+        "upsert_foreign": upsert(victim, constraint="uq_usage_user_date"),
+        "upsert_with_where": upsert(
+            caller, constraint="uq_usage_user_date", where=UsageRecord.ai_calls_count > 0
+        ),
+        "select": sa.select(UsageRecord),
+    }
+    assert [k for k, s in accepted.items() if not inserts_for_caller(s, caller)] == []
+    assert [k for k, s in rejected.items() if inserts_for_caller(s, caller)] == []
 
 
 def test_floor1_caller_filter_detector_rejects_widened_predicates():

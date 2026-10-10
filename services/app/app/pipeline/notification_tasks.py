@@ -220,6 +220,50 @@ async def _send_daily_reminders() -> int:
     return notified
 
 
+async def _send_study_nudges() -> int:
+    """Send the day-2 study nudge to eligible users at their local 08:xx.
+
+    Rides the hourly reminder run (no schedule of its own). One send per user
+    per local day via the shared claim; a failed send releases the claim so the
+    next hourly run retries. The zone comes from the scoped
+    ``settings_service.get_user_timezone`` (R-023), never the column.
+
+    Returns:
+        Number of users nudged.
+    """
+    from app.services import nudge_service, settings_service
+
+    nudged = 0
+    failed = 0
+
+    async with async_session_factory() as session:
+        candidates = await nudge_service.find_nudge_candidates(session)
+        for cand in candidates:
+            tz = await settings_service.get_user_timezone(session, cand.user_id)
+            if not _is_send_time(tz):
+                continue
+            local_date = user_today(tz)
+            if not await _claim_send("study_nudge", cand.user_id, local_date):
+                continue
+            try:
+                await nudge_service.send_study_nudge(session, cand.user_id, cand.has_uploads)
+                nudged += 1
+            except Exception:
+                failed += 1
+                await _release_send("study_nudge", cand.user_id, local_date)
+                logger.warning("study_nudge_user_failed", user_id=cand.user_id, exc_info=True)
+        await session.commit()
+
+    logger.info(
+        "study_nudges_sent",
+        counter="study_nudges_total",
+        sent=nudged,
+        failed=failed,
+        candidates=len(candidates),
+    )
+    return nudged
+
+
 async def _send_weekly_digest() -> int:
     """Send weekly study digest to opted-in users.
 
@@ -336,10 +380,16 @@ def send_daily_reminders() -> dict:
     try:
         notified = run_async(_send_daily_reminders())
         logger.info("daily_reminders_completed", notified=notified)
-        return {"status": "completed", "notified": notified}
     except Exception:
         logger.error("daily_reminders_failed", exc_info=True)
-        return {"status": "failed", "notified": 0}
+        return {"status": "failed", "notified": 0, "nudged": 0}
+    # Independent of the reminders: one failing must not suppress the other.
+    try:
+        nudged = run_async(_send_study_nudges())
+    except Exception:
+        logger.error("study_nudges_failed", exc_info=True)
+        nudged = 0
+    return {"status": "completed", "notified": notified, "nudged": nudged}
 
 
 @celery_app.task(name="app.pipeline.notification_tasks.send_weekly_digest")

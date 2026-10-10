@@ -74,7 +74,7 @@ ADAPTERS = {
     "openai": (lambda: OpenAIAdapter(api_key="k", model="gpt-4o"), "_call_api"),
     "ollama": (lambda: OllamaAdapter(base_url="http://ollama:11434", model="m"), "_call_api"),
     "claude_code": (
-        lambda: ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet"),
+        lambda: ClaudeCodeAdapter(model="sonnet"),
         "_run_claude_code",
     ),
 }
@@ -98,17 +98,17 @@ class TestLanguageDirective:
     """The directive text itself, on the base adapter."""
 
     def test_empty_by_default(self):
-        adapter = ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet")
+        adapter = ClaudeCodeAdapter(model="sonnet")
         assert adapter.output_language is None
         assert adapter.language_directive() == ""
 
     def test_empty_for_english(self):
-        adapter = ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet")
+        adapter = ClaudeCodeAdapter(model="sonnet")
         adapter.set_output_language("en")
         assert adapter.language_directive() == ""
 
     def test_names_the_language_for_russian(self):
-        adapter = ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet")
+        adapter = ClaudeCodeAdapter(model="sonnet")
         adapter.set_output_language("ru")
         directive = adapter.language_directive()
         assert "Russian" in directive
@@ -116,7 +116,7 @@ class TestLanguageDirective:
 
     def test_protects_headings_and_json_field_names(self):
         """The two things whose translation would break parsing, named explicitly."""
-        adapter = ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet")
+        adapter = ClaudeCodeAdapter(model="sonnet")
         adapter.set_output_language("ru")
         directive = adapter.language_directive()
         assert "section headings" in directive
@@ -124,13 +124,13 @@ class TestLanguageDirective:
 
     def test_unsupported_tag_is_ignored(self):
         """A tag that slipped past validation must not reach the prompt."""
-        adapter = ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet")
+        adapter = ClaudeCodeAdapter(model="sonnet")
         adapter.set_output_language("xx")
         assert adapter.output_language is None
         assert adapter.language_directive() == ""
 
     def test_with_language_leaves_english_prompts_byte_identical(self):
-        adapter = ClaudeCodeAdapter(cli_path="/usr/bin/claude", model="sonnet")
+        adapter = ClaudeCodeAdapter(model="sonnet")
         assert adapter.with_language("Summarise this.") == "Summarise this."
 
 

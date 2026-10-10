@@ -12,6 +12,7 @@ goes to stdout and is never written to the structured log — the same rule
 
 import argparse
 import asyncio
+import datetime
 import pathlib
 import sys
 from urllib.parse import quote_plus
@@ -57,6 +58,36 @@ async def _ensure_admin(email: str, username: str | None) -> int:
     print(
         "Any link printed by an earlier run of this command is now void — use only the newest one."
     )
+    return 0
+
+
+async def _grant_pro(
+    emails: list[str] | None, created_before: datetime.date | None, dry_run: bool
+) -> int:
+    """Grant Pro to beta users and print who changed. Idempotent."""
+    try:
+        async with async_session_factory() as session:
+            try:
+                result = await admin_service.grant_beta_pro(
+                    session, emails=emails, created_before=created_before, dry_run=dry_run
+                )
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            if not dry_run:
+                await session.commit()
+    finally:
+        await engine.dispose()
+
+    label = "would grant" if dry_run else "granted"
+    print(f"{label}: {len(result.granted)}")
+    for email in result.granted:
+        print(f"  + {email}")
+    print(f"already pro: {len(result.already_pro)}")
+    if result.missing:
+        print(f"not found: {len(result.missing)}")
+        for email in result.missing:
+            print(f"  ? {email}")
     return 0
 
 
@@ -238,6 +269,22 @@ def main(argv: list[str] | None = None) -> int:
         help="Display name, used only when no admin account exists yet",
     )
 
+    grant = sub.add_parser(
+        "grant-pro",
+        help="Grant the Pro tier to beta users (decision PROD-08); safe to re-run",
+    )
+    selector = grant.add_mutually_exclusive_group(required=True)
+    selector.add_argument("--emails", help="Comma-separated addresses to grant")
+    selector.add_argument(
+        "--created-before",
+        type=datetime.date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="Grant every account created before this UTC date",
+    )
+    grant.add_argument(
+        "--dry-run", action="store_true", help="Report what would change; modify nothing"
+    )
+
     backfill = sub.add_parser(
         "backfill-concept-embeddings",
         help="Embed concepts created before embeddings worked (issue #33)",
@@ -301,6 +348,19 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
 
+    if args.command == "grant-pro":
+        emails = [e.strip() for e in args.emails.split(",") if e.strip()] if args.emails else None
+        try:
+            return asyncio.run(_grant_pro(emails, args.created_before, args.dry_run))
+        except (OSError, OperationalError, InterfaceError) as exc:
+            print(
+                f"error: cannot reach the database ({type(exc).__name__}: {exc}) — "
+                "is the db service up, and are you running this inside the api "
+                "container?",
+                file=sys.stderr,
+            )
+            return 1
+
     if args.command == "backfill-concept-embeddings":
         try:
             return asyncio.run(_backfill_concept_embeddings(args.batch_size))
@@ -334,7 +394,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.print_usage(sys.stderr)
     print(
-        "error: a command is required (ensure-admin, backfill-concept-embeddings, "
+        "error: a command is required (ensure-admin, grant-pro, backfill-concept-embeddings, "
         "backfill-courseops-keys, evals)",
         file=sys.stderr,
     )

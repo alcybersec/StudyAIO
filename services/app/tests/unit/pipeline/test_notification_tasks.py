@@ -1,5 +1,6 @@
 """Tests for scheduled notification tasks (deadline reminders)."""
 
+import asyncio
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -282,3 +283,67 @@ class TestHourlyLocalSend:
         # Tokyo: 08:00 JST on Oct 9 is Oct 8 23:00 UTC; the deadline due Oct 9 is "today".
         assert await run(datetime(2026, 10, 8, 23, 0, tzinfo=UTC), "Asia/Tokyo") == 1
         assert await run(datetime(2026, 10, 9, 8, 0, tzinfo=UTC), "Asia/Tokyo") == 0  # 17:00 JST
+
+
+@pytest.mark.asyncio
+class TestStudyNudges:
+    """Day-2 nudge rides the hourly beat run, at the user's local 08:xx."""
+
+    def _patches(self, cands, tz, nudge_mock):
+        from app.pipeline import notification_tasks
+        from app.services import nudge_service, settings_service
+
+        return (
+            patch.object(nudge_service, "find_nudge_candidates", AsyncMock(return_value=cands)),
+            patch.object(settings_service, "get_user_timezone", AsyncMock(return_value=tz)),
+            patch.object(nudge_service, "send_study_nudge", nudge_mock),
+            patch.object(
+                notification_tasks,
+                "async_session_factory",
+                lambda: _session_factory_for(AsyncMock())(),
+            ),
+        )
+
+    async def test_sends_once_at_local_send_time(self):
+        from app.pipeline import notification_tasks
+        from app.services.nudge_service import NudgeCandidate
+
+        nudge = AsyncMock(return_value={})
+        p1, p2, p3, p4 = self._patches([NudgeCandidate("u1", True)], "UTC", nudge)
+        with freeze(NOON_UTC), p1, p2 as tzm, p3, p4:
+            first = await notification_tasks._send_study_nudges()
+            second = await notification_tasks._send_study_nudges()
+        assert (first, second) == (1, 0)
+        assert nudge.await_args.args[1:] == ("u1", True)
+        assert tzm.await_args.args[1] == "u1"
+
+    async def test_skips_outside_send_time(self):
+        from app.pipeline import notification_tasks
+        from app.services.nudge_service import NudgeCandidate
+
+        nudge = AsyncMock()
+        p1, p2, p3, p4 = self._patches([NudgeCandidate("u1", False)], "UTC", nudge)
+        with freeze(NOON_UTC.replace(hour=14)), p1, p2, p3, p4:
+            assert await notification_tasks._send_study_nudges() == 0
+        nudge.assert_not_awaited()
+
+    async def test_failure_releases_claim_for_retry(self):
+        from app.pipeline import notification_tasks
+        from app.services.nudge_service import NudgeCandidate
+
+        nudge = AsyncMock(side_effect=[RuntimeError("smtp"), {}])
+        p1, p2, p3, p4 = self._patches([NudgeCandidate("u1", True)], "UTC", nudge)
+        with freeze(NOON_UTC), p1, p2, p3, p4:
+            assert await notification_tasks._send_study_nudges() == 0
+            assert await notification_tasks._send_study_nudges() == 1
+
+    async def test_task_runs_nudges_in_hourly_reminder_run(self):
+        from app.pipeline import notification_tasks
+
+        with (
+            patch.object(notification_tasks, "_send_daily_reminders", AsyncMock(return_value=2)),
+            patch.object(notification_tasks, "_send_study_nudges", AsyncMock(return_value=3)),
+        ):
+            out = await asyncio.to_thread(notification_tasks.send_daily_reminders)
+        assert out["notified"] == 2
+        assert out["nudged"] == 3

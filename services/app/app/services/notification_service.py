@@ -20,12 +20,20 @@ EVENT_TYPES = [
     "cards_due",
     "exam_reminder",
     "weekly_digest",
+    "study_nudge",
 ]
 
 CHANNELS = ["email", "telegram", "push"]
 
+# Opt-out defaults for new users (PROD-03): the reminders that bring a student
+# back, on email only. Push/Telegram need a device or link first, and
+# pipeline/review events stay off (the in-app inbox already covers them).
+DEFAULT_ENABLED: frozenset[tuple[str, str]] = frozenset(
+    ("email", event) for event in ("cards_due", "exam_reminder", "weekly_digest", "study_nudge")
+)
+
 # Closed set of inbox notification kinds
-INBOX_KINDS = ["pipeline", "review", "achievement", "deadline"]
+INBOX_KINDS = ["pipeline", "review", "achievement", "deadline", "nudge"]
 
 
 # ── In-app inbox notifications ─────────────────────────────────────
@@ -239,7 +247,7 @@ async def update_preferences(
 async def seed_default_preferences(
     session: AsyncSession, user_id: str
 ) -> list[NotificationPreference]:
-    """Seed default notification preferences for a user (all disabled).
+    """Seed default notification preferences for a user (DEFAULT_ENABLED on).
 
     Args:
         session: Database session.
@@ -260,7 +268,7 @@ async def seed_default_preferences(
                 user_id=user_id,
                 channel=channel,
                 event_type=event_type,
-                enabled=False,
+                enabled=(channel, event_type) in DEFAULT_ENABLED,
             )
             session.add(pref)
             defaults.append(pref)
@@ -392,6 +400,8 @@ def _build_push_body(event_type: str, kwargs: dict[str, object]) -> str:
         title = kwargs.get("exam_title", "Exam")
         date = kwargs.get("exam_date", "")
         return f"{title} is coming up on {date}. Keep studying!"
+    if event_type == "study_nudge":
+        return str(kwargs.get("body", "Your study material is ready."))
     if event_type == "weekly_digest":
         return "Your weekly study digest is ready."
     return f"New {event_type.replace('_', ' ')} notification."

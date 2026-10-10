@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import * as Tabs from '@radix-ui/react-tabs'
@@ -32,6 +32,7 @@ const TAB_SCOPED_PARAMS: Record<string, TabValue> = {
 
 export function StudyHubPage() {
   const { t } = useTranslation()
+  const tabListRef = useRef<HTMLDivElement>(null)
 
   const [searchParams, setSearchParams] = useSearchParams()
   const [tabFromUrl, setTab] = useTabRouting(TAB_VALUES, 'plan', 'tab', {
@@ -63,6 +64,12 @@ export function StudyHubPage() {
     [searchParams, setSearchParams],
   )
 
+  // Keep the active tab visible when the bar scrolls (narrow phones, deep links).
+  useEffect(() => {
+    const active = tabListRef.current?.querySelector<HTMLElement>('[data-state="active"]')
+    active?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [activeTab])
+
   return (
     <div>
       <PageHeader
@@ -72,12 +79,15 @@ export function StudyHubPage() {
       />
 
       <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
-        <Tabs.List className="flex gap-1 border-b border-border mb-6 -mt-2">
+        <Tabs.List
+          ref={tabListRef}
+          className="flex gap-1 border-b border-border mb-6 -mt-2 overflow-x-auto overflow-y-hidden max-w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {TAB_VALUES.map((tab) => (
             <Tabs.Trigger
               key={tab}
               value={tab}
-              className="px-4 py-2.5 text-sm font-medium text-text-muted transition-colors border-b-2 border-transparent hover:text-text data-[state=active]:text-text data-[state=active]:border-sage min-h-[44px]"
+              className="shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-medium text-text-muted transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sage border-b-2 border-transparent hover:text-text data-[state=active]:text-text data-[state=active]:border-sage min-h-[44px]"
             >
               {t(tabLabels[tab])}
               {tab === 'plan' && (

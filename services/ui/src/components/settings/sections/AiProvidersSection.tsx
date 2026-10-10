@@ -3,9 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Cpu, Globe, Server, Sparkles, Terminal, Zap, type LucideIcon } from 'lucide-react'
-import { Badge, Button, Card, ErrorState, Input, Select, SkeletonCard, Textarea } from '../../ui'
+import { Badge, Button, Card, ErrorState, Input, SkeletonCard, Textarea } from '../../ui'
 import { FieldSavedNote } from '../FieldSavedNote'
 import { useSavedFields } from '../useSavedFields'
+import { useAuth } from '../../../hooks/useAuth'
 import { useSettings, useUpdateSettings } from '../../../hooks/useApi'
 import { settingsApi } from '../../../api/endpoints'
 import { toastMutationError } from '../../../lib/toast'
@@ -83,11 +84,29 @@ const PROVIDERS: ProviderMeta[] = [
   },
 ]
 
-const CLAUDE_MODEL_OPTIONS = [
-  { value: 'opus', label: 'Opus' },
-  { value: 'sonnet', label: 'Sonnet' },
-  { value: 'haiku', label: 'Haiku' },
-]
+/**
+ * A value the operator controls (GL#11, GL#14): shown so the user can see what
+ * runs, but never editable — the server answers a write with a 422.
+ */
+function OperatorValue({ id, label, value }: { id: string; label: string; value: string }) {
+  const { t } = useTranslation()
+
+  return (
+    <div>
+      <div className="text-xs font-medium text-text-muted mb-1.5" id={`${id}_label`}>
+        {label}
+      </div>
+      <p
+        id={id}
+        aria-labelledby={`${id}_label`}
+        className="text-xs font-mono text-text bg-surface-2 rounded px-2 py-1.5"
+      >
+        {value || t('default')}
+      </p>
+      <p className="mt-1.5 text-xs text-text-faint">{t('Set by the server operator')}</p>
+    </div>
+  )
+}
 
 const PROVIDER_TITLES: Record<AgentBackend, string> = {
   studyaio: 'StudyAIO provided',
@@ -211,6 +230,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
   const { t } = useTranslation()
   const updateMutation = useUpdateSettings()
   const { saved, markSaved } = useSavedFields()
+  const { isSelfHosted } = useAuth()
   const [test, setTest] = useState<{ state: 'idle' | 'testing' | 'ok' | 'error'; message?: string }>(
     { state: 'idle' },
   )
@@ -270,12 +290,6 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
     saveValue('agent_backend', id)
   }
 
-  const selectField = (field: 'claude_model') => (value: string) => {
-    if (getValues(field) === value) return
-    setValue(field, value as never)
-    saveValue(field, value)
-  }
-
   const runTest = async () => {
     setTest({ state: 'testing' })
     const started = Date.now()
@@ -312,13 +326,17 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
           const Icon = provider.icon
           const selected = backend === provider.id
           const status = provider.status(settings)
+          const unavailable = provider.id === 'ollama' && !isSelfHosted
           return (
             <button
               key={provider.id}
               type="button"
               onClick={() => selectProvider(provider.id)}
               aria-pressed={selected}
-              className={`text-left rounded-xl border p-3 transition-colors cursor-pointer ${
+              disabled={unavailable}
+              className={`text-left rounded-xl border p-3 transition-colors ${
+                unavailable ? 'opacity-50 cursor-not-allowed ' : 'cursor-pointer '
+              }${
                 selected
                   ? 'border-sage ring-1 ring-sage bg-sage-soft/40'
                   : 'border-border bg-surface-1 hover:border-border-strong'
@@ -333,9 +351,9 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
               </span>
               <span className="block text-xs text-text-muted mt-1.5">{t(provider.desc)}</span>
               <span
-                className={`block text-[11px] font-mono mt-2 ${status.ok ? 'text-sage-fg' : 'text-text-faint'}`}
+                className={`block text-[11px] font-mono mt-2 ${status.ok && !unavailable ? 'text-sage-fg' : 'text-text-faint'}`}
               >
-                {t(status.text)}
+                {unavailable ? t('Not available on this server — it needs an endpoint only the operator can set') : t(status.text)}
               </span>
             </button>
           )
@@ -354,24 +372,8 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
 
           {backend === 'claude_code' && (
             <>
-              <div>
-                <LabelRow htmlFor="claude_code_path" label={t('Claude CLI path')} saved={!!saved.claude_code_path} />
-                <Input
-                  id="claude_code_path"
-                  className="font-mono"
-                  error={errors.claude_code_path?.message}
-                  {...registerWithSave('claude_code_path')}
-                />
-              </div>
-              <div>
-                <LabelRow htmlFor="claude_model" label={t('Model')} saved={!!saved.claude_model} />
-                <Select
-                  id="claude_model"
-                  options={CLAUDE_MODEL_OPTIONS}
-                  value={watch('claude_model')}
-                  onValueChange={selectField('claude_model')}
-                />
-              </div>
+              <OperatorValue id="claude_code_path" label={t('Claude CLI path')} value={settings.claude_code_path} />
+              <OperatorValue id="claude_model" label={t('Model')} value={settings.claude_model} />
               <div>
                 <SecretLabelRow
                   htmlFor="claude_cli_credentials"
@@ -428,15 +430,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {...registerWithSave('anthropic_api_key')}
                 />
               </div>
-              <div>
-                <LabelRow htmlFor="claude_model_api" label={t('Model')} saved={!!saved.claude_model} />
-                <Select
-                  id="claude_model_api"
-                  options={CLAUDE_MODEL_OPTIONS}
-                  value={watch('claude_model')}
-                  onValueChange={selectField('claude_model')}
-                />
-              </div>
+              <OperatorValue id="claude_model_api" label={t('Model')} value={settings.claude_model} />
             </>
           )}
 
@@ -518,41 +512,45 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   {t('e.g. glm-5.3 (flagship), glm-5.3-flash (cheaper), glm-4.6')}
                 </p>
               </div>
-              <div>
-                <LabelRow
-                  htmlFor="zai_base_url"
-                  label={t('Endpoint')}
-                  saved={!!saved.zai_base_url}
-                />
-                <Input
-                  id="zai_base_url"
-                  placeholder="https://api.z.ai/api/paas/v4/"
-                  className="font-mono"
-                  error={errors.zai_base_url?.message}
-                  {...registerWithSave('zai_base_url')}
-                />
-                <p className="mt-1.5 text-xs text-text-faint">
-                  {t('Leave blank unless you use a regional or self-hosted endpoint.')}
-                </p>
-              </div>
+              {isSelfHosted ? (
+                <div>
+                  <LabelRow htmlFor="zai_base_url" label={t('Endpoint')} saved={!!saved.zai_base_url} />
+                  <Input
+                    id="zai_base_url"
+                    placeholder="https://api.z.ai/api/paas/v4/"
+                    className="font-mono"
+                    error={errors.zai_base_url?.message}
+                    {...registerWithSave('zai_base_url')}
+                  />
+                  <p className="mt-1.5 text-xs text-text-faint">
+                    {t('Leave blank unless you use a regional or self-hosted endpoint.')}
+                  </p>
+                </div>
+              ) : (
+                <OperatorValue id="zai_base_url" label={t('Endpoint')} value={settings.zai_base_url ?? ''} />
+              )}
             </>
           )}
 
           {backend === 'ollama' && (
             <>
-              <div>
-                <LabelRow htmlFor="ollama_base_url" label={t('Base URL')} saved={!!saved.ollama_base_url} />
-                <Input
-                  id="ollama_base_url"
-                  placeholder="http://ollama:11434"
-                  className="font-mono"
-                  error={errors.ollama_base_url?.message}
-                  {...registerWithSave('ollama_base_url')}
-                />
-                <p className="mt-1.5 text-xs text-text-faint">
-                  {t("Your own Ollama server. Required — this provider runs on your hardware, not StudyAIO's.")}
-                </p>
-              </div>
+              {isSelfHosted ? (
+                <div>
+                  <LabelRow htmlFor="ollama_base_url" label={t('Base URL')} saved={!!saved.ollama_base_url} />
+                  <Input
+                    id="ollama_base_url"
+                    placeholder="http://ollama:11434"
+                    className="font-mono"
+                    error={errors.ollama_base_url?.message}
+                    {...registerWithSave('ollama_base_url')}
+                  />
+                  <p className="mt-1.5 text-xs text-text-faint">
+                    {t("Your own Ollama server. Required — this provider runs on your hardware, not StudyAIO's.")}
+                  </p>
+                </div>
+              ) : (
+                <OperatorValue id="ollama_base_url" label={t('Base URL')} value={settings.ollama_base_url ?? ''} />
+              )}
               <div>
                 <LabelRow htmlFor="ollama_model" label={t('Model')} saved={!!saved.ollama_model} />
                 <Input

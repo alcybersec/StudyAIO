@@ -82,7 +82,9 @@ class TestClientConstruction:
         adapter = ZaiAdapter(api_key="secret-key")
         with patch("app.agents.openai_adapter.AsyncOpenAI") as mock_client:
             adapter._client()
-        mock_client.assert_called_once_with(api_key="secret-key", base_url=ZAI_BASE_URL)
+        kwargs = mock_client.call_args.kwargs
+        assert (kwargs["api_key"], kwargs["base_url"]) == ("secret-key", ZAI_BASE_URL)
+        assert kwargs["http_client"].follow_redirects is False  # GL#14
 
     def test_openai_adapter_still_uses_the_sdk_default(self):
         """Adding base_url support must not change OpenAI's own behaviour."""
@@ -90,7 +92,10 @@ class TestClientConstruction:
             adapter = OpenAIAdapter(api_key="k", model="gpt-4o")
         with patch("app.agents.openai_adapter.AsyncOpenAI") as mock_client:
             adapter._client()
-        mock_client.assert_called_once_with(api_key="k")
+        kwargs = mock_client.call_args.kwargs
+        assert kwargs["api_key"] == "k"
+        assert "base_url" not in kwargs
+        assert kwargs["http_client"].follow_redirects is False  # GL#14
 
 
 class TestApiKeyRequired:

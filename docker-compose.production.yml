@@ -20,6 +20,10 @@ services:
   worker:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
     build: !reset null
+    environment:
+      # GL#12 / R-030: uid/gid of `claudecli` in the image (worker only).
+      CLAUDE_CLI_UID: "10001"
+      CLAUDE_CLI_GID: "10001"
 
   beat:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}

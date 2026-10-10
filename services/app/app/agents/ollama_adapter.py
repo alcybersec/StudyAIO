@@ -1,5 +1,7 @@
 """Ollama adapter — calls a local Ollama server for AI operations."""
 
+import asyncio
+
 import structlog
 from ollama import AsyncClient
 
@@ -16,6 +18,8 @@ from app.agents.base import (
     SummaryResult,
 )
 from app.core.ai_settings import get_effective_setting
+from app.core.exceptions import AgentError
+from app.core.url_safety import UnsafeURLError, validate_outbound_url
 
 logger = structlog.get_logger()
 
@@ -27,7 +31,18 @@ _SUMMARY_NUM_PREDICT = 8192
 class OllamaAdapter(AgentAdapter):
     """Calls an Ollama server via the official Python SDK."""
 
-    def __init__(self, base_url: str = "", model: str = ""):
+    def __init__(self, base_url: str = "", model: str = "", user_supplied_url: bool = False):
+        """Configure the adapter.
+
+        Args:
+            base_url: Ollama endpoint; falls back to the operator setting.
+            model: Model name; falls back to the operator setting.
+            user_supplied_url: True when ``base_url`` came from a user's own
+                config. Such a URL is validated against private/loopback
+                ranges immediately before every connection (SEC-03, GL#14);
+                the operator default is private by design and is not.
+        """
+        self._user_supplied_url = bool(user_supplied_url and base_url)
         self._base_url = base_url or get_effective_setting("ollama_base_url")
         self._model = model or get_effective_setting("ollama_model")
 
@@ -44,7 +59,13 @@ class OllamaAdapter(AgentAdapter):
         Raises:
             AgentError: If the API call fails.
         """
-        client = AsyncClient(host=self._base_url)
+        if self._user_supplied_url:
+            try:
+                await asyncio.to_thread(validate_outbound_url, self._base_url)
+            except UnsafeURLError as e:
+                raise AgentError(f"Ollama base URL refused: {e}") from None
+        # Redirects off: a validated host must not bounce us to a private one.
+        client = AsyncClient(host=self._base_url, follow_redirects=False)
         logger.info(
             "ollama_api_call",
             prompt_length=len(prompt),

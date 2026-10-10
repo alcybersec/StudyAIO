@@ -11,8 +11,10 @@ from app.agents.embeddings import get_embedding_provider
 from app.agents.factory import get_agent
 from app.core.clock import utc_now
 from app.core.utils import generate_id
+from app.models.artifact import LectureArtifact
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
+from app.models.course import Course
 from app.services import course_service, search_service, settings_service
 from app.services.chat_scope import build_sources, detect_quiz_intent, parse_scope
 
@@ -22,6 +24,15 @@ logger = structlog.get_logger()
 MAX_HISTORY_MESSAGES = 10
 # Max RAG chunks to retrieve per question.
 MAX_RAG_CHUNKS = 5
+# Recent user messages scanned for a course/week to carry into a follow-up.
+CARRY_WINDOW = 6
+
+
+def _join_codes(codes: list[str]) -> str:
+    """Render ['A', 'B', 'C'] as 'A, B or C'."""
+    if len(codes) == 1:
+        return codes[0]
+    return ", ".join(codes[:-1]) + f" or {codes[-1]}"
 
 
 @dataclass
@@ -44,6 +55,48 @@ def _no_material_reply(plan: _Plan) -> str:
     return f"{label} has no indexed material yet."
 
 
+async def _courses_with_week(session: AsyncSession, user_id: str, week: int) -> list[str]:
+    """Codes of the caller's active courses that have an artifact in ``week``."""
+    result = await session.execute(
+        select(Course.code)
+        .join(LectureArtifact, LectureArtifact.course_id == Course.id)
+        .where(
+            Course.user_id == user_id,
+            Course.archived_at.is_(None),
+            LectureArtifact.user_id == user_id,
+            LectureArtifact.week == week,
+        )
+        .distinct()
+        .order_by(Course.code)
+    )
+    return [row[0] for row in result.all()]
+
+
+async def _carry_scope(
+    session: AsyncSession,
+    user_id: str,
+    recent_user_messages: list[str],
+) -> tuple[Course | None, int | None]:
+    """Find the latest course (and week) named in recent user messages.
+
+    Messages are newest first. The course is re-resolved against the caller's
+    own courses on every turn, so a deleted or foreign code is skipped and the
+    next older one is tried. The week is the newest one mentioned at or after
+    the message that supplied the course.
+    """
+    week: int | None = None
+    for text in recent_user_messages[:CARRY_WINDOW]:
+        parsed = parse_scope(text)
+        if week is None:
+            week = parsed.week
+        if parsed.code is None:
+            continue
+        course = await course_service.get_course_by_code(session, parsed.code, user_id=user_id)
+        if course is not None:
+            return course, week
+    return None, None
+
+
 async def _plan_message(
     session: AsyncSession,
     user_id: str,
@@ -51,14 +104,19 @@ async def _plan_message(
     course_id: str | None,
     week: int | None,
     session_course_id: str | None,
+    recent_user_messages: list[str] | None = None,
 ) -> _Plan:
     """Resolve the course/week scope and quiz intent for a message.
 
     A course code named in the message is resolved against the caller's own
     courses only; a code they do not own is reported exactly like a missing
-    one. An explicit ``course_id`` skips message parsing entirely.
+    one. An explicit ``course_id`` skips message parsing entirely. When the
+    message names no course, the latest one from ``recent_user_messages``
+    (newest first, caller-scoped) is carried over. A week with no course
+    anywhere in context gets a clarifying question, never an unscoped search.
     """
     plan = _Plan(course_id=course_id or session_course_id, week=week)
+    parsed = None
     if course_id is None:
         parsed = parse_scope(content)
         if parsed.code:
@@ -72,6 +130,14 @@ async def _plan_message(
             plan.from_message = True
             if week is None:
                 plan.week = parsed.week
+        else:
+            carried, carried_week = await _carry_scope(session, user_id, recent_user_messages or [])
+            if carried is not None:
+                plan.course_id = carried.id
+                plan.code = carried.code
+                plan.from_message = True
+                if week is None:
+                    plan.week = parsed.week if parsed.week is not None else carried_week
     if detect_quiz_intent(content):
         plan.action = {
             "type": "open_quiz_builder",
@@ -83,6 +149,20 @@ async def _plan_message(
         if plan.week is not None:
             target += f" Week {plan.week}"
         plan.reply = f"Open the quiz builder to create a test for {target}."
+    elif parsed is not None and plan.course_id is None and parsed.week is not None and week is None:
+        codes = await _courses_with_week(session, user_id, parsed.week)
+        if len(codes) == 1:
+            course = await course_service.get_course_by_code(session, codes[0], user_id=user_id)
+            if course is not None:
+                plan.course_id = course.id
+                plan.code = course.code
+                plan.week = parsed.week
+                plan.from_message = True
+        elif codes:
+            plan.week = parsed.week
+            plan.reply = f"Which course for Week {parsed.week} — {_join_codes(codes)}?"
+        else:
+            plan.reply = f"None of your courses have Week {parsed.week} material indexed yet."
     return plan
 
 
@@ -255,7 +335,10 @@ async def send_message(
     history.append({"role": "user", "content": content})
 
     # 3. Resolve scope named in the message, then embed + search (RAG)
-    plan = await _plan_message(session, user_id, content, course_id, week, chat_session.course_id)
+    recent_user = [m.content for m in reversed(history_msgs) if m.role == "user"]
+    plan = await _plan_message(
+        session, user_id, content, course_id, week, chat_session.course_id, recent_user
+    )
     chunks: list[dict] = []
     answer_text = ""
     answer_citations: list[dict] = []
@@ -405,7 +488,10 @@ async def stream_message(
     history.append({"role": "user", "content": content})
 
     # Resolve scope named in the message, then RAG search
-    plan = await _plan_message(session, user_id, content, course_id, week, chat_session.course_id)
+    recent_user = [m.content for m in reversed(history_msgs) if m.role == "user"]
+    plan = await _plan_message(
+        session, user_id, content, course_id, week, chat_session.course_id, recent_user
+    )
     chunks: list[dict] = []
     if plan.reply is None:
         search_ok = False

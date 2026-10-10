@@ -394,7 +394,6 @@
   "Google Calendar": "Google Календарь",
   "Grading criteria, submission details, guidelines…": "Критерии оценки, порядок сдачи, требования…",
   "Graph": "Граф",
-  "Haiku": "Haiku",
   "Handbook": "Методичка",
   "Hard": "Трудно",
   "Hide original": "Скрыть оригинал",
@@ -606,7 +605,6 @@
   "Open sessions list": "Открыть список сессий",
   "OpenAI": "OpenAI",
   "OpenAI configuration": "Настройка OpenAI",
-  "Opus": "Opus",
   "Other": "Другое",
   "Overlap between consecutive chunks (0–500)": "Перекрытие соседних фрагментов (0–500)",
   "PAUSED": "ПАУЗА",
@@ -790,7 +788,6 @@
   "Something broke": "Что-то сломалось",
   "Something confused me": "Что-то непонятно",
   "Something went wrong": "Что-то пошло не так",
-  "Sonnet": "Sonnet",
   "Source files (": "Исходные файлы (",
   "Sources": "Источники",
   "Stage": "Этап",
@@ -1290,5 +1287,10 @@
   "Saving…": "Сохранение…",
   "That time zone is not valid.": "Такого часового пояса не существует.",
   "Couldn't save the time zone. Try again.": "Не удалось сохранить часовой пояс. Попробуйте ещё раз.",
-  "Decides when your day starts: streaks, what is due today, and exam countdowns.": "Определяет, когда начинается ваш день: серии, задачи на сегодня и обратный отсчёт до экзаменов."
+  "Decides when your day starts: streaks, what is due today, and exam countdowns.": "Определяет, когда начинается ваш день: серии, задачи на сегодня и обратный отсчёт до экзаменов.",
+  "Day-2 study nudge": "Напоминание через два дня",
+  "A reminder to study again if you have been away for two days": "Напоминание вернуться к учёбе, если вы не заходили два дня",
+  "Set by the server operator": "Задаётся оператором сервера",
+  "default": "по умолчанию",
+  "Not available on this server — it needs an endpoint only the operator can set": "Недоступно на этом сервере: для него нужен адрес, который задаёт только оператор"
 }

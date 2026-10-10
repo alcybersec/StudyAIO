@@ -43,6 +43,10 @@ logger = structlog.get_logger()
 #: upload is accepted, rather than failing a stage halfway through.
 PIPELINE_AI_CALLS_PER_UPLOAD = 4
 
+#: What a run resumed after classification still costs (summarize, flashcards,
+#: quiz). Review-resolve and merge/reclassify regeneration re-run from there.
+PIPELINE_AI_CALLS_AFTER_CLASSIFY = PIPELINE_AI_CALLS_PER_UPLOAD - 1
+
 
 def _limit_for(tier: str, resource: str) -> int:
     """Resolve a configured limit for a tier.

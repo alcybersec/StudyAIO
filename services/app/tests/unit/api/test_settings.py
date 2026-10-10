@@ -134,3 +134,19 @@ class TestTimezoneInvalidatesDashboardCache:
 
         assert response.status_code == 200
         delete.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+class TestOperatorOnlySettings:
+    """SEC-01 (GL#11): the executable path and model are not user-settable."""
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [("claude_code_path", "/tmp/evil"), ("claude_model", "opus")],
+    )
+    async def test_put_operator_only_key_returns_422(self, async_client, field, value):
+        """The real service rejects it before touching the database."""
+        response = await async_client.put("/api/settings", json={field: value})
+
+        assert response.status_code == 422
+        assert "operator" in response.json()["detail"]

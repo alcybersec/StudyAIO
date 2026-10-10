@@ -15,6 +15,7 @@ const EVENT_LABELS: Record<string, string> = {
   cards_due: 'Cards Due',
   exam_reminder: 'Exam Reminder',
   weekly_digest: 'Weekly Digest',
+  study_nudge: 'Day-2 study nudge',
 }
 
 const EVENT_DESCRIPTIONS: Record<string, string> = {
@@ -23,6 +24,7 @@ const EVENT_DESCRIPTIONS: Record<string, string> = {
   cards_due: 'Daily reminder for due flashcards',
   exam_reminder: 'Upcoming exam alerts',
   weekly_digest: 'Weekly study summary',
+  study_nudge: 'A reminder to study again if you have been away for two days',
 }
 
 const CHANNELS = ['email', 'telegram', 'push'] as const
@@ -33,7 +35,7 @@ const CHANNEL_LABELS: Record<string, string> = {
   telegram: 'Telegram',
   push: 'Push',
 }
-const EVENT_TYPES = ['pipeline_complete', 'review_created', 'cards_due', 'exam_reminder', 'weekly_digest'] as const
+const EVENT_TYPES = ['pipeline_complete', 'review_created', 'cards_due', 'exam_reminder', 'weekly_digest', 'study_nudge'] as const
 
 export function NotificationsSection() {
   const { t } = useTranslation()

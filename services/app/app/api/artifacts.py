@@ -10,7 +10,7 @@ from app.core.database import get_session
 from app.core.exceptions import ArtifactBusyError
 from app.models.user import User
 from app.pipeline.summarize import summarize_artifact
-from app.services import artifact_service
+from app.services import artifact_service, quota_service
 
 logger = structlog.get_logger()
 
@@ -48,6 +48,10 @@ async def reclassify_artifact(
     session: AsyncSession = Depends(get_session),
 ) -> ReclassifyResponse:
     """Reclassify an artifact to another course/week."""
+    # Reclassifying regenerates up to two weekly summaries: AI the caller pays
+    # for, and a free re-run loop if unmetered (QUOTA-01).
+    await quota_service.check_ai_quota(session, user.id, user.tier, calls=2)
+
     try:
         result = await artifact_service.reclassify(
             session,

@@ -20,7 +20,7 @@ from app.core.exceptions import AgentError
 from app.core.rate_limit import limiter
 from app.models.course import Course
 from app.models.user import User
-from app.services import billing_service, concept_service, quota_service, settings_service
+from app.services import concept_service, quota_service, settings_service
 
 logger = structlog.get_logger()
 
@@ -221,12 +221,6 @@ async def extract_concepts(
         raise HTTPException(
             status_code=502, detail="Concept extraction failed: the AI provider request failed"
         ) from None
-
-    # Record AI usage (best-effort)
-    try:
-        await billing_service.record_usage(session, user.id, ai_calls=1)
-    except Exception:
-        logger.warning("usage_record_concepts_failed", exc_info=True)
 
     return ConceptExtractionResponse(
         artifact_id=artifact_id,

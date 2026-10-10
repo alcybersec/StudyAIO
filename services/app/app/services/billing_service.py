@@ -1,9 +1,10 @@
 """Billing service for Stripe subscription management."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -268,6 +269,11 @@ async def record_usage(
 ) -> None:
     """Record usage for quota tracking. Creates or increments today's record.
 
+    One atomic ``INSERT ... ON CONFLICT DO UPDATE SET n = n + delta`` — the
+    increment is computed by the database from the stored value. The earlier
+    read-modify-write lost counts when two requests (a chat stream and an
+    upload, say) updated the same day's row concurrently (COST-01).
+
     Args:
         session: Database session.
         user_id: The user's ID.
@@ -276,33 +282,87 @@ async def record_usage(
         tokens_input: Input tokens to add.
         tokens_output: Output tokens to add.
     """
-    today = utc_today()
-    result = await session.execute(
-        select(UsageRecord).where(
-            UsageRecord.user_id == user_id,
-            UsageRecord.record_date == today,
-        )
+    now = datetime.now(UTC)
+    stmt = pg_insert(UsageRecord).values(
+        id=generate_id(),
+        user_id=user_id,
+        record_date=utc_today(),
+        ai_calls_count=ai_calls,
+        uploads_count=uploads,
+        ai_tokens_input=tokens_input,
+        ai_tokens_output=tokens_output,
+        created_at=now,
+        updated_at=now,
     )
-    record = result.scalar_one_or_none()
-
-    if record:
-        record.ai_calls_count += ai_calls
-        record.uploads_count += uploads
-        record.ai_tokens_input += tokens_input
-        record.ai_tokens_output += tokens_output
-    else:
-        record = UsageRecord(
-            id=generate_id(),
-            user_id=user_id,
-            record_date=today,
-            ai_calls_count=ai_calls,
-            uploads_count=uploads,
-            ai_tokens_input=tokens_input,
-            ai_tokens_output=tokens_output,
-        )
-        session.add(record)
-
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_usage_user_date",
+        set_={
+            "ai_calls_count": UsageRecord.ai_calls_count + ai_calls,
+            "uploads_count": UsageRecord.uploads_count + uploads,
+            "ai_tokens_input": UsageRecord.ai_tokens_input + tokens_input,
+            "ai_tokens_output": UsageRecord.ai_tokens_output + tokens_output,
+            "updated_at": now,
+        },
+    )
+    await session.execute(stmt)
     await session.flush()
+
+
+def estimate_tokens(text: str = "") -> int:
+    """Estimate the tokens in ``text`` (about 4 characters each).
+
+    Used only when an adapter reports no usage. Never below
+    ``ai_call_estimate_min_tokens``, which stands in for retrieved context and
+    system prompts the caller cannot see.
+
+    Args:
+        text: The text sent to, or returned by, the model.
+
+    Returns:
+        The estimated token count.
+    """
+    return max(settings.ai_call_estimate_min_tokens, len(text) // 4)
+
+
+async def record_ai_call(
+    session: AsyncSession,
+    user_id: str,
+    agent: object | None = None,
+    prompt_text: str = "",
+    output_text: str = "",
+) -> None:
+    """Meter one request-time AI call, with tokens.
+
+    Real token counts from the adapter win. When it reports none (the Claude
+    Code CLI, streaming) an estimate is recorded instead so the global token
+    ceiling still sees the spend: input is ``estimate_tokens(prompt_text)``
+    (floored), output is ``len(output_text) // 4`` (at least 1).
+
+    Best-effort: metering must never fail a request that already succeeded.
+    The caller commits.
+
+    Args:
+        session: Database session.
+        user_id: The owner of the work.
+        agent: The AgentAdapter used, if the caller has it.
+        prompt_text: What was sent, for the estimate.
+        output_text: What came back, for the estimate.
+    """
+    try:
+        usage = getattr(agent, "usage", None)
+        tokens_in = int(getattr(usage, "input_tokens", 0) or 0)
+        tokens_out = int(getattr(usage, "output_tokens", 0) or 0)
+        if tokens_in + tokens_out == 0:
+            tokens_in = estimate_tokens(prompt_text)
+            tokens_out = max(1, len(output_text) // 4)
+        await record_usage(
+            session, user_id, ai_calls=1, tokens_input=tokens_in, tokens_output=tokens_out
+        )
+    except Exception:
+        logger.warning("ai_call_usage_record_failed", user_id=user_id, exc_info=True)
+        return
+    if agent is not None and hasattr(agent, "reset_usage"):
+        agent.reset_usage()
 
 
 async def record_agent_usage(session: AsyncSession, user_id: str, agent: object) -> None:

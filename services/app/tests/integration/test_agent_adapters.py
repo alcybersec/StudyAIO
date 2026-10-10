@@ -232,12 +232,10 @@ class TestContract:
         assert "three way handshake" in transport.prompts[0]
 
         streamed = "".join([piece async for piece in agent.stream_answer("How?", CHUNKS)])
-        if backend in HAS_SYSTEM_CHANNEL:
-            # Native streaming relays the model's raw JSON; the chat layer parses it at the end.
-            assert json.loads(streamed)["answer"] == "TCP uses a handshake [1]."
-        else:
-            # Default streaming yields the finished answer text in one piece.
-            assert streamed == "TCP uses a handshake [1]."
+        # GL#16: the stream is plain prose equal to the answer text, never JSON scaffolding
+        # (native adapters use answer_question_stream.txt; the guard unwraps a JSON reply).
+        assert streamed == "TCP uses a handshake [1]."
+        assert not streamed.lstrip().startswith("{")
 
     async def test_course_ops_and_concepts(self, rig):
         agent, transport, _ = rig
@@ -400,7 +398,7 @@ class TestApiAdapters:
         sent = {}
 
         class Client:
-            def __init__(self, api_key=None, base_url=None):
+            def __init__(self, api_key=None, base_url=None, **_):
                 sent["base_url"] = base_url
                 self.chat = type(
                     "C", (), {"completions": type("X", (), {"create": staticmethod(self._create)})}

@@ -11,7 +11,7 @@ from app.core.database import get_session
 from app.models.artifact import LectureArtifact
 from app.models.user import User
 from app.pipeline.orchestrator import resume_pipeline
-from app.services import artifact_service, review_service
+from app.services import artifact_service, quota_service, review_service
 
 logger = structlog.get_logger()
 
@@ -106,6 +106,13 @@ async def resolve_review_item(
                 f"Review items of type '{item.entity_type}' cannot be resolved here. "
                 "Dismiss it instead."
             ),
+        )
+
+    # Resolving re-runs the pipeline from extract, which is AI spend. Checked
+    # before anything is applied so a refusal leaves the item pending (QUOTA-01).
+    if item.entity_type == "lecture_artifact":
+        await quota_service.check_ai_quota(
+            session, user.id, user.tier, calls=quota_service.PIPELINE_AI_CALLS_AFTER_CLASSIFY
         )
 
     # Apply resolution to the entity

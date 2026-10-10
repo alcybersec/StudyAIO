@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AiProvidersSection } from './AiProvidersSection'
 import { useSettings, useUpdateSettings } from '../../../hooks/useApi'
+import { useAuth } from '../../../hooks/useAuth'
 import type { Settings } from '../../../types'
 
 vi.mock('../../../hooks/useApi', () => ({
@@ -10,12 +11,17 @@ vi.mock('../../../hooks/useApi', () => ({
   useUpdateSettings: vi.fn(),
 }))
 
+vi.mock('../../../hooks/useAuth', () => ({ useAuth: vi.fn() }))
+
 vi.mock('../../../api/endpoints', () => ({
   settingsApi: { testAi: vi.fn() },
 }))
 
 const mockSettings = vi.mocked(useSettings)
 const mockUpdate = vi.mocked(useUpdateSettings)
+const mockAuth = vi.mocked(useAuth)
+const asHosted = (selfHosted: boolean) =>
+  mockAuth.mockReturnValue({ isSelfHosted: selfHosted } as never)
 const asResult = (q: object) => q as never
 const mutate = vi.fn()
 
@@ -56,6 +62,7 @@ function withSettings(overrides: Partial<Settings> = {}) {
 beforeEach(() => {
   vi.clearAllMocks()
   mockUpdate.mockReturnValue(asResult({ mutate, isPending: false }))
+  asHosted(false)
   withSettings()
 })
 
@@ -109,5 +116,48 @@ describe('AiProvidersSection', () => {
     render(<AiProvidersSection />)
 
     expect(screen.queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument()
+  })
+
+  it('shows the Claude CLI path and model read-only, set by the operator', () => {
+    withSettings({ agent_backend: 'claude_code', claude_code_path: '/opt/claude', claude_model: 'opus' })
+    render(<AiProvidersSection />)
+
+    expect(screen.queryByRole('textbox', { name: /Claude CLI path/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByText('/opt/claude')).toBeInTheDocument()
+    expect(screen.getByText('opus')).toBeInTheDocument()
+    expect(screen.getAllByText('Set by the server operator')).toHaveLength(2)
+  })
+
+  it('makes the Ollama provider unavailable when not self-hosted', async () => {
+    const user = userEvent.setup()
+    render(<AiProvidersSection />)
+
+    const ollama = screen.getByRole('button', { name: /Ollama/ })
+    expect(ollama).toBeDisabled()
+    expect(screen.getByText(/Not available on this server/)).toBeInTheDocument()
+    await user.click(ollama)
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('lets a self-hosted user pick Ollama and edit its base URL', () => {
+    asHosted(true)
+    withSettings({ agent_backend: 'ollama' })
+    render(<AiProvidersSection />)
+
+    expect(screen.getByRole('button', { name: /Ollama/ })).toBeEnabled()
+    expect(screen.getByRole('textbox', { name: 'Base URL' })).toBeInTheDocument()
+  })
+
+  it('shows the Z.ai endpoint read-only when not self-hosted, editable when self-hosted', () => {
+    withSettings({ agent_backend: 'zai', zai_base_url: 'https://ops.example/v4/' })
+    const { unmount } = render(<AiProvidersSection />)
+    expect(screen.queryByRole('textbox', { name: 'Endpoint' })).not.toBeInTheDocument()
+    expect(screen.getByText('https://ops.example/v4/')).toBeInTheDocument()
+    unmount()
+
+    asHosted(true)
+    render(<AiProvidersSection />)
+    expect(screen.getByRole('textbox', { name: 'Endpoint' })).toBeInTheDocument()
   })
 })

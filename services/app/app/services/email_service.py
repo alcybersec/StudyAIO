@@ -33,6 +33,9 @@ def render_template(template_name: str, **kwargs: object) -> str:
         Rendered HTML string.
     """
     template = _jinja_env.get_template(template_name)
+    kwargs.setdefault(
+        "preferences_url", f"{settings.app_base_url.rstrip('/')}/settings/notifications"
+    )
     return template.render(**kwargs)
 
 
@@ -304,4 +307,24 @@ async def send_weekly_digest(
         study_sessions=study_sessions,
         streak_days=streak_days,
         due_count=due_count,
+    )
+
+
+async def send_study_nudge(to_email: str, body: str, cta_url: str) -> bool:
+    """Send the day-2 "come back and study" nudge.
+
+    Args:
+        to_email: Recipient email.
+        body: Plain-text message body.
+        cta_url: Absolute link to the suggested next step.
+
+    Returns:
+        True if sent successfully.
+    """
+    return await send_templated_email(
+        to_email=to_email,
+        subject="StudyAIO: ready for your first study session?",
+        template_name="study_nudge.html",
+        body=body,
+        cta_url=cta_url,
     )

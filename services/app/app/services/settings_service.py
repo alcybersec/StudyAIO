@@ -21,6 +21,7 @@ Credentials are therefore write-only: `get_user_settings` returns
 ``<key>_configured`` booleans, never values.
 """
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from typing import Any
@@ -37,6 +38,7 @@ from app.core.ai_settings import (  # noqa: F401  (re-exported for existing impo
     get_effective_setting,
 )
 from app.core.clock import valid_timezone
+from app.core.url_safety import UnsafeURLError, validate_outbound_url
 from app.core.utils import generate_id
 from app.models.user_settings import UserSettings
 
@@ -47,8 +49,6 @@ logger = structlog.get_logger()
 
 # Keys that can be modified via the settings API
 ALLOWED_KEYS = {
-    "claude_code_path",
-    "claude_model",
     "agent_backend",
     "anthropic_api_key",
     "openai_api_key",
@@ -66,6 +66,19 @@ ALLOWED_KEYS = {
     "chunk_overlap_tokens",
     "max_upload_size_mb",
 }
+
+#: Operator-only (SEC-01, GL#11). `claude_code_path` is the executable the
+#: worker runs; `claude_model` rides with it. They come from the environment
+#: (`CLAUDE_CODE_PATH`, `CLAUDE_MODEL`) and never from a user's stored row: a
+#: PUT naming one is rejected, and a value stored before this rule is ignored
+#: on every read path. Do not add them back to ALLOWED_KEYS.
+OPERATOR_ONLY_KEYS = frozenset({"claude_code_path", "claude_model"})
+
+#: Endpoints the worker will fetch on a user's behalf (SEC-03, GL#14). When the
+#: deployment is not self-hosted they are operator-only like the keys above;
+#: when it is, they must be public http(s) URLs (`core.url_safety`), checked at
+#: PUT time and again whenever a stored value is turned into an agent config.
+USER_URL_KEYS = frozenset({"zai_base_url", "ollama_base_url"})
 
 VALID_MODELS = {"opus", "sonnet", "haiku"}
 
@@ -105,8 +118,6 @@ USER_ONLY_KEYS = frozenset(SECRET_KEYS | {"ollama_base_url"})
 
 # Validation rules: (type, min, max)
 _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
-    "claude_code_path": (str, None, None),
-    "claude_model": (str, None, None),
     "agent_backend": (str, None, None),
     "anthropic_api_key": (str, None, None),
     "claude_cli_credentials": (str, None, None),
@@ -139,15 +150,21 @@ def validate_setting(key: str, value: Any) -> Any:
     Raises:
         ValueError: If key is unknown or value is invalid.
     """
+    if key in OPERATOR_ONLY_KEYS:
+        raise ValueError(f"{key} is configured by the operator and cannot be changed")
     if key not in ALLOWED_KEYS:
         raise ValueError(f"Unknown setting: {key}")
+    if key in USER_URL_KEYS:
+        if not settings.self_hosted:
+            raise ValueError(f"{key} is configured by the operator and cannot be changed")
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{key} must be a non-empty string")
+        try:
+            return validate_outbound_url(value)
+        except UnsafeURLError as e:
+            raise ValueError(f"{key}: {e}") from e
 
     expected_type, min_val, max_val = _VALIDATORS[key]
-
-    if key == "claude_model":
-        if value not in VALID_MODELS:
-            raise ValueError(f"claude_model must be one of {sorted(VALID_MODELS)}, got '{value}'")
-        return value
 
     if key == "agent_backend":
         if value not in VALID_BACKENDS:
@@ -191,19 +208,9 @@ def validate_setting(key: str, value: Any) -> Any:
             raise ValueError("openai_model must be a non-empty string")
         return value.strip()
 
-    if key == "ollama_base_url":
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError("ollama_base_url must be a non-empty string")
-        return value.strip()
-
     if key == "ollama_model":
         if not isinstance(value, str) or not value.strip():
             raise ValueError("ollama_model must be a non-empty string")
-        return value.strip()
-
-    if key == "claude_code_path":
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError("claude_code_path must be a non-empty string")
         return value.strip()
 
     # Numeric types
@@ -346,6 +353,30 @@ async def redacted_error(session: AsyncSession, user_id: str, exc: BaseException
         return f"{type(exc).__name__} (details withheld)"
 
 
+def _stored_url(overrides: dict[str, Any], key: str) -> str:
+    """Return a stored user URL if it may still be used, else "".
+
+    Not self-hosted: the user's value is never used. Self-hosted: it is
+    re-validated now, so a row written before the rule, or a hostname whose DNS
+    has since moved to a private range, is dropped rather than trusted.
+
+    Args:
+        overrides: The user's stored `settings_json`.
+        key: One of `USER_URL_KEYS`.
+
+    Returns:
+        The usable URL, or "" meaning "no user value".
+    """
+    value = overrides.get(key)
+    if not value or not settings.self_hosted:
+        return ""
+    try:
+        return validate_outbound_url(str(value))
+    except UnsafeURLError:
+        logger.warning("stored_user_url_rejected", key=key)
+        return ""
+
+
 def _public_view(overrides: dict[str, Any]) -> dict[str, Any]:
     """Build the credential-free settings view for a set of user overrides.
 
@@ -361,14 +392,21 @@ def _public_view(overrides: dict[str, Any]) -> dict[str, Any]:
     """
     merged = {k: v for k, v in _defaults().items() if k not in SECRET_KEYS}
 
-    for key in ALLOWED_KEYS - SECRET_KEYS - USER_ONLY_KEYS:
+    for key in ALLOWED_KEYS - SECRET_KEYS - USER_ONLY_KEYS - USER_URL_KEYS:
         if key in overrides:
             merged[key] = overrides[key]
+
+    # zai_base_url falls back to the instance's endpoint when the user has none.
+    merged["zai_base_url"] = _stored_url(overrides, "zai_base_url") or merged.get(
+        "zai_base_url", ""
+    )
 
     # An explicitly chosen provider is entirely the user's own, so these
     # show what they stored rather than what the instance is configured with.
     for key in USER_ONLY_KEYS - SECRET_KEYS:
-        merged[key] = overrides.get(key, "")
+        merged[key] = (
+            _stored_url(overrides, key) if key in USER_URL_KEYS else overrides.get(key, "")
+        )
 
     # Everyone defaults to "StudyAIO provided", whatever the instance backend is.
     merged["agent_backend"] = overrides.get("agent_backend", STUDYAIO_BACKEND)
@@ -446,7 +484,11 @@ async def update_user_settings(
     # Validate remaining settings
     validated: dict[str, Any] = {}
     for key, value in updates.items():
-        validated[key] = validate_setting(key, value)
+        if key in USER_URL_KEYS:
+            # Resolves DNS (blocking); keep it off the event loop.
+            validated[key] = await asyncio.to_thread(validate_setting, key, value)
+        else:
+            validated[key] = validate_setting(key, value)
 
     user_settings = await _get_or_create_user_settings(session, user_id)
 
@@ -527,8 +569,6 @@ async def get_effective_setting_async(session: AsyncSession, user_id: str, key: 
 # Keys relevant to AI agent configuration
 _AGENT_CONFIG_KEYS = {
     "agent_backend",
-    "claude_code_path",
-    "claude_model",
     "anthropic_api_key",
     "openai_api_key",
     "openai_model",
@@ -722,7 +762,9 @@ def _agent_config_from_overrides(overrides: dict[str, Any]) -> dict[str, Any] | 
     defaults = _defaults()
     config: dict[str, Any] = {}
     for key in _AGENT_CONFIG_KEYS:
-        if key in USER_ONLY_KEYS:
+        if key in USER_URL_KEYS:
+            config[key] = _stored_url(overrides, key)
+        elif key in USER_ONLY_KEYS:
             config[key] = overrides.get(key, "")
         else:
             config[key] = overrides.get(key, defaults.get(key, ""))

@@ -60,7 +60,7 @@ class TestGetUserSettings:
 
     async def test_overrides_merged_with_defaults(self, mock_session, mock_user_settings):
         """User overrides are merged on top of defaults."""
-        mock_user_settings.settings_json = {"claude_model": "haiku", "flashcard_count_per_week": 25}
+        mock_user_settings.settings_json = {"openai_model": "gpt-x", "flashcard_count_per_week": 25}
 
         with patch.object(
             settings_service,
@@ -70,7 +70,7 @@ class TestGetUserSettings:
         ):
             result = await settings_service.get_user_settings(mock_session, USER_ID)
 
-        assert result["claude_model"] == "haiku"
+        assert result["openai_model"] == "gpt-x"
         assert result["flashcard_count_per_week"] == 25
         # Other defaults still present
         assert "chunk_size_tokens" in result
@@ -107,14 +107,14 @@ class TestUpdateUserSettings:
                 settings_service,
                 "get_user_settings",
                 new_callable=AsyncMock,
-                return_value={"claude_model": "sonnet"},
+                return_value={"openai_model": "gpt-x"},
             ),
         ):
             result = await settings_service.update_user_settings(
-                mock_session, USER_ID, {"claude_model": "sonnet"}
+                mock_session, USER_ID, {"openai_model": "gpt-x"}
             )
 
-        assert result["claude_model"] == "sonnet"
+        assert result["openai_model"] == "gpt-x"
         mock_session.commit.assert_called_once()
 
     async def test_theme_update(self, mock_session, mock_user_settings):

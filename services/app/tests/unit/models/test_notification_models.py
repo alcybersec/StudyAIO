@@ -26,6 +26,53 @@ class TestNotificationPreference:
         assert NotificationPreference.__tablename__ == "notification_preferences"
 
 
+class TestBackfillMigrationConstants:
+    """The backfill migration inlines the seed constants; guard against drift."""
+
+    def test_backfill_constants_match_service(self) -> None:
+        """Inlined channel/event/default lists equal the service's seed constants."""
+        import importlib.util
+        from pathlib import Path
+
+        from app.services import notification_service as svc
+
+        path = (
+            Path(__file__).parents[3]
+            / "alembic/versions/b7d1f4a82c35_backfill_default_notification_prefs.py"
+        )
+        spec = importlib.util.spec_from_file_location("backfill_mig", path)
+        assert spec and spec.loader
+        mig = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mig)
+
+        assert list(mig.CHANNELS) == svc.CHANNELS
+        assert list(mig.EVENT_TYPES) == svc.EVENT_TYPES
+        assert {
+            (mig.DEFAULT_ENABLED_CHANNEL, e) for e in mig.DEFAULT_ENABLED_EVENTS
+        } == svc.DEFAULT_ENABLED
+
+    def test_study_nudge_backfill_constants_match_service(self) -> None:
+        """The study_nudge backfill's channels/event/default channel match the service."""
+        import importlib.util
+        from pathlib import Path
+
+        from app.services import notification_service as svc
+
+        path = (
+            Path(__file__).parents[3]
+            / "alembic/versions/c8e2a5f93d16_backfill_study_nudge_prefs.py"
+        )
+        spec = importlib.util.spec_from_file_location("nudge_backfill_mig", path)
+        assert spec and spec.loader
+        mig = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mig)
+
+        assert list(mig.CHANNELS) == svc.CHANNELS
+        assert mig.EVENT_TYPE in svc.EVENT_TYPES
+        assert (mig.DEFAULT_ENABLED_CHANNEL, mig.EVENT_TYPE) in svc.DEFAULT_ENABLED
+        assert mig.down_revision == "b7d1f4a82c35"
+
+
 class TestTelegramLink:
     """Tests for TelegramLink model."""
 

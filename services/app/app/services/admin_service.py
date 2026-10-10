@@ -1,6 +1,7 @@
 """Admin service — user management and system metrics."""
 
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 
 import structlog
 from sqlalchemy import and_, delete, func, or_, select, update
@@ -26,7 +27,7 @@ from app.models.usage_record import UsageRecord
 from app.models.user import User
 from app.models.user_achievement import UserAchievement
 from app.models.user_xp import UserXP
-from app.services import account_service, quota_service, user_service
+from app.services import account_service, notification_service, quota_service, user_service
 
 logger = structlog.get_logger()
 
@@ -915,6 +916,7 @@ async def create_user(
     )
     session.add(user)
     await session.flush()
+    await notification_service.seed_default_preferences(session, user.id)
 
     minted = await user_service.request_password_reset(
         session, email, expires_in_hours=user_service.ACCOUNT_SETUP_TOKEN_HOURS
@@ -924,6 +926,76 @@ async def create_user(
 
     logger.info("admin_created_user", user_id=user.id, role=role, tier=tier)
     return user, minted.raw_token
+
+
+@dataclass
+class BetaGrantResult:
+    """Outcome of `grant_beta_pro`, as email lists for the operator's report."""
+
+    granted: list[str]
+    already_pro: list[str]
+    missing: list[str]
+
+
+async def grant_beta_pro(
+    session: AsyncSession,
+    emails: list[str] | None = None,
+    created_before: date | None = None,
+    dry_run: bool = False,
+) -> BetaGrantResult:
+    """Grant the Pro tier to beta users (decision PROD-08).
+
+    Beta users keep Pro while the free limits are enforced for new signups
+    (QUOTA-01). Idempotent: users already on Pro are reported and untouched, so
+    re-running with the same selector changes nothing. Every grant is logged.
+    The caller commits; with ``dry_run`` nothing is modified.
+
+    Args:
+        session: Database session.
+        emails: Addresses to grant (case-insensitive). Mutually exclusive with
+            ``created_before``.
+        created_before: Grant every account created before this UTC date.
+        dry_run: Report what would be granted without changing any row.
+
+    Returns:
+        Which accounts were granted, already Pro, or (for ``emails``) not found.
+
+    Raises:
+        ValueError: If not exactly one of ``emails`` / ``created_before`` is given.
+    """
+    if (emails is None) == (created_before is None):
+        raise ValueError("pass exactly one of emails or created_before")
+
+    query = select(User)
+    wanted: list[str] = []
+    if emails is not None:
+        wanted = [normalize_email(e) for e in emails if e.strip()]
+        query = query.where(User.email.in_(wanted))
+    else:
+        cutoff = datetime(created_before.year, created_before.month, created_before.day, tzinfo=UTC)
+        query = query.where(User.created_at < cutoff)
+
+    users = list((await session.execute(query)).scalars().all())
+    granted: list[str] = []
+    already: list[str] = []
+    for user in users:
+        if user.tier == "pro":
+            already.append(user.email)
+            continue
+        granted.append(user.email)
+        if not dry_run:
+            user.tier = "pro"
+            logger.info("beta_pro_granted", user_id=user.id, email=user.email)
+    found = {u.email for u in users}
+    missing = [e for e in wanted if e not in found]
+    logger.info(
+        "beta_pro_grant_run",
+        granted=len(granted),
+        already_pro=len(already),
+        missing=len(missing),
+        dry_run=dry_run,
+    )
+    return BetaGrantResult(granted=granted, already_pro=already, missing=missing)
 
 
 async def ensure_admin(

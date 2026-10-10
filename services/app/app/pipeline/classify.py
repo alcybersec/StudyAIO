@@ -9,17 +9,19 @@ from sqlalchemy import select
 
 from app.agents.factory import get_agent
 from app.core.database import async_session_factory, run_async
-from app.core.exceptions import AgentError, ClassificationError
+from app.core.exceptions import AgentError, ClassificationError, QuotaExceededError
 from app.core.storage import LocalStorageBackend, get_storage, normalize_storage_key
 from app.core.utils import generate_id
 from app.extractors.archive import check_archive_bounds
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.pipeline_run import PipelineRun
+from app.models.user import User
 from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
 from app.pipeline.failures import record_stage_failure
 from app.services import review_service
 from app.services.event_service import publish_pipeline_event_sync
+from app.services.quota_service import check_course_quota
 from app.services.settings_service import get_effective_setting
 from app.worker import celery_app
 
@@ -130,6 +132,10 @@ async def _get_or_create_course(session, course_code: str, user_id: str) -> Cour
 
     Returns:
         Course instance.
+
+    Raises:
+        QuotaExceededError: The owner is at their plan's course limit and the
+            code matches none of their existing courses. Nothing is created.
     """
     if not user_id:
         raise ValueError("user_id is required to resolve a course")
@@ -138,6 +144,11 @@ async def _get_or_create_course(session, course_code: str, user_id: str) -> Cour
     course = result.scalar_one_or_none()
     if course:
         return course
+
+    # Classify is the only place courses are created, so this is the course
+    # quota gate. Row-owner-wins: the artifact owner's plan, not the task's.
+    tier = (await session.execute(select(User.tier).where(User.id == user_id))).scalar_one_or_none()
+    await check_course_quota(session, user_id, tier or "free")
 
     course = Course(
         id=generate_id(),
@@ -233,11 +244,25 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
 
             threshold = get_effective_setting("classification_confidence_threshold")
 
+            course = None
+            limit_error: QuotaExceededError | None = None
             if classification.confidence >= threshold:
+                try:
+                    course = await _get_or_create_course(
+                        session, classification.course_code, user_id=artifact.user_id
+                    )
+                except QuotaExceededError as exc:
+                    limit_error = exc
+                    logger.info(
+                        "classify_course_limit_reached",
+                        artifact_id=artifact_id,
+                        user_id=artifact.user_id,
+                        course_code=classification.course_code,
+                        limit=exc.limit,
+                    )
+
+            if course is not None:
                 # High confidence — apply classification
-                course = await _get_or_create_course(
-                    session, classification.course_code, user_id=artifact.user_id
-                )
                 artifact.course_id = course.id
                 artifact.week = classification.week
                 artifact.title = classification.title
@@ -283,6 +308,15 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
                     "reason": classification.reasoning
                     or "Classification confidence below threshold",
                 }
+                if limit_error is not None:
+                    review_type = "classification_course"
+                    payload["reason_code"] = "course_limit_reached"
+                    payload["reason"] = (
+                        f"Course limit reached ({limit_error.limit} on your plan): "
+                        f"'{classification.course_code}' would be a new course. "
+                        "Assign this file to one of your existing courses, "
+                        "or upgrade to add more."
+                    )
 
                 suggested_values = {
                     "course_code": classification.course_code,

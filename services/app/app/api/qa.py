@@ -19,6 +19,7 @@ from app.services import (
     search_service,
     settings_service,
 )
+from app.services.chat_scope import build_sources
 
 logger = structlog.get_logger()
 
@@ -105,24 +106,32 @@ async def ask_question(
             status_code=500, detail=f"Failed to generate answer: {safe_error}"
         ) from None
 
-    # Record AI usage (best-effort)
-    try:
-        await billing_service.record_usage(session, user.id, ai_calls=1)
-    except Exception:
-        logger.warning("usage_record_qa_failed", exc_info=True)
+    # Record AI usage with real adapter tokens when reported, else an estimate.
+    # Committed here: the session is not committed by the dependency, so a bare
+    # flush would be rolled back on close and Q&A would never count.
+    await billing_service.record_ai_call(
+        session,
+        user.id,
+        agent=agent,
+        prompt_text=body.question + "".join(str(c.get("text", "")) for c in chunks),
+        output_text=getattr(answer_result, "answer", "") or "",
+    )
+    await session.commit()
 
     # Build response
+    # Citations are derived from the chunks we sent, never from the model's
+    # own citation list: ids and snippets there cannot be trusted (GL#13).
     citations = [
         Citation(
-            ref=c.get("ref", i + 1),
-            chunk_id=c.get("chunk_id", ""),
-            text_snippet=c.get("text_snippet", ""),
-            course_code=c.get("course_code", ""),
-            week=c.get("week", 0),
-            page_ref=c.get("page_ref", 0),
-            artifact_id=c.get("artifact_id", ""),
+            ref=s["ref"],
+            chunk_id=str(s["chunk_id"] or ""),
+            text_snippet=s["text_snippet"],
+            course_code=s["course_code"] or "",
+            week=s["week"] or 0,
+            page_ref=s["page_ref"] or 0,
+            artifact_id=str(s["artifact_id"] or ""),
         )
-        for i, c in enumerate(answer_result.citations)
+        for s in build_sources(answer_result.answer, chunks)
     ]
 
     return QAResponse(

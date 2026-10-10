@@ -31,22 +31,24 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
 class TestPreferences:
-    async def test_defaults_are_seeded_disabled_then_updated(
-        self, client_factory, make_user, db_session
-    ):
+    async def test_defaults_are_seeded_then_updated(self, client_factory, make_user, db_session):
         user = await make_user()
         client = client_factory(user)
         seeded = (await client.get("/api/notifications/preferences")).json()["preferences"]
         assert len(seeded) == len(notification_service.CHANNELS) * len(
             notification_service.EVENT_TYPES
         )
-        assert not any(p["enabled"] for p in seeded)  # opt-in only
+        # GL#15: email reminders are on by default, everything else is opt-in.
+        on = {(p["channel"], p["event_type"]) for p in seeded if p["enabled"]}
+        assert on == set(notification_service.DEFAULT_ENABLED)
+        assert ("email", "cards_due") in on
 
         resp = await client.put(
             "/api/notifications/preferences",
             json={
                 "preferences": [
-                    {"channel": "email", "event_type": "cards_due", "enabled": True},
+                    {"channel": "push", "event_type": "cards_due", "enabled": True},
+                    {"channel": "email", "event_type": "cards_due", "enabled": False},
                     {"channel": "carrier-pigeon", "event_type": "cards_due", "enabled": True},
                     {"channel": "push", "event_type": "made-up", "enabled": True},
                 ]
@@ -56,7 +58,15 @@ class TestPreferences:
         enabled = {
             (p["channel"], p["event_type"]) for p in resp.json()["preferences"] if p["enabled"]
         }
-        assert enabled == {("email", "cards_due")}  # unknown channel / event ignored
+        # unknown channel / event ignored; the user's opt-out of a default sticks
+        assert enabled == (set(notification_service.DEFAULT_ENABLED) - {("email", "cards_due")}) | {
+            ("push", "cards_due")
+        }
+        again = (await client.get("/api/notifications/preferences")).json()["preferences"]
+        email_cards = next(
+            p for p in again if (p["channel"], p["event_type"]) == ("email", "cards_due")
+        )
+        assert email_cards["enabled"] is False  # stays off after re-read
         rows = (
             (
                 await db_session.execute(
@@ -79,7 +89,8 @@ class TestPreferences:
         theirs = (await client_factory(b).get("/api/notifications/preferences")).json()[
             "preferences"
         ]
-        assert not any(p["enabled"] for p in theirs)
+        on = {(p["channel"], p["event_type"]) for p in theirs if p["enabled"]}
+        assert on == set(notification_service.DEFAULT_ENABLED)  # a's push opt-in did not leak
 
 
 class TestInbox:
@@ -659,9 +670,13 @@ class TestScheduledJobs:
                 notification_tasks.send_daily_reminders,
                 notification_tasks.send_weekly_digest,
             ):
-                assert task.run() == {"status": "completed", "notified": 3}
+                expected = {"status": "completed", "notified": 3}
+                if task is notification_tasks.send_daily_reminders:
+                    expected["nudged"] = 3  # GL#15: study nudges ride the daily task
+                assert task.run() == expected
         with patch.object(notification_tasks, "run_async", side_effect=RuntimeError("db down")):
             assert notification_tasks.send_daily_reminders.run() == {
                 "status": "failed",
                 "notified": 0,
+                "nudged": 0,
             }

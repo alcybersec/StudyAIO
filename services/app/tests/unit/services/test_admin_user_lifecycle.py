@@ -37,6 +37,7 @@ def _no_existing_user(mock_session):
 
 class TestCreateUser:
     @pytest.mark.asyncio
+    @patch("app.services.notification_service.seed_default_preferences", new=AsyncMock())
     async def test_creates_an_account_with_no_password(self, mock_session):
         _no_existing_user(mock_session)
         minted = MagicMock(raw_token="tok-123")
