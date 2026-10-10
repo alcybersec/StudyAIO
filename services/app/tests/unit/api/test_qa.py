@@ -148,3 +148,75 @@ class TestAskQuestion:
         )
 
         assert response.status_code == 422
+
+
+def _chunk(n: int) -> dict:
+    return {
+        "chunk_id": f"chunk-{n}",
+        "text": f"Real text of chunk {n}.",
+        "page_ref": n,
+        "artifact_id": f"art-{n}",
+        "week": n,
+        "course_code": "CSIT302",
+    }
+
+
+async def _ask(async_client, answer: str, adapter_citations: list[dict], n_chunks: int = 3):
+    provider = MagicMock()
+    provider.embed_texts.return_value = [[0.1] * 384]
+    agent = AsyncMock()
+    agent.answer_question.return_value = AnswerResult(answer=answer, citations=adapter_citations)
+    chunks = [_chunk(i) for i in range(1, n_chunks + 1)]
+    with (
+        patch("app.api.qa.get_embedding_provider", return_value=provider),
+        patch(
+            "app.api.qa.search_service.search_chunks",
+            new_callable=AsyncMock,
+            return_value=chunks,
+        ),
+        patch("app.api.qa.get_agent", return_value=agent),
+    ):
+        return await async_client.post("/api/qa/ask", json={"question": "q?"})
+
+
+@pytest.mark.asyncio
+class TestQACitationsDerived:
+    """Citations come from the retrieved chunks, never from the adapter (GL#13)."""
+
+    async def test_adapter_citations_with_wrong_ids_are_ignored(self, async_client, mock_session):
+        bogus = [
+            {
+                "ref": 1,
+                "chunk_id": "FAKE",
+                "artifact_id": "FAKE",
+                "text_snippet": "invented",
+                "course_code": "XXX999",
+                "week": 99,
+                "page_ref": 99,
+            }
+        ]
+        response = await _ask(async_client, "Answer [1].", bogus)
+        cites = response.json()["citations"]
+        assert len(cites) == 1
+        assert cites[0]["chunk_id"] == "chunk-1"
+        assert cites[0]["artifact_id"] == "art-1"
+        assert cites[0]["text_snippet"] == "Real text of chunk 1."
+        assert cites[0]["course_code"] == "CSIT302"
+
+    async def test_markers_map_to_chunk_at_position(self, async_client, mock_session):
+        response = await _ask(async_client, "A [3] and B [2].", [])
+        cites = response.json()["citations"]
+        assert [(c["ref"], c["chunk_id"]) for c in cites] == [(2, "chunk-2"), (3, "chunk-3")]
+
+    async def test_out_of_range_marker_ignored(self, async_client, mock_session):
+        response = await _ask(async_client, "A [1] and [9] and [0].", [])
+        assert [c["ref"] for c in response.json()["citations"]] == [1]
+
+    async def test_grouped_markers(self, async_client, mock_session):
+        response = await _ask(async_client, "Both [1, 3].", [])
+        assert [c["chunk_id"] for c in response.json()["citations"]] == ["chunk-1", "chunk-3"]
+
+    async def test_no_markers_means_no_citations(self, async_client, mock_session):
+        bogus = [{"ref": 1, "chunk_id": "FAKE", "text_snippet": "x"}]
+        response = await _ask(async_client, "No markers here.", bogus)
+        assert response.json()["citations"] == []
