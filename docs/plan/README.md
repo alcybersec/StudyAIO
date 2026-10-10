@@ -24,7 +24,8 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S3-AI-041 (GL#8: claude_code worker keeps revoked token) | `ai` | 2026-10-10 | isolated |
+| M32-S3-AI-041 (GL#8: claude_code re-reads host credentials, one retry on auth failure) | `ai` | 2026-10-10 | **held** `c85297b`/`f4e5c98` — lands with SAFETY-045 + DEVOPS-042 compose mount |
+| M32-S3-SAFETY-045 (review GL#8 retry; reclassify `_run_once` rmtree) | `safety` | 2026-10-10 | isolated |
 | M32-S3-DEVOPS-042 (GL#7: e2e pip ResolutionImpossible) | `devops` | 2026-10-10 | isolated |
 | M32-S3-AI-044 (wall-clock-dependent reminder unit test on main; audit for others) | `ai` | 2026-10-10 | isolated |
 
