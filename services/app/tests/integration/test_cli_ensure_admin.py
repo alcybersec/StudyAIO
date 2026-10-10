@@ -107,6 +107,11 @@ def default_admin_row(_run_migrations, _require_env):
     yield DEFAULT_ADMIN_ID
 
     with engine.connect() as conn:
+        # GL#15: signup/ensure-admin now seeds notification_preferences (FK, no cascade).
+        conn.execute(
+            sqlalchemy.text("DELETE FROM notification_preferences WHERE user_id = :id"),
+            {"id": DEFAULT_ADMIN_ID},
+        )
         conn.execute(sqlalchemy.text("DELETE FROM users WHERE id = :id"), {"id": DEFAULT_ADMIN_ID})
         conn.commit()
     engine.dispose()

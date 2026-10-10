@@ -471,6 +471,10 @@ def install_transport(stack, backend: str, transport: Transport) -> None:
                 )
 
         stack.enter_context(patch("app.agents.ollama_adapter.AsyncClient", FakeOllama))
+        # The user-supplied URL is SSRF-validated (needs DNS); that guard has its own tests.
+        stack.enter_context(
+            patch("app.agents.ollama_adapter.validate_outbound_url", lambda url: url)
+        )
 
     elif backend == "claude_code":
 
