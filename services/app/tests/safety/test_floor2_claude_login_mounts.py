@@ -257,6 +257,7 @@ def test_floor2_setup_script_creates_a_private_empty_dir_and_copies_no_login():
         run = subprocess.run(
             [*_as_non_root(), "bash", str(SETUP), str(target)],
             env=env,
+            stdin=subprocess.DEVNULL,  # no token offered; a tty would block on the prompt
             capture_output=True,
             text=True,
             check=False,
@@ -266,6 +267,9 @@ def test_floor2_setup_script_creates_a_private_empty_dir_and_copies_no_login():
         settings = target / "settings.json"
         settings_text = settings.read_text() if settings.exists() else None
         settings_mode = settings.stat().st_mode & 0o077 if settings.exists() else None
+        placeholder = target / ".credentials.json"
+        placeholder_text = placeholder.read_text().strip() if placeholder.exists() else "{}"
+        placeholder_mode = placeholder.stat().st_mode & 0o077 if placeholder.exists() else 0
     finally:
         shutil.rmtree(base, ignore_errors=True)
 
@@ -273,8 +277,13 @@ def test_floor2_setup_script_creates_a_private_empty_dir_and_copies_no_login():
     assert mode == 0o700, f"login dir mode {oct(mode) if mode else mode}, want 0o700"
     assert (settings_text or "").strip() == "{}"
     assert settings_mode == 0, "settings.json is group/other readable"
-    assert listing == ["settings.json"], (
+    # SAFETY-053: an empty, private ``.credentials.json`` placeholder is allowed (and
+    # recommended): without it ``compose up`` makes Docker create a root-owned dir there.
+    assert set(listing or []) <= {"settings.json", ".credentials.json"}, (
         f"the setup script left {listing} in the login dir; it must copy no credentials"
+    )
+    assert placeholder_text == "{}" and placeholder_mode == 0, (
+        ".credentials.json is more than a private '{}' placeholder"
     )
     assert SCRIPT_SENTINEL not in run.stdout + run.stderr, "the script printed a credential"
 
@@ -284,18 +293,14 @@ def test_floor2_setup_script_refuses_to_run_as_root(tmp_path):
     """As root the script exits non-zero and creates nothing."""
     target = tmp_path / "claude-login"
     run = subprocess.run(
-        ["bash", str(SETUP), str(target)], capture_output=True, text=True, check=False
+        ["bash", str(SETUP), str(target)],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert run.returncode != 0
     assert not target.exists(), "the script created the login dir as root"
-    assert (target.stat().st_mode & 0o777) == 0o700, oct(target.stat().st_mode)
-    settings = target / "settings.json"
-    assert settings.read_text().strip() == "{}"
-    assert (settings.stat().st_mode & 0o077) == 0, "settings.json is group/other readable"
-    assert sorted(p.name for p in target.iterdir()) == ["settings.json"], (
-        "the setup script placed something besides settings.json in the login dir"
-    )
-    assert SCRIPT_SENTINEL not in run.stdout + run.stderr, "the script printed a credential"
 
 
 def test_floor2_setup_script_has_its_root_guard_before_mkdir():
