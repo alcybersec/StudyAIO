@@ -141,6 +141,9 @@ class Settings(BaseSettings):
     #: Mirror of uvicorn's `--host`. The app cannot see its own bind address, so
     #: the operator declares it; the default is the conservative "exposed".
     bind_host: str = "0.0.0.0"
+    # Fernet key(s) for per-user AI credentials at rest (SEC-06). Comma-separated
+    # for rotation: first encrypts, all decrypt. Required unless SINGLE_USER_MODE.
+    settings_encryption_key: SecretStr = SecretStr("")
     # "open" | "invite" | "closed" — gates POST /api/auth/register
     registration_mode: str = "open"
 

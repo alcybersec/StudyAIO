@@ -39,6 +39,7 @@ slowapi>=0.1,<1.0
 
 # Authentication
 PyJWT[crypto]>=2.11,<3.0
+cryptography>=46,<51  # Fernet for user_settings secrets (SEC-06)
 argon2-cffi>=25.0,<26.0
 authlib>=1.6,<2.0
 pyotp>=2.9,<3.0
