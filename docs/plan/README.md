@@ -27,6 +27,14 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S4-BACKEND-001 + 004 (SEC-01 GL#11, SEC-03 GL#14) | `backend` | 2026-10-10 | isolated |
+| M32-S4-BACKEND-003 (AI-05 GL#13) | `backend` | 2026-10-10 | isolated |
+| M32-S4-AI-002 (AGENT-01 GL#12) | `ai` | 2026-10-10 | isolated |
+| M32-S4-AI-006 (AI-04 GL#16) | `ai` | 2026-10-10 | isolated |
+| M32-S4-FRONTEND-008 (UX-06 GL#18) | `frontend` | 2026-10-10 | isolated |
+| M32-S4-BACKEND-005 (PROD-03 GL#15) | `backend` | 2026-10-10 | isolated |
+
+**M32 GitLab issues (2026-10-10):** GL#11–#30 = M32-S4-BACKEND-001 … M32-S4-QA-020 in §11 order (labels `M32`, `audit-2026-10`). Queued: AI-007 (AI-03, after wave 1), BACKEND-009 (QUOTA-01/COST-01; PROD-08 decided: beta users get Pro).
 
 ## Completed
 
