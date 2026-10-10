@@ -41,8 +41,16 @@ class TestAuthConfig:
         resp = await client_factory().get("/api/auth/config")
         assert resp.status_code == 200
         body = resp.json()
+        # SEC-05: the default is hosted (authenticated); single-user mode is opt-in.
+        assert body["self_hosted"] is False
+
+    async def test_config_single_user_mode_never_offers_open_registration(self, client_factory):
+        with (
+            patch("app.config.settings.self_hosted", True),
+            patch("app.config.settings.single_user_mode", True),
+        ):
+            body = (await client_factory().get("/api/auth/config")).json()
         assert body["self_hosted"] is True
-        # Self-hosted never offers open registration in the UI.
         assert body["registration_enabled"] is False
 
     async def test_config_saas_open_registration(self, client_factory):

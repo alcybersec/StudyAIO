@@ -9,7 +9,6 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -17,6 +16,7 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import select
 
+from app.core.clock import utc_today
 from app.core.exceptions import GlobalCeilingError, QuotaExceededError
 from app.core.utils import generate_id
 from app.models.subscription import Subscription
@@ -65,7 +65,8 @@ async def _subscription(db_session, user, customer="cus_1", **kw) -> Subscriptio
 class TestOverview:
     async def test_self_hosted_user_has_no_limits(self, client_factory, make_user):
         user = await make_user(tier="free")
-        body = (await client_factory(user).get("/api/billing/subscription")).json()
+        with patch("app.config.settings.self_hosted", True):
+            body = (await client_factory(user).get("/api/billing/subscription")).json()
         assert body["subscription"]["status"] == "active"
         assert body["usage"]["ai_calls_limit"] is None and body["usage"]["courses_limit"] is None
 
@@ -77,7 +78,7 @@ class TestOverview:
             UsageRecord(
                 id=generate_id(),
                 user_id=user.id,
-                record_date=date.today(),
+                record_date=utc_today(),
                 ai_calls_count=7,
                 uploads_count=2,
             )
@@ -108,8 +109,9 @@ class TestCheckoutAndPortal:
     async def test_disabled_when_self_hosted(self, client_factory, make_user):
         client = client_factory(await make_user())
         body = {"success_url": "https://x/ok", "cancel_url": "https://x/no"}
-        assert (await client.post("/api/billing/checkout", json=body)).status_code == 400
-        assert (await client.post("/api/billing/portal")).status_code == 400
+        with patch("app.config.settings.self_hosted", True):
+            assert (await client.post("/api/billing/checkout", json=body)).status_code == 400
+            assert (await client.post("/api/billing/portal")).status_code == 400
 
     async def test_checkout_creates_customer_once_and_returns_url(
         self, client_factory, make_user, db_session, saas
@@ -375,9 +377,10 @@ class TestQuotas:
     async def test_quota_does_not_apply_when_self_hosted(self, make_user, db_session):
         user = await make_user(tier="free")
         await billing_service.record_usage(db_session, user.id, ai_calls=10_000, uploads=10_000)
-        await quota_service.check_ai_quota(db_session, user.id, "free")
-        await quota_service.check_upload_quota(db_session, user.id, "free")
-        await quota_service.check_course_quota(db_session, user.id, "free")
+        with patch("app.config.settings.self_hosted", True):
+            await quota_service.check_ai_quota(db_session, user.id, "free")
+            await quota_service.check_upload_quota(db_session, user.id, "free")
+            await quota_service.check_course_quota(db_session, user.id, "free")
 
     async def test_course_quota(self, make_user, db_session, saas):
         from app.models.course import Course

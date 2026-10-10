@@ -11,10 +11,11 @@ obvious by construction.
 """
 
 import secrets
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from app.core.clock import utc_today
 from app.models.artifact import LectureArtifact
 from app.models.invite_code import InviteCode
 from app.models.usage_record import UsageRecord
@@ -68,7 +69,7 @@ async def _active_days(session, tag: str, uid: str, days: list[int]) -> None:
             UsageRecord(
                 id=f"{tag}-usage-{offset}",
                 user_id=uid,
-                record_date=date.today() - timedelta(days=offset),
+                record_date=utc_today() - timedelta(days=offset),
                 uploads_count=1,
             )
         )

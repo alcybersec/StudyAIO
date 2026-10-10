@@ -5,7 +5,7 @@ checked for owner scoping. The extraction task is run against committed rows
 with a fake agent, the way the worker runs it.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +13,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select, text
 
+from app.core.clock import utc_today
 from app.core.database import async_session_factory
 from app.core.exceptions import CourseOpsError
 from app.core.storage import get_storage
@@ -241,8 +242,8 @@ class TestAssessmentsAndDeadlines:
         owner, stranger = await make_user(), await make_user()
         await _course(db_session, owner)
         client, other = client_factory(owner), client_factory(stranger)
-        soon = (date.today() + timedelta(days=5)).isoformat()
-        past = (date.today() - timedelta(days=5)).isoformat()
+        soon = (utc_today() + timedelta(days=5)).isoformat()
+        past = (utc_today() - timedelta(days=5)).isoformat()
 
         d1 = await client.post(
             "/api/courseops/deadlines",
@@ -301,7 +302,7 @@ class TestAssessmentsAndDeadlines:
             course_id=course.id,
             assessment_id=assessment.id,
             title="Final exam",
-            due_date=date.today() + timedelta(days=30),
+            due_date=utc_today() + timedelta(days=30),
             deadline_type="exam",
             is_confirmed=False,
         )
@@ -338,7 +339,7 @@ class TestAssessmentsAndDeadlines:
                 id=generate_id(),
                 course_id=course.id,
                 title="Lab report",
-                due_date=date.today() + timedelta(days=9),
+                due_date=utc_today() + timedelta(days=9),
                 deadline_type="assignment",
                 is_confirmed=True,
             )
