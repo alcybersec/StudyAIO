@@ -24,7 +24,8 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M32-S3-AI-041 (GL#8: claude_code re-reads host credentials, one retry on auth failure) | `ai` | 2026-10-10 | **held** `c85297b`/`f4e5c98` — lands with SAFETY-045 + DEVOPS-042 compose mount |
+| M32-S3-AI-041 (GL#8) | `ai` | 2026-10-10 | **held** `c85297b`/`f4e5c98` + veto fix `cca3e21` (+ safety `588c8b4`, devops compose `0bdf597`) — awaiting SAFETY-046 |
+| M32-S3-SAFETY-046 (re-review GL#8 fix; lift VETO?) | `safety` | 2026-10-10 | isolated |
 
 ## Completed
 
