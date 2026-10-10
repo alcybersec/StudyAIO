@@ -26,6 +26,7 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
+| M32-S3-DEVOPS-060 (R-028: migrate before starting new api/worker/beat) | `devops` | 2026-10-10 | isolated |
 
 ## Completed
 
