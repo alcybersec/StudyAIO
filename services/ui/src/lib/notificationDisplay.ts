@@ -1,5 +1,5 @@
 /** Presentation helpers for inbox notifications (icon map + relative time). */
-import { Bell, CalendarClock, FileCheck, Inbox, Zap, type LucideIcon } from 'lucide-react'
+import { Bell, CalendarClock, FileCheck, Inbox, Lightbulb, Zap, type LucideIcon } from 'lucide-react'
 
 /** kind → icon, per the ShellNav prototype notification panel. */
 export const NOTIFICATION_ICONS: Record<string, LucideIcon> = {
@@ -7,6 +7,7 @@ export const NOTIFICATION_ICONS: Record<string, LucideIcon> = {
   review: Inbox,
   achievement: Zap,
   deadline: CalendarClock,
+  nudge: Lightbulb,
 }
 
 export function notificationIcon(kind: string): LucideIcon {

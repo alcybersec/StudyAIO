@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { Bell, CalendarClock, FileCheck, Inbox, Zap } from 'lucide-react'
+import { Bell, CalendarClock, FileCheck, Inbox, Lightbulb, Zap } from 'lucide-react'
 import { notificationsInboxApi } from '../../api/notificationsInbox'
 import type { InboxNotification } from '../../types'
 import { notificationIcon } from '../../lib/notificationDisplay'
@@ -57,6 +57,7 @@ describe('notificationIcon', () => {
     expect(notificationIcon('review')).toBe(Inbox)
     expect(notificationIcon('achievement')).toBe(Zap)
     expect(notificationIcon('deadline')).toBe(CalendarClock)
+    expect(notificationIcon('nudge')).toBe(Lightbulb)
     expect(notificationIcon('unknown')).toBe(Bell)
   })
 })
