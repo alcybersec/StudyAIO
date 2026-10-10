@@ -68,7 +68,13 @@ export function OnboardingTour() {
         }}
       />
       {/* Clickable overlay to prevent interaction behind */}
-      <div className="fixed inset-0 z-[9999]" onClick={skip} />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label={t('Skip tour')}
+        className="fixed inset-0 z-[9999] cursor-default"
+        onClick={skip}
+      />
       {/* Tooltip */}
       <TourTooltip
         title={t(currentStep.title)}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { logRawError } from '../lib/userError'
 import type { PipelineEvent } from '../types'
 
 export type PipelineConnectionState = 'connecting' | 'open' | 'reconnecting'
@@ -29,7 +30,14 @@ export function usePipelineEvents(artifactIds?: string[]) {
     let backoffMs = MIN_BACKOFF_MS
 
     const handlePipeline = (event: MessageEvent) => {
-      const data = JSON.parse(event.data) as PipelineEvent
+      let data: PipelineEvent
+      try {
+        data = JSON.parse(event.data) as PipelineEvent
+      } catch (err) {
+        // A malformed frame must not tear down the stream - skip it.
+        logRawError(err)
+        return
+      }
       if (ids.length === 0 || ids.includes(data.artifact_id)) {
         // Stamp receipt time so consumers can derive per-stage durations
         setEvents((prev) => [...prev, { ...data, receivedAt: Date.now() }].slice(-MAX_EVENTS))
