@@ -65,7 +65,7 @@ variables:
 
 .pip-cache: &pip-cache
   key:
-    files: [services/app/requirements.txt, services/app/requirements.lock.txt]
+    files: [services/app/requirements.txt, services/app/requirements-dev.txt, services/app/requirements.lock.txt]
     prefix: pip
   paths: [.cache/pip]
 

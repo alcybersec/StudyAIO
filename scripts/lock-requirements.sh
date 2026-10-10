@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate services/app/requirements.lock.txt from requirements.txt.
+# Regenerate services/app/requirements.lock.txt from requirements-dev.txt (which includes requirements.txt).
 #
 # The lock is a CONSTRAINTS file, not an install list. requirements.txt still
 # decides *what* is installed; the lock only pins the version of everything that
@@ -17,7 +17,9 @@
 #   - python:3.12-slim   — the base in .gitlab-ci.yml and services/app/Dockerfile
 #   - PIP_EXTRA_INDEX_URL — the torch CPU index, set globally in .gitlab-ci.yml
 #
-# Regenerate whenever you change requirements.txt. If you forget, the install
+# Regenerate whenever you change requirements.txt or requirements-dev.txt.
+# One lock covers both; the runtime image installs requirements.txt only and
+# uses the lock purely as constraints. If you forget, the install
 # does not silently drift — it fails when a new dependency conflicts with a pin,
 # which is the signal to re-run this.
 #
@@ -26,7 +28,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REQ="$REPO_ROOT/services/app/requirements.txt"
+APP="$REPO_ROOT/services/app"
+REQ="$APP/requirements-dev.txt"
 LOCK="$REPO_ROOT/services/app/requirements.lock.txt"
 
 # Must match `variables:` in .gitlab-ci.yml.
@@ -41,10 +44,10 @@ echo "Resolving $REQ in $PYTHON_IMAGE ..."
 docker run --rm \
   -e PIP_EXTRA_INDEX_URL="$EXTRA_INDEX" \
   -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
-  -v "$REQ:/r.txt:ro" \
+  -v "$APP:/app:ro" \
   -v "$WORK:/out" \
   "$PYTHON_IMAGE" \
-  sh -c "pip install -q --dry-run --report /out/report.json -r /r.txt"
+  sh -c "pip install -q --dry-run --report /out/report.json -r /app/requirements-dev.txt"
 
 python3 - "$WORK/report.json" "$LOCK" "$EXTRA_INDEX" <<'PY'
 import json

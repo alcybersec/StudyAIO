@@ -9,8 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# The lock is a CONSTRAINTS file: requirements.txt still decides what is
-# installed, the lock only pins which version, transitive deps included. Both
+# The lock is a CONSTRAINTS file: requirements.txt (runtime only -- test and
+# lint tooling live in requirements-dev.txt and never enter this image) still
+# decides what is installed, the lock only pins which version, transitive deps included. Both
 # are copied so this layer rebuilds when either moves.
 #
 # Production resolved fresh until GL#7, which meant the versions CI tested were
