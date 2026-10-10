@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import re
 import stat
 import tempfile
 from typing import Any
@@ -20,6 +21,7 @@ from app.agents.base import (
     FlashcardData,
     QuizQuestionData,
     SummaryResult,
+    _string_leaves,
 )
 from app.core.ai_settings import get_effective_setting
 from app.core.exceptions import AgentError
@@ -66,6 +68,37 @@ def _describe_failure(stdout: bytes, stderr: bytes) -> str:
     return " | ".join(parts) or "Unknown error"
 
 
+# What the CLI prints when its OAuth token is revoked/expired (GL#8).
+_AUTH_FAILURE = re.compile(
+    r"\b401\b|failed to authenticate|token has been revoked|invalid[_ ]grant|"
+    r"token (?:has )?expired|not logged in",
+    re.IGNORECASE,
+)
+
+
+class _CliAuthError(AgentError):
+    """An AgentError known to be an authentication failure (already redacted)."""
+
+
+def _read_host_credentials() -> dict[str, Any] | None:
+    """Read the host's credentials fresh from ``CLAUDE_HOST_CREDENTIALS_FILE``.
+
+    Returns:
+        The parsed credentials, or None when unconfigured, missing or invalid.
+        Never logs the content.
+    """
+    path = os.environ.get("CLAUDE_HOST_CREDENTIALS_FILE", "")
+    if not path:
+        return None
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        logger.warning("claude_code_host_credentials_unreadable")
+        return None
+    return data if isinstance(data, dict) and data else None
+
+
 class ClaudeCodeAdapter(AgentAdapter):
     """Calls Claude Code CLI via subprocess.
 
@@ -88,8 +121,49 @@ class ClaudeCodeAdapter(AgentAdapter):
         self._model = model or get_effective_setting("claude_model")
         self._credentials_json = credentials_json
         self.refreshed_credentials: dict[str, Any] | None = None
+        self._host_credentials: dict[str, Any] | None = None
+
+    def _credential_values(self) -> list[str]:
+        """Also cover the host credentials re-read after an auth failure."""
+        values = super()._credential_values()
+        values.extend(_string_leaves(self._host_credentials))
+        return values
 
     async def _run_claude_code(self, prompt: str, timeout: int = _DEFAULT_TIMEOUT) -> str:
+        """Run the CLI; after a stale-token auth failure, retry once with fresh creds.
+
+        GL#8: the worker's ``~/.claude/.credentials.json`` is a single-file bind
+        mount, which pins an inode. When the host refreshes the token by
+        rename-over, the container keeps the revoked one for good. The host file
+        is therefore also exposed on a path that tracks it (the
+        ``CLAUDE_HOST_CREDENTIALS_FILE`` env var, a directory mount) and is
+        re-read here, per failure, never cached. Exactly one retry; per-user
+        credentials (from the DB) are never substituted.
+
+        Args:
+            prompt: The full prompt text to send.
+            timeout: Timeout in seconds.
+
+        Returns:
+            Raw stdout from the CLI.
+
+        Raises:
+            AgentError: If the CLI fails (redacted) or times out.
+        """
+        try:
+            return await self._run_once(prompt, timeout, self._credentials_json)
+        except _CliAuthError as first:
+            fresh = None if self._credentials_json else _read_host_credentials()
+            if fresh is None:
+                raise
+            self._host_credentials = fresh
+            logger.warning("claude_code_auth_failed_retrying_with_host_credentials")
+            try:
+                return await self._run_once(prompt, timeout, fresh)
+            except _CliAuthError as second:
+                raise second from first
+
+    async def _run_once(self, prompt: str, timeout: int, credentials: dict[str, Any] | None) -> str:
         """Execute claude CLI with the given prompt and return output.
 
         If per-user credentials are configured, writes them to a temp
@@ -114,7 +188,7 @@ class ClaudeCodeAdapter(AgentAdapter):
             "claude_code_call",
             prompt_length=len(prompt),
             model=self._model,
-            has_user_credentials=self._credentials_json is not None,
+            has_user_credentials=credentials is not None,
         )
 
         env = None
@@ -122,11 +196,11 @@ class ClaudeCodeAdapter(AgentAdapter):
 
         try:
             # Set up per-user credentials if provided
-            if self._credentials_json:
+            if credentials:
                 temp_dir = tempfile.mkdtemp(prefix="claude_creds_")
                 creds_path = os.path.join(temp_dir, ".credentials.json")
                 with open(creds_path, "w") as f:
-                    json.dump(self._credentials_json, f)
+                    json.dump(credentials, f)
                 # Restrictive permissions: owner read/write only
                 os.chmod(creds_path, stat.S_IRUSR | stat.S_IWUSR)
 
@@ -163,7 +237,7 @@ class ClaudeCodeAdapter(AgentAdapter):
                         with open(creds_path) as f:
                             refreshed = json.load(f)
                         # Only store if different from original
-                        if refreshed != self._credentials_json:
+                        if refreshed != credentials:
                             self.refreshed_credentials = refreshed
                             logger.info("claude_code_credentials_refreshed")
                 except Exception:
@@ -194,7 +268,10 @@ class ClaudeCodeAdapter(AgentAdapter):
             # stdout first: `claude -p` writes its answer, and its refusal to
             # produce one, there. stderr is where warnings go.
             error_text = _describe_failure(stdout, stderr)
-            raise self._agent_error(f"Claude Code failed (exit {process.returncode}): {error_text}")
+            message = self._redact(f"Claude Code failed (exit {process.returncode}): {error_text}")
+            if _AUTH_FAILURE.search(error_text):
+                raise _CliAuthError(message)
+            raise AgentError(message)
 
         result = stdout.decode().strip()
         # The CLI runs with --output-format text and reports no token usage, so
