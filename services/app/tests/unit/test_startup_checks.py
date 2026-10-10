@@ -3,6 +3,8 @@
 from unittest.mock import patch
 
 import pytest
+from cryptography.fernet import Fernet
+from pydantic import SecretStr
 
 
 def _no_embedding_probe():
@@ -46,6 +48,10 @@ class TestJWTSecretStartupCheck:
         """App should start fine with a custom JWT secret in SaaS mode."""
         with (
             patch("app.main.settings.self_hosted", False),
+            patch(
+                "app.main.settings.settings_encryption_key",
+                SecretStr(Fernet.generate_key().decode()),
+            ),
             patch("app.main.settings.jwt_secret_key") as mock_secret,
             patch("app.main.configure_logging"),
             _no_embedding_probe(),

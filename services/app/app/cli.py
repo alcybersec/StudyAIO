@@ -208,6 +208,70 @@ async def _backfill_courseops_keys(dry_run: bool, keep_legacy: bool) -> int:
     return 0
 
 
+async def _encrypt_user_secrets(apply: bool) -> int:
+    """Encrypt plaintext (or retired-key) per-user credentials at rest (SEC-06, GL#20).
+
+    Idempotent: values already under the current key are left alone. A dry run
+    (the default) reports counts only and never prints a value.
+
+    Args:
+        apply: Write the changes; otherwise report and roll back.
+
+    Returns:
+        A process exit code.
+    """
+    from sqlalchemy import select
+
+    from app.core import secret_box
+    from app.models.user_settings import UserSettings
+    from app.services.settings_service import SECRET_KEYS
+
+    if not secret_box.is_configured():
+        print(
+            f"error: {secret_box.ENV_VAR} is not set; there is nothing to encrypt with.",
+            file=sys.stderr,
+        )
+        return 1
+
+    encrypted = rotated = skipped = 0
+    try:
+        async with async_session_factory() as session:
+            rows = (await session.execute(select(UserSettings))).scalars().all()
+            for row in rows:
+                stored = row.settings_json or {}
+                updated = dict(stored)
+                for key in SECRET_KEYS:
+                    value = stored.get(key)
+                    if not value or not isinstance(value, str):
+                        continue
+                    if not secret_box.is_encrypted(value):
+                        updated[key] = secret_box.encrypt(value)
+                        encrypted += 1
+                    elif secret_box.needs_rotation(value):
+                        try:
+                            updated[key] = secret_box.encrypt(secret_box.decrypt(value))
+                            rotated += 1
+                        except secret_box.SecretDecryptError:
+                            skipped += 1
+                            print(f"warning: user {row.user_id} {key}: cannot decrypt; left as is")
+                if apply and updated != stored:
+                    row.settings_json = updated
+            if apply:
+                await session.commit()
+            else:
+                await session.rollback()
+    finally:
+        await engine.dispose()
+
+    verb = "encrypted" if apply else "would encrypt"
+    print(
+        f"{verb}: {encrypted} plaintext credential(s); re-keyed: {rotated}; unreadable: {skipped}"
+    )
+    if not apply:
+        print("Dry run: nothing was written. Re-run with --apply.")
+    return 0
+
+
 async def _run_evals(only: str | None, no_judge: bool, out: str | None, n: int) -> int:
     """Score generated summaries against the eval cases.
 
@@ -311,6 +375,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Leave the old-shape blobs on disk",
     )
 
+    enc = sub.add_parser(
+        "encrypt-user-secrets",
+        help="Encrypt stored per-user AI credentials at rest (SEC-06, GL#20); dry run by default",
+    )
+    enc.add_argument("--apply", action="store_true", help="Write the changes (default: dry run)")
+
     evals = sub.add_parser(
         "evals",
         help="Score generated summaries against the eval cases (costs AI calls)",
@@ -385,6 +455,15 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
 
+    if args.command == "encrypt-user-secrets":
+        try:
+            return asyncio.run(_encrypt_user_secrets(args.apply))
+        except (OSError, OperationalError, InterfaceError) as exc:
+            print(
+                f"error: cannot reach the database ({type(exc).__name__}: {exc})", file=sys.stderr
+            )
+            return 1
+
     if args.command == "evals":
         try:
             return asyncio.run(_run_evals(args.case, args.no_judge, args.out, args.n))
@@ -395,7 +474,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.print_usage(sys.stderr)
     print(
         "error: a command is required (ensure-admin, grant-pro, backfill-concept-embeddings, "
-        "backfill-courseops-keys, evals)",
+        "backfill-courseops-keys, encrypt-user-secrets, evals)",
         file=sys.stderr,
     )
     return 2

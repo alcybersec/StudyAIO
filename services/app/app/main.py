@@ -45,6 +45,7 @@ from app.api import (
     uploads_router,
 )
 from app.config import settings
+from app.core import secret_box
 from app.core.demo_middleware import DemoAccountMiddleware
 from app.core.exceptions import (
     AgentError,
@@ -298,6 +299,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     check_single_user_mode()
+    secret_box.check_startup()
     warn_if_proxy_headers_untrusted()
     warn_if_embedding_provider_unavailable()
 
