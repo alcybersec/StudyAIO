@@ -24,7 +24,7 @@ class TestDeliverPasswordReset:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://study.example.com"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.return_value = True
 
             await deliver_password_reset("user@test.com", "tok123")
@@ -43,7 +43,7 @@ class TestDeliverPasswordReset:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://study.example.com/"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.return_value = True
 
             await deliver_password_reset("user@test.com", "tok123")
@@ -61,7 +61,7 @@ class TestDeliverPasswordReset:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://x.test"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.return_value = True
 
             await deliver_password_reset("user@test.com", "a b&c")
@@ -78,7 +78,7 @@ class TestDeliverPasswordReset:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://x.test"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.return_value = True
 
             assert await deliver_password_reset("user@test.com", "tok") is True
@@ -93,7 +93,7 @@ class TestDeliverPasswordReset:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://x.test"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.side_effect = RuntimeError("smtp exploded")
 
             assert await deliver_password_reset("user@test.com", "tok") is False
@@ -109,7 +109,7 @@ class TestDeliverPasswordReset:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://x.test"
-            mock_settings.self_hosted = True
+            mock_settings.single_user_mode = True
             mock_send.return_value = False
 
             await deliver_password_reset("user@test.com", "tok")
@@ -129,7 +129,7 @@ class TestDeliverPasswordReset:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://x.test"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.return_value = False
 
             await deliver_password_reset("user@test.com", "tok")
@@ -137,3 +137,22 @@ class TestDeliverPasswordReset:
             everything_logged = str(mock_logger.mock_calls)
             assert "tok" not in everything_logged
             assert "reset-password?token" not in everything_logged
+
+    @pytest.mark.asyncio
+    async def test_self_hosted_multi_user_never_logs_link(self) -> None:
+        """SEC-05: SELF_HOSTED is authenticated; only single_user_mode may log the link."""
+        with (
+            patch("app.services.user_service.settings") as mock_settings,
+            patch("app.services.user_service.logger") as mock_logger,
+            patch(
+                "app.services.email_service.send_password_reset", new_callable=AsyncMock
+            ) as mock_send,
+        ):
+            mock_settings.app_base_url = "https://x.test"
+            mock_settings.self_hosted = True
+            mock_settings.single_user_mode = False
+            mock_send.return_value = False
+
+            await deliver_password_reset("user@test.com", "tok")
+
+            assert "reset-password?token" not in str(mock_logger.mock_calls)

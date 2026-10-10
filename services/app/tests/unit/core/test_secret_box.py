@@ -61,16 +61,33 @@ class TestSecretBox:
         assert secret_box.decrypt("sk-legacy-plain") == "sk-legacy-plain"
         assert secret_box.is_encrypted("sk-legacy-plain") is False
 
-    def test_no_key_stores_plaintext_when_self_hosted(self, monkeypatch):
+    def test_no_key_stores_plaintext_when_single_user(self, monkeypatch):
         monkeypatch.setattr(settings, "settings_encryption_key", SecretStr(""))
-        monkeypatch.setattr(settings, "self_hosted", True)
+        monkeypatch.setattr(settings, "single_user_mode", True)
         assert secret_box.encrypt("abc-plain") == "abc-plain"
 
-    def test_no_key_refuses_to_write_when_not_self_hosted(self, monkeypatch):
+    def test_no_key_refuses_to_write_when_multi_user(self, monkeypatch):
         monkeypatch.setattr(settings, "settings_encryption_key", SecretStr(""))
-        monkeypatch.setattr(settings, "self_hosted", False)
+        monkeypatch.setattr(settings, "single_user_mode", False)
         with pytest.raises(secret_box.SecretBoxError):
             secret_box.encrypt("abc-plain")
+
+    def test_self_hosted_multi_user_without_key_refuses_to_write(self, monkeypatch):
+        """SEC-05: SELF_HOSTED alone is multi-user; plaintext fallback is single-user only."""
+        monkeypatch.setattr(settings, "settings_encryption_key", SecretStr(""))
+        monkeypatch.setattr(settings, "self_hosted", True)
+        monkeypatch.setattr(settings, "single_user_mode", False)
+        with pytest.raises(secret_box.SecretBoxError):
+            secret_box.encrypt("abc-plain")
+        with pytest.raises(RuntimeError, match="SETTINGS_ENCRYPTION_KEY"):
+            secret_box.check_startup()
+
+    def test_submitted_enc_prefix_is_not_trusted(self, key):
+        """Safety note (c): a user-supplied enc:v1: string is data, not ciphertext."""
+        forged = "enc:v1:" + "A" * 40
+        stored = secret_box.encrypt(forged)
+        assert stored != forged
+        assert secret_box.decrypt(stored) == forged
 
     def test_encrypted_value_without_key_is_unreadable(self, key, monkeypatch):
         token = secret_box.encrypt("abc-plain")
@@ -80,13 +97,13 @@ class TestSecretBox:
 
     def test_startup_check_fails_fast_in_saas_without_key(self, monkeypatch):
         monkeypatch.setattr(settings, "settings_encryption_key", SecretStr(""))
-        monkeypatch.setattr(settings, "self_hosted", False)
+        monkeypatch.setattr(settings, "single_user_mode", False)
         with pytest.raises(RuntimeError, match="SETTINGS_ENCRYPTION_KEY"):
             secret_box.check_startup()
 
-    def test_startup_check_passes_self_hosted_without_key(self, monkeypatch):
+    def test_startup_check_passes_single_user_without_key(self, monkeypatch):
         monkeypatch.setattr(settings, "settings_encryption_key", SecretStr(""))
-        monkeypatch.setattr(settings, "self_hosted", True)
+        monkeypatch.setattr(settings, "single_user_mode", True)
         secret_box.check_startup()
 
     def test_startup_check_rejects_malformed_key(self, monkeypatch):

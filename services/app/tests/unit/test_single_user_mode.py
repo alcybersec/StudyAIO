@@ -108,6 +108,7 @@ async def test_startup_actually_runs_the_guard():
         patch("app.main.check_single_user_mode") as check,
         patch("app.main.warn_if_embedding_provider_unavailable"),
         patch("app.main.configure_logging"),
+        patch("app.main.settings.single_user_mode", True),
         patch("app.main.settings.self_hosted", True),
     ):
         async with lifespan(app):
