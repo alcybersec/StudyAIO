@@ -17,6 +17,8 @@ Orchestrator updates here.
 
 **M32-S1 + R-023 complete (2026-10-09).** Pipeline **#553** on `12408ba`, all 6 jobs success by name: `backend-tests` `2524 passed` + golden `317` + contracts `53`; `test-floor` 97.48% / `159 passed`; `integration-tests` 87.16% / `531 passed`; `e2e-tests` `64 passed`; `frontend-checks` `636 passed`; `python-lint` success. MR !33 **merged** 2026-10-10 (merge commit `d9df2fc`, user waived the pre-merge backup; nightly backup only). Prod deploy result not yet read by the Orchestrator — the auto-mode classifier denied polling the main pipeline; user to confirm `deploy-selfhosted` by job name. Pipeline **#559** on `e6128d2` (kit/retrofit, after MR !33): all 6 jobs success. **Open:** M32's feature not yet named; **Prod check 2026-10-10 (the prod host via `a host shell on host shell`):** api/worker/ui/beat up 3 days on locally-built `studyaio-*` images, not CI's GHCR images — MR !33 did NOT deploy and the box has drifted from CI again. `/opt/studyaio/claude-login` created (alex, 0700, empty settings.json).
 
+**M32-S3 (2026-10-10).** Pipeline **#560** on `4022f9f` (kit/retrofit: GL#7/#8/#9, R-024/025/026/027 fixes): all 6 jobs success by name. **Next:** operator saves the Claude setup-token on the prod host (`/opt/studyaio/claude-login/oauth-token`), then one MR to main + verify the CI deploy on the VM (prod is drifted and still on pre-!33 code). M32's feature not yet named.
+
 **Integration branch.** `kit/retrofit` @ `2f3296d`+ (code `8d9de14`, pipeline #537 green) — pushed,
 not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
