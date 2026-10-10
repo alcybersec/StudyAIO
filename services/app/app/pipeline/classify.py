@@ -5,9 +5,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
+from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy import select
 
 from app.agents.factory import get_agent
+from app.agents.transient import TransientAgentError
 from app.core.database import async_session_factory, run_async
 from app.core.exceptions import AgentError, ClassificationError, QuotaExceededError
 from app.core.storage import LocalStorageBackend, get_storage, normalize_storage_key
@@ -19,6 +21,7 @@ from app.models.pipeline_run import PipelineRun
 from app.models.user import User
 from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
 from app.pipeline.failures import record_stage_failure
+from app.pipeline.resilience import handle_retryable, is_retryable
 from app.services import review_service
 from app.services.event_service import publish_pipeline_event_sync
 from app.services.quota_service import check_course_quota
@@ -350,8 +353,13 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
                     "review_type": review_type,
                 }
 
+        except SoftTimeLimitExceeded:
+            raise
+
         except (ClassificationError, AgentError) as e:
-            await record_stage_failure(session, run=run, artifact_id=artifact_id, error=e)
+            await record_stage_failure(
+                session, run=run, artifact_id=artifact_id, error=e, retrying=is_retryable(e)
+            )
             raise
 
         except Exception as e:
@@ -405,6 +413,10 @@ def classify_artifact(self, input_value: str | dict) -> dict:
             artifact_id, "classify", result.get("status", "completed"), user_id=event_user_id
         )
         return result
+    except (SoftTimeLimitExceeded, TransientAgentError) as exc:
+        handle_retryable(
+            self, exc, stage="classify", artifact_id=artifact_id, event_user_id=event_user_id
+        )
     except (ClassificationError, AgentError):
         publish_pipeline_event_sync(artifact_id, "classify", "failed", user_id=event_user_id)
         raise  # Don't retry on classification/agent errors

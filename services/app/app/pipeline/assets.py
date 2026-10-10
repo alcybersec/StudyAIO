@@ -4,11 +4,13 @@ import json
 from datetime import UTC, datetime
 
 import structlog
+from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.agents import parsing
 from app.agents.factory import get_agent
+from app.agents.transient import TransientAgentError
 from app.core.database import async_session_factory, run_async
 from app.core.exceptions import AgentError, AssetGenerationError
 from app.core.utils import generate_id
@@ -18,6 +20,7 @@ from app.models.pipeline_run import PipelineRun
 from app.models.summary import Summary
 from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
 from app.pipeline.failures import record_stage_failure
+from app.pipeline.resilience import handle_retryable, is_retryable
 from app.services import asset_service
 from app.services.event_service import publish_pipeline_event_sync
 from app.services.settings_service import get_effective_setting
@@ -215,8 +218,13 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
                 "quiz_count": len(quiz_questions),
             }
 
+        except SoftTimeLimitExceeded:
+            raise
+
         except (AssetGenerationError, AgentError) as e:
-            await record_stage_failure(session, run=run, artifact_id=artifact_id, error=e)
+            await record_stage_failure(
+                session, run=run, artifact_id=artifact_id, error=e, retrying=is_retryable(e)
+            )
             raise
 
         except Exception as e:
@@ -270,6 +278,10 @@ def generate_assets(self, input_value: str | dict) -> dict:
             artifact_id, "assets", result.get("status", "completed"), user_id=event_user_id
         )
         return result
+    except (SoftTimeLimitExceeded, TransientAgentError) as exc:
+        handle_retryable(
+            self, exc, stage="assets", artifact_id=artifact_id, event_user_id=event_user_id
+        )
     except (AssetGenerationError, AgentError):
         publish_pipeline_event_sync(artifact_id, "assets", "failed", user_id=event_user_id)
         raise  # Don't retry on asset/agent errors

@@ -254,9 +254,21 @@ class AgentAdapter(ABC):
         except Exception:
             return "(details withheld)"
 
-    def _agent_error(self, message: str) -> AgentError:
-        """Build an ``AgentError`` whose message carries no credential value."""
-        return AgentError(self._redact(message))
+    def _agent_error(self, message: str, cause: BaseException | None = None) -> AgentError:
+        """Build an ``AgentError`` whose message carries no credential value.
+
+        Args:
+            message: Error text; redacted here.
+            cause: The underlying exception. When it is transient (timeout,
+                429, 5xx, connection reset) the result is a
+                ``TransientAgentError`` so the pipeline retries it (GL#22).
+        """
+        from app.agents.transient import TransientAgentError, is_transient_error
+
+        redacted = self._redact(message)
+        if cause is not None and is_transient_error(cause):
+            return TransientAgentError(redacted)
+        return AgentError(redacted)
 
     #: Set lazily so subclasses need no cooperating __init__.
     _usage: "TokenUsage | None" = None

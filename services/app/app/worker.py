@@ -5,6 +5,7 @@ from celery.schedules import crontab
 
 from app.config import settings
 from app.core.observability import init_sentry
+from app.pipeline.limits import STAGE_TIME_LIMITS
 
 # Error monitoring for the worker process (no-op unless SENTRY_DSN is set).
 init_sentry("worker")
@@ -24,6 +25,7 @@ celery_app = Celery(
         "app.pipeline.notification_tasks",
         "app.pipeline.calendar_task",
         "app.pipeline.backup_task",
+        "app.pipeline.recovery",
     ],
 )
 
@@ -37,7 +39,17 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=100,
+    # Per-stage soft/hard time limits (TECH-04). The soft limit raises inside the
+    # task so it can retry; the hard limit kills a wedged process.
+    task_annotations={
+        name: {"soft_time_limit": soft, "time_limit": hard}
+        for name, (soft, hard) in STAGE_TIME_LIMITS.items()
+    },
     beat_schedule={
+        "recover-stuck-artifacts": {
+            "task": "app.pipeline.recovery.recover_stuck_artifacts",
+            "schedule": crontab(minute="*/10"),
+        },
         "daily-deadline-reminders": {
             "task": "app.pipeline.notification_tasks.send_deadline_reminders",
             "schedule": crontab(minute=0),

@@ -98,6 +98,7 @@ async def record_stage_failure(
     run: PipelineRun,
     artifact_id: str,
     error: BaseException,
+    retrying: bool = False,
 ) -> None:
     """Mark a pipeline stage failed: the `PipelineRun` row and the artifact.
 
@@ -109,6 +110,9 @@ async def record_stage_failure(
         artifact_id: The artifact to move to `"failed"`.
         error: The exception the stage is about to raise, recorded as
             `run.error_message`.
+        retrying: The error is transient and the task will retry (GL#22). The
+            run is still recorded as failed, but the artifact keeps its
+            in-progress status; the final attempt fails it.
     """
     # Read these *before* the rollback. Each was assigned by the stage's own
     # `PipelineRun(...)` call and nothing has committed since, so none is expired
@@ -141,8 +145,51 @@ async def record_stage_failure(
 
         # Re-fetch rather than reuse the caller's instance: the rollback expired it.
         artifact = await session.get(LectureArtifact, artifact_id)
-        if artifact is not None:
+        if artifact is not None and not retrying:
             artifact.status = FAILED
+
+
+async def record_stage_event(
+    artifact_id: str,
+    stage: str,
+    status: str,
+    message: str,
+    *,
+    artifact_status: str | None = None,
+) -> None:
+    """Write a standalone `PipelineRun` row from a fresh session.
+
+    For events no stage session can record: a time limit that killed the
+    transaction, retries running out, the recovery job. Optionally moves the
+    artifact to ``artifact_status``.
+
+    Args:
+        artifact_id: Artifact the event belongs to.
+        stage: Stage name (at most 30 characters).
+        status: Run status to record (``failed``, ``recovered``, ...).
+        message: Stored as `error_message`. Callers pass redacted text only.
+        artifact_status: If given, the artifact's new status.
+    """
+    from app.core.database import async_session_factory
+
+    now = datetime.now(UTC)
+    async with async_session_factory() as session:
+        session.add(
+            PipelineRun(
+                artifact_id=artifact_id,
+                stage=stage,
+                status=status,
+                error_message=message,
+                started_at=now,
+                completed_at=now,
+                duration_ms=0,
+            )
+        )
+        if artifact_status is not None:
+            artifact = await session.get(LectureArtifact, artifact_id)
+            if artifact is not None:
+                artifact.status = artifact_status
+        await session.commit()
 
 
 async def record_document_failure(
