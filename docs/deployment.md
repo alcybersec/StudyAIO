@@ -466,6 +466,46 @@ filters `Authorization`/`Cookie`/`x-api-key` headers, drops cookies entirely, an
 replaces `?token=` in URLs. Password-reset and email-verification links are bearer
 credentials for the account — they must never reach a third-party service.
 
+### Metrics
+
+Metric names carry the `studyaio_` prefix. Two endpoints, neither public:
+
+| Target | Endpoint | Notes |
+|---|---|---|
+| api | `http://127.0.0.1:8000/metrics` | `PROMETHEUS_ENABLED=true` |
+| worker | `http://127.0.0.1:9101/metrics` | `WORKER_METRICS_PORT=9101`; published on the VM loopback only; multiprocess aggregation via the `/tmp/prometheus` tmpfs |
+
+Caddy forwards only `/api/*` and `/health/*`, and the UI's nginx answers `/metrics` with 404, so
+neither endpoint is reachable from the internet. The api port is still published on the host
+(`8000:8000`, needed for `/health/*`), so keep it off untrusted networks. Beat serves no metrics.
+`docker-compose.prod.yml` turns this on; `docker-compose.selfhosted.yml` leaves it off unless
+`PROMETHEUS_ENABLED=true` is set in `.env`.
+
+a host-local scraper scrape snippet (Alloy runs on the VM; point at your existing `remote_write`):
+
+```alloy
+prometheus.scrape "studyaio" {
+  targets = [
+    {"__address__" = "127.0.0.1:8000", "job" = "studyaio-api"},
+    {"__address__" = "127.0.0.1:9101", "job" = "studyaio-worker"},
+  ]
+  forward_to = [prometheus.remote_write.default.receiver] // your existing remote_write
+}
+```
+
+Suggested alert rules (confirm exact metric names against `/metrics`):
+
+```yaml
+- alert: StudyAIOBackupStale
+  expr: time() - studyaio_backup_last_success > 26 * 3600
+  for: 10m
+- alert: StudyAIOStuckArtifactsFailed
+  expr: increase(studyaio_stuck_artifacts_failed_total[1h]) > 0
+- alert: StudyAIOStageFailures
+  expr: sum by (stage) (rate(studyaio_stage_failures_total[15m])) > 0
+  for: 15m
+```
+
 ### Health Check
 
 ```bash

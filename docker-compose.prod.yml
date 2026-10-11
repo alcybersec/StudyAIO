@@ -28,6 +28,9 @@ services:
       # default -- the api and worker refuse to start without it unless
       # SINGLE_USER_MODE=true. See docs/deployment.md.
       SETTINGS_ENCRYPTION_KEY:
+      # Exposes /metrics on :8000. Caddy forwards only /api/* and /health/*,
+      # so it is not public; scrape it host-locally (docs/deployment.md#metrics).
+      PROMETHEUS_ENABLED: "true"
     # --forwarded-allow-ips names the reverse proxy whose X-Forwarded-For may be
     # believed. Uvicorn's default is 127.0.0.1, so a proxy on any other host has
     # its headers discarded and every client arrives as that proxy's address —
@@ -73,6 +76,17 @@ services:
       CLAUDE_CLI_UID: "10001"
       CLAUDE_CLI_GID: "10001"
       CLAUDE_HOST_OAUTH_TOKEN_FILE: /run/claude-host/oauth-token
+      # Metrics: the worker main process serves /metrics on WORKER_METRICS_PORT,
+      # aggregating prefork children through PROMETHEUS_MULTIPROC_DIR (tmpfs
+      # below, wiped on every container start). Beat deliberately gets neither.
+      PROMETHEUS_ENABLED: "true"
+      WORKER_METRICS_PORT: "9101"
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
+    # Loopback only: a host-local scraper (a host-local scraper) reaches it, nothing else.
+    ports:
+      - "127.0.0.1:9101:9101"
+    tmpfs:
+      - /tmp/prometheus:mode=1777
 
   beat:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}

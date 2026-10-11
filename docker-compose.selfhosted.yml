@@ -52,6 +52,15 @@ services:
       CLAUDE_CLI_UID: "10001"
       CLAUDE_CLI_GID: "10001"
       CLAUDE_HOST_OAUTH_TOKEN_FILE: /run/claude-host/oauth-token
+      # Metrics, off by default. Set PROMETHEUS_ENABLED=true in .env to turn on
+      # /metrics on the api (:8000) and the worker (127.0.0.1:9101). Beat gets none.
+      PROMETHEUS_ENABLED: ${PROMETHEUS_ENABLED:-false}
+      WORKER_METRICS_PORT: "9101"
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
+    ports:
+      - "127.0.0.1:9101:9101"
+    tmpfs:
+      - /tmp/prometheus:mode=1777
 
   beat:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
