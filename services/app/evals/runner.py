@@ -275,7 +275,12 @@ async def run(
             agent.reset_usage()
 
             extraction = ExtractionData(
-                pages=case["pages"],
+                # Cases key pages as "page"; the prompt builder reads
+                # "page_number". Without this every header rendered "Page 0".
+                pages=[
+                    {**pg, "page_number": pg.get("page_number", pg.get("page", 0))}
+                    for pg in case["pages"]
+                ],
                 metadata={
                     "course_code": case.get("course", "EVAL"),
                     "week": case.get("week", 1),

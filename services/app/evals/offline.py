@@ -51,6 +51,113 @@ _FOOTER = re.compile(r"^---\s*\n\s*\*Sources:.*Version:\s*\d+\.?\*\s*\Z", re.MUL
 _H2 = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
 
+#: A citation marker as `build_extraction_text` prints it: `[p.3]`, `[D2 p.3]`,
+#: and ranges/lists such as `[p.3-5]` or `[p.2, p.4]`.
+_CITATION = re.compile(r"\[(?:D\d+\s+)?pp?\.\s*\d+(?:\s*[-–,]\s*(?:p\.\s*)?\d+)*\]")
+_MARKER_DOC = re.compile(r"D\d+")
+_NUMBER = re.compile(r"\d+")
+_KEY_CONCEPTS = re.compile(r"^##\s+Key Concepts\s*$(.*?)(?=^##\s|\Z)", re.MULTILINE | re.DOTALL)
+_BULLET = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
+_TABLE_RULE = re.compile(r"^[\s:|-]+$")
+#: Acronyms and CamelCase names: the shape outside-material imports usually take
+#: (QUIC, AVL, MapReduce). Deliberately narrow: plain words are not testable.
+_NAMED_TERM = re.compile(r"\b(?:[A-Z]{3,}(?=s?\b)|[A-Z][a-z]+[A-Z][A-Za-z]*\b)")
+_MIN_CLAIM_WORDS = 4
+
+
+def key_concepts_claims(summary: str) -> list[str]:
+    """The checkable units of ``## Key Concepts``: bullets, table rows, paragraphs.
+
+    Headings, code fences, table header/rule rows and fragments under four words
+    ("Formally:") are not claims.
+    """
+    match = _KEY_CONCEPTS.search(summary)
+    if not match:
+        return []
+    units: list[str] = []
+    para: list[str] = []
+    in_code = False
+    table_rows = 0
+
+    def flush() -> None:
+        if para:
+            units.append(" ".join(para))
+            para.clear()
+
+    for raw in match.group(1).splitlines():
+        line = raw.strip()
+        if line.startswith("```"):
+            flush()
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        if line.startswith("|"):
+            flush()
+            table_rows += 1
+            # Row 1 is the header and row 2 the rule: neither is a claim.
+            if table_rows > 2 and not _TABLE_RULE.match(line):
+                units.append(line)
+            continue
+        table_rows = 0
+        if not line or line.startswith("#"):
+            flush()
+        elif _BULLET.match(line):
+            flush()
+            units.append(_BULLET.sub("", line))
+        else:
+            para.append(line.lstrip("> "))
+    flush()
+    return [u for u in units if len(u.split()) >= _MIN_CLAIM_WORDS]
+
+
+@dataclass
+class CitationReport:
+    """How well Key Concepts claims point back at the source (GL#34)."""
+
+    claims: int = 0
+    cited: int = 0
+    #: Markers naming a page the case does not have.
+    invalid_markers: list[str] = field(default_factory=list)
+    #: Acronym / CamelCase terms in Key Concepts that the source never mentions.
+    ungrounded_terms: list[str] = field(default_factory=list)
+
+    @property
+    def coverage(self) -> float:
+        """Share of Key Concepts claims carrying a valid marker (1.0 with no claims)."""
+        return self.cited / self.claims if self.claims else 1.0
+
+
+def check_citations(case: dict, summary: str) -> CitationReport:
+    """Citation coverage and an outside-material signal for ``## Key Concepts``.
+
+    A claim counts as cited only when every marker in it names a page the case
+    has; a marker for page 40 of a 3-page lecture is invented, not a citation.
+    Report only: not part of the gate threshold yet.
+    """
+    pages = case.get("pages", [])
+    valid = {int(pg.get("page", pg.get("page_number", 0))) for pg in pages}
+    source = "\n".join(pg.get("text", "") for pg in pages)
+    claims = key_concepts_claims(summary)
+    report = CitationReport(claims=len(claims))
+    seen: set[str] = set()
+    for claim in claims:
+        markers = _CITATION.findall(claim)
+        bad = [
+            m
+            for m in markers
+            if any(int(n) not in valid for n in _NUMBER.findall(_MARKER_DOC.sub("", m)))
+        ]
+        report.invalid_markers += bad
+        if markers and not bad:
+            report.cited += 1
+        for term in _NAMED_TERM.findall(_CITATION.sub("", claim)):
+            if term not in seen and not _mentions(source, term):
+                seen.add(term)
+                report.ungrounded_terms.append(term)
+    return report
+
+
 @dataclass
 class OfflineScore:
     """One stored summary scored against one case."""
@@ -63,6 +170,7 @@ class OfflineScore:
     missing_facts: list[str] = field(default_factory=list)
     forbidden_hits: list[str] = field(default_factory=list)
     connection_violations: list[str] = field(default_factory=list)
+    citations: CitationReport = field(default_factory=CitationReport)
 
     @property
     def faithfulness(self) -> float:
@@ -144,6 +252,7 @@ def score_offline(case: dict, summary: str) -> OfflineScore:
         missing_facts=missing_facts,
         forbidden_hits=hits,
         connection_violations=check_connections(case, summary),
+        citations=check_citations(case, summary),
     )
 
 
@@ -164,6 +273,12 @@ class OfflineRun:
     def coverage(self) -> float:
         total = len(self.scores) + len(self.missing_fixtures)
         return sum(s.coverage for s in self.scores) / total if total else 0.0
+
+    @property
+    def citation_coverage(self) -> float:
+        """Mean Key Concepts citation coverage (report only, not gated)."""
+        total = len(self.scores) + len(self.missing_fixtures)
+        return sum(s.citations.coverage for s in self.scores) / total if total else 0.0
 
     @property
     def structure(self) -> float:
@@ -270,13 +385,19 @@ def format_offline_report(run: OfflineRun, baseline: dict | None, failures: list
         lines.append(
             f"  [{flag}] {s.case_id:<26} faithfulness {s.faithfulness:.2f}"
             f"  coverage {s.coverage:.0%}  structure {'ok' if s.structure_ok else 'BROKEN'}"
+            f"  cited {s.citations.coverage:.0%}"
         )
+        for marker in s.citations.invalid_markers:
+            lines.append(f"         invalid citation: {marker}")
+        for term in s.citations.ungrounded_terms:
+            lines.append(f"         term not in source: {term}")
         for fact in s.missing_facts:
             lines.append(f"         missing fact: {fact}")
         for hit in s.forbidden_hits:
             lines.append(f"         forbidden claim: {hit}")
     agg = f"{len(run.scores)} case(s) · faithfulness {run.faithfulness:.3f}"
     agg += f" · coverage {run.coverage:.3f} · structure {run.structure:.0%}"
+    agg += f" · citation coverage {run.citation_coverage:.0%} (report only)"
     if baseline:
         agg += f" · baseline {baseline['aggregate']['faithfulness']:.3f}"
     lines += ["", agg]
