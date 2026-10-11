@@ -26,7 +26,9 @@ M33-S2-ARCH-018 (ADR 0007), which needs the user's acceptance before S2 implemen
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| _none_ | | | |
+| M33-S1-DATA-031 (schema: `ai_feedback`, `usage_events`, consent fields — for GL#36/#37/#38) | `data` | 2026-10-11 | isolated |
+| M33-S1-AI-012 (GL#33: ≥20 eval cases, offline CI check, baseline) | `ai` | 2026-10-11 | isolated |
+| M33-S1-AI-014 (GL#35: relevance floor + follow-up retrieval; retrieval half by `backend`) | `backend` | 2026-10-11 | isolated |
 
 **GL#31 (2026-10-10):** chat follow-ups lose course/week scope (prod repro; a course's week 3 has 8 indexed chunks) — pulled into M32 wave 1 as M32-S4-BACKEND-023 (audit AI-06 overlap).
 
