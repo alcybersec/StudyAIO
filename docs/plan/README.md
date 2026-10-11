@@ -25,11 +25,13 @@ not merged to `main`; draft MR !33 → `main` opened 2026-10-09.
 
 **M32 wave 1 deployed 2026-10-10** — MR !35 merged (`677209b`), closes GL#11–16, #18, #19, #31. Verified on the prod host: api/worker/beat/ui on `ghcr.io/…:677209b`, alembic `c8e2a5f93d16 (head)`, worker `CLAUDE_CLI_UID=10001` (denied on `/app/data`, `/run/claude-host`), `AGENT_BACKEND=zai`, health 200, UI 200, 0 schema errors at startup (migrate-first deploy worked). **Open:** operator `grant-pro`, the secret manager `NOTIFICATIONS_ENABLED`+SMTP, ceilings vs Z.ai limit; AI-03 (GL#17); wave 2.
 
+**M32 wave 2 deployed 2026-10-11** — MR !36 merged (`b3e0671`), closes GL#17, #20, #22–#30. First deploy-selfhosted run stopped by the new guard (exit 68: key not yet in the host env file; the the secret manager unit has an empty ExecStart, user re-exported via script); second stopped at the pre-migration dump (exit 67: `/opt/studyaio/backups` root:root 755 → now alex:alex 2770 + ACL u:999). Job 4794 success: predeploy dump 6.0M, migrations, health. Verified on the prod host: api/worker/beat/ui on `ghcr.io/…:b3e0671` with both compose files, 0 restarts, alembic `c8e2a5f93d16 (head)`, `/health/ready` 200, key set + `BACKUP_ENABLED=true` in api and worker, 0 errors in logs. `encrypt-user-secrets` dry run: 0 plaintext (nothing to migrate). Re-embed applied: 66/67 artifacts re-embedded, 0 failed. **Next:** M32 gate (wave 1 + wave 2 done).
+
 ## Active
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| _none — wave 2 complete; awaiting MR decision_ | | | |
+| _none_ | | | |
 
 **GL#31 (2026-10-10):** chat follow-ups lose course/week scope (prod repro; CSCI369 W3 has 8 indexed chunks) — pulled into M32 wave 1 as M32-S4-BACKEND-023 (audit AI-06 overlap).
 
