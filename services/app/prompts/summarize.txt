@@ -5,7 +5,7 @@
 
    v2.2 (2026-10-10, GL#9): `## Connections` may only point at material that is
    in the context this prompt was given.
-   Validating v2.1 against real lectures (CSIT302 W2, CSIT314 W2) found two
+   Validating v2.1 against sample lectures found two
    leaks. (1) A closing "In industry, ..." paragraph imported aerospace,
    SOC practice, persuasion psychology: context the lecturer never gave, which
    a student cannot tell from the lecture. (2) v2.1 invited links to "other
