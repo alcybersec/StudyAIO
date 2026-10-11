@@ -1,0 +1,7 @@
+# Justified exceptions for scripts/audit-deps.sh (SEC-07 / GL#27).
+#
+# One entry per line:   <pip|npm>:<advisory id>   # why it is accepted, and when to drop it
+# An entry is a debt, not a resting place: every one names the change that removes it.
+# Anything not listed here fails the CI `dependency-audit` job.
+
+# (no entries)

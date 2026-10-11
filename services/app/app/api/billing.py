@@ -147,6 +147,12 @@ async def stripe_webhook(
 
     logger.info("webhook_received", event_type=event["type"], event_id=event["id"])
 
-    await billing_service.handle_webhook_event(session, event["type"], event["data"])
+    await billing_service.handle_webhook_event(
+        session,
+        event["type"],
+        event["data"],
+        event_id=event["id"],
+        created=event.get("created"),
+    )
 
     return {"status": "ok"}

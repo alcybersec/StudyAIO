@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { userErrorMessage } from '../../lib/userError'
 import i18n from '../../i18n'
 import { useTranslation } from 'react-i18next'
 import { TriangleAlert } from 'lucide-react'
@@ -15,7 +16,7 @@ interface ChangeEmailDialogProps {
 }
 
 function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback
+  return userErrorMessage(err, fallback)
 }
 
 /** Display names for the providers the backend records, which are lowercase. */

@@ -157,6 +157,7 @@ class TestAuthConfigAdvertisesTheMode:
         with patch("app.api.auth.settings") as cfg:
             cfg.registration_mode = "invite"
             cfg.self_hosted = False
+            cfg.single_user_mode = False
             cfg.google_client_id = ""
             cfg.github_client_id = ""
             cfg.demo_enabled = False
@@ -172,6 +173,7 @@ class TestAuthConfigAdvertisesTheMode:
         with patch("app.api.auth.settings") as cfg:
             cfg.registration_mode = "closed"
             cfg.self_hosted = False
+            cfg.single_user_mode = False
             cfg.google_client_id = ""
             cfg.github_client_id = ""
             cfg.demo_enabled = False
@@ -186,6 +188,7 @@ class TestAuthConfigAdvertisesTheMode:
         with patch("app.api.auth.settings") as cfg:
             cfg.registration_mode = "open"
             cfg.self_hosted = False
+            cfg.single_user_mode = False
             cfg.google_client_id = ""
             cfg.github_client_id = ""
             cfg.demo_enabled = False

@@ -7,6 +7,10 @@ class StudyAIOError(Exception):
     pass
 
 
+class RateLimiterUnavailableError(StudyAIOError):
+    """The shared rate-limit store is unreachable on a fail-closed endpoint."""
+
+
 class DuplicateFileError(StudyAIOError):
     """Raised when an uploaded file already exists (same SHA-256)."""
 

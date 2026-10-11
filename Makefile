@@ -84,7 +84,7 @@ endif
 
 bootstrap: $(VENV_STAMP)
 
-$(VENV_STAMP): services/app/requirements.txt services/app/requirements.lock.txt scripts/bootstrap.sh
+$(VENV_STAMP): services/app/requirements.txt services/app/requirements-dev.txt services/app/requirements.lock.txt scripts/bootstrap.sh
 	bash scripts/bootstrap.sh
 
 # `make test` = the unit/golden/contracts run above, then (default full run only) the

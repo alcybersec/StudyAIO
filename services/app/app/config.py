@@ -1,6 +1,6 @@
 """Application configuration loaded from environment variables."""
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -78,8 +78,8 @@ class Settings(BaseSettings):
     classification_confidence_threshold: float = 0.7
     flashcard_count_per_week: int = 15
     quiz_question_count_per_week: int = 8
-    chunk_size_tokens: int = 500
-    chunk_overlap_tokens: int = 50
+    chunk_size_tokens: int = 200
+    chunk_overlap_tokens: int = 30
 
     # Embeddings
     # This default is read by services/app/Dockerfile at build time and baked
@@ -129,9 +129,28 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
-    self_hosted: bool = True
+    #: Deployment flavour: no billing/quota, operator-managed URLs, mail links
+    #: logged. It does NOT disable authentication (SEC-05, GL#25): the default
+    #: is False so a fresh install is authenticated; see `single_user_mode`.
+    self_hosted: bool = False
+    #: Explicit opt-in "no login" mode: unauthenticated callers act as the
+    #: default admin. Implies `self_hosted`. Startup refuses it unless the API
+    #: is bound to loopback (`bind_host`) or `i_understand_no_auth` is set.
+    single_user_mode: bool = False
+    i_understand_no_auth: bool = False
+    #: Mirror of uvicorn's `--host`. The app cannot see its own bind address, so
+    #: the operator declares it; the default is the conservative "exposed".
+    bind_host: str = "0.0.0.0"
+    # Fernet key(s) for per-user AI credentials at rest (SEC-06). Comma-separated
+    # for rotation: first encrypts, all decrypt. Required unless SINGLE_USER_MODE.
+    settings_encryption_key: SecretStr = SecretStr("")
     # "open" | "invite" | "closed" — gates POST /api/auth/register
     registration_mode: str = "open"
+
+    #: Rate-limit counters live in Redis so every worker process shares them
+    #: (SEC-10, GL#28). Empty means `redis_url`. On a Redis outage auth
+    #: endpoints fail closed (503); every other endpoint fails open.
+    rate_limit_storage_uri: str = ""
 
     # Redis socket timeouts (seconds). Cache/event/OAuth-state writes are all
     # best-effort, so a slow or unreachable Redis must fail fast and degrade
@@ -225,6 +244,13 @@ class Settings(BaseSettings):
     @property
     def summaries_dir(self) -> str:
         return f"{self.data_dir}/summaries"
+
+    @model_validator(mode="after")
+    def _single_user_implies_self_hosted(self) -> "Settings":
+        """Single-user mode is a self-hosted mode (no billing, no quota)."""
+        if self.single_user_mode:
+            self.self_hosted = True
+        return self
 
     @field_validator("registration_mode")
     @classmethod

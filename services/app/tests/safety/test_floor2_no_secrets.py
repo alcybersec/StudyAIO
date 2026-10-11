@@ -21,6 +21,7 @@ Two halves:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -120,7 +121,127 @@ async def test_floor2_settings_put_never_echoes_a_credential(async_client):
     assert response.status_code == 200, response.text
     _assert_no_sentinel(response.text, "PUT /api/settings response")
     # And it really was stored — otherwise the absence above proves nothing.
-    assert row.settings_json["openai_api_key"] == _sentinel("openai_api_key")
+    # SEC-06: stored as ciphertext that decrypts back to what was sent.
+    from app.core import secret_box
+
+    stored = row.settings_json["openai_api_key"]
+    assert stored != _sentinel("openai_api_key")
+    assert stored.startswith(secret_box.PREFIX)
+    assert secret_box.decrypt(stored) == _sentinel("openai_api_key")
+
+
+# ── stored at rest (SEC-06, GL#20) ─────────────────────────────────────
+#
+# A credential in ``user_settings.settings_json`` is a credential in every
+# database dump and backup. Outside single-user mode it is stored only as
+# ``enc:v1:<fernet>``, and the instance refuses to start, or to store one, with
+# no key. The suite's root conftest supplies a throwaway key.
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("self_hosted", [False, True], ids=["saas", "self_hosted"])
+async def test_floor2_credentials_never_persisted_in_plaintext_when_multi_user(
+    async_client, self_hosted
+):
+    """Every SECRET_KEY written through PUT lands encrypted, and round-trips."""
+    from app.config import settings
+    from app.core import secret_box
+    from app.services.settings_service import SECRET_KEYS
+
+    assert secret_box.is_configured(), "the suite must run with a throwaway key"
+    sent = _stored_credentials()
+    row = _settings_row({})
+    with (
+        patch.object(settings, "self_hosted", self_hosted),
+        patch.object(settings, "single_user_mode", False),
+        patch(
+            "app.services.settings_service._get_or_create_user_settings",
+            new=AsyncMock(return_value=row),
+        ),
+    ):
+        response = await async_client.put("/api/settings", json=sent)
+
+    assert response.status_code == 200, response.text
+    _assert_no_sentinel(json.dumps(row.settings_json), "the stored user_settings row")
+    for key in SECRET_KEYS:
+        stored = row.settings_json[key]
+        assert stored.startswith(secret_box.PREFIX), f"{key} stored in plaintext"
+        assert secret_box.decrypt(stored) == sent[key], f"{key} does not round-trip"
+
+
+@pytest.mark.asyncio
+async def test_floor2_multi_user_without_key_refuses_to_store_a_credential(async_client):
+    """No key outside single-user mode: the PUT is refused and nothing is written."""
+    from pydantic import SecretStr
+
+    from app.config import settings
+
+    row = _settings_row({})
+    with (
+        patch.object(settings, "single_user_mode", False),
+        patch.object(settings, "settings_encryption_key", SecretStr("")),
+        patch(
+            "app.services.settings_service._get_or_create_user_settings",
+            new=AsyncMock(return_value=row),
+        ),
+    ):
+        response = await async_client.put("/api/settings", json=_stored_credentials())
+
+    assert response.status_code == 422, response.text
+    assert "SETTINGS_ENCRYPTION_KEY" in response.json()["detail"]
+    _assert_no_sentinel(response.text, "the refusal body")
+    _assert_no_sentinel(json.dumps(row.settings_json), "the stored user_settings row")
+
+
+@pytest.mark.asyncio
+async def test_floor2_ciphertext_shaped_input_is_never_stored_verbatim(async_client):
+    """A submitted ``enc:v1:...`` is encrypted like any other value, not trusted as ciphertext."""
+    from app.core import secret_box
+
+    forged = f"{secret_box.PREFIX}{_sentinel('openai_api_key')}"
+    row = _settings_row({})
+    with patch(
+        "app.services.settings_service._get_or_create_user_settings",
+        new=AsyncMock(return_value=row),
+    ):
+        response = await async_client.put("/api/settings", json={"openai_api_key": forged})
+
+    assert response.status_code == 200, response.text
+    stored = row.settings_json["openai_api_key"]
+    assert stored != forged
+    assert secret_box.decrypt(stored) == forged
+
+
+def test_floor2_multi_user_startup_refuses_without_encryption_key():
+    """Lifespan refuses a multi-user instance with no SETTINGS_ENCRYPTION_KEY.
+
+    Control: single-user mode on loopback starts without one (plaintext, warned).
+    """
+    from pydantic import SecretStr
+
+    from app.main import app, lifespan
+
+    def start(single_user_mode: bool) -> None:
+        with (
+            patch("app.main.settings.self_hosted", True),
+            patch("app.main.settings.single_user_mode", single_user_mode),
+            patch("app.main.settings.bind_host", "127.0.0.1"),
+            patch("app.main.settings.settings_encryption_key", SecretStr("")),
+            patch("app.main.settings.jwt_secret_key") as mock_secret,
+            patch("app.main.configure_logging"),
+            patch("app.main.warn_if_embedding_provider_unavailable"),
+        ):
+            mock_secret.get_secret_value.return_value = "a-real-unique-signing-key-0123456789"
+
+            async def _run() -> None:
+                async with lifespan(app):
+                    pass
+
+            asyncio.run(_run())
+
+    with pytest.raises(RuntimeError, match="SETTINGS_ENCRYPTION_KEY"):
+        start(single_user_mode=False)
+    start(single_user_mode=True)
 
 
 def test_floor2_settings_schemas_carry_no_credential_value():
@@ -149,23 +270,29 @@ def test_floor2_settings_schemas_carry_no_credential_value():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("encrypted", [False, True], ids=["legacy_plaintext", "ciphertext"])
 async def test_floor2_account_export_never_returns_a_stored_credential(
-    async_client, default_test_user
+    async_client, default_test_user, encrypted
 ):
     """GET /api/auth/account/export must not hand back stored AI credentials.
 
     The export filters credential *columns* (``EXPORT_EXCLUDED_COLUMNS``), but
     the per-user AI credentials live as keys inside ``user_settings.settings_json``,
-    which is exported whole.
+    which is exported whole. Since SEC-06 they are normally ciphertext, which
+    would not contain the sentinel, so the ciphertext case checks the prefix too.
     """
     from app.api.deps import get_current_user
+    from app.core import secret_box
     from app.main import app
     from app.services import account_service
 
+    credentials = _stored_credentials()
+    if encrypted:
+        credentials = {k: secret_box.encrypt(v) for k, v in credentials.items()}
     settings_row = {
         "id": "settings-1",
         "user_id": default_test_user.id,
-        "settings_json": {"agent_backend": "openai", **_stored_credentials()},
+        "settings_json": {"agent_backend": "openai", **credentials},
         "theme": "system",
     }
 
@@ -210,6 +337,7 @@ async def test_floor2_account_export_never_returns_a_stored_credential(
     assert response.status_code == 200, response.text
     assert "user_settings" in response.json()["tables"], "export did not reach user_settings"
     _assert_no_sentinel(response.text, "GET /api/auth/account/export")
+    assert secret_box.PREFIX not in response.text, "export carries stored ciphertext"
 
 
 # ── logged ─────────────────────────────────────────────────────────────

@@ -23,6 +23,11 @@ services:
     pull_policy: always
     restart: unless-stopped
     stop_grace_period: 35s
+    environment:
+      # SEC-06: passed through from the environment / .env, deliberately no
+      # default -- the api and worker refuse to start without it unless
+      # SINGLE_USER_MODE=true. See docs/deployment.md.
+      SETTINGS_ENCRYPTION_KEY:
     # --forwarded-allow-ips names the reverse proxy whose X-Forwarded-For may be
     # believed. Uvicorn's default is 127.0.0.1, so a proxy on any other host has
     # its headers discarded and every client arrives as that proxy's address —
@@ -40,6 +45,10 @@ services:
     command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=4
     volumes: !override
       - ./data:/app/data
+      # See docker-compose.yml: run_backup needs the script and a persistent
+      # destination, neither of which the image carries. GL#24.
+      - ./scripts/backup.sh:/app/scripts/backup.sh:ro
+      - ./backups:/app/backups
       # Claude CLI comes from the image — never bind-mount a host binary here
       # (see the note in docker-compose.yml). Credentials only.
       # Credentials come ONLY from the dedicated service-login directory
@@ -52,6 +61,10 @@ services:
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/settings.json:/root/.claude/settings.json:ro
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}:/run/claude-host:ro
     environment:
+      # SEC-06: passed through from the environment / .env, deliberately no
+      # default -- the api and worker refuse to start without it unless
+      # SINGLE_USER_MODE=true. See docs/deployment.md.
+      SETTINGS_ENCRYPTION_KEY:
       # Preferred login: a long-lived token (`claude setup-token`) stored as
       # <dir>/oauth-token (0600). The adapter reads it from this file and hands
       # it only to the CLI subprocess. .credentials.json stays as the fallback.

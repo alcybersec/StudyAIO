@@ -130,27 +130,82 @@ async def create_portal_session(session: AsyncSession, user_id: str) -> str:
     return portal.url
 
 
-async def handle_webhook_event(session: AsyncSession, event_type: str, data: dict) -> None:
-    """Process a Stripe webhook event.
+# Stripe status -> plan. Decision (R-034): ``trialing`` is a paid-for trial and
+# ``past_due`` is a dunning grace period (Stripe retries the card and later
+# sends ``unpaid``/``canceled`` if it fails), so both keep Pro. ``incomplete``
+# (first payment not yet made) neither grants nor revokes.
+PRO_STATUSES = frozenset({"active", "trialing", "past_due"})
+FREE_STATUSES = frozenset({"canceled", "unpaid", "incomplete_expired", "paused"})
+
+_EVENT_TTL_SECONDS = 60 * 60 * 24 * 30
+_ORDER_TTL_SECONDS = 60 * 60 * 24 * 90
+
+
+async def handle_webhook_event(
+    session: AsyncSession,
+    event_type: str,
+    data: dict,
+    *,
+    event_id: str | None = None,
+    created: int | None = None,
+) -> None:
+    """Process a Stripe webhook event, idempotently and in order.
+
+    Replays of the same ``event_id`` are no-ops (Redis ``SET NX``). An event
+    whose ``created`` is older than the last one applied for that Stripe
+    customer is ignored, so a late ``updated`` cannot undo a newer state. If
+    processing fails the dedupe mark is released so Stripe's retry applies.
 
     Args:
         session: Database session.
         event_type: The Stripe event type.
         data: The event data object.
+        event_id: The Stripe event id, for dedupe.
+        created: The event's ``created`` unix timestamp, for ordering.
     """
-    obj = data.get("object", {})
+    from app.core import redis as redis_mod
 
-    if event_type in (
+    obj = data.get("object", {})
+    if event_type not in (
         "customer.subscription.created",
         "customer.subscription.updated",
+        "customer.subscription.deleted",
     ):
-        await _handle_subscription_update(session, obj)
-    elif event_type == "customer.subscription.deleted":
-        await _handle_subscription_deleted(session, obj)
-    elif event_type == "checkout.session.completed":
-        logger.info("checkout_completed", customer=obj.get("customer"))
-    else:
-        logger.debug("webhook_event_ignored", event_type=event_type)
+        if event_type == "checkout.session.completed":
+            logger.info("checkout_completed", customer=obj.get("customer"))
+        else:
+            logger.debug("webhook_event_ignored", event_type=event_type)
+        return
+
+    client = redis_mod.redis_client
+    dedupe_key = f"stripe:event:{event_id}" if event_id else None
+    order_key = f"stripe:last_created:{obj.get('customer')}" if created is not None else None
+
+    if dedupe_key and not await client.set(dedupe_key, "1", nx=True, ex=_EVENT_TTL_SECONDS):
+        logger.info("webhook_replay_ignored", event_id=event_id, event_type=event_type)
+        return
+    try:
+        if order_key:
+            last = await client.get(order_key)
+            if last is not None and created < int(last):
+                logger.info(
+                    "webhook_stale_ignored",
+                    event_id=event_id,
+                    event_type=event_type,
+                    created=created,
+                    last_applied=int(last),
+                )
+                return
+        if event_type == "customer.subscription.deleted":
+            await _handle_subscription_deleted(session, obj)
+        else:
+            await _handle_subscription_update(session, obj)
+        if order_key:
+            await client.set(order_key, str(created), ex=_ORDER_TTL_SECONDS)
+    except Exception:
+        if dedupe_key:
+            await client.delete(dedupe_key)
+        raise
 
 
 async def _handle_subscription_update(session: AsyncSession, sub_obj: dict) -> None:
@@ -170,10 +225,9 @@ async def _handle_subscription_update(session: AsyncSession, sub_obj: dict) -> N
     sub.stripe_subscription_id = stripe_sub_id
     sub.status = status
 
-    # Map Stripe status to plan tier
-    if status == "active":
+    if status in PRO_STATUSES:
         sub.plan = "pro"
-    elif status in ("canceled", "unpaid", "past_due"):
+    elif status in FREE_STATUSES:
         sub.plan = "free"
 
     # Period dates
@@ -213,6 +267,12 @@ async def _handle_subscription_deleted(session: AsyncSession, sub_obj: dict) -> 
     sub = result.scalar_one_or_none()
     if not sub:
         logger.warning("webhook_subscription_not_found", customer_id=customer_id)
+        return
+
+    deleted_id = sub_obj.get("id")
+    if deleted_id and sub.stripe_subscription_id and deleted_id != sub.stripe_subscription_id:
+        # An old subscription ending must not cancel the customer's current one.
+        logger.info("webhook_deleted_other_subscription_ignored", user_id=sub.user_id)
         return
 
     sub.plan = "free"

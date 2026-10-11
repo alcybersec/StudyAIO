@@ -5,13 +5,14 @@ The Google API client is replaced by a small recording fake. Everything else
 mapping rows) runs against Postgres.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import select
 
+from app.core.clock import utc_today
 from app.core.exceptions import CalendarSyncError
 from app.core.utils import generate_id
 from app.models.calendar_event import CalendarEvent
@@ -86,7 +87,7 @@ async def _with_content(db_session, user, code="CAL1"):
         id=generate_id(),
         course_id=seeded.course.id,
         title="Lab",
-        due_date=date.today() + timedelta(days=5),
+        due_date=utc_today() + timedelta(days=5),
         deadline_type="assignment",
     )
     exam = Exam(

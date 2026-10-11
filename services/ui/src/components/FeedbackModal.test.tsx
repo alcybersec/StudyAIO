@@ -76,7 +76,7 @@ describe('FeedbackModal', () => {
     await user.type(screen.getByLabelText(/your feedback/i), 'important report')
     await user.click(screen.getByRole('button', { name: /^send$/i }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/network down/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/your text is still here/i)
     expect(screen.getByLabelText(/your feedback/i)).toHaveValue('important report')
   })
 

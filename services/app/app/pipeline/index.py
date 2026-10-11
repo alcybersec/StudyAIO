@@ -10,6 +10,7 @@ from app.core.database import async_session_factory, run_async
 from app.core.exceptions import IndexingError
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
+from app.models.chunk import Chunk
 from app.models.extraction import Extraction
 from app.models.pipeline_run import PipelineRun
 from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
@@ -21,12 +22,19 @@ from app.worker import celery_app
 logger = structlog.get_logger()
 
 
-async def _index(artifact_id: str, user_id: str | None = None) -> dict:
+async def _index(
+    artifact_id: str, user_id: str | None = None, *, refresh: str | None = None
+) -> dict:
     """Async index implementation.
 
     Args:
         artifact_id: UUID of the artifact to index.
         user_id: Owner user UUID.
+        refresh: Re-embed mode used by `reembed_task` (GL#17), `None` for the
+            normal stage. `"dry_run"` only reports whether the artifact's chunks
+            outgrow the embedder; `"apply"` rewrites them if so. Neither touches
+            artifact status, `PipelineRun` or pipeline events: the artifact is
+            already indexed and stays searchable throughout.
 
     Returns:
         Dict with artifact_id, status, chunk_count.
@@ -58,6 +66,35 @@ async def _index(artifact_id: str, user_id: str | None = None) -> dict:
         manifest = extraction.manifest_json
         if not manifest or "pages" not in manifest:
             raise IndexingError(f"Extraction for artifact {artifact_id} has no pages in manifest")
+
+        if refresh is not None:
+            provider = get_embedding_provider()
+            stored = (
+                (await session.execute(select(Chunk.text).where(Chunk.artifact_id == artifact_id)))
+                .scalars()
+                .all()
+            )
+            if not any(index_service.chunk_exceeds_window(provider, t) for t in stored):
+                return {"artifact_id": artifact_id, "status": "skipped_fit"}
+            if refresh == "dry_run":
+                return {"artifact_id": artifact_id, "status": "stale"}
+            # Embeds first, then deletes + inserts in this one transaction, so a
+            # failure leaves the old chunks in place (floor 4).
+            rewritten = await index_service.index_artifact_chunks(
+                session=session,
+                artifact_id=artifact_id,
+                pages=manifest["pages"],
+                embedding_provider=provider,
+            )
+            if not rewritten:
+                await session.rollback()
+                return {"artifact_id": artifact_id, "status": "skipped_no_text"}
+            await session.commit()
+            return {
+                "artifact_id": artifact_id,
+                "status": "reembedded",
+                "chunk_count": len(rewritten),
+            }
 
         # Update status
         artifact.status = "indexing"

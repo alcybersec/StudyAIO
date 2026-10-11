@@ -64,11 +64,30 @@ class TestValidateSetting:
             settings_service.validate_setting("flashcard_count_per_week", 200)
 
     def test_chunk_size_bounds(self):
-        """Chunk size respects its bounds."""
+        """Chunk size is capped to the embedder window (AI-03)."""
         assert settings_service.validate_setting("chunk_size_tokens", 50) == 50
-        assert settings_service.validate_setting("chunk_size_tokens", 5000) == 5000
+        assert settings_service.validate_setting("chunk_size_tokens", 248) == 248
         with pytest.raises(ValueError):
             settings_service.validate_setting("chunk_size_tokens", 10)
+        with pytest.raises(ValueError, match="must be <= 248"):
+            settings_service.validate_setting("chunk_size_tokens", 249)
+
+    def test_chunk_overlap_bounds(self):
+        """Chunk overlap is capped at half the maximum chunk size."""
+        assert settings_service.validate_setting("chunk_overlap_tokens", 0) == 0
+        assert settings_service.validate_setting("chunk_overlap_tokens", 124) == 124
+        with pytest.raises(ValueError, match="must be <= 124"):
+            settings_service.validate_setting("chunk_overlap_tokens", 125)
+
+    def test_chunk_defaults_fit_embedder_window(self):
+        """Config defaults are valid under the setting bounds."""
+        from app.config import Settings
+
+        cfg = Settings()
+        assert cfg.chunk_size_tokens == 200
+        assert cfg.chunk_overlap_tokens == 30
+        settings_service.validate_setting("chunk_size_tokens", cfg.chunk_size_tokens)
+        settings_service.validate_setting("chunk_overlap_tokens", cfg.chunk_overlap_tokens)
 
     def test_agent_backend_valid(self):
         """Valid agent backends are accepted."""

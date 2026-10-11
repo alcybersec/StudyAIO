@@ -45,7 +45,8 @@ Key variables:
 - `UI_PORT` — host port for the UI (default: `3001`)
 - `STUDYAIO_CLAUDE_LOGIN_DIR` — host path of the dedicated Claude service-login directory (default: `/opt/studyaio/claude-login`); worker only, read-only
 - `AGENT_BACKEND` — which AI adapter to use: `claude_code` (default), `anthropic_api`, `openai`, or `ollama`. Each has its own key/model variables in `.env.example`. Credentials saved per user in Settings override these.
-- `SELF_HOSTED` — `true` (default) skips auth and uses a single default admin user; `false` enforces login
+- `SELF_HOSTED` — `false` (default). Controls only billing, quota and URL policy; it does not affect authentication.
+- `SINGLE_USER_MODE` — `true` is the opt-in no-login mode (one default admin user). It requires `BIND_HOST` to be a loopback address, or `I_UNDERSTAND_NO_AUTH=true`.
 
 `.env.example` lists every setting in `app/config.py`, commented out where the
 default is fine.
@@ -300,7 +301,8 @@ installed. `services/app/requirements.lock.txt` pins **which version** of
 everything the resolver reaches, direct and transitive, and CI applies it to
 every `pip install` through `PIP_CONSTRAINT`.
 
-1. Add the requirement to `requirements.txt` as usual.
+1. Add the requirement to `requirements.txt` (runtime) or `requirements-dev.txt`
+   (pytest, ruff, other test-only tooling; the runtime image never installs it).
 2. Run `./scripts/lock-requirements.sh` to regenerate the lock.
 3. Commit both files together.
 
@@ -370,7 +372,7 @@ make coverage           # Unit tests with coverage report
 
 `make test` is the one command from a clean clone. It needs `python3.12` or `uv`
 on PATH, builds `services/app/.venv` (CPU torch, constrained by
-`requirements.lock.txt`, as CI does) and runs `tests/unit`, `tests/golden` and
+`requirements.lock.txt`, as CI does; installs `requirements-dev.txt`) and runs `tests/unit`, `tests/golden` and
 `tests/contracts`. It does **not** run integration tests, which need Postgres and
 Redis: use `make test-integration`. An empty collection (pytest exit 5) fails the
 target. Override the paths with `make test TEST_PATHS=tests/unit`.

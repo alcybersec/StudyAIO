@@ -45,6 +45,7 @@ from app.api import (
     uploads_router,
 )
 from app.config import settings
+from app.core import secret_box
 from app.core.demo_middleware import DemoAccountMiddleware
 from app.core.exceptions import (
     AgentError,
@@ -57,6 +58,7 @@ from app.core.exceptions import (
     LastAdminError,
     ProviderCredentialError,
     QuotaExceededError,
+    RateLimiterUnavailableError,
     RegistrationClosedError,
     StudyAIOError,
     UserExistsError,
@@ -163,6 +165,32 @@ _DEFAULT_JWT_SECRET = "changeme-in-production-use-a-real-secret"
 _DEFAULT_FORWARDED_ALLOW_IPS = "127.0.0.1"
 
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def check_single_user_mode() -> None:
+    """Refuse to start "no login" mode on a reachable interface (SEC-05, GL#25).
+
+    Raises:
+        RuntimeError: `SINGLE_USER_MODE` is on, `BIND_HOST` is not loopback and
+            `I_UNDERSTAND_NO_AUTH` is not set.
+    """
+    if not settings.single_user_mode:
+        return
+    host = settings.bind_host.strip().lower()
+    if host in _LOOPBACK_HOSTS or host.startswith("127."):
+        return
+    if settings.i_understand_no_auth:
+        logger.warning("single_user_mode_exposed", bind_host=host)
+        return
+    raise RuntimeError(
+        "FATAL: SINGLE_USER_MODE=true disables login, and BIND_HOST "
+        f"({host or 'unset'}) is not a loopback address, so anyone who can reach "
+        "the API becomes the admin. Bind to 127.0.0.1, or set "
+        "I_UNDERSTAND_NO_AUTH=true if the network is already trusted/isolated."
+    )
+
+
 def warn_if_proxy_headers_untrusted() -> None:
     """Warn when the app is behind a proxy it has not been told to trust.
 
@@ -181,7 +209,7 @@ def warn_if_proxy_headers_untrusted() -> None:
     This only warns. The correct value depends on deployment topology, so
     guessing one would be worse than saying clearly that it is unset.
     """
-    if settings.self_hosted:
+    if settings.single_user_mode:
         return
 
     configured = os.environ.get("FORWARDED_ALLOW_IPS", "").strip()
@@ -259,9 +287,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application startup and shutdown events."""
     configure_logging(settings.log_level)
 
-    # Refuse to start with default JWT secret in SaaS mode
+    # Refuse the committed JWT secret whenever login is on. SELF_HOSTED is an
+    # authenticated mode since SEC-05; only single-user mode signs no tokens.
     if (
-        not settings.self_hosted
+        not settings.single_user_mode
         and settings.jwt_secret_key.get_secret_value() == _DEFAULT_JWT_SECRET
     ):
         raise RuntimeError(
@@ -270,6 +299,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))"'
         )
 
+    check_single_user_mode()
+    secret_box.check_startup()
     warn_if_proxy_headers_untrusted()
     warn_if_embedding_provider_unavailable()
 
@@ -511,6 +542,18 @@ async def duplicate_file_handler(request: Request, exc: DuplicateFileError) -> J
             "detail": str(exc),
             "existing_artifact_id": exc.existing_artifact_id,
         },
+    )
+
+
+@app.exception_handler(RateLimiterUnavailableError)
+async def rate_limiter_unavailable_handler(
+    request: Request, exc: RateLimiterUnavailableError
+) -> JSONResponse:
+    """Fail closed (503) when the shared limiter store is down on an auth route."""
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Service temporarily unavailable. Please retry shortly."},
+        headers={"Retry-After": "5"},
     )
 
 

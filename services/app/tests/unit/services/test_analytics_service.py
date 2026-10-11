@@ -1,10 +1,11 @@
 """Tests for analytics service."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.clock import utc_today
 from app.services.analytics_service import (
     compute_and_store_snapshot,
     get_exam_readiness,
@@ -103,7 +104,7 @@ class TestGetStudyHeatmap:
         """Returns all days in range, filling zero-activity days."""
         session = AsyncMock()
 
-        today = date.today()
+        today = utc_today()
         yesterday = today - timedelta(days=1)
 
         # Only one day with data
@@ -360,7 +361,7 @@ class TestComputeAndStoreSnapshot:
 
         session.add.assert_called_once()
         assert result.user_id == "user-001"
-        assert result.snapshot_date == date.today()
+        assert result.snapshot_date == utc_today()
         assert result.metrics_json == mock_overview
 
     @pytest.mark.asyncio
@@ -371,7 +372,7 @@ class TestComputeAndStoreSnapshot:
 
         existing_snapshot = MagicMock()
         existing_snapshot.user_id = "user-001"
-        existing_snapshot.snapshot_date = date.today()
+        existing_snapshot.snapshot_date = utc_today()
         existing_snapshot.metrics_json = {"old": "data"}
 
         mock_result = MagicMock()

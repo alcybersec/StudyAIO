@@ -573,6 +573,72 @@ The adapter never writes back to this directory.
 
 ---
 
+## SETTINGS_ENCRYPTION_KEY
+
+Per-user AI credentials (`user_settings.settings_json`) are stored encrypted at
+rest as `enc:v1:<token>` (Fernet: AES-128-CBC plus an HMAC-SHA256 tag; see
+`app/core/secret_box.py`). The key lives only in the environment.
+
+**Required** for the API and worker. Without it both refuse to start, unless
+`SINGLE_USER_MODE=true` (which then stores plaintext and logs a warning at
+startup). `preflight-check.sh` reports a missing or malformed key as an error,
+and `infra/deploy/deploy.sh` aborts the deploy (exit 68) before the dump,
+migration or any restart if the new image needs a key and the environment has
+none, rather than letting the api crash-loop.
+
+**Generate** (44 characters, url-safe base64 of 32 random bytes):
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+`scripts/setup-selfhosted.sh` generates one into `.env` for you.
+
+**Store it in the secret manager** (prod) as `SETTINGS_ENCRYPTION_KEY`, in the same
+environment and path as the other studyaio secrets. `.env` on the host is
+regenerated from the secret manager, so a key set only in the host's `.env` is lost at
+the next regeneration. Compose passes the variable through to `api` and `worker`
+with no default (`docker-compose*.yml`).
+
+**Never lose it.** Every stored credential is unreadable without it, and there
+is no recovery: users would have to re-enter their provider keys. Back it up
+somewhere independent of the host and of Postgres backups (a backup of the
+database is useless if the key sits only beside it).
+
+**Rotation.** The value may be a comma-separated list. The first key encrypts,
+every key decrypts:
+
+1. Generate a new key and set `SETTINGS_ENCRYPTION_KEY=<new>,<old>` in the secret manager.
+2. Deploy (or recreate the api and worker) so both load the list.
+3. Re-key the stored values: `python -m app.cli encrypt-user-secrets` (dry run),
+   then `python -m app.cli encrypt-user-secrets --apply`.
+4. Once the dry run reports nothing left to re-key, drop `<old>` and deploy again.
+
+**After the first deploy of SEC-06**, existing plaintext credentials are still
+plaintext until migrated. From `/opt/studyaio`, with the same two compose files
+CI uses:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec api \
+  python -m app.cli encrypt-user-secrets            # dry run: counts only
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec api \
+  python -m app.cli encrypt-user-secrets --apply    # writes
+```
+
+Run the dry run first and read its counts (plaintext to encrypt, values to
+re-key, unreadable values); `--apply` is the only form that writes. The command
+never prints a credential.
+
+**Old plaintext lingers.** Encrypting rewrites the rows, but the previous
+plaintext remains in Postgres dead tuples until autovacuum or `VACUUM` reclaims
+it, and in every database dump and backup taken before the migration (the
+pre-deploy dumps in `backups/`, beat backups) until those expire. If that
+exposure matters, rotate the provider keys themselves (ask users to re-enter
+theirs; rotate any instance-level `*_API_KEY`) after the migration, and let the
+old dumps age out.
+
+---
+
 ## Environment Variable Reference
 
 | Variable | Default | Description |
@@ -587,8 +653,10 @@ The adapter never writes back to this directory.
 | `S3_REGION` | `us-east-1` | AWS region |
 | `S3_ENDPOINT_URL` | | Custom S3 endpoint |
 | `LOG_LEVEL` | `INFO` | Logging level |
-| `SELF_HOSTED` | `true` | Bypass tier/quota checks |
+| `SELF_HOSTED` | `false` | Billing, quota and URL policy only; does not affect auth |
+| `SINGLE_USER_MODE` | `false` | Opt-in no-login mode (one default admin). Requires `BIND_HOST` loopback or `I_UNDERSTAND_NO_AUTH=true` |
 | `JWT_SECRET_KEY` | (insecure default) | **Change in production** |
+| `SETTINGS_ENCRYPTION_KEY` | | **Required** unless `SINGLE_USER_MODE=true`. Fernet key (or comma-separated list for rotation) that encrypts per-user AI credentials at rest. See [SETTINGS_ENCRYPTION_KEY](#settings_encryption_key). |
 | `CORS_ORIGINS` | `http://localhost:3001` | Comma-separated origins |
 | `MAX_UPLOAD_SIZE_MB` | `100` | Max upload file size (compressed bytes on the wire) |
 | `MAX_ARCHIVE_DECOMPRESSED_MB` | `500` | Most a DOCX/PPTX archive may expand to in the worker. Checked before parsing; over it, that artifact fails |
@@ -667,7 +735,7 @@ token is not origin-bound, so substitute an origin your browser can reach and
 keep the `?token=` intact.
 
 Follow the link, set a password, and confirm you can log in **before** changing
-`SELF_HOSTED` — after the flip the default identity no longer exists and there
+`SINGLE_USER_MODE` — after the flip the default identity no longer exists and there
 is no other way in.
 
 Re-running the command is safe, but it voids any link an earlier run printed.
@@ -677,8 +745,8 @@ If you run it twice, use only the newest link — an older one fails with
 The link is a bearer credential for an admin account. Do not paste it into a
 shared channel.
 
-**1. Multi-user mode.** `SELF_HOSTED=false`. Left at `true`, the API falls back
-to a single shared admin identity and there are no real accounts.
+**1. Multi-user mode.** Leave `SINGLE_USER_MODE` unset (`false`). With it `true`, the API
+falls back to a single shared admin identity and there are no real accounts.
 
 **2. Working outbound email.** Set `SMTP_HOST` and `SMTP_FROM_EMAIL`. With them
 empty, `send_email()` returns `False` without sending, so password resets and

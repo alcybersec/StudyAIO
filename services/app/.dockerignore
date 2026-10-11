@@ -1,0 +1,35 @@
+# Build context is services/app (see the compose `build.context` and CI's
+# BUILD_CONTEXT), so the repo-root .dockerignore does NOT apply to the api image.
+# This file does. Keep the runtime image to what it runs.
+#
+# Nothing in the image build or the CI test jobs needs tests/: CI runs pytest on
+# the checked-out repo in python:3.12-slim, never inside this image, and the dev
+# compose stack bind-mounts ./services/app/tests and pytest.ini itself.
+
+# Tests and their scaffolding
+tests/
+conftest.py
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local environments and caches
+.venv/
+.venv*/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Eval run output (the scorer, runner and cases/ ARE runtime: `cli evals`)
+evals/results/
+evals/out/
+evals/*.json
+
+# Never in an image
+.env
+.env.*
+*.log

@@ -1,10 +1,11 @@
 """Tests for streak service."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core.clock import utc_today
 from app.services.streak_service import (
     get_streak,
     get_study_history,
@@ -93,7 +94,7 @@ class TestGetStreak:
     async def test_consecutive_days_streak(self):
         """Counts consecutive study days correctly."""
         session = AsyncMock()
-        today = date.today()
+        today = utc_today()
 
         dates = [
             (today,),
@@ -112,7 +113,7 @@ class TestGetStreak:
     async def test_gap_breaks_current_streak(self):
         """A gap in dates breaks the current streak."""
         session = AsyncMock()
-        today = date.today()
+        today = utc_today()
 
         dates = [
             (today,),
@@ -131,7 +132,7 @@ class TestGetStreak:
     async def test_yesterday_counts_as_active_streak(self):
         """If last study was yesterday and no study today, streak is still alive."""
         session = AsyncMock()
-        today = date.today()
+        today = utc_today()
 
         dates = [
             (today - timedelta(days=1),),
@@ -148,7 +149,7 @@ class TestGetStreak:
     async def test_single_day_streak(self):
         """Single study day = streak of 1."""
         session = AsyncMock()
-        today = date.today()
+        today = utc_today()
 
         dates = [(today,)]
         mock_result = MagicMock()
@@ -167,7 +168,7 @@ class TestGetStudyHistory:
     async def test_returns_aggregated_history(self):
         """Returns daily aggregates."""
         session = AsyncMock()
-        today = date.today()
+        today = utc_today()
 
         mock_result = MagicMock()
         mock_result.__iter__ = MagicMock(

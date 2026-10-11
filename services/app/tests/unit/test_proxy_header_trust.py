@@ -29,7 +29,7 @@ def _warnings(mock_logger):
 
 
 def test_warns_when_unset_in_saas_mode(warned, monkeypatch):
-    monkeypatch.setattr("app.main.settings.self_hosted", False)
+    monkeypatch.setattr("app.main.settings.single_user_mode", False)
     monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
 
     warn_if_proxy_headers_untrusted()
@@ -39,7 +39,7 @@ def test_warns_when_unset_in_saas_mode(warned, monkeypatch):
 
 def test_warns_when_left_at_the_uvicorn_default(warned, monkeypatch):
     """127.0.0.1 is the default, and is wrong for any proxy on another host."""
-    monkeypatch.setattr("app.main.settings.self_hosted", False)
+    monkeypatch.setattr("app.main.settings.single_user_mode", False)
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "127.0.0.1")
 
     warn_if_proxy_headers_untrusted()
@@ -48,7 +48,7 @@ def test_warns_when_left_at_the_uvicorn_default(warned, monkeypatch):
 
 
 def test_silent_when_a_proxy_is_named(warned, monkeypatch):
-    monkeypatch.setattr("app.main.settings.self_hosted", False)
+    monkeypatch.setattr("app.main.settings.single_user_mode", False)
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "192.0.2.10")
 
     warn_if_proxy_headers_untrusted()
@@ -56,9 +56,9 @@ def test_silent_when_a_proxy_is_named(warned, monkeypatch):
     assert not _warnings(warned)
 
 
-def test_silent_in_self_hosted_mode(warned, monkeypatch):
-    """A self-hosted instance is usually reached directly; the warning is noise."""
-    monkeypatch.setattr("app.main.settings.self_hosted", True)
+def test_silent_in_single_user_mode(warned, monkeypatch):
+    """A single-user instance is usually reached directly; the warning is noise."""
+    monkeypatch.setattr("app.main.settings.single_user_mode", True)
     monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
 
     warn_if_proxy_headers_untrusted()
@@ -66,9 +66,20 @@ def test_silent_in_self_hosted_mode(warned, monkeypatch):
     assert not _warnings(warned)
 
 
+def test_warns_in_self_hosted_multi_user_mode(warned, monkeypatch):
+    """SEC-05: SELF_HOSTED is authenticated and may sit behind a proxy; it must warn."""
+    monkeypatch.setattr("app.main.settings.self_hosted", True)
+    monkeypatch.setattr("app.main.settings.single_user_mode", False)
+    monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
+
+    warn_if_proxy_headers_untrusted()
+
+    assert _warnings(warned)
+
+
 def test_whitespace_only_value_still_warns(warned, monkeypatch):
     """An empty-but-present variable is as untrusted as an absent one."""
-    monkeypatch.setattr("app.main.settings.self_hosted", False)
+    monkeypatch.setattr("app.main.settings.single_user_mode", False)
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "   ")
 
     warn_if_proxy_headers_untrusted()
@@ -91,6 +102,10 @@ async def test_startup_actually_runs_the_check():
         # Stubbed because it loads the embedding model for real; its own wiring
         # test lives in test_embedding_startup_check.py.
         patch("app.main.warn_if_embedding_provider_unavailable"),
+        # SEC-05: self_hosted defaults to False, which arms the default-JWT-secret
+        # refusal; that is not what this test is about.
+        patch("app.main.settings.single_user_mode", True),
+        patch("app.main.check_single_user_mode"),
     ):
         async with lifespan(app):
             pass

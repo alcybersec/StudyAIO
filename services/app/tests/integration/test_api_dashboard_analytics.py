@@ -5,11 +5,12 @@ try/except, so a broken query shows up as a missing section rather than an
 error. These tests therefore assert that every section is actually present.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from app.core.cache import cache_delete, dashboard_cache_key
+from app.core.clock import utc_today
 from app.core.utils import generate_id
 from app.models.deadline import Deadline
 from app.models.pipeline_run import PipelineRun
@@ -63,7 +64,7 @@ async def _populated_user(client_factory, make_user, db_session, code="DASH101")
             id=generate_id(),
             course_id=seeded.course.id,
             title="Lab 1",
-            due_date=date.today() + timedelta(days=4),
+            due_date=utc_today() + timedelta(days=4),
             deadline_type="assignment",
             is_confirmed=True,
         )

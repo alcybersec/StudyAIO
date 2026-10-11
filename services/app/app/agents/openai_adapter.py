@@ -139,7 +139,7 @@ class OpenAIAdapter(AgentAdapter):
         try:
             response = await client.chat.completions.create(**request_kwargs)
         except Exception as e:
-            raise self._agent_error(f"{self.provider_name} API call failed: {e}") from None
+            raise self._agent_error(f"{self.provider_name} API call failed: {e}", e) from None
 
         choice = response.choices[0]
         result = (choice.message.content or "").strip()
@@ -465,7 +465,7 @@ Respond with ONLY a JSON object:
                 if delta and delta.content:
                     yield delta.content
         except Exception as e:
-            raise self._agent_error(f"OpenAI streaming failed: {e}") from None
+            raise self._agent_error(f"OpenAI streaming failed: {e}", e) from None
 
     async def extract_course_ops(
         self, document_text: str, course_code: str, document_type: str

@@ -12,7 +12,7 @@ and none of them can fail if it stops rejecting anonymous callers.
 That matters more here than in most apps, because of the shape of the real
 dependency (`app/api/deps.py`):
 
-    if settings.self_hosted:
+    if settings.single_user_mode:
         try:
             return await get_current_user(request, session)
         except AuthenticationError:
@@ -92,7 +92,12 @@ async def real_auth_client(
     # one test would let the next one pass without the lookup it is testing.
     deps_module._default_user_cache = None
     try:
-        with patch.object(settings, "self_hosted", self_hosted):
+        # The anonymous fallback is keyed on `single_user_mode` (SEC-05); the
+        # `self_hosted` argument now means "the explicit no-login opt-in".
+        with (
+            patch.object(settings, "self_hosted", self_hosted),
+            patch.object(settings, "single_user_mode", self_hosted),
+        ):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
                 base_url="http://test",

@@ -119,7 +119,7 @@ class TestDeliverEmailVerification:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://study.example.com"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.return_value = True
 
             await deliver_email_verification("user@test.com", "tok123")
@@ -138,7 +138,7 @@ class TestDeliverEmailVerification:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://study.example.com/"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.return_value = True
 
             await deliver_email_verification("user@test.com", "tok123")
@@ -157,7 +157,7 @@ class TestDeliverEmailVerification:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://x.test"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.return_value = True
 
             await deliver_email_verification("user@test.com", "a b&c")
@@ -173,7 +173,7 @@ class TestDeliverEmailVerification:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://x.test"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.return_value = True
 
             assert await deliver_email_verification("user@test.com", "tok") is True
@@ -188,7 +188,7 @@ class TestDeliverEmailVerification:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://x.test"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.side_effect = RuntimeError("smtp exploded")
 
             assert await deliver_email_verification("user@test.com", "tok") is False
@@ -204,7 +204,7 @@ class TestDeliverEmailVerification:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://x.test"
-            mock_settings.self_hosted = True
+            mock_settings.single_user_mode = True
             mock_send.return_value = False
 
             await deliver_email_verification("user@test.com", "tok")
@@ -224,7 +224,7 @@ class TestDeliverEmailVerification:
             ) as mock_send,
         ):
             mock_settings.app_base_url = "https://x.test"
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             mock_send.return_value = False
 
             await deliver_email_verification("user@test.com", "tok")
@@ -232,6 +232,25 @@ class TestDeliverEmailVerification:
             everything_logged = str(mock_logger.mock_calls)
             assert "tok" not in everything_logged
             assert "verify-email?token" not in everything_logged
+
+    @pytest.mark.asyncio
+    async def test_self_hosted_multi_user_never_logs_link(self) -> None:
+        """SEC-05: SELF_HOSTED is authenticated; only single_user_mode may log the link."""
+        with (
+            patch("app.services.user_service.settings") as mock_settings,
+            patch("app.services.user_service.logger") as mock_logger,
+            patch(
+                "app.services.email_service.send_email_verification", new_callable=AsyncMock
+            ) as mock_send,
+        ):
+            mock_settings.app_base_url = "https://x.test"
+            mock_settings.self_hosted = True
+            mock_settings.single_user_mode = False
+            mock_send.return_value = False
+
+            await deliver_email_verification("user@test.com", "tok")
+
+            assert "verify-email?token" not in str(mock_logger.mock_calls)
 
 
 class TestVerificationRoundTrip:

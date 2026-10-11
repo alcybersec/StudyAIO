@@ -182,6 +182,14 @@ TEST_DATA_DIR = _install_test_data_dir()
 # defaulted: an operator's real value must not leak into the run.
 os.environ["GLOBAL_MAX_AI_CALLS_PER_DAY"] = "0"
 os.environ["GLOBAL_MAX_AI_TOKENS_PER_DAY"] = "0"
+# SEC-10: the limiter is Redis-backed in production; tests must never open a socket.
+os.environ.setdefault("RATE_LIMIT_STORAGE_URI", "memory://")
+
+# SEC-06: startup refuses a multi-user instance without an encryption key. The
+# suite runs the lifespan in multi-user mode, so give it a throwaway Fernet key
+# (the all-A key is valid base64 of 32 zero bytes; it protects nothing real).
+# setdefault: a test environment may supply its own.
+os.environ.setdefault("SETTINGS_ENCRYPTION_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 
 # Collection-time refusal. This runs at conftest import, so it aborts before a
 # single test module is imported — earlier than any fixture can.

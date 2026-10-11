@@ -156,5 +156,13 @@ else
     pytest_args=(-x -v --cov=app --cov-report=term-missing "--cov-fail-under=$tier")
 fi
 
+# Credential-encryption key (SEC-06). The API refuses to start without one unless
+# SINGLE_USER_MODE=true, and a real key must never live in the tree, so a
+# throwaway one is generated per run unless the caller supplied their own.
+if [ -z "${SETTINGS_ENCRYPTION_KEY:-}" ]; then
+    SETTINGS_ENCRYPTION_KEY="$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+    export SETTINGS_ENCRYPTION_KEY
+fi
+
 echo "==> Running: $PYTEST tests/integration ${pytest_args[*]}"
 "$PYTEST" tests/integration "${pytest_args[@]}"

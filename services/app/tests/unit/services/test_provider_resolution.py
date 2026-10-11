@@ -12,6 +12,7 @@ from pydantic import SecretStr
 
 from app.agents.factory import get_agent
 from app.config import settings as app_settings
+from app.core import secret_box
 from app.core.exceptions import ProviderCredentialError
 from app.services import settings_service
 
@@ -167,7 +168,8 @@ class TestSecretUpdateSemantics:
             {"agent_backend": "zai", "zai_api_key": USER_ZAI_KEY},
             {"zai_api_key": "<test-placeholder>-replacement"},
         )
-        assert stored["zai_api_key"] == "<test-placeholder>-replacement"
+        # SEC-06: stored encrypted; the box round-trips it.
+        assert secret_box.decrypt(stored["zai_api_key"]) == "<test-placeholder>-replacement"
 
     async def test_non_secret_empty_value_is_not_swallowed(self):
         """Only credentials get the "empty means unchanged" treatment."""

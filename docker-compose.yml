@@ -36,6 +36,11 @@ services:
       - ./data:/app/data
     env_file:
       - .env
+    environment:
+      # SEC-06: passed through from the environment / .env, deliberately no
+      # default -- the api and worker refuse to start without it unless
+      # SINGLE_USER_MODE=true. See docs/deployment.md.
+      SETTINGS_ENCRYPTION_KEY:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')\""]
@@ -65,6 +70,12 @@ services:
       # you only notice if the numbers refuse to move.
       - ./services/app/evals:/app/evals
       - ./data:/app/data
+      # run_backup (beat, BACKUP_ENABLED=true) execs /app/scripts/backup.sh and
+      # writes to /app/backups. Neither is in the image (build context is
+      # services/app), and the container filesystem is lost on redeploy, so both
+      # come from the host. GL#24.
+      - ./scripts/backup.sh:/app/scripts/backup.sh:ro
+      - ./backups:/app/backups
       # The Claude CLI is installed in the image (see services/app/Dockerfile) —
       # do NOT bind-mount a host binary over /usr/local/bin/claude. That path is
       # a symlink to .../claude-code/bin/claude.exe; Docker resolves the symlink
@@ -82,6 +93,10 @@ services:
     env_file:
       - .env
     environment:
+      # SEC-06: passed through from the environment / .env, deliberately no
+      # default -- the api and worker refuse to start without it unless
+      # SINGLE_USER_MODE=true. See docs/deployment.md.
+      SETTINGS_ENCRYPTION_KEY:
       # Preferred login: a long-lived token (`claude setup-token`) stored as
       # <dir>/oauth-token (0600). The adapter reads it from this file and hands
       # it only to the CLI subprocess. .credentials.json stays as the fallback.
@@ -121,7 +136,7 @@ services:
   db:
     image: pgvector/pgvector:pg16
     ports:
-      - "${DB_PORT:-5433}:5432"
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/db/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -138,7 +153,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${REDIS_PORT:-6380}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
     volumes:
       - redisdata:/data
     healthcheck:

@@ -90,7 +90,7 @@ class AnthropicAPIAdapter(AgentAdapter):
         try:
             message = await client.messages.create(**create_kwargs)
         except Exception as e:
-            raise self._agent_error(f"Anthropic API call failed: {e}") from None
+            raise self._agent_error(f"Anthropic API call failed: {e}", e) from None
 
         # Extract text from response
         text_parts = []
@@ -413,7 +413,7 @@ Respond with ONLY a JSON object:
                 async for text in stream.text_stream:
                     yield text
         except Exception as e:
-            raise self._agent_error(f"Anthropic streaming failed: {e}") from None
+            raise self._agent_error(f"Anthropic streaming failed: {e}", e) from None
 
     async def extract_course_ops(
         self, document_text: str, course_code: str, document_type: str

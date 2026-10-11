@@ -24,6 +24,7 @@ from app.agents.base import (
     SummaryResult,
     _string_leaves,
 )
+from app.agents.transient import TransientAgentError, is_transient_text
 from app.core.ai_settings import get_effective_setting
 from app.core.clock import utc_now
 from app.core.exceptions import AgentError
@@ -388,7 +389,7 @@ class ClaudeCodeAdapter(AgentAdapter):
         except TimeoutError:
             if process is not None:
                 process.kill()
-            raise AgentError(f"Claude Code timed out after {timeout}s") from None
+            raise TransientAgentError(f"Claude Code timed out after {timeout}s") from None
         except FileNotFoundError:
             raise AgentError(
                 f"Claude Code CLI not found at '{self._cli_path}'. "
@@ -435,6 +436,8 @@ class ClaudeCodeAdapter(AgentAdapter):
             message = self._redact(f"Claude Code failed (exit {process.returncode}): {error_text}")
             if _AUTH_FAILURE.search(error_text):
                 raise _CliAuthError(message)
+            if is_transient_text(error_text):
+                raise TransientAgentError(message)
             raise AgentError(message)
 
         result = stdout.decode().strip()

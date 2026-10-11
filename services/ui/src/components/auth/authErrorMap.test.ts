@@ -23,7 +23,7 @@ describe('classifyAuthError', () => {
   it('maps a plain 403 to a generic message, not MFA', () => {
     expect(classifyAuthError(new AppApiError('Forbidden', 403))).toEqual({
       kind: 'other',
-      message: 'Forbidden',
+      message: 'You don\'t have permission to do that.',
     })
   })
 
@@ -33,7 +33,7 @@ describe('classifyAuthError', () => {
     expect(classifyAuthError(err)).toEqual({
       kind: 'fields',
       fields: { email: 'Enter a valid email address' },
-      message: 'Invalid payload',
+      message: 'Enter a valid email address',
     })
   })
 
@@ -50,11 +50,11 @@ describe('classifyAuthError', () => {
   it('maps 409 to conflict', () => {
     expect(classifyAuthError(new AppApiError('User already exists', 409))).toEqual({
       kind: 'conflict',
-      message: 'User already exists',
+      message: 'That conflicts with something that already exists.',
     })
   })
 
   it('maps unknown errors to other', () => {
-    expect(classifyAuthError(new Error('boom'))).toEqual({ kind: 'other', message: 'boom' })
+    expect(classifyAuthError(new Error('boom'))).toEqual({ kind: 'other', message: 'Something went wrong' })
   })
 })

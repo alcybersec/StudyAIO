@@ -112,18 +112,69 @@ get_val() {
 
 JWT_SECRET=$(get_val "JWT_SECRET_KEY")
 SELF_HOSTED=$(get_val "SELF_HOSTED")
+SINGLE_USER_MODE=$(get_val "SINGLE_USER_MODE")
+BIND_HOST=$(get_val "BIND_HOST")
+NO_AUTH_ACK=$(get_val "I_UNDERSTAND_NO_AUTH")
 
+# The default key is committed to the repository, so anyone can sign a token with
+# it. SELF_HOSTED=true no longer skips login (SEC-05), so with the default key an
+# instance hands out forgeable admin tokens. Only SINGLE_USER_MODE (an anonymous
+# caller already *is* the admin) gains nothing from a forged token.
 if [[ "$JWT_SECRET" == "changeme-in-production-use-a-real-secret" ]]; then
-    if [[ "$SELF_HOSTED" == "false" ]]; then
-        error "JWT_SECRET_KEY is set to default value (SaaS mode). Generate a new one:"
-        echo "       python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+    if [[ "$SINGLE_USER_MODE" == "true" ]]; then
+        warn "JWT_SECRET_KEY is the committed default (tolerated only because SINGLE_USER_MODE=true)."
     else
-        warn "JWT_SECRET_KEY is set to default value. Consider changing it for security."
+        error "JWT_SECRET_KEY is the committed default — anyone can forge an admin token. Generate a new one:"
+        echo "       python -c \"import secrets; print(secrets.token_urlsafe(64))\""
     fi
 elif [[ -z "$JWT_SECRET" ]]; then
     error "JWT_SECRET_KEY is not set."
 else
     ok "JWT_SECRET_KEY is set to a custom value"
+fi
+
+# ── Single-user ("no login") mode ─────────────────────────────────
+
+if [[ "$SINGLE_USER_MODE" == "true" ]]; then
+    case "$BIND_HOST" in
+        127.0.0.1|localhost|::1)
+            warn "SINGLE_USER_MODE=true — every caller is the admin. Safe only because BIND_HOST=$BIND_HOST is loopback; never put this behind a proxy."
+            ;;
+        *)
+            if [[ "$NO_AUTH_ACK" == "true" ]]; then
+                warn "SINGLE_USER_MODE=true with BIND_HOST='${BIND_HOST:-unset}' and I_UNDERSTAND_NO_AUTH=true — anyone who can reach this host is the admin."
+            else
+                warn "SINGLE_USER_MODE=true with BIND_HOST='${BIND_HOST:-unset}' (not loopback) — anyone who can reach this host is the admin, and startup will refuse it without I_UNDERSTAND_NO_AUTH=true."
+            fi
+            ;;
+    esac
+else
+    # Without single-user mode the API and worker refuse to start unless they can
+    # encrypt per-user AI credentials at rest (SEC-06, app/core/secret_box.py).
+    # Format: one Fernet key (44 chars, url-safe base64 of 32 bytes), or a
+    # comma-separated list for rotation (first encrypts, all decrypt).
+    ENC_KEY=$(get_val SETTINGS_ENCRYPTION_KEY)
+    ENC_HINT='Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+    if [[ -z "${ENC_KEY//[[:space:]]/}" ]]; then
+        error "SETTINGS_ENCRYPTION_KEY is unset — the API and worker will refuse to start without it (unless SINGLE_USER_MODE=true). ${ENC_HINT}"
+    else
+        ENC_BAD=0
+        ENC_COUNT=0
+        IFS=',' read -r -a ENC_PARTS <<< "$ENC_KEY"
+        for part in "${ENC_PARTS[@]}"; do
+            part="${part#"${part%%[![:space:]]*}"}"
+            part="${part%"${part##*[![:space:]]}"}"
+            [[ -z "$part" ]] && continue
+            ENC_COUNT=$((ENC_COUNT + 1))
+            [[ "$part" =~ ^[A-Za-z0-9_-]{43}=$ ]] || ENC_BAD=1
+        done
+        if [[ "$ENC_BAD" -eq 1 || "$ENC_COUNT" -eq 0 ]]; then
+            # The value is never echoed: it is a live secret.
+            error "SETTINGS_ENCRYPTION_KEY is malformed — each key must be 44 characters of url-safe base64 (a Fernet key); startup will refuse it. ${ENC_HINT}"
+        else
+            ok "SETTINGS_ENCRYPTION_KEY is set (${ENC_COUNT} key(s); first one encrypts)"
+        fi
+    fi
 fi
 
 # ── Database Password ─────────────────────────────────────────────

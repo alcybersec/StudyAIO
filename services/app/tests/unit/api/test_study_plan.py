@@ -1,13 +1,15 @@
 """Tests for GET /api/study/plan."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.core.clock import utc_today
+
 
 def _plan_days(items_per_day: list[dict] | None = None) -> list[dict]:
-    today = date.today()
+    today = utc_today()
     return [
         {
             "day": (today + timedelta(days=i)).isoformat(),

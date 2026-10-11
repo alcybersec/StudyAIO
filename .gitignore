@@ -69,3 +69,4 @@ services/app/alembic/versions/__pycache__/
 
 # parallel coverage runs (xdist / pytest-cov) leave per-process data files
 .coverage.*
+backups/

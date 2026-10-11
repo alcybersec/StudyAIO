@@ -35,7 +35,7 @@ class TestGetCurrentUserOrDefault:
         request.cookies = {}  # No JWT cookie
 
         with patch("app.api.deps.settings") as mock_settings:
-            mock_settings.self_hosted = True
+            mock_settings.single_user_mode = True
             user = await get_current_user_or_default(request, mock_session)
 
         assert user.id == DEFAULT_ADMIN_ID
@@ -52,7 +52,7 @@ class TestGetCurrentUserOrDefault:
         request.cookies = {}  # No JWT cookie
 
         with patch("app.api.deps.settings") as mock_settings:
-            mock_settings.self_hosted = False
+            mock_settings.single_user_mode = False
             with pytest.raises(AuthenticationError):
                 await get_current_user_or_default(request, mock_session)
 
@@ -93,7 +93,7 @@ class TestSelfHostedSessionRevocation:
         request.cookies = {"access_token": token}
 
         with patch("app.api.deps.settings") as mock_settings:
-            mock_settings.self_hosted = True
+            mock_settings.single_user_mode = True
             with pytest.raises(SessionRevokedError):
                 await get_current_user_or_default(request, mock_session)
 
@@ -114,7 +114,7 @@ class TestSelfHostedSessionRevocation:
         request.cookies = {}
 
         with patch("app.api.deps.settings") as mock_settings:
-            mock_settings.self_hosted = True
+            mock_settings.single_user_mode = True
             user = await get_current_user_or_default(request, mock_session)
 
         assert user.id == DEFAULT_ADMIN_ID
@@ -135,7 +135,7 @@ class TestSelfHostedSessionRevocation:
         request.cookies = {"access_token": "not-a-jwt"}
 
         with patch("app.api.deps.settings") as mock_settings:
-            mock_settings.self_hosted = True
+            mock_settings.single_user_mode = True
             user = await get_current_user_or_default(request, mock_session)
 
         assert user.id == DEFAULT_ADMIN_ID
@@ -154,7 +154,7 @@ class TestSelfHostedSessionRevocation:
         request.cookies = {"access_token": create_access_token(user.id, user.role, user.tier)}
 
         with patch("app.api.deps.settings") as mock_settings:
-            mock_settings.self_hosted = True
+            mock_settings.single_user_mode = True
             returned = await get_current_user_or_default(request, mock_session)
 
         assert returned.id == "user-001"

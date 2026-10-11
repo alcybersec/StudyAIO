@@ -19,11 +19,14 @@ celery_app = Celery(
         "app.pipeline.extract",
         "app.pipeline.summarize",
         "app.pipeline.index",
+        "app.pipeline.reembed_task",
         "app.pipeline.assets",
         "app.pipeline.courseops_task",
         "app.pipeline.notification_tasks",
         "app.pipeline.calendar_task",
         "app.pipeline.backup_task",
+        "app.pipeline.recovery",
+        "app.pipeline.limits",
     ],
 )
 
@@ -37,7 +40,13 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=100,
+    # Per-stage soft/hard time limits (TECH-04) are applied by app.pipeline.limits
+    # (ADR 0002: worker must not import pipeline).
     beat_schedule={
+        "recover-stuck-artifacts": {
+            "task": "app.pipeline.recovery.recover_stuck_artifacts",
+            "schedule": crontab(minute="*/10"),
+        },
         "daily-deadline-reminders": {
             "task": "app.pipeline.notification_tasks.send_deadline_reminders",
             "schedule": crontab(minute=0),

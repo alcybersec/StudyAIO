@@ -287,19 +287,20 @@ export function TimedStudyTab() {
           <Card>
             <div className="text-center py-8">
               <span className="text-xs font-medium text-text-muted uppercase tracking-wider">{t('Flashcard')}</span>
-              <div
-                className="mt-4 cursor-pointer min-h-[200px] flex items-center justify-center"
+              <button
+                type="button"
+                className="mt-4 w-full cursor-pointer min-h-[200px] flex items-center justify-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-peri"
                 onClick={() => !flipped && setFlipped(true)}
               >
                 {!flipped ? (
-                  <div>
-                    <p className="text-lg font-medium text-text">{currentCard.front}</p>
-                    <p className="text-sm text-text-muted mt-4">{t('Click or press Space to reveal')}</p>
-                  </div>
+                  <span className="block">
+                    <span className="block text-lg font-medium text-text">{currentCard.front}</span>
+                    <span className="block text-sm text-text-muted mt-4">{t('Click or press Space to reveal')}</span>
+                  </span>
                 ) : (
-                  <p className="text-lg text-text">{currentCard.back}</p>
+                  <span className="block text-lg text-text">{currentCard.back}</span>
                 )}
-              </div>
+              </button>
               {flipped && (
                 <div className="mt-6">
                   <p className="text-xs text-text-muted mb-2">{t('How well did you know this? (0-5)')}</p>

@@ -3,6 +3,8 @@
 from unittest.mock import patch
 
 import pytest
+from cryptography.fernet import Fernet
+from pydantic import SecretStr
 
 
 def _no_embedding_probe():
@@ -24,7 +26,7 @@ class TestJWTSecretStartupCheck:
         from app.main import _DEFAULT_JWT_SECRET
 
         with (
-            patch("app.main.settings.self_hosted", False),
+            patch("app.main.settings.single_user_mode", False),
             patch("app.main.settings.jwt_secret_key") as mock_secret,
             _no_embedding_probe(),
         ):
@@ -45,7 +47,11 @@ class TestJWTSecretStartupCheck:
     def test_custom_secret_in_saas_mode_starts(self):
         """App should start fine with a custom JWT secret in SaaS mode."""
         with (
-            patch("app.main.settings.self_hosted", False),
+            patch("app.main.settings.single_user_mode", False),
+            patch(
+                "app.main.settings.settings_encryption_key",
+                SecretStr(Fernet.generate_key().decode()),
+            ),
             patch("app.main.settings.jwt_secret_key") as mock_secret,
             patch("app.main.configure_logging"),
             _no_embedding_probe(),
@@ -63,10 +69,34 @@ class TestJWTSecretStartupCheck:
             # Should not raise
             asyncio.run(_run())
 
-    def test_default_secret_in_selfhosted_mode_starts(self):
-        """App should start fine with default JWT secret in self-hosted mode."""
+    def test_default_secret_in_selfhosted_multi_user_mode_raises(self):
+        """SEC-05: SELF_HOSTED has logins, so the committed key must be refused."""
+        from app.main import _DEFAULT_JWT_SECRET
+
         with (
             patch("app.main.settings.self_hosted", True),
+            patch("app.main.settings.single_user_mode", False),
+            patch("app.main.settings.jwt_secret_key") as mock_secret,
+            _no_embedding_probe(),
+        ):
+            mock_secret.get_secret_value.return_value = _DEFAULT_JWT_SECRET
+            import asyncio
+
+            from app.main import app, lifespan
+
+            async def _run():
+                async with lifespan(app):
+                    pass
+
+            with pytest.raises(RuntimeError, match="JWT_SECRET_KEY is set to the default"):
+                asyncio.run(_run())
+
+    def test_default_secret_in_single_user_mode_starts(self):
+        """No login in single-user mode, so no token is signed and the default is inert."""
+        with (
+            patch("app.main.settings.self_hosted", True),
+            patch("app.main.settings.single_user_mode", True),
+            patch("app.main.check_single_user_mode"),
             patch("app.main.configure_logging"),
             _no_embedding_probe(),
         ):
@@ -78,5 +108,5 @@ class TestJWTSecretStartupCheck:
                 async with lifespan(app):
                     pass
 
-            # Should not raise — self-hosted allows default secret
+            # Should not raise — single-user mode signs no tokens
             asyncio.run(_run())

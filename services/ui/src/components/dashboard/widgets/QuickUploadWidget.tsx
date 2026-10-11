@@ -1,4 +1,5 @@
 import { memo, useCallback, useRef, useState } from 'react'
+import { userErrorMessage } from '../../../lib/userError'
 import i18n from '../../../i18n'
 import { useTranslation } from 'react-i18next'
 import { Upload } from 'lucide-react'
@@ -28,7 +29,7 @@ export const QuickUploadWidget = memo(function QuickUploadWidget() {
           message: i18n.t('{{file}} uploaded', { file: result.filename }),
         })
       } catch (err) {
-        setLastResult({ ok: false, message: err instanceof Error ? err.message : i18n.t('Upload failed') })
+        setLastResult({ ok: false, message: userErrorMessage(err, i18n.t('Upload failed')) })
       }
     },
     [upload],

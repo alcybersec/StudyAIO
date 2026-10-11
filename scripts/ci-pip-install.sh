@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the backend's Python dependencies from services/app/requirements.lock.txt
+# Install the backend's runtime AND test dependencies (requirements-dev.txt) from services/app/requirements.lock.txt
 # WITHOUT running pip's resolver. Used by every CI job that needs the backend
 # (backend-tests, test-floor, integration-tests, e2e-tests) so they install
 # identically.
@@ -18,7 +18,7 @@
 # from the PyTorch CPU index, everything else from PyPI. No --extra-index-url, so
 # one index's hiccup cannot change what the other resolves.
 #
-# Afterwards: --no-index re-check of requirements.txt (fails if someone edited it
+# Afterwards: --no-index re-check of requirements-dev.txt (which includes requirements.txt) (fails if someone edited it
 # without re-running scripts/lock-requirements.sh) and `pip check`.
 #
 # Run it with the interpreter you want populated (the venv's on PATH, or the
@@ -27,7 +27,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REQ="$REPO_ROOT/services/app/requirements.txt"
+REQ="$REPO_ROOT/services/app/requirements-dev.txt"
 LOCK="$REPO_ROOT/services/app/requirements.lock.txt"
 PYPI="https://pypi.org/simple"
 TORCH_CPU="https://download.pytorch.org/whl/cpu"

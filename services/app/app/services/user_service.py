@@ -357,7 +357,7 @@ async def deliver_password_reset(email: str, token: str) -> bool:
         sent = False
 
     if not sent:
-        if settings.self_hosted:
+        if settings.single_user_mode:
             # No mail server on a single-user box is normal. The link is the only
             # way back into the account, so put it where the operator can find it.
             logger.info("password_reset_link_not_emailed", reset_url=reset_url)
@@ -473,7 +473,7 @@ async def deliver_email_verification(email: str, token: str) -> bool:
         sent = False
 
     if not sent:
-        if settings.self_hosted:
+        if settings.single_user_mode:
             # No mail server on a single-user box is normal. Verification gates
             # nothing today, but the operator can still follow the link to set
             # the flag.

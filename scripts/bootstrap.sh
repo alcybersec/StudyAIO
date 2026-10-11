@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build services/app/.venv from requirements.txt, constrained by the lock file.
+# Build services/app/.venv from requirements-dev.txt (runtime + test deps), constrained by the lock file.
 #
 # Mirrors the CI backend-tests install (.gitlab-ci.yml): PIP_CONSTRAINT points at
 # requirements.lock.txt and the CPU-only torch index is added, so a clean clone
@@ -30,6 +30,6 @@ export PIP_CONSTRAINT="$APP_DIR/requirements.lock.txt"
 export PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL:-https://download.pytorch.org/whl/cpu}"
 
 "$VENV/bin/python" -m pip install --quiet --upgrade pip
-"$VENV/bin/python" -m pip install -r "$APP_DIR/requirements.txt"
+"$VENV/bin/python" -m pip install -r "$APP_DIR/requirements-dev.txt"
 touch "$VENV/.bootstrap-stamp"
 echo "bootstrap: $VENV ready ($("$VENV/bin/python" --version))"

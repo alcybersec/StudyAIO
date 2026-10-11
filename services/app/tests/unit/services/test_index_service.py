@@ -161,6 +161,16 @@ class TestChunkPages:
         assert 2 in page_refs
 
 
+def _provider_mock(**kw) -> MagicMock:
+    """A provider mock that answers the chunker's window/tokenizer questions."""
+    provider = MagicMock()
+    provider._input_window.return_value = 256
+    provider._word_tokens.side_effect = lambda words: [1 for _ in words]
+    for k, v in kw.items():
+        setattr(provider, k, v)
+    return provider
+
+
 class TestIndexArtifactChunks:
     """Tests for the async index_artifact_chunks function."""
 
@@ -172,8 +182,7 @@ class TestIndexArtifactChunks:
         session = AsyncMock()
         session.add = MagicMock()
 
-        mock_provider = MagicMock()
-        mock_provider.dimensions = 384
+        mock_provider = _provider_mock(dimensions=384)
         mock_provider.embed_texts.return_value = [[0.1] * 384]
 
         pages = [{"page_number": 1, "text": "Test content"}]
@@ -198,7 +207,7 @@ class TestIndexArtifactChunks:
         from app.services.index_service import index_artifact_chunks
 
         session = AsyncMock()
-        mock_provider = MagicMock()
+        mock_provider = _provider_mock()
 
         pages = [{"page_number": 1, "text": ""}]
 
@@ -220,8 +229,7 @@ class TestIndexArtifactChunks:
         session = AsyncMock()
         session.add = MagicMock()
 
-        mock_provider = MagicMock()
-        mock_provider.dimensions = 384
+        mock_provider = _provider_mock(dimensions=384)
         mock_provider.embed_texts.return_value = [
             [0.1] * 384,
             [0.2] * 384,

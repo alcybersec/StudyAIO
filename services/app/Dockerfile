@@ -9,8 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# The lock is a CONSTRAINTS file: requirements.txt still decides what is
-# installed, the lock only pins which version, transitive deps included. Both
+# The lock is a CONSTRAINTS file: requirements.txt (runtime only -- test and
+# lint tooling live in requirements-dev.txt and never enter this image) still
+# decides what is installed, the lock only pins which version, transitive deps included. Both
 # are copied so this layer rebuilds when either moves.
 #
 # Production resolved fresh until GL#7, which meant the versions CI tested were
@@ -60,6 +61,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # platform; if that step is skipped the stub stays in place — a JS file with a
 # .exe extension — and every invocation dies with ERR_UNKNOWN_FILE_EXTENSION.
 RUN claude --version
+
+# pg_dump for the beat-scheduled backup (scripts/backup.sh, GL#24). It must be
+# the SERVER's major version (pgvector/pgvector:pg16): pg_dump refuses a server
+# newer than itself, and Debian bookworm only ships client 15. So take the
+# client from the PGDG repo. Without it `run_backup` died on "pg_dump: not
+# found" -- see also the compose mounts of scripts/backup.sh and ./backups,
+# neither of which the image carries (its build context is services/app).
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
+    install -d /usr/share/keyrings; \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg; \
+    . /etc/os-release; \
+    echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends postgresql-client-16; \
+    pg_dump --version; \
+    rm -r /var/lib/apt/lists/*
 
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local

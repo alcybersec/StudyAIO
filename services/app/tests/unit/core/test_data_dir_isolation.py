@@ -155,11 +155,19 @@ class TestStorageRootGuard:
         assert TEMP_ROOT.parts[0] in str(escaped)
         assert _root_conftest()._is_disposable(escaped) is False
 
-    def test_guard_is_installed_as_a_session_autouse_fixture(self):
-        """The fixture exists and is autouse, so it cannot be forgotten."""
-        marker = _root_conftest()._disposable_storage_root._pytestfixturefunction
-        assert marker.autouse is True
-        assert marker.scope == "session"
+    def test_guard_is_installed_as_a_session_autouse_fixture(self, request):
+        """The fixture exists and is autouse, so it cannot be forgotten.
+
+        Resolved through the fixture manager rather than the fixture function's
+        marker attribute, which pytest 8.4 renamed. This test does not request the
+        guard, so its presence in ``fixturenames`` can only come from autouse.
+        """
+        name = "_disposable_storage_root"
+        assert hasattr(_root_conftest(), name)
+        assert name in request.fixturenames
+        defs = request.session._fixturemanager.getfixturedefs(name, request.node)
+        assert defs, f"{name} is not registered with pytest"
+        assert defs[-1].scope == "session"
 
     def test_there_is_no_opt_out(self):
         """The guard takes no flag, marker or environment escape hatch.

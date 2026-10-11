@@ -5,6 +5,7 @@ guarding. It is bash, so these run it as a subprocess against generated .env
 fixtures and assert on exit code and output.
 """
 
+import base64
 import os
 import re
 import shutil
@@ -37,7 +38,13 @@ def _script_default(pattern: str) -> str:
 DEFAULT_JWT_SECRET = _script_default(r'"\$JWT_SECRET" == "([^"]+)"')
 DEFAULT_DB_PASSWORD = _script_default(r'"\$DB_PASS" == "([^"]+)"')
 
+# A well-formed Fernet key (44 chars url-safe base64), built rather than written
+# out so no credential-shaped literal sits in the tree. Not a real secret.
+VALID_FERNET_KEY = base64.urlsafe_b64encode(bytes(range(32))).decode()
+VALID_FERNET_KEY_2 = base64.urlsafe_b64encode(bytes(range(32, 64))).decode()
+
 BASE_ENV = {
+    "SETTINGS_ENCRYPTION_KEY": VALID_FERNET_KEY,
     "JWT_SECRET_KEY": "<test-placeholder>",
     "POSTGRES_PASSWORD": "<test-placeholder>",
     "CORS_ORIGINS": "https://studyaio.example.com",
@@ -74,6 +81,7 @@ def _write_raw_env(tmp_path: Path, text: str) -> Path:
 # `secret-manager export --format=dotenv` actually emits on the host this script
 # runs against.
 QUOTED_BASE_ENV = {
+    "SETTINGS_ENCRYPTION_KEY": VALID_FERNET_KEY,
     "JWT_SECRET_KEY": "<test-placeholder>",
     "POSTGRES_PASSWORD": "<test-placeholder>",
     "CORS_ORIGINS": "https://studyaio.example.com",
@@ -140,6 +148,49 @@ def _run(env_file: Path, env: dict[str, str] | None = None) -> subprocess.Comple
 def _requires_bash():
     if shutil.which("bash") is None:  # pragma: no cover - CI always has bash
         pytest.skip("bash not available")
+
+
+class TestSettingsEncryptionKey:
+    """SEC-06: startup refuses a missing or malformed key outside single-user mode."""
+
+    def test_valid_key_passes(self, tmp_path):
+        result = _run(_write_env(tmp_path))
+        assert result.returncode == 0, result.stdout
+        assert "SETTINGS_ENCRYPTION_KEY is set (1 key(s)" in result.stdout
+
+    def test_missing_key_is_an_error(self, tmp_path):
+        result = _run(_write_env(tmp_path, SETTINGS_ENCRYPTION_KEY=None))
+        assert result.returncode == 1
+        assert "SETTINGS_ENCRYPTION_KEY is unset" in result.stdout
+
+    def test_malformed_key_is_an_error_and_is_not_echoed(self, tmp_path):
+        result = _run(_write_env(tmp_path, SETTINGS_ENCRYPTION_KEY="not-a-fernet-key"))
+        assert result.returncode == 1
+        assert "SETTINGS_ENCRYPTION_KEY is malformed" in result.stdout
+        assert "not-a-fernet-key" not in result.stdout
+
+    def test_rotation_list_passes(self, tmp_path):
+        key = f"{VALID_FERNET_KEY},{VALID_FERNET_KEY_2}"
+        result = _run(_write_env(tmp_path, SETTINGS_ENCRYPTION_KEY=key))
+        assert result.returncode == 0, result.stdout
+        assert "2 key(s)" in result.stdout
+
+    def test_one_bad_key_in_a_list_is_an_error(self, tmp_path):
+        key = f"{VALID_FERNET_KEY},short"
+        result = _run(_write_env(tmp_path, SETTINGS_ENCRYPTION_KEY=key))
+        assert result.returncode == 1
+        assert "malformed" in result.stdout
+
+    def test_single_user_mode_does_not_require_it(self, tmp_path):
+        result = _run(
+            _write_env(
+                tmp_path,
+                SETTINGS_ENCRYPTION_KEY=None,
+                SINGLE_USER_MODE="true",
+                BIND_HOST="127.0.0.1",
+            )
+        )
+        assert "SETTINGS_ENCRYPTION_KEY" not in result.stdout
 
 
 class TestProviderCredential:

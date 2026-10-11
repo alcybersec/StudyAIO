@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { userErrorMessage } from '../../lib/userError'
 import { useTranslation } from 'react-i18next'
 import { Card } from '../ui'
 import { useTelegramLink, useUnlinkTelegram } from '../../hooks/useNotifications'
@@ -94,9 +95,10 @@ export function TelegramLinkCard({ linked, username }: TelegramLinkCardProps) {
 
           {linkMutation.isError && (
             <p className="text-sm text-red-fg">
-              {linkMutation.error instanceof Error
-                ? linkMutation.error.message
-                : t('Failed to generate link. Is the Telegram bot configured?')}
+              {userErrorMessage(
+                linkMutation.error,
+                t('Failed to generate link. Is the Telegram bot configured?'),
+              )}
             </p>
           )}
         </div>

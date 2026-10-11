@@ -1292,5 +1292,17 @@
   "A reminder to study again if you have been away for two days": "Напоминание вернуться к учёбе, если вы не заходили два дня",
   "Set by the server operator": "Задаётся оператором сервера",
   "default": "по умолчанию",
-  "Not available on this server — it needs an endpoint only the operator can set": "Недоступно на этом сервере: для него нужен адрес, который задаёт только оператор"
+  "Not available on this server — it needs an endpoint only the operator can set": "Недоступно на этом сервере: для него нужен адрес, который задаёт только оператор",
+  "Not found": "Не найдено",
+  "The request was invalid": "Запрос не удалось принять",
+  "Please sign in again.": "Войдите в аккаунт снова.",
+  "This is over your plan limit.": "Это превышает лимит вашего тарифа.",
+  "You don't have permission to do that.": "У вас нет прав на это действие.",
+  "That conflicts with something that already exists.": "Это конфликтует с уже существующими данными.",
+  "That file is too large.": "Этот файл слишком большой.",
+  "Streaming failed": "Не удалось получить ответ",
+  "Stream request failed": "Не удалось отправить запрос",
+  "Too many requests — try again shortly": "Слишком много запросов — повторите чуть позже",
+  "Skip tour": "Пропустить обзор",
+  "Couldn't send that. Your text is still here — try again.": "Не удалось отправить. Ваш текст сохранён — попробуйте ещё раз."
 }

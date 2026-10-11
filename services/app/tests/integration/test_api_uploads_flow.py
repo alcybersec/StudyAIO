@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy import select
 
 from app.api.uploads import pipeline_event_stream
+from app.core.clock import utc_today
 from app.core.storage import get_storage
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
@@ -142,7 +143,7 @@ class TestSingleUpload:
             UsageRecord(
                 id=generate_id(),
                 user_id=user.id,
-                record_date=__import__("datetime").date.today(),
+                record_date=utc_today(),
                 uploads_count=10_000,
             )
         )

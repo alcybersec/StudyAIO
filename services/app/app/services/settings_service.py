@@ -31,6 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core import secret_box
 from app.core.ai_settings import (  # noqa: F401  (re-exported for existing importers)
     BACKEND_REQUIRED_KEY,
     STUDYAIO_BACKEND,
@@ -131,8 +132,8 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
     "classification_confidence_threshold": (float, 0.0, 1.0),
     "flashcard_count_per_week": (int, 1, 100),
     "quiz_question_count_per_week": (int, 1, 100),
-    "chunk_size_tokens": (int, 50, 5000),
-    "chunk_overlap_tokens": (int, 0, 500),
+    "chunk_size_tokens": (int, 50, 248),
+    "chunk_overlap_tokens": (int, 0, 124),
     "max_upload_size_mb": (int, 1, 1000),
 }
 
@@ -322,7 +323,7 @@ async def redact_user_secrets(session: AsyncSession, user_id: str, text: str) ->
     stored = (row.settings_json or {}) if row else {}
     values: list[str] = []
     for key in SECRET_KEYS:
-        values.extend(_string_leaves(stored.get(key)))
+        values.extend(_string_leaves(_plain_secret(stored.get(key), key)))
     for env_secret in (
         settings.anthropic_api_key,
         settings.openai_api_key,
@@ -351,6 +352,55 @@ async def redacted_error(session: AsyncSession, user_id: str, exc: BaseException
         return await redact_user_secrets(session, user_id, str(exc))
     except Exception:
         return f"{type(exc).__name__} (details withheld)"
+
+
+def _plain_secret(value: Any, key: str) -> str:
+    """Decrypt one stored credential, or "" if it cannot be trusted.
+
+    Args:
+        value: The stored value (ciphertext, legacy plaintext, or empty).
+        key: Setting name, for the log line only.
+
+    Returns:
+        The plaintext; "" when empty or when decryption fails. The failure is
+        logged without any value.
+    """
+    if not value or not isinstance(value, str):
+        return ""
+    try:
+        return secret_box.decrypt(value)
+    except secret_box.SecretDecryptError:
+        logger.warning("user_secret_undecryptable", key=key)
+        return ""
+
+
+def _reencrypt_legacy(row: UserSettings | None) -> None:
+    """Encrypt, in place, any credential still stored as plaintext (or under a retired key).
+
+    Called from the agent-config read paths so a legacy row is rewritten the
+    first time it is used. Only the owner's own row is touched. The change is
+    flushed with the caller's transaction, not committed here.
+
+    Args:
+        row: The user's settings row, or None.
+    """
+    if row is None or not secret_box.is_configured():
+        return
+    stored = row.settings_json or {}
+    updated = dict(stored)
+    for key in SECRET_KEYS:
+        value = stored.get(key)
+        if not value or not isinstance(value, str):
+            continue
+        if not secret_box.is_encrypted(value):
+            updated[key] = secret_box.encrypt(value)
+        elif secret_box.needs_rotation(value):
+            plain = _plain_secret(value, key)
+            if plain:
+                updated[key] = secret_box.encrypt(plain)
+    if updated != stored:
+        row.settings_json = updated
+        logger.info("user_secrets_reencrypted", user_id=getattr(row, "user_id", None))
 
 
 def _stored_url(overrides: dict[str, Any], key: str) -> str:
@@ -491,6 +541,13 @@ async def update_user_settings(
             validated[key] = validate_setting(key, value)
 
     user_settings = await _get_or_create_user_settings(session, user_id)
+
+    # Credentials are encrypted before they touch the row (SEC-06).
+    for key in SECRET_KEYS & validated.keys():
+        try:
+            validated[key] = secret_box.encrypt(validated[key])
+        except secret_box.SecretBoxError as e:
+            raise ValueError(f"{key} cannot be stored: {e}") from e
 
     # Update settings_json
     if validated or clear_secrets:
@@ -719,6 +776,7 @@ async def get_user_ai_context(
         `get_user_agent_config` and `get_user_output_language` respectively.
     """
     row = await _get_row(session, user_id)
+    _reencrypt_legacy(row)
     overrides = (row.settings_json or {}) if row else {}
     return _agent_config_from_overrides(overrides), _output_language_from_row(row)
 
@@ -742,7 +800,9 @@ async def get_user_agent_config(session: AsyncSession, user_id: str) -> dict[str
         Dict of AI settings when the user runs their own provider; None when
         they are on "StudyAIO provided".
     """
-    return _agent_config_from_overrides(await _get_overrides(session, user_id))
+    row = await _get_row(session, user_id)
+    _reencrypt_legacy(row)
+    return _agent_config_from_overrides((row.settings_json or {}) if row else {})
 
 
 def _agent_config_from_overrides(overrides: dict[str, Any]) -> dict[str, Any] | None:
@@ -753,7 +813,8 @@ def _agent_config_from_overrides(overrides: dict[str, Any]) -> dict[str, Any] | 
 
     Returns:
         Dict of AI settings when the user runs their own provider; None when
-        they are on "StudyAIO provided".
+        they are on "StudyAIO provided". Credentials are decrypted here and
+        nowhere else.
     """
     backend = resolve_backend(overrides)
     if backend == STUDYAIO_BACKEND:
@@ -764,6 +825,8 @@ def _agent_config_from_overrides(overrides: dict[str, Any]) -> dict[str, Any] | 
     for key in _AGENT_CONFIG_KEYS:
         if key in USER_URL_KEYS:
             config[key] = _stored_url(overrides, key)
+        elif key in SECRET_KEYS:
+            config[key] = _plain_secret(overrides.get(key), key)
         elif key in USER_ONLY_KEYS:
             config[key] = overrides.get(key, "")
         else:

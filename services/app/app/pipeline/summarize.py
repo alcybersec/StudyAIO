@@ -1,14 +1,20 @@
 """Pipeline stage 3: Summarize — generate weekly markdown summaries."""
 
+import asyncio
+import contextlib
 import json
+import time
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import select
+from celery.exceptions import SoftTimeLimitExceeded
+from sqlalchemy import select, text
 from sqlalchemy.orm import joinedload
 
 from app.agents.factory import get_agent
-from app.core.database import async_session_factory, run_async
+from app.agents.transient import TransientAgentError
+from app.core.database import async_session_factory, engine, run_async
 from app.core.exceptions import AgentError, SummarizationError
 from app.core.storage import get_storage
 from app.core.utils import generate_id
@@ -16,11 +22,69 @@ from app.models.artifact import LectureArtifact
 from app.models.pipeline_run import PipelineRun
 from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
 from app.pipeline.failures import record_stage_failure
+from app.pipeline.resilience import StageBusyError, count_metric, handle_retryable, is_retryable
 from app.services import summary_service
 from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
 
 logger = structlog.get_logger()
+
+
+#: How long a summarize waits for another worker holding the same week before it
+#: gives up with `StageBusyError` (which Celery retries with backoff). Kept below
+#: the stage soft time limit minus the longest AI call.
+LOCK_WAIT_SECONDS = 840.0
+LOCK_POLL_SECONDS = 2.0
+
+
+@contextlib.asynccontextmanager
+async def _week_lock(user_id: str, course_id: str, week: int) -> AsyncIterator[None]:
+    """Serialise summarize per (user, course, week) with a Postgres advisory lock (GL#23).
+
+    Two artifacts of one week summarized concurrently both read "no summary yet"
+    and both insert version 1; the unique constraint then fails one of them.
+    Holding this lock across read-existing -> write -> commit makes the second
+    run see the first's summary and increment the version (floor 4: no version
+    lost).
+
+    The lock is session-level on a dedicated autocommit connection, not
+    transaction-level on the stage's session: the stage commits mid-way (usage
+    metering, refreshed credentials), which would silently release a
+    transaction-level lock. A dead worker's connection closes and Postgres
+    releases the lock, so there is no stale-lock cleanup.
+
+    Raises:
+        StageBusyError: If the lock is not free within `LOCK_WAIT_SECONDS`.
+    """
+    key = f"summarize:{user_id}:{course_id}:{week}"
+    started = time.monotonic()
+    async with engine.connect() as conn:
+        conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+        while True:
+            acquired = (
+                await conn.execute(
+                    text("SELECT pg_try_advisory_lock(hashtextextended(:k, 0))"), {"k": key}
+                )
+            ).scalar()
+            if acquired:
+                break
+            if time.monotonic() - started >= LOCK_WAIT_SECONDS:
+                count_metric("summarize_lock_busy_total")
+                raise StageBusyError(f"Another summarize holds {course_id} week {week}")
+            await asyncio.sleep(LOCK_POLL_SECONDS)
+        waited = time.monotonic() - started
+        if waited >= LOCK_POLL_SECONDS:
+            logger.info("summarize_lock_waited", course_id=course_id, week=week, waited=waited)
+        try:
+            yield
+        finally:
+            try:
+                await conn.execute(
+                    text("SELECT pg_advisory_unlock(hashtextextended(:k, 0))"), {"k": key}
+                )
+            except Exception:
+                # Closing the connection releases the lock anyway.
+                logger.warning("summarize_lock_unlock_failed", exc_info=True)
 
 
 async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
@@ -76,7 +140,13 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
         session.add(run)
         await session.flush()
 
+        week_lock = _week_lock(artifact.user_id, artifact.course_id, artifact.week)
+        lock_held = False
         try:
+            # Serialise per (user, course, week) before reading existing state.
+            await week_lock.__aenter__()
+            lock_held = True
+
             # Get all extractions for this course+week
             extractions = await summary_service.get_week_extractions(
                 session, artifact.course_id, artifact.week
@@ -187,13 +257,22 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
                 "file_path": storage_key,
             }
 
+        except SoftTimeLimitExceeded:
+            raise
+
         except (SummarizationError, AgentError) as e:
-            await record_stage_failure(session, run=run, artifact_id=artifact_id, error=e)
+            await record_stage_failure(
+                session, run=run, artifact_id=artifact_id, error=e, retrying=is_retryable(e)
+            )
             raise
 
         except Exception as e:
             await record_stage_failure(session, run=run, artifact_id=artifact_id, error=e)
             raise SummarizationError(f"Summarization failed: {e}") from e
+
+        finally:
+            if lock_held:
+                await week_lock.__aexit__(None, None, None)
 
 
 @celery_app.task(
@@ -242,6 +321,10 @@ def summarize_artifact(self, input_value: str | dict) -> dict:
             artifact_id, "summarize", result.get("status", "completed"), user_id=event_user_id
         )
         return result
+    except (SoftTimeLimitExceeded, TransientAgentError, StageBusyError) as exc:
+        handle_retryable(
+            self, exc, stage="summarize", artifact_id=artifact_id, event_user_id=event_user_id
+        )
     except (SummarizationError, AgentError):
         publish_pipeline_event_sync(artifact_id, "summarize", "failed", user_id=event_user_id)
         raise  # Don't retry on summarization/agent errors

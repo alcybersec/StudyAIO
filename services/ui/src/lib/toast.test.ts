@@ -19,7 +19,7 @@ describe('mutationErrorContent', () => {
 
   it('maps NotFoundError to a plain not-found message', () => {
     const content = mutationErrorContent(new NotFoundError('Exam not found', 404))
-    expect(content.message).toBe('Exam not found')
+    expect(content.message).toBe('Not found')
     expect(content.description).toMatch(/no longer exists|removed/i)
   })
 
@@ -41,9 +41,9 @@ describe('mutationErrorContent', () => {
     expect(content.description).toMatch(/retry/i)
   })
 
-  it('uses the API message for other AppApiErrors', () => {
+  it('maps other AppApiErrors', () => {
     const content = mutationErrorContent(new AppApiError('Quota exceeded', 402))
-    expect(content.message).toBe('Quota exceeded')
+    expect(content.message).toBe('This is over your plan limit.')
   })
 
   it('falls back to a generic message for unknown errors', () => {
