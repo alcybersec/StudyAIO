@@ -26,8 +26,9 @@ M33-S2-ARCH-018 (ADR 0007), which needs the user's acceptance before S2 implemen
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| M33-S1-DATA-031 (schema: `ai_feedback`, `usage_events`, consent fields — for GL#36/#37/#38) | `data` | 2026-10-11 | isolated |
-| M33-S1-AI-012 (GL#33: ≥20 eval cases, offline CI check, baseline) | `ai` | 2026-10-11 | isolated |
+| M33-S1-BACKEND-015/016 (GL#36 feedback API, GL#37 usage events + D7/D30 readout) | `backend` | 2026-10-11 | isolated |
+| M33-S1-BACKEND-017 (GL#38 consent gate + no emails in logs) | `backend` | 2026-10-11 | isolated |
+| M33-S1-AI-013 (GL#34 cited, faithful summaries; target ≥ measured baseline 0.878 + margin) | `ai` | 2026-10-11 | isolated |
 | M33-S1-AI-014 (GL#35: relevance floor + follow-up retrieval; retrieval half by `backend`) | `backend` | 2026-10-11 | isolated |
 
 **GL#31 (2026-10-10):** chat follow-ups lose course/week scope (prod repro; a course's week 3 has 8 indexed chunks) — pulled into M32 wave 1 as M32-S4-BACKEND-023 (audit AI-06 overlap).
@@ -44,6 +45,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M33-S1-DATA-031 (schema `ai_feedback`, `usage_events`, `users.ai_processing_consent_*`; migration `e5b7d2c94a08`) + M33-S1-AI-012/012b + DEVOPS-032 (GL#33: 21 synthetic cases, offline `--check` CI gate `summary-eval`, regression semantics; **measured baseline on the production model: faithfulness 0.878, coverage 0.993, structure 90%**) | `data`, `ai`, `devops` | → `kit/retrofit` (see log) | Migration up/down/up on pg16, single head; Orchestrator: `python -m evals --offline --check` → `RESULT: PASS` (2 known structure WARNs); `glab ci lint` valid; leak grep 0 on files + messages. Live run: 22 provider calls (1 aborted + 21) | 2026-10-11 |
 
 ## Blocked
 
