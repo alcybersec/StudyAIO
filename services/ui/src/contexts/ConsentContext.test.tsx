@@ -68,9 +68,11 @@ describe('consent dialog from the profile', () => {
   it('opens when the profile says consent is required and describes what is sent', () => {
     renderWith({ ...USER, ai_consent_required: true })
     const dialog = screen.getByRole('dialog')
-    expect(dialog).toHaveTextContent(/lecture files you upload/i)
-    expect(dialog).toHaveTextContent(/questions you ask/i)
-    expect(dialog).toHaveTextContent(/password and your email/i)
+    expect(dialog).toHaveTextContent(/lecture files and course documents you upload, and their file names/i)
+    expect(dialog).toHaveTextContent(/recent messages from the same conversation/i)
+    expect(dialog).toHaveTextContent(/course codes and week numbers, and summaries the AI already wrote/i)
+    expect(dialog).toHaveTextContent(/password, your email address and your username/i)
+    expect(dialog).toHaveTextContent(/in its file name, is sent as is/i)
     expect(screen.getByRole('link', { name: /data & privacy/i })).toHaveAttribute('href', '/settings/privacy')
   })
 

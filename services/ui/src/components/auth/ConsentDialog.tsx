@@ -40,14 +40,19 @@ export function ConsentDialog({ open, busy, changed, error, onAccept, onDecline 
         <section>
           <h3 className="font-semibold text-text mb-1">{t('What is sent to the AI provider')}</h3>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>{t('The text extracted from the lecture files you upload.')}</li>
-            <li>{t('The questions you ask and your chat messages.')}</li>
+            <li>{t('The text extracted from the lecture files and course documents you upload, and their file names.')}</li>
+            <li>{t('Your questions and chat messages, including recent messages from the same conversation.')}</li>
+            <li>{t('Your course codes and week numbers, and summaries the AI already wrote for you, to keep answers on topic.')}</li>
           </ul>
         </section>
         <section>
           <h3 className="font-semibold text-text mb-1">{t('What is not sent')}</h3>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>{t('Your password and your email address.')}</li>
+            <li>
+              {t(
+                'Your password, your email address and your username. Anything written inside a file you upload, or in its file name, is sent as is.',
+              )}
+            </li>
             <li>{t('Other people\'s data: only your own content is ever used.')}</li>
           </ul>
         </section>
