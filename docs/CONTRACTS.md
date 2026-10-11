@@ -245,6 +245,32 @@ means UTC; results are aware. Not duplicated here, so there is one copy to keep 
 `date.today()`, `datetime.today()`, `datetime.utcnow()` and naive `datetime.now()` everywhere else
 under `app/`. A new public member is a version bump here and an amendment of ADR 0006 first.
 
+### api.ai-consent v1
+
+AI-processing disclosure and consent (SEC-08, GL#38). Provider: `backend` —
+`services/app/app/services/consent_service.py`, `app/api/deps.py` (`require_ai_consent`),
+`app/api/auth.py`. Consumers: `frontend` (disclosure dialog), `safety` (floor 2 pin), `qa`.
+
+- Storage: `users.ai_processing_consent_at` (timestamptz) and `users.ai_processing_consent_version`
+  (smallint), both NULL until consented. Current wording version: `AI_CONSENT_VERSION` (int, default 1).
+- `POST /api/auth/consent` (caller required). Optional body `{"version": int}`: a value other than
+  the current version is refused 409 so a stale page cannot consent to wording it did not show.
+  Records now and the current version. Response `{"ai_consent_required": false, "ai_consent_version": n}`.
+- `GET /api/auth/me` (and every `UserProfileResponse`) gains `ai_consent_required: bool`: true when
+  the timestamp or version is NULL, or the version is below the current one. The raw record is not
+  exposed.
+- Gate: every route that spends AI or enqueues AI pipeline work for the caller declares
+  `dependencies=[Depends(require_ai_consent)]` and refuses **403** with body
+  `{"detail": ..., "code": "ai_consent_required", "consent_version": n}` before any quota check, spend or
+  enqueue. Routes: `POST /api/settings/test-ai`, `/api/chat/sessions/{id}/messages` and `.../messages/stream`,
+  `/api/qa/ask`, `/api/concepts/extract/{id}`, `/api/uploads`, `/api/uploads/batch`,
+  `/api/uploads/capture`, `/api/uploads/{id}/retry`, `/api/artifacts/{id}/reclassify`,
+  `/api/review-items/{id}/resolve`, `/api/courses/{code}/merge`, `/api/courseops/documents`.
+- Single-user mode: the operator is treated as consented (`ai_consent_required` is always false).
+- Logging: no log line carries an email address. Call sites log `user_id`; the structlog processor
+  `app.core.logging.redact_emails` and the stdlib `EmailRedactingFilter` redact any address-shaped
+  value as defence in depth.
+
 ## Change log
 
 The `Contract` column holds the name from that contract's `###` heading in Current.
@@ -254,3 +280,4 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-04 | agents.AgentAdapter | v1 | Recorded as-built: 7 abstract methods, `stream_answer`, metering and output-language members, `get_agent`, 13 data types, 5 backends, 12 direct consumers. No code changed. | M31-S1-ARCH-001 |
 | 2026-10-04 | agents.AgentAdapter | v1 | Floor-3 open question closed by reference to ADR 0003, which enumerates the five request-time `get_agent` call sites. Interface unchanged, so no version bump. | M31-S1-ARCH-006 |
 | 2026-10-09 | core.clock | v1 | New contract, recorded before implementation: five functions, `user_settings.timezone` as the zone source, `None`/invalid → UTC. Contract test committed red. | M32-S2-ARCH-033 |
+| 2026-10-11 | api.ai-consent | v1 | New contract, recorded before implementation: consent endpoint, `ai_consent_required` on the profile, 403 `ai_consent_required` gate, email-free logs. | M33-S1-BACKEND-017 |

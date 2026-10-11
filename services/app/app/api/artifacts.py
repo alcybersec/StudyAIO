@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, require_ai_consent
 from app.core.database import get_session
 from app.core.exceptions import ArtifactBusyError
 from app.models.user import User
@@ -35,6 +35,7 @@ class ReclassifyResponse(BaseModel):
 
 @router.post(
     "/artifacts/{artifact_id}/reclassify",
+    dependencies=[Depends(require_ai_consent)],
     response_model=ReclassifyResponse,
     summary="Reclassify an artifact",
     description="Moves an artifact (and its flashcards/quiz questions) to a "

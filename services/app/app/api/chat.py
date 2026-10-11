@@ -18,7 +18,7 @@ from app.api.chat_schemas import (
     SendMessageRequest,
     SendMessageResponse,
 )
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, require_ai_consent
 from app.config import settings
 from app.core.database import get_session
 from app.core.rate_limit import limiter
@@ -160,6 +160,7 @@ async def get_messages(
 
 @router.post(
     "/chat/sessions/{session_id}/messages",
+    dependencies=[Depends(require_ai_consent)],
     response_model=SendMessageResponse,
     summary="Send a message",
     description="Send a message in a chat session and receive an AI response.",
@@ -212,6 +213,7 @@ async def send_message(
 
 @router.post(
     "/chat/sessions/{session_id}/messages/stream",
+    dependencies=[Depends(require_ai_consent)],
     summary="Send a message (streaming)",
     description="Send a message and receive the AI response as an SSE stream.",
 )

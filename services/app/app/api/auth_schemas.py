@@ -2,7 +2,9 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, computed_field
+
+from app.services import consent_service
 
 
 class RegisterRequest(BaseModel):
@@ -114,6 +116,19 @@ class SessionEndedResponse(BaseModel):
     session_ended: bool = True
 
 
+class ConsentRequest(BaseModel):
+    """Optional echo of the disclosure version the user was shown."""
+
+    version: int | None = None
+
+
+class ConsentResponse(BaseModel):
+    """Result of recording AI-processing consent."""
+
+    ai_consent_required: bool
+    ai_consent_version: int
+
+
 class AuthConfigResponse(BaseModel):
     """Public auth configuration response."""
 
@@ -148,6 +163,16 @@ class UserProfileResponse(BaseModel):
     # None on every other response, including a normal TOTP login -- the count
     # is not account state the client should be polling.
     backup_codes_remaining: int | None = None
+    # Read from the user row only to derive ``ai_consent_required``; the raw
+    # consent record is not part of the payload.
+    ai_processing_consent_at: datetime | None = Field(default=None, exclude=True)
+    ai_processing_consent_version: int | None = Field(default=None, exclude=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def ai_consent_required(self) -> bool:
+        """True until the user has agreed to the current AI-processing disclosure."""
+        return consent_service.consent_required(self)  # type: ignore[arg-type]
 
     model_config = {"from_attributes": True}
 

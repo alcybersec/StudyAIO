@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.embeddings import get_embedding_provider
 from app.agents.factory import get_agent
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, require_ai_consent
 from app.api.schemas import Citation, QARequest, QAResponse
 from app.config import settings
 from app.core.database import get_session
@@ -28,6 +28,7 @@ router = APIRouter()
 
 @router.post(
     "/qa/ask",
+    dependencies=[Depends(require_ai_consent)],
     response_model=QAResponse,
     summary="Ask a question",
     description="Ask a question about lecture content. Returns an AI-generated answer with citations to source chunks.",

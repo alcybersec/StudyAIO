@@ -49,6 +49,7 @@ from app.core import secret_box
 from app.core.demo_middleware import DemoAccountMiddleware
 from app.core.exceptions import (
     AgentError,
+    AiConsentRequiredError,
     AuthenticationError,
     AuthorizationError,
     DemoRestrictionError,
@@ -444,6 +445,21 @@ if _instrumentator is not None:
 async def authentication_error_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
     """Handle authentication errors with 401."""
     return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+
+@app.exception_handler(AiConsentRequiredError)
+async def ai_consent_required_handler(
+    request: Request, exc: AiConsentRequiredError
+) -> JSONResponse:
+    """Handle a missing AI-processing consent with 403 and a stable machine code."""
+    return JSONResponse(
+        status_code=403,
+        content={
+            "detail": str(exc),
+            "code": "ai_consent_required",
+            "consent_version": settings.ai_consent_version,
+        },
+    )
 
 
 @app.exception_handler(AuthorizationError)

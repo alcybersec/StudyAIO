@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, require_ai_consent
 from app.api.schemas import (
     BatchUploadFileResult,
     BatchUploadResponse,
@@ -55,6 +55,7 @@ MAX_CAPTURE_BYTES = 1024 * 1024
 
 @router.post(
     "/uploads",
+    dependencies=[Depends(require_ai_consent)],
     response_model=UploadResponse,
     status_code=201,
     summary="Upload a lecture file",
@@ -193,6 +194,7 @@ async def upload_file(
 
 @router.post(
     "/uploads/batch",
+    dependencies=[Depends(require_ai_consent)],
     response_model=BatchUploadResponse,
     status_code=201,
     summary="Batch upload lecture files",
@@ -393,6 +395,7 @@ async def batch_upload(
 
 @router.post(
     "/uploads/capture",
+    dependencies=[Depends(require_ai_consent)],
     response_model=UploadResponse,
     status_code=201,
     summary="Quick capture text or a URL",
@@ -505,6 +508,7 @@ _PRE_STAGE_STATUS = {
 
 @router.post(
     "/uploads/{artifact_id}/retry",
+    dependencies=[Depends(require_ai_consent)],
     response_model=RetryResponse,
     summary="Retry a failed pipeline",
     description="Retries the processing pipeline for a failed artifact, resuming from the failed stage.",

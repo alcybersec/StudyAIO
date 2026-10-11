@@ -13,7 +13,7 @@ from app.core.constants import DEFAULT_ADMIN_ID
 from app.core.database import get_session
 from app.core.exceptions import AuthenticationError, AuthorizationError, SessionRevokedError
 from app.models.user import User
-from app.services import settings_service, user_service
+from app.services import consent_service, settings_service, user_service
 
 logger = structlog.get_logger()
 
@@ -155,6 +155,23 @@ async def get_current_user_or_default(
             return await _get_or_create_default_user(session)
     else:
         return await get_current_user(request, session)
+
+
+async def require_ai_consent(
+    user: User = Depends(get_current_user_or_default),
+) -> User:
+    """Refuse with 403 ``ai_consent_required`` unless the caller has consented.
+
+    Attach as a route-level ``dependencies=[Depends(require_ai_consent)]`` on every
+    endpoint that spends AI or enqueues AI pipeline work for the caller (SEC-08,
+    GL#38). It reuses ``get_current_user_or_default``, so it sees the same caller
+    the handler does and a revoked session is rejected first.
+
+    Raises:
+        AiConsentRequiredError: The caller has no current-version consent.
+    """
+    consent_service.require_consent(user)
+    return user
 
 
 async def get_user_tz(

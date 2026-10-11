@@ -125,7 +125,7 @@ async def register_user(
     session.add(user)
     await session.flush()
     await notification_service.seed_default_preferences(session, user.id)
-    logger.info("user_registered", user_id=user.id, email=email)
+    logger.info("user_registered", user_id=user.id)
     return user
 
 

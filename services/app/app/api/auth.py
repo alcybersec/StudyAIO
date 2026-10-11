@@ -10,6 +10,8 @@ from app.api.auth_schemas import (
     AccountDeleteRequest,
     AuthConfigResponse,
     ChangePasswordRequest,
+    ConsentRequest,
+    ConsentResponse,
     ForgotPasswordRequest,
     LoginRequest,
     MFADisableRequest,
@@ -23,7 +25,7 @@ from app.api.auth_schemas import (
     UserProfileResponse,
     VerifyEmailRequest,
 )
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_user_or_default
 from app.config import settings
 from app.core import login_throttle
 from app.core.auth import (
@@ -63,7 +65,7 @@ from app.core.oauth import (
 from app.core.rate_limit import limiter
 from app.core.security import generate_qr_code_base64, setup_totp, verify_totp
 from app.models.user import User
-from app.services import account_service, invite_service, user_service
+from app.services import account_service, consent_service, invite_service, user_service
 
 logger = structlog.get_logger()
 
@@ -325,6 +327,34 @@ async def refresh_tokens(
 async def get_me(user: User = Depends(get_current_user)) -> UserProfileResponse:
     """Get current user profile."""
     return UserProfileResponse.model_validate(user)
+
+
+@router.post("/consent")
+async def record_ai_consent(
+    body: ConsentRequest | None = None,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user_or_default),
+) -> ConsentResponse:
+    """Record the caller's consent to AI processing of their content.
+
+    Stores now and the current disclosure version. A client that echoes the
+    version it displayed gets 409 if the wording has since changed, so a stale
+    page can never record consent to text the user did not see.
+    """
+    if (
+        body is not None
+        and body.version is not None
+        and body.version != settings.ai_consent_version
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="The AI-processing disclosure has changed; reload and review it again",
+        )
+    await consent_service.record_consent(session, user)
+    return ConsentResponse(
+        ai_consent_required=consent_service.consent_required(user),
+        ai_consent_version=settings.ai_consent_version,
+    )
 
 
 @router.put("/me")

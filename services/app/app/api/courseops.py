@@ -17,7 +17,7 @@ from app.api.courseops_schemas import (
     DeadlineResponse,
     DeadlineUpdateRequest,
 )
-from app.api.deps import get_current_user_or_default, get_user_tz
+from app.api.deps import get_current_user_or_default, get_user_tz, require_ai_consent
 from app.config import settings
 from app.core.database import get_session
 from app.core.exceptions import CourseOpsError
@@ -37,6 +37,7 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx"}
 
 @router.post(
     "/documents",
+    dependencies=[Depends(require_ai_consent)],
     response_model=CourseDocumentResponse,
     status_code=201,
     summary="Upload a course document",

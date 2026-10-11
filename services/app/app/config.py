@@ -142,6 +142,10 @@ class Settings(BaseSettings):
     #: default admin. Implies `self_hosted`. Startup refuses it unless the API
     #: is bound to loopback (`bind_host`) or `i_understand_no_auth` is set.
     single_user_mode: bool = False
+    #: Wording version of the AI-processing disclosure (SEC-08, GL#38). Bump it
+    #: when the disclosure text changes materially; every user whose recorded
+    #: version is lower is asked again before the next AI action.
+    ai_consent_version: int = 1
     i_understand_no_auth: bool = False
     #: Mirror of uvicorn's `--host`. The app cannot see its own bind address, so
     #: the operator declares it; the default is the conservative "exposed".
