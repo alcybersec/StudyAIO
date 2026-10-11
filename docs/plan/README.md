@@ -127,4 +127,4 @@ at its gate, leaving one pointer line here._
 
 | Gate | Verdict | Summary | Date |
 |---|---|---|---|
-| M32 | **CONDITIONAL** — Floors APPROVE, Tests PASS; G1 `test-ai` quota bypass (backend), G2 grant-pro (user), G3 metrics export (devops/ai), G4 first scheduled backup (Orchestrator) — awaiting user acceptance | [`summary.md`](../gates/M32/summary.md) · floors: [`floors.md`](../gates/M32/floors.md) | 2026-10-11 |
+| M32 | **CONDITIONAL** — Floors APPROVE, Tests PASS; G1, G2, G3 closed 2026-10-11 (MR !37 `b92177a` deployed; grant-pro applied); **G4 open** (first scheduled backup) — awaiting user acceptance | [`summary.md`](../gates/M32/summary.md) · floors: [`floors.md`](../gates/M32/floors.md) | 2026-10-11 |

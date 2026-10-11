@@ -102,6 +102,15 @@ still on the free tier → G2.
 | G3 | Export counters/latency for retries, recovery, re-embed and backup (enable Prometheus on prod or ship equivalent log-based alerts) | `devops`, `ai` | M33-S1-DEVOPS-003 |
 | G4 | Observe the first scheduled `daily-backup` on prod (02:00) succeed and land in the backup dir | Orchestrator, `devops` | M33-S1-OPS-004 |
 
+**Condition status (2026-10-11, after the gate):**
+
+| # | Status | Evidence |
+|---|---|---|
+| G1 | **closed** | MR !37 (`b92177a`, deployed): quota + global ceiling checked before the instance provider, usage recorded on success and failure, 5/minute rate limit; 7 red-first unit tests; `safety` floor pin over every request-time AI call site, 9 mutants red; floor `437 passed` |
+| G2 | **closed** | `grant-pro` dry run then apply on prod: 1 granted, 1 already Pro; active users by tier now `pro 2` |
+| G3 | **closed** | MR !37 deployed: api `/metrics` 200 (31 families), worker metrics server on loopback port 9101 returns 200 with `studyaio_*` families, UI returns 404 for `/metrics`; label policy pinned in the floor tier (4 mutants red) |
+| G4 | open | first scheduled `daily-backup` (02:00 UTC) not yet observed; the same task run on demand succeeded |
+
 Non-blocking notes (N-2 … N-10) are listed in [`floors.md`](floors.md) with owners.
 
 **Carried conditions.** M31's C1–C6 entered M32 as carried conditions and **all six are closed** — none
