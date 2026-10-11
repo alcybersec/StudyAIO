@@ -15,7 +15,7 @@ The 2026-10-04 miss and the VETO-lift work, against acceptance. Evidence is in `
 
 | Item | Evidence | Met? |
 |---|---|---|
-| M31-S1-DEVOPS-005: a deliberate floor violation and a deliberate coverage drop each redden the pipeline | #526 `test-floor` **failed** (job 4307, `Floor 2: credential committed to the tree: docs/redproof/sentinel.txt:1`); #527 `backend-tests` **failed** (job 4312, `FAIL Required test coverage of 75.0% not reached. Total coverage: 61.42%`). Read by job name. #525 exposed a false green (no git in image), fixed (`cbd7d72`, `ffe396d`). Throwaway branches deleted | **Met** |
+| M31-S1-DEVOPS-005: a deliberate floor violation and a deliberate coverage drop each redden the pipeline | #526 `test-floor` **failed** (`Floor 2: credential committed to the tree: docs/redproof/sentinel.txt:1`); #527 `backend-tests` **failed** (`FAIL Required test coverage of 75.0% not reached. Total coverage: 61.42%`). Read by job name. #525 exposed a false green (no git in image), fixed (`cbd7d72`, `ffe396d`). Throwaway branches deleted | **Met** |
 | QA-004 pipeline half | Same as above (#527) | **Met** |
 | Run `tests/contracts` in CI | #537 `backend-tests` contracts step `25 passed` | **Met** |
 | Runbook: `make test-floor`, tiers, `coverage-tier.py` | `docs/developer_guide.md` § Coverage Tiers (`d338dc2`) | **Met** |

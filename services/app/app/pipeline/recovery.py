@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from app.core.database import async_session_factory, run_async
 from app.models.artifact import LectureArtifact
 from app.models.pipeline_run import PipelineRun
+from app.pipeline import metrics
 from app.pipeline.resilience import STUCK_THRESHOLD_SECONDS, count_metric
 from app.worker import celery_app
 
@@ -104,6 +105,7 @@ async def _recover(now: datetime | None = None) -> dict:
                 artifact.status = "failed"
                 failed.append(artifact.id)
                 count_metric("pipeline_recovery_failed_total", stage=stage)
+                metrics.STUCK_FAILED.labels(stage=stage).inc()
                 logger.error(
                     "pipeline_recovery_gave_up",
                     artifact_id=artifact.id,
@@ -131,6 +133,7 @@ async def _recover(now: datetime | None = None) -> dict:
                 requeued.append(artifact.id)
                 dispatch.append((artifact.id, stage, artifact.user_id))
                 count_metric("pipeline_recovery_requeued_total", stage=stage)
+                metrics.STUCK_REQUEUED.labels(stage=stage).inc()
                 logger.warning(
                     "pipeline_recovery_requeued",
                     artifact_id=artifact.id,
@@ -154,7 +157,12 @@ async def _recover(now: datetime | None = None) -> dict:
 @celery_app.task(name="app.pipeline.recovery.recover_stuck_artifacts")
 def recover_stuck_artifacts() -> dict:
     """Celery beat task: requeue or fail artifacts stuck in an in-progress state."""
-    result = run_async(_recover())
+    try:
+        result = run_async(_recover())
+    except Exception:
+        metrics.RECOVERY_RUNS.labels(outcome="error").inc()
+        raise
+    metrics.RECOVERY_RUNS.labels(outcome="ok").inc()
     logger.info(
         "pipeline_recovery_tick",
         requeued=len(result["requeued"]),

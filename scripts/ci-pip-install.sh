@@ -5,7 +5,7 @@
 # identically.
 #
 # Why (GL#7): e2e-tests failed with ResolutionImpossible on an unchanged
-# requirements.txt (job 2810). pip backtracked through every aiogram release
+# requirements.txt. pip backtracked through every aiogram release
 # because aiohttp had NO candidates -- it was never fetched -- i.e. an index
 # lookup came back empty/slow (the trace shows multi-minute stalls) and the
 # resolver reported that as a version conflict. A constraints file does not help:

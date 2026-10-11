@@ -7,15 +7,16 @@ nothing legitimate to read back, and returning one is what issue #30 was.
 """
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_or_default
 from app.api.schemas import SettingsResponse, SettingsUpdateRequest, TestAIResponse
 from app.core.cache import cache_delete, dashboard_cache_key
 from app.core.database import get_session
+from app.core.rate_limit import limiter
 from app.models.user import User
-from app.services import settings_service
+from app.services import billing_service, quota_service, settings_service
 
 logger = structlog.get_logger()
 
@@ -80,7 +81,9 @@ async def update_settings(
     summary="Test AI connection",
     description="Tests the AI connection using the current user's saved settings. Sends a minimal prompt to verify credentials work.",
 )
+@limiter.limit("5/minute")
 async def test_ai_connection(
+    request: Request,
     user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> TestAIResponse:
@@ -96,6 +99,14 @@ async def test_ai_connection(
         if user_agent_config
         else settings_service.STUDYAIO_BACKEND
     )
+    # A probe on the operator's key is real spend: it counts against the
+    # caller's quota and the global ceilings, and is recorded. A user testing
+    # their own credentials spends their own money, so only the rate limit
+    # applies.
+    metered = user_agent_config is None
+    if metered:
+        await quota_service.check_ai_quota(session, user.id, user.tier)
+
     agent = get_agent(user_settings=user_agent_config)
 
     try:
@@ -104,12 +115,18 @@ async def test_ai_connection(
             filename="test.pdf",
             known_courses=["TEST101"],
         )
+        if metered:
+            await billing_service.record_ai_call(session, user.id, agent=agent)
+            await session.commit()
         return TestAIResponse(
             status="ok",
             backend=backend,
             message=f"Connection successful (confidence: {result.confidence})",
         )
     except Exception as e:
+        if metered:
+            await billing_service.record_ai_call(session, user.id, agent=agent)
+            await session.commit()
         safe_error = await settings_service.redacted_error(session, user.id, e)
         logger.warning("test_ai_failed", error=safe_error, backend=backend)
         raise HTTPException(

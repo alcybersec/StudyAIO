@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Forced command for the the CI deploy key key (authorized_keys).
+# Forced command for the CI deploy key (authorized_keys).
 # Rewritten 2026-09-27 when CI moved to GitLab.
 #
 # CANONICAL COPY: infra/deploy/deploy.sh in the StudyAIO repo. The live file is
@@ -35,10 +35,10 @@ TAG="${SHA:0:7}"
 
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 
-# origin is GITLAB as of 2026-09-27 (git-host alias, read-only deploy key
+# origin is GITLAB as of 2026-09-27 (read-only deploy key
 # scoped to this project). The commit CI just built is therefore available
 # immediately -- the deploy no longer waits on GitLab->GitHub mirror propagation,
-# which is what it depended on when origin was git@git-host:.
+# which is what it depended on when origin was the GitHub mirror.
 echo "==> Fetching ${SHA}..."
 if ! git fetch --quiet origin; then
     echo "refusing: git fetch from origin failed" >&2
@@ -51,7 +51,7 @@ fi
 # chasing a mirror problem that did not exist -- the actual error was a dirty
 # working tree.
 if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then
-    echo "refusing: commit ${SHA} is not on origin (GitLab) -- was it actually pushed?" >&2
+    echo "refusing: commit ${SHA} is not on origin -- was it actually pushed?" >&2
     exit 65
 fi
 
@@ -76,10 +76,10 @@ touch .env
 sed -i '/^GHCR_OWNER=/d;/^IMAGE_TAG=/d' .env
 printf 'GHCR_OWNER=%s\nIMAGE_TAG=%s\n' "alcybersec" "${TAG}" >> .env
 
-# Checked BEFORE pulling. Pipeline 368 died halfway through extracting the torch
+# Checked BEFORE pulling. A CI run died halfway through extracting the torch
 # layer with "no space left on device" -- which surfaces as a containerd error
 # naming a blob digest and reads like a registry fault, not a full disk. The
-# host had 575M free. Failing here instead costs a second and says what is
+# host had almost no space free. Failing here instead costs a second and says what is
 # actually wrong.
 #
 # 8G is the working figure: the api image carries torch, LibreOffice and the
@@ -190,8 +190,8 @@ curl -fsS -o /dev/null "http://localhost:${UI_PORT:-3001}/"
 
 # -a, NOT a bare -f. Without -a this removes only DANGLING images, so every
 # deploy since this script was written left its predecessor's tagged image on
-# disk permanently: 33 images totalling 24G by 2026-09-28, 6.5G of it unused.
-# That is how the host reached 99% and failed the deploy above -- the cleanup
+# disk permanently: dozens of images totalling many GB, most of it unused.
+# That is how the host ran out of disk and failed the deploy above -- the cleanup
 # step existed the whole time and was reclaiming next to nothing.
 #
 # The until filter keeps roughly a week of recent tags as local rollback

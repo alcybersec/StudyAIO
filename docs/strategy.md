@@ -116,7 +116,7 @@ to `open`. §10 Status is derived from `docs/plan/README.md`, which is authorita
   write into a path that role already owns, so the ownership guard blocks nothing — but check the
   result reads sensibly: a role whose only paths are documentation has nowhere natural to put a test,
   and that is a sign the ownership map needs adjusting before dispatch rather than after.
-- [x] `git@192.168.10.20:alcybersec/StudyAIO.git` is reachable and `glab` is authenticated.
+- [x] The project's GitLab remote (`origin`) is reachable and `glab` is authenticated.
 
 Confirmed 2026-10-04. `architect` was given `services/app/tests/contracts/**` so that
 M31-S1-ARCH-001 has somewhere to put its contract test.
@@ -187,7 +187,7 @@ is paused until S4 wave 1 closes. Finding IDs are the audit's.
 | M32-S4-BACKEND-011 | `backend` | BILL-01: Stripe webhook no dedupe/ordering; `trialing` unmapped (R-034) | Idempotent by event id; out-of-order events can't downgrade; `trialing` mapped; integration tests |
 | M32-S4-AI-012 | `ai` | TECH-04: transient AI error = permanent failure; no time limits; stuck items never recover | Retries with backoff for transient errors; per-stage time limits; a beat job requeues or fails stuck items visibly |
 | M32-S4-AI-013 | `ai`, `backend` | TECH-05: concurrent summarize of the same week races | Per-(course, week) lock or serialisation; both artifacts succeed; integration test with two parallel uploads |
-| M32-S4-DEVOPS-014 | `devops` | TECH-06: documented auto-backup can't run in the image; deploy migrates without a dump (R-028 fixed the order) | Backup runs in prod (verified on the VM); `deploy.sh` takes a DB dump before migrating |
+| M32-S4-DEVOPS-014 | `devops` | TECH-06: documented auto-backup can't run in the image; deploy migrates without a dump (R-028 fixed the order) | Backup runs in prod (verified on the prod host); `deploy.sh` takes a DB dump before migrating |
 | M32-S4-BACKEND-015 | `backend`, `devops` (+`safety`) | SEC-05: self-hosted default makes unauthenticated callers admin; Postgres/Redis published (R-035) | Secure-by-default self-host: explicit opt-in for single-user mode, no published DB/Redis ports |
 | M32-S4-FRONTEND-016 | `frontend`, `backend` | UX-05: raw server/exception strings shown to users | User-facing errors are mapped messages; raw text only in logs |
 | M32-S4-DEVOPS-017 | `devops`, `safety` | SEC-07: vulnerable deps (starlette, python-multipart, transformers, react-router) | Upgraded; a dependency audit step in CI |

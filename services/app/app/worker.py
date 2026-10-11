@@ -27,6 +27,7 @@ celery_app = Celery(
         "app.pipeline.backup_task",
         "app.pipeline.recovery",
         "app.pipeline.limits",
+        "app.pipeline.metrics",
     ],
 )
 

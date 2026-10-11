@@ -42,7 +42,7 @@ variables:
   # and gives each package a single index (PyPI, or the torch CPU index for
   # torch==x+cpu). So there is deliberately no PIP_EXTRA_INDEX_URL or
   # PIP_CONSTRAINT here. GL#7: e2e-tests failed ResolutionImpossible on an
-  # unchanged requirements.txt (job 2810) because an index lookup came back
+  # unchanged requirements.txt because an index lookup came back
   # empty and the resolver called it a conflict. Regenerate the lock with
   # ./scripts/lock-requirements.sh after editing requirements.txt.
   npm_config_cache: $CI_PROJECT_DIR/.cache/npm
@@ -113,7 +113,7 @@ backend-tests:
 # git is REQUIRED here: the floor-2 secret scan enumerates tracked files with
 # `git ls-files`, and python:3.12-slim ships no git. Without it the scan silently
 # falls back to the services/app tree and never sees docs/, infra/, scripts/ or
-# the compose files. Pipeline 525 (red-proof, 2026-10-04) stayed green with a
+# the compose files. A red-proof run (2026-10-04) stayed green with a
 # secret-shaped sentinel in docs/ for exactly this reason.
 test-floor:
   stage: test
@@ -307,19 +307,18 @@ e2e-tests:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_TAG =~ /^v/
   variables:
-    # MANDATORY on the build host: Docker 29.x uses the containerd image store, so
+    # MANDATORY on Docker 29.x hosts using the containerd image store, so
     # `docker build` runs via BuildKit and attaches a provenance attestation by
     # default. The resulting OCI index references the empty-JSON blob
     # sha256:44136fa355b3..., and a GitLab/GHCR manifest PUT then fails with
     # `blob unknown to registry` / MANIFEST_BLOB_UNKNOWN -- AFTER every layer has
-    # pushed successfully, so it reads as a registry fault. Cost a pipeline on
-    # another project (288) to diagnose.
+    # pushed successfully, so it reads as a registry fault.
     BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
   before_script:
     # IMAGE_TAG is computed HERE, not in `variables:`. GitLab expands only $VAR /
     # ${VAR} in a variables block -- it does NOT do bash substring expansion, so
     # `IMAGE_TAG: ${CI_COMMIT_SHA:0:7}` silently yields an EMPTY string and the
-    # build dies on `invalid tag "ghcr.io/owner/name:"` (pipeline 299).
+    # build dies on `invalid tag "ghcr.io/owner/name:"`.
     # before_script shares a shell with script, so this assignment carries over;
     # after_script does not, so it recomputes the value.
     #
@@ -339,7 +338,7 @@ e2e-tests:
     - docker push "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:$IMAGE_TAG"
     - docker push "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:latest"
   after_script:
-    # This host shares one Docker daemon and has already hit 100% disk once.
+    # The runner host shares one Docker daemon, so free the disk.
     # after_script is a SEPARATE shell, so IMAGE_TAG must be recomputed.
     - docker image rm "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:${CI_COMMIT_SHA:0:7}" || true
 
@@ -368,10 +367,9 @@ deploy-selfhosted:
   image: alpine:latest
   needs: [build-api, build-ui, e2e-tests]
   # Auto-deploys on main, matching the previous GitHub behaviour. The first run
-  # was gated manual while deploy.sh was unproven; it succeeded as job 2459 on
+  # was gated manual while deploy.sh was unproven; it succeeded on
   # 2026-09-27 (verified on the prod host: .env pinned to the tested tag, all four app
   # containers on it), so the gate has served its purpose and is removed.
-  # another project stays manual by contrast -- it has its own deploy policy.
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: on_success

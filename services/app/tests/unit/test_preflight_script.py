@@ -70,7 +70,7 @@ def _write_raw_env(tmp_path: Path, text: str) -> Path:
     """Write a literal .env body verbatim — for fixtures that need quoting
     _write_env can't produce (single- or double-quoted values, comments
     placed outside the quotes), e.g. reproducing
-    `secret-manager export --format=dotenv` output.
+    secret-manager dotenv exports.
     """
     path = tmp_path / ".env"
     path.write_text(text)
@@ -78,8 +78,7 @@ def _write_raw_env(tmp_path: Path, text: str) -> Path:
 
 
 # Same shape as BASE_ENV, but every value is single-quoted — the format
-# `secret-manager export --format=dotenv` actually emits on the host this script
-# runs against.
+# secret-manager dotenv exports commonly emit.
 QUOTED_BASE_ENV = {
     "SETTINGS_ENCRYPTION_KEY": VALID_FERNET_KEY,
     "JWT_SECRET_KEY": "<test-placeholder>",
@@ -414,8 +413,7 @@ class TestSpendCeiling:
 
 
 class TestQuotedValues:
-    """`secret-manager export --format=dotenv` — the standard secret-management
-    pattern on the host this script runs against — single-quotes every
+    """Secret-manager dotenv exports single-quote every
     value. get_val must strip both quote styles, or every SaaS-mode branch
     below silently takes the self-hosted path instead.
     """

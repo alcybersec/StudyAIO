@@ -22,9 +22,9 @@ Required test coverage of 95% reached. Total coverage: 97.32%
 EXIT=0
 ```
 
-**Pipeline, read by job name (`glab api projects/:id/pipelines/537/jobs`):** pipeline #537 on `8d9de14`, ref
+**Pipeline, read by job name (`glab api projects/:id/pipelines/<id>/jobs`):** the pipeline on `8d9de14`, ref
 `kit/retrofit`, status `success`. Jobs: `test-floor`, `backend-tests`, `integration-tests`, `e2e-tests`,
-`frontend-checks` and `python-lint` all report `success`. The `test-floor` trace (job 4407) ends with
+`frontend-checks` and `python-lint` all report `success`. The `test-floor` trace ends with
 `Required test coverage of 95% reached. Total coverage: 97.32%` and `72 passed, 6 warnings in 164.10s`.
 
 **§11 gate addition** ("the floor tier must be non-empty and green, and every floor in §6 must map to a named test"):
@@ -95,7 +95,7 @@ The handler fix holds in the code, but no test in the tier pins it. See follow-u
     `user_id or artifact.user_id`. If both are `None`, that matches only ownerless rows, so it fails closed.
 - The integration xfails for all seven are gone (QA-022 deleted them). The tests are in
   `test_api_study_exams.py`, `test_api_content_reads.py`, `test_api_courses_files.py`, `test_gamification.py` and
-  `test_pipeline_end_to_end.py`, and they pass in #537 `integration-tests`.
+  `test_pipeline_end_to_end.py`, and they pass in that pipeline's `integration-tests`.
 - Leaderboard: `xp_service.get_leaderboard` admits a row only when `user_settings.leaderboard_opt_in` is true, or
   when the row is the caller's own. The column defaults to `False` (DATA-017). It returns no extra fields.
 - New owned table `summary_versions`: `user_id` is a NOT NULL FK, and it is classified as owned. No API reads it yet.
@@ -168,7 +168,7 @@ loses no data. R-013, the courseops upload race, is unchanged.
 
 | # | Item | Met? | Evidence (red first, then green) |
 |---|---|---|---|
-| 1 | Floor 1, R-015: scope the 7 findings; strict xfails XPASS, markers removed | **MET** | BACKEND-013 and AI-014. The xfails turned XPASS(strict) on the integrated branch (`7 failed` = the 7 XPASS, BACKEND-013 row). QA-022 removed the markers and re-proved them with the fixes reverted (`9 failed`). Green in #537 `integration-tests`. Mutations 1a–1g are red in the floor tier as well. |
+| 1 | Floor 1, R-015: scope the 7 findings; strict xfails XPASS, markers removed | **MET** | BACKEND-013 and AI-014. The xfails turned XPASS(strict) on the integrated branch (`7 failed` = the 7 XPASS, BACKEND-013 row). QA-022 removed the markers and re-proved them with the fixes reverted (`9 failed`). Green in that pipeline's `integration-tests`. Mutations 1a–1g are red in the floor tier as well. |
 | 2 | Floor 1 sweep gap: body-borne ids, typed path params, function-level check, each shown red on R-015 code | **MET** | SAFETY-012 on the pre-fix tree: `13 failed, 38 passed`, each red a named R-015/R-012 finding. Green after BACKEND-013 and AI-014. `test_floor1_route_sweep_reaches_every_handler` fails on any validation 422, so the `json={}` blind spot cannot come back silently. Mutations 1a–1g go red through the new sweep paths, and none of them would have reached a handler under the old sweep. |
 | 3 | Floor 2: redact at `AgentError` construction (`ai`); handler stops echoing (`backend`); concepts site, worker pin and stale `FLOORS.md` line (`safety`) | **MET in code**, with one pin gap (F-1) | SAFETY-012 red on the integrated branch (`9 failed`: 8 worker echoes plus classify). AI-014 turned them green (`422 passed`). Concepts is in `REQUEST_TIME_AI_ERROR_SITES`. Mutations 3a, 3b and 3d are red. The handler fix is verified by direct call but not pinned (3c survived). The specific stale line ("RED today" at qa/chat) is gone, but other `RED until` notes in `FLOORS.md` are now stale too (F-2). |
 | 4 | R-007 rulings (leaderboard, re-summarize, regeneration, single-item deletes) implemented | **MET** | The rulings are recorded in `docs/decisions.md` (2026-10-04). ADR 0004 is Accepted, with an amendment and a clarification. SAFETY-021 landed `5 failed` (exactly the BACKEND-019 pins), and BACKEND-019 made them green with no test edit. SAFETY-025 found one more hole, the merge pin (`1 failed`), which BACKEND-026 made green with no test edit. Mutations 4a–4e are red. |

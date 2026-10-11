@@ -49,9 +49,8 @@ fi
 # Quoting mirrors python-dotenv's actual rules (config.py's env_file loader
 # uses python-dotenv, and .env.example ships commented-out lines like
 # `AGENT_BACKEND=claude_code   # claude_code | anthropic_api | ...` that an
-# operator uncomments as-is, plus `secret-manager export --format=dotenv` — the
-# secret-management pattern on hosts this script runs against — which
-# single-quotes every value it emits):
+# operator uncomments as-is, plus secret-manager dotenv exports, which
+# single-quote every value it emits):
 #   - A single- or double-quoted value: the quotes delimit the value.
 #     Anything after the closing quote (e.g. a trailing comment) is
 #     discarded, but a `#` *inside* the quotes is literal value content, not

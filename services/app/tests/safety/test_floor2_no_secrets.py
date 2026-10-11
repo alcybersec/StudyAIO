@@ -978,7 +978,7 @@ def _tracked_files() -> list[pathlib.Path]:
     There is deliberately no fallback. The old one scanned ``services/app``
     when git was missing, which silently dropped ``docs/``, ``infra/`` and the
     rest of the tree from a check whose subject is "the tree" (a false green
-    in CI, pipeline 525). A floor check that cannot see its subject fails.
+    in CI). A floor check that cannot see its subject fails.
     """
     try:
         out = subprocess.run(
@@ -1009,7 +1009,7 @@ def test_floor2_tracked_file_scan_fails_loudly_without_git(failure):
 
     In CI the ``python:3.12-slim`` job had no git, ``_tracked_files`` swallowed
     the OSError and fell back to the service tree, and an AKIA sentinel
-    committed under ``docs/`` passed ``test-floor`` (pipeline 525, job 4301).
+    committed under ``docs/`` passed ``test-floor``.
     """
     real_run = subprocess.run
 

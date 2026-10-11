@@ -75,12 +75,12 @@ Verify:
 
 | | Where | How |
 |---|---|---|
-| Code | `origin` → `git@192.168.10.20:alcybersec/StudyAIO.git` | `git push origin <branch>` |
+| Code | `origin` → the project's GitLab remote | `git push origin <branch>` |
 | Issues | GitLab issues | `glab issue list` / `create` / `view` / `close` |
 | Reviews | GitLab merge requests | `glab mr create` / `view` / `merge` |
 | CI | `.gitlab-ci.yml` | `glab ci list` / `get` / `trace` / `retry` |
 
-`glab` is installed and authenticated against `gitlab.home.example.com`
+`glab` is installed and authenticated against the project's GitLab instance
 (`glab auth status` to confirm). Prefer it over raw `curl` — it already holds the
 token and resolves the project from the remote.
 
@@ -484,13 +484,13 @@ real Postgres + Redis, frontend typecheck/lint/unit/build with the color-token
 and bundle-size guards, and the Playwright suite. Jobs are `interruptible` by
 default, so a newer push cancels the run it supersedes.
 
-Every job runs on the homelab runners and must carry tags — they are registered
-`run_untagged:false`, so a tagless job would sit pending forever. The default is
-`[homelab, docker]`; the two image-build jobs override it to `[shell]` because
+Every job runs on the project's self-hosted runners and must carry tags — they are
+registered `run_untagged:false`, so a tagless job would sit pending forever. The
+default tag set targets the Docker-executor runner; the two image-build jobs override it to `[shell]` because
 they need a real host Docker socket, which the docker runner does not have.
 
 `build-api`/`build-ui` and `deploy-selfhosted` run only on `main` or a `v*` tag.
-They build and push the GHCR images and deploy the prod host. Images deliberately still
+They build and push the GHCR images and deploy to the prod host. Images deliberately still
 go to **GHCR**, not the GitLab registry: `docker-compose.prod.yml` pins
 `ghcr.io/${GHCR_OWNER}/studyaio-{api,ui}` and the deploy host logs in to GHCR to
 pull, so the migration changed only *who runs the build*. Deploy takes

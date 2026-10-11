@@ -164,12 +164,12 @@ That means changes are applied by hand. From a workstation with host access:
 
 ```bash
 # Stage and syntax-check first, so a broken script never occupies the live name.
-ssh alex@deploy-host \
+ssh "$DEPLOY_USER@$DEPLOY_HOST" \
   'cat > /opt/studyaio/.deploy.sh.new \
    && chmod 755 /opt/studyaio/.deploy.sh.new \
    && bash -n /opt/studyaio/.deploy.sh.new' < infra/deploy/deploy.sh
 
-ssh alex@deploy-host 'cd /opt/studyaio \
+ssh "$DEPLOY_USER@$DEPLOY_HOST" 'cd /opt/studyaio \
   && cp -a deploy.sh "deploy.sh.bak-$(date -u +%Y%m%dT%H%M%SZ)" \
   && mv -f .deploy.sh.new deploy.sh'
 ```
@@ -191,12 +191,12 @@ api image carries torch, LibreOffice and the baked embedding model, and a pull
 needs the compressed layer and its extracted form on disk at once. Below that it
 exits 66 with the reclaim commands, rather than dying part-way through
 extraction with a containerd error naming a blob digest — which is what a full
-disk actually looks like, and it reads like a registry fault (pipeline 368).
+disk actually looks like, and it reads like a registry fault.
 
 Post-deploy cleanup uses `docker image prune -af --filter "until=168h"`. The
 `-a` matters: a bare `docker image prune -f` removes only *dangling* images, so
-every deploy leaves its predecessor's tagged image on disk forever. That is how
-this host reached 99% full with 33 images totalling 24 GB. The `until` filter
+every deploy leaves its predecessor's tagged image on disk forever, and the disk
+eventually fills. The `until` filter
 keeps about a week of tags as local rollback targets; older ones are re-pullable
 from GHCR, and images used by a running container are never pruned.
    - Holds `resource_group: studyaio-prod`, so two deploys never interleave, and
@@ -227,7 +227,8 @@ these belong in the repository.
 | `VITE_SENTRY_DSN` | yes | Frontend Sentry DSN. Vite inlines `VITE_*` at **build** time, so this is consumed by `build-ui`, not at runtime. Unset builds a UI with monitoring off. |
 
 > Runners are registered `run_untagged:false`, so every job must carry tags. The
-> default is `[homelab, docker]`; the image builds override to `[shell]`. A job
+> default tag set targets the Docker-executor runner; the image builds override to
+> `[shell]`. A job
 > that loses its tags sits pending forever rather than failing.
 
 ---
@@ -466,6 +467,47 @@ filters `Authorization`/`Cookie`/`x-api-key` headers, drops cookies entirely, an
 replaces `?token=` in URLs. Password-reset and email-verification links are bearer
 credentials for the account — they must never reach a third-party service.
 
+### Metrics
+
+Metric names carry the `studyaio_` prefix. Two endpoints, neither public:
+
+| Target | Endpoint | Notes |
+|---|---|---|
+| api | `http://127.0.0.1:8000/metrics` | `PROMETHEUS_ENABLED=true` |
+| worker | `http://127.0.0.1:9101/metrics` | `WORKER_METRICS_PORT=9101`; published on the host loopback only; multiprocess aggregation via the `/tmp/prometheus` tmpfs |
+
+Configure your reverse proxy to forward only `/api/*` and `/health/*` (the UI's nginx already
+answers `/metrics` with 404), so neither endpoint is reachable from the internet. The api port is still published on the host
+(`8000:8000`, needed for `/health/*`), so keep it off untrusted networks. Beat serves no metrics.
+`docker-compose.prod.yml` turns this on; `docker-compose.selfhosted.yml` leaves it off unless
+`PROMETHEUS_ENABLED=true` is set in `.env`.
+
+Scrape both from a host-local scraper running on the same machine. A plain Prometheus
+`scrape_configs` example (adapt to whatever agent you use, and forward to your own storage):
+
+```yaml
+scrape_configs:
+  - job_name: studyaio-api
+    static_configs:
+      - targets: ["127.0.0.1:8000"]
+  - job_name: studyaio-worker
+    static_configs:
+      - targets: ["127.0.0.1:9101"]
+```
+
+Suggested alert rules (confirm exact metric names against `/metrics`):
+
+```yaml
+- alert: StudyAIOBackupStale
+  expr: time() - studyaio_backup_last_success > 26 * 3600
+  for: 10m
+- alert: StudyAIOStuckArtifactsFailed
+  expr: increase(studyaio_stuck_artifacts_failed_total[1h]) > 0
+- alert: StudyAIOStageFailures
+  expr: sum by (stage) (rate(studyaio_stage_failures_total[15m])) > 0
+  for: 15m
+```
+
 ### Health Check
 
 ```bash
@@ -485,7 +527,7 @@ The directory holds `oauth-token` (one line, mode 0600); the worker reads it via
 hands it only to the CLI subprocess. A `.credentials.json` there is only the
 documented fallback (an expiring login that is never refreshed).
 
-**Operator steps on deploy-host (deploy user, not root, in `/opt/studyaio`):**
+**Operator steps on the deploy host (deploy user, not root, in `/opt/studyaio`):**
 
 ```bash
 # 1. Create the dir BEFORE the first `compose up` (see warning below)
@@ -529,7 +571,7 @@ the worker's CLI tools or commands. Preflight errors if it is anything else, and
 **Emergency only: recreate just the worker outside CI.** Rotation and revocation
 do not need it (see above); use it only when the worker itself must be recreated
 outside CI. **First step:** run `grep '^IMAGE_TAG=' .env` in `/opt/studyaio` and
-confirm it is the CI-pinned sha; the secret-manager service can regenerate `.env`
+confirm it is the CI-pinned sha; a secret-manager sync service can regenerate `.env`
 (e.g. after a reboot) and drop the pin. **Stop if it is not the pinned sha.**
 Then, with the `.env` that the last CI deploy pinned (so `IMAGE_TAG`
 and `GHCR_OWNER` are left exactly as they are; do not edit or regenerate it):
@@ -540,9 +582,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml \
 ```
 
 It must use both files CI uses (base plus prod overlay), run the GHCR images at
-the unchanged `IMAGE_TAG`, never `--build`, and touch only `worker`. Never
-restart `the secret-manager sync service`: it regenerates `.env` and drops the
-`IMAGE_TAG` pin. Note the use in the deploy log; the next CI deploy reasserts
+the unchanged `IMAGE_TAG`, never `--build`, and touch only `worker`. If a
+secret-manager sync service writes `.env`, never restart it here: it regenerates
+`.env` and drops the `IMAGE_TAG` pin. Note the use in the deploy log; the next CI deploy reasserts
 the canonical state.
 
 **What the worker can see:** only that directory, mounted read-only at
@@ -594,9 +636,9 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 `scripts/setup-selfhosted.sh` generates one into `.env` for you.
 
-**Store it in the secret manager** (prod) as `SETTINGS_ENCRYPTION_KEY`, in the same
-environment and path as the other studyaio secrets. `.env` on the host is
-regenerated from the secret manager, so a key set only in the host's `.env` is lost at
+**Store it in your secret manager** (prod) as `SETTINGS_ENCRYPTION_KEY`, in the
+same environment and path as the other studyaio secrets. If `.env` on the host is
+regenerated from a secret manager, a key set only in the host's `.env` is lost at
 the next regeneration. Compose passes the variable through to `api` and `worker`
 with no default (`docker-compose*.yml`).
 

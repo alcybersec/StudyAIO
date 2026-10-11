@@ -90,7 +90,7 @@ class TestCourseCodesAreOnlyUniquePerUser:
 
 @pytest.mark.asyncio(loop_scope="session")
 class TestBackfillAgainstRealRows:
-    """The operator's run, on the state a live instance is actually in."""
+    """The operator's run, on a realistic pre-migration state."""
 
     async def test_each_user_gets_their_own_file_and_their_own_content(self, db_session, tmp_path):
         """One file before, two after, and neither holds the other's text."""

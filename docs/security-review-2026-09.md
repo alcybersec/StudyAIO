@@ -34,7 +34,7 @@ runs — but measured over the internet it is 0.75/0.75s for a real account vers
 
 | # | Finding | State |
 |---|---|---|
-| [#36](https://github.com/alcybersec/StudyAIO/issues/36) | Origin accepted traffic from any address, bypassing Cloudflare | Fixed on the VPS |
+| [#36](https://github.com/alcybersec/StudyAIO/issues/36) | Origin accepted traffic from any address, bypassing Cloudflare | Fixed at the edge |
 | [#39](https://github.com/alcybersec/StudyAIO/issues/39) | Every client shared one rate-limit bucket | Fixed (PR #40) |
 | [#37](https://github.com/alcybersec/StudyAIO/issues/37) | No per-account brute-force throttle | Fixed (PR #43) |
 | [#38](https://github.com/alcybersec/StudyAIO/pull/38) | Access log recorded no client address | Merged |
@@ -77,13 +77,12 @@ There was no granularity to spoof around.
 
 ## What changed
 
-**Infrastructure** (see the homelab runbook,
-`sessions/2026-09-05_studyaio-security-hardening/`):
+**Infrastructure** (details in ops notes, kept out of tree):
 
-- Edge Caddy restricts the site to Cloudflare's ranges and aborts everything
-  else, refreshed weekly with a guard against applying a truncated list.
-- Edge Caddy overwrites `X-Forwarded-For` from `CF-Connecting-IP`; the inner
-  Caddy passes it through instead of appending.
+- The edge reverse proxy restricts the site to Cloudflare's ranges and aborts
+  everything else, refreshed weekly with a guard against applying a truncated list.
+- The edge reverse proxy overwrites `X-Forwarded-For` from `CF-Connecting-IP`; the
+  inner reverse proxy passes it through instead of appending.
 
 **This repo:**
 
@@ -401,20 +400,6 @@ run server-side under `merge_access_level` — so MRs are unaffected, which was 
 open MR rather than assumed. Nothing automated pushes either: no CI job or script runs
 `git push`, the deploy sends only a SHA over SSH and checks it out, and the GitHub mirror is
 outbound.
-
-The fleet-wide half is closed too, on 2026-09-28: `another project` and
-`another project` now carry the same two flags. Both were checked first for the
-failure mode that matters — a project with no working CI would have had *every* MR made
-unmergeable by this change — and both have a `.gitlab-ci.yml` with recent green runs. The two
-open MRs on `another project` were confirmed still `mergeable` afterwards rather than
-assumed to be.
-
-That check found a real defect in `another project`: every non-`main` pipeline
-since 2026-09-27 is created with **zero jobs** and reported `skipped`, though the config at
-those commits has seven jobs with no branch rules. It is specific to that project — the same
-runner served `another project` fine throughout — and the new gate turns it into a merge
-blocker there, failing safe but stranding the next MR. Filed on that repository as its issue
-#1, with the stopgap recorded.
 
 One more thing changed the risk picture here: StudyAIO's `main` auto-deploys again as of
 2026-09-27, and `/opt/studyaio`'s origin is now GitLab rather than GitHub, so a deploy no
