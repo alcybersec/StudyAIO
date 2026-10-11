@@ -257,8 +257,10 @@ AI-processing disclosure and consent (SEC-08, GL#38). Provider: `backend` —
   the current version is refused 409 so a stale page cannot consent to wording it did not show.
   Records now and the current version. Response `{"ai_consent_required": false, "ai_consent_version": n}`.
 - `GET /api/auth/me` (and every `UserProfileResponse`) gains `ai_consent_required: bool`: true when
-  the timestamp or version is NULL, or the version is below the current one. The raw record is not
-  exposed.
+  the timestamp or version is NULL, or the version is below the current one, and
+  `ai_consent_version: int`, the CURRENT required disclosure version (`AI_CONSENT_VERSION`, not the
+  user's stored one), so a client can echo it to `POST /api/auth/consent` on every path. The raw
+  record is not exposed.
 - Gate: every route that spends AI or enqueues AI pipeline work for the caller declares
   `dependencies=[Depends(require_ai_consent)]` and refuses **403** with body
   `{"detail": ..., "code": "ai_consent_required", "consent_version": n}` before any quota check, spend or
@@ -328,5 +330,6 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-04 | agents.AgentAdapter | v1 | Floor-3 open question closed by reference to ADR 0003, which enumerates the five request-time `get_agent` call sites. Interface unchanged, so no version bump. | M31-S1-ARCH-006 |
 | 2026-10-09 | core.clock | v1 | New contract, recorded before implementation: five functions, `user_settings.timezone` as the zone source, `None`/invalid → UTC. Contract test committed red. | M32-S2-ARCH-033 |
 | 2026-10-11 | api.ai-consent | v1 | New contract, recorded before implementation: consent endpoint, `ai_consent_required` on the profile, 403 `ai_consent_required` gate, email-free logs. | M33-S1-BACKEND-017 |
+| 2026-10-11 | api.ai-consent | v1 | Additive: `ai_consent_version` (current required version) on `UserProfileResponse`. | M33-S1-BACKEND-036 |
 | 2026-10-11 | api.ai_feedback | v1 | New contract, recorded before implementation: vote upsert/delete/list, admin aggregate at `/admin/ai-feedback`. | M33-S1-BACKEND-015 |
 | 2026-10-11 | services.usage | v1 | New contract, recorded before implementation: allowlisted never-raising `record`, view-event endpoint, admin retention readout. | M33-S1-BACKEND-016 |

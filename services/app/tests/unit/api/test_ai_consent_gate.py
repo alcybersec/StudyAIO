@@ -190,6 +190,41 @@ class TestProfilePayload:
             s.ai_consent_version = 2
             assert self._profile_safe(user)["ai_consent_required"] is True
 
+    def test_profile_exposes_current_required_version(self, make_user):
+        from datetime import UTC, datetime
+
+        user = make_user(
+            ai_processing_consent_at=datetime.now(UTC), ai_processing_consent_version=1
+        )
+        with patch("app.services.consent_service.settings") as s:
+            s.single_user_mode = False
+            s.ai_consent_version = 4
+            payload = self._profile_safe(user)
+        assert payload["ai_consent_version"] == 4
+
+    def test_profile_version_tracks_setting_not_stored(self, make_user):
+        user = make_user(ai_processing_consent_at=None, ai_processing_consent_version=None)
+        with patch("app.services.consent_service.settings") as s:
+            s.single_user_mode = False
+            s.ai_consent_version = 2
+            first = self._profile_safe(user)["ai_consent_version"]
+            s.ai_consent_version = 7
+            second = self._profile_safe(user)["ai_consent_version"]
+        assert (first, second) == (2, 7)
+
+    def test_profile_still_hides_raw_consent_record(self, make_user):
+        from datetime import UTC, datetime
+
+        user = make_user(
+            ai_processing_consent_at=datetime.now(UTC), ai_processing_consent_version=1
+        )
+        with patch("app.services.consent_service.settings") as s:
+            s.single_user_mode = False
+            s.ai_consent_version = 1
+            payload = self._profile_safe(user)
+        assert "ai_processing_consent_at" not in payload
+        assert "ai_processing_consent_version" not in payload
+
     def _profile_safe(self, user):
         from datetime import UTC, datetime
 

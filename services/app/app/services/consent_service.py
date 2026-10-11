@@ -19,6 +19,11 @@ from app.models.user import User
 logger = structlog.get_logger()
 
 
+def current_version() -> int:
+    """Return the disclosure version a user must have agreed to."""
+    return settings.ai_consent_version
+
+
 def consent_required(user: User) -> bool:
     """Whether this user must consent (again) before any AI processing.
 

@@ -174,6 +174,12 @@ class UserProfileResponse(BaseModel):
         """True until the user has agreed to the current AI-processing disclosure."""
         return consent_service.consent_required(self)  # type: ignore[arg-type]
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def ai_consent_version(self) -> int:
+        """The current required disclosure version (not the user's stored one)."""
+        return consent_service.current_version()
+
     model_config = {"from_attributes": True}
 
 
