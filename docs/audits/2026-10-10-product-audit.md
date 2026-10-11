@@ -10,7 +10,7 @@ Ranking formula: `(5 - sev)*2 + conf_bonus - effort_cost`. Merged IDs list every
 
 | ID | Status 2026-10-10 | Evidence |
 |---|---|---|
-| SEC-00 | **Answered.** Prod api + worker: `SELF_HOSTED=false`, `AGENT_BACKEND=zai`, `ZAI_API_KEY` set (values not read). | `docker exec … printenv` via `a host shell on host shell 210`. SEC-05 is therefore **not** S1 on prod; quota checks are active (QUOTA-01 bypass is real); instance-funded chat/Q&A works on Z.ai — the "Q&A broken in prod" hypothesis is **disproved**. |
+| SEC-00 | **Answered.** Prod api + worker: `SELF_HOSTED=false`, `AGENT_BACKEND=zai`, `ZAI_API_KEY` set (values not read). | `docker exec … printenv`, read via a host shell on prod. SEC-05 is therefore **not** S1 on prod; quota checks are active (QUOTA-01 bypass is real); instance-funded chat/Q&A works on Z.ai — the "Q&A broken in prod" hypothesis is **disproved**. |
 | AGENT-01 | **Partly fixed** (deployed `c28312d`, MR !34). | `claude -p` now runs with `--tools ""`, `--strict-mcp-config`, `--no-session-persistence`, an allowlisted child env (PATH, HOME, LANG, LC_ALL + auth var), Sentry frame locals off (R-027, SAFETY-053/057). **Still open:** cwd `/app`, runs as root, `--model`/`claude_model` ignored, no system prompt. Prod uses `zai`, so the CLI only runs for users who pick `claude_code` with their own credentials. |
 | SEC-01 | **Open — S1.** Not touched by R-027 work. | The path is still user-settable; the CLI-sandbox fix does not cover *which binary* runs. |
 | SEC-05 | Not S1 on prod (`SELF_HOSTED=false`); still the insecure default for self-hosters. | — |
@@ -113,7 +113,7 @@ Capacity: items 0–8 are about 1–1.5 weeks at 20–30 h/week. Pause new-featu
 ## 6. Hypotheses to validate
 | Hypothesis | Test | Status 2026-10-10 |
 |---|---|---|
-| Classmates would use it weekly without being nudged | Turn on PROD-10 usage events + reminders; measure D7/D30 for the current ~20 users over 4 weeks | open |
+| Early users would use it weekly without being nudged | Turn on PROD-10 usage events + reminders; measure D7/D30 for the current early users over 4 weeks | open |
 | Students would pay over free NotebookLM | Fake-door "Pro" with the weak-spot engine + exam plan; count clicks/pre-orders among 50+ students | open |
 | A shared course space drives organic invites | Seed 2 courses as shared spaces; track invites per uploader | open |
 | Instructors/bootcamps want course-wide corpora | 5 instructor interviews; ask for an LOI for a one-term pilot | open |
@@ -125,5 +125,5 @@ Capacity: items 0–8 are about 1–1.5 weeks at 20–30 h/week. Pause new-featu
 ## Open challenges (from red-team, unresolved)
 - **Claude subscription terms.** The default backend serves many tenants from the operator's personal Claude login. That may breach Anthropic's consumer terms and is subject to per-account rate limits and suspension [unverified; check the terms]. *(Orchestrator: not the case on prod, which uses `zai`; applies to any `claude_code` instance deployment.)*
 - **Copyright/IP.** Students upload instructors' slides; shared course spaces (PROD-04) would redistribute them, and instructor/B2B sales need IP consent. Not assessed.
-- **Data protection.** local data-protection law / GCC data residency for course content sent to US-hosted LLMs isn't covered beyond SEC-08's consent gap [unverified; not legal advice].
+- **Data protection.** Local data-protection law and data residency for course content sent to US-hosted LLMs isn't covered beyond SEC-08's consent gap [unverified; not legal advice].
 - **Q&A/chat possibly broken in prod** (SEC-00): *(Orchestrator: disproved, see §0.)*

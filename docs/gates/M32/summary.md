@@ -18,9 +18,9 @@ Every M32 task in `docs/strategy.md` §11, with its handoff evidence in `docs/pl
 |---|---|---|---|
 | S1 — M31 conditions | C1 ARCH-027 (ADR 0002 Accepted); C2a BACKEND-001; C2b BACKEND-002; C3 QA-003; C4 SAFETY-004; C5 BACKEND-005; C6 BACKEND-006 + AI-012 + SAFETY-009 | Plan rows for each; strict xfails XPASS'd then removed; e2e `92 passed`, 0 skipped (jobs 4775, 4782); C4/C5/C6 pins re-mutated red by `safety` at this gate | met |
 | S2 — R-023 clock policy | DATA-032, ARCH-033 (ADR 0006), BACKEND-034/039, FRONTEND-035, AI-036, QA-038, SAFETY-037/040 | Plan rows; ADR 0006 Accepted; clock contract green; SAFETY-040 APPROVE | met |
-| S3 — GL#7/#8/#9, R-024..R-028 | DEVOPS-042/059/060, AI-041/043/044/049/058, SAFETY-045/046/050/057, QA-047 | Plan rows; MR !34 deployed `c28312d` and verified on VM | met |
+| S3 — GL#7/#8/#9, R-024..R-028 | DEVOPS-042/059/060, AI-041/043/044/049/058, SAFETY-045/046/050/057, QA-047 | Plan rows; MR !34 deployed `c28312d` and verified on the prod host | met |
 | S4 wave 1 | BACKEND-001 SEC-01, AI-002 AGENT-01, BACKEND-003 AI-05, BACKEND-004 SEC-03, BACKEND-005 PROD-03, AI-006 AI-04, FRONTEND-008 UX-06, BACKEND-023 GL#31, BACKEND-009 QUOTA-01/COST-01, + AI-024/025/029, DATA-027/031, DEVOPS-022, FRONTEND-025, QA-021/028/030/032, SAFETY-026 | Plan rows; MR !35 deployed `677209b`, verified on VM (uid 10001 denied on data/host creds) | met (QUOTA-01 one route open → G1) |
-| S4 wave 2 | AI-007 AI-03, BACKEND-010 SEC-06, BACKEND-011 BILL-01, AI-012/013 TECH-04/05, DEVOPS-014 TECH-06, BACKEND-015 SEC-05, FRONTEND-016 UX-05, DEVOPS-017 SEC-07, BACKEND-018 SEC-10, DEVOPS-019 SEC-11, QA-020 UX-08, + fix-ups AI-008/009/010, BACKEND-030/031/032, QA-033/034, DEVOPS-028..031, SAFETY-027/028/029 | Plan rows; pipeline #586 7/7 by name; MR !36 deployed `b3e0671` (job 4794), verified on VM; re-embed 66/66 applied, 0 failed; encrypt-user-secrets 0 plaintext | met |
+| S4 wave 2 | AI-007 AI-03, BACKEND-010 SEC-06, BACKEND-011 BILL-01, AI-012/013 TECH-04/05, DEVOPS-014 TECH-06, BACKEND-015 SEC-05, FRONTEND-016 UX-05, DEVOPS-017 SEC-07, BACKEND-018 SEC-10, DEVOPS-019 SEC-11, QA-020 UX-08, + fix-ups AI-008/009/010, BACKEND-030/031/032, QA-033/034, DEVOPS-028..031, SAFETY-027/028/029 | Plan rows; pipeline #586 7/7 by name; MR !36 deployed `b3e0671` (`deploy-selfhosted` success), verified on the prod host; re-embed 66/66 applied, 0 failed; encrypt-user-secrets 0 plaintext | met |
 
 No task of the milestone is missing its handoff or acceptance evidence.
 
@@ -50,7 +50,7 @@ Pipelines read **by job name** (`glab api …/pipelines/<id>/jobs`):
 
 ## Operational
 
-Verified on the prod VM on 2026-10-11, values as booleans/counts only:
+Verified on the prod host on 2026-10-11, values as booleans/counts only:
 
 - **Deploy:** api/worker/beat/ui on `ghcr.io/…:b3e0671`, both compose files, 0 restarts; alembic
   `c8e2a5f93d16 (head)`; `/health/ready` 200; 0 error lines in api/worker since start.
@@ -58,16 +58,16 @@ Verified on the prod VM on 2026-10-11, values as booleans/counts only:
   pre-migration dump `predeploy_…_b3e0671.sql.gz` (6.0 MB) written by `deploy.sh`; `daily-backup` on the beat
   schedule (02:00). Backup dir now `2770` + ACL (deploy user and worker uid only). The first **scheduled** run is
   not yet observed → G4.
-- **Recovery (TECH-04):** `recover-stuck-artifacts` sent by beat at 10:30Z, succeeded, `{'requeued': [], 'failed': []}` — visible in the log store.
-- **Logs:** structured logs for re-embed, recovery, backup and retries reach the log store (`{host="studyaio"}`).
+- **Recovery (TECH-04):** `recover-stuck-artifacts` sent by beat at 10:30Z, succeeded, `{'requeued': [], 'failed': []}` — visible in the central log store.
+- **Logs:** structured logs for re-embed, recovery, backup and retries reach the central log store.
 - **Metrics: gap.** `prometheus_enabled=False` on prod (`/metrics` 404); TECH-04's retry counters live in an
   in-process `Counter` that nothing exports. The kit's "counters and latency with the feature" rule is not met
   for the new jobs → G3.
 - **Spend ceilings:** `global_max_ai_calls_per_day=300`, `global_max_ai_tokens_per_day=2000000` (non-zero).
 - **Config:** encryption key set and `BACKUP_ENABLED=true` in api and worker; `SELF_HOSTED=false`; registration
   `invite`; notifications enabled, SMTP host and app base URL set.
-- **Runbook:** `docs/deployment.md` § SETTINGS_ENCRYPTION_KEY (generation, the secret manager, rotation, never lose it,
-  `encrypt-user-secrets`); `deploy.sh` exit 68/67 guards; host `deploy.sh` reinstalled (sha `0f57dc96…`).
+- **Runbook:** `docs/deployment.md` § SETTINGS_ENCRYPTION_KEY (generation, secret manager, rotation, never lose it,
+  `encrypt-user-secrets`); `deploy.sh` exit 68/67 guards; host `deploy.sh` reinstalled.
 - **Rollback:** wave 2 added no migration (head unchanged since wave 1), so `IMAGE_TAG=677209b` is
   schema-compatible. Caveat: credentials written after `b3e0671` are encrypted and unreadable by older images
   (0 credentials existed at deploy time).

@@ -1547,7 +1547,7 @@ on 2026-09-01 — most of this list shipped during v2. ✅ built · ⚠️ parti
 
 **Infrastructure**
 - ⚠️ MinIO for object storage — an S3-compatible backend exists (`core/storage.py`); MinIO itself is not wired into any compose file
-- ✅ Nginx reverse proxy with HTTPS — nginx serves the SPA and proxies `/api`; TLS terminates at Caddy (homelab) or Traefik (self-host overlay)
+- ✅ Nginx reverse proxy with HTTPS — nginx serves the SPA and proxies `/api`; TLS terminates at your reverse proxy (e.g. Traefik in the self-host overlay)
 - ⚠️ Prometheus + Grafana monitoring — `/metrics` is exposed behind `PROMETHEUS_ENABLED`; no Grafana dashboards in this repo
 - ✅ Backup strategy for Postgres — nightly `app.pipeline.backup_task.run_backup`, `scripts/backup.sh` + `restore.sh`, `make backup` / `make restore`
 

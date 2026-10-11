@@ -12,9 +12,8 @@ the slides authoritative and the audio adding clarification.
 
 ## The decisive finding: local transcription does not fit this box
 
-Production hardware, measured 2026-09-28: **4 vCPU (AMD Ryzen 7 PRO 8845HS,
-AVX512/VNNI), 2 GB total RAM with ~0 available, 30 GB disk at 84% used
-(4.6 GB free), no GPU.**
+Production hardware, measured 2026-09-28: **a small VM (few vCPUs, little RAM
+and disk), no GPU.**
 
 The worker already holds torch plus `all-MiniLM-L6-v2` for embeddings (400–600 MB
 RSS when warm), next to Postgres, Redis, uvicorn and two worker slots.
@@ -26,7 +25,7 @@ RSS when warm), next to Postgres, Redis, uvicorn and two worker slots.
 | medium | ~2.1 GB | Exceeds total system RAM on its own |
 
 Disk compounds it: ~0.5 GB of dependencies (ffmpeg, ctranslate2, onnxruntime)
-against 4.6 GB free, **plus the audio itself** — 100 lectures is 1.2 GB stored as
+against little free disk, **plus the audio itself** — 100 lectures is 1.2 GB stored as
 Opus, 4.8 GB as MP3.
 
 Making local work means an 8 GB VM for mediocre quality, or a GPU box for good
@@ -52,7 +51,7 @@ behaviour, not price.**
 
 Cheapest by roughly 4×, and fast enough that a 50-minute lecture occupies a
 worker slot for well under a minute — which matters a great deal at
-`--concurrency=2` on 4 vCPU. It runs the strongest open model for accented,
+`--concurrency=2` on a few vCPUs. It runs the strongest open model for accented,
 technical speech.
 
 **Verify Groq's data-retention and training terms before committing.** Theirs are
