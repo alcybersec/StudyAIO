@@ -1,8 +1,8 @@
 """Floors 1 and 2: Prometheus metrics carry no identifier, credential or exception text.
 
-M32 gate condition G3 (ai ``0d48287``, infra ``3339ac7``). The worker serves
-``/metrics`` on ``127.0.0.1:9101``; the api serves ``/metrics`` on ``:8000``, which
-is reachable on the LAN (Caddy and nginx do not forward it). Nothing there asks
+M32 gate condition G3. The worker serves ``/metrics`` on ``127.0.0.1:9101``;
+the api serves ``/metrics`` on ``:8000``, which is reachable on the private
+network (the reverse proxy and nginx do not forward it). Nothing there asks
 for a login, so anything in a label is readable by anyone on that network, and a
 label is also written to the worker's multiprocess tmpfs files.
 

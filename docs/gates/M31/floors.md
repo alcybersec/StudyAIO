@@ -1,7 +1,7 @@
 # M31 gate — Floors dimension
 
 **Reviewer:** `safety` (veto role), review mode · **Date:** 2026-10-04 · **Tree:** `kit/retrofit` @ `2da6f17`
-(GitLab pipeline #523 on that sha: `status: success`, job `test-floor: success`, read by job name.)
+(GitLab pipeline on that sha: `status: success`, job `test-floor: success`, read by job name.)
 
 Floor text is quoted from `docs/strategy.md` §6 as amended by ADR 0003. The floor-to-test map lives in
 `services/app/tests/safety/FLOORS.md`. This file judges whether each floor **holds in the code**. That

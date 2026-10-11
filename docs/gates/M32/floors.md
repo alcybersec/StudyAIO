@@ -2,7 +2,7 @@
 
 **Reviewer:** `safety` (veto role), review mode · **Date:** 2026-10-11
 **Tree:** `kit/retrofit` @ `94a1374`. The gated code is `main` @ `b3e0671` (MR !36), which was deployed to prod
-2026-10-11 by job 4794. `git diff --stat b3e0671 94a1374` shows one file, `docs/plan/README.md`. This review adds
+2026-10-11 by the `deploy-selfhosted` job. `git diff --stat b3e0671 94a1374` shows one file, `docs/plan/README.md`. This review adds
 one floor pin and doc corrections under `tests/safety/**` and `docs/security/**` (§7). It changes no `app/` code.
 
 Floor text is quoted from `docs/strategy.md` §6 as amended by ADR 0003, ADR 0004 (with its amendment and
@@ -44,34 +44,34 @@ EXIT=0
 
 `glab api "projects/:fullpath/pipelines/<id>/jobs?include_retried=true"`
 
-**#586**: `kit/retrofit` @ `5a83532` (MR !36 head), pipeline `success`.
+**MR head pipeline**: `kit/retrofit` @ `5a83532` (MR !36 head), pipeline `success`.
 
-| Job | id | Status |
-|---|---|---|
-| `python-lint` | 4769 | success |
-| `backend-tests` | 4770 | success |
-| `test-floor` | 4771 | success: `Required test coverage of 95% reached. Total coverage: 97.48%`, `374 passed, 28 warnings in 317.77s` |
-| `integration-tests` | 4772 | success |
-| `dependency-audit` | 4773 | success |
-| `frontend-checks` | 4774 | success |
-| `e2e-tests` | 4775 | success |
+| Job | Status |
+|---|---|
+| `python-lint` | success |
+| `backend-tests` | success |
+| `test-floor` | success: `Required test coverage of 95% reached. Total coverage: 97.48%`, `374 passed, 28 warnings in 317.77s` |
+| `integration-tests` | success |
+| `dependency-audit` | success |
+| `frontend-checks` | success |
+| `e2e-tests` | success |
 
-**#587**: `main` @ `b3e0671`, pipeline `success`.
+**`main` pipeline**: `main` @ `b3e0671`, pipeline `success`.
 
-| Job | id | Status |
-|---|---|---|
-| `python-lint` | 4776 | success |
-| `backend-tests` | 4777 | success: unit 88.87% `2920 passed, 3 skipped`; golden `317 passed`; contracts `53 passed` |
-| `test-floor` | 4778 | success: `Total coverage: 97.48%`, `374 passed, 29 warnings in 326.92s` |
-| `integration-tests` | 4779 | success: 83.44% `537 passed` |
-| `dependency-audit` | 4780 | success: pip-audit `No known vulnerabilities found`; `0 unallowlisted high/critical npm advisories` |
-| `frontend-checks` | 4781 | success |
-| `e2e-tests` | 4782 | success: `92 passed`, 0 skipped |
-| `build-api` | 4783 | success |
-| `build-ui` | 4784 | success |
-| `deploy-selfhosted` | 4785 | **failed, by design**: `refusing: this image requires SETTINGS_ENCRYPTION_KEY and the environment has none. … Nothing was dumped, migrated or restarted.` → `exit code 68` |
-| `deploy-selfhosted` | 4793 | **failed, by design**: `backups/predeploy_…sql.gz.partial: Permission denied` → `refusing: pre-migration database dump failed; nothing was migrated or restarted` → `exit code 67` |
-| `deploy-selfhosted` | 4794 | success: `Checking SETTINGS_ENCRYPTION_KEY` → `Dumping database before migration` → `Running migrations (one-off container, new image)` → `Starting containers` → `Verifying health` → `Deploy complete: b3e067191c9c… (tag b3e0671)` |
+| Job | Status |
+|---|---|
+| `python-lint` | success |
+| `backend-tests` | success: unit 88.87% `2920 passed, 3 skipped`; golden `317 passed`; contracts `53 passed` |
+| `test-floor` | success: `Total coverage: 97.48%`, `374 passed, 29 warnings in 326.92s` |
+| `integration-tests` | success: 83.44% `537 passed` |
+| `dependency-audit` | success: pip-audit `No known vulnerabilities found`; `0 unallowlisted high/critical npm advisories` |
+| `frontend-checks` | success |
+| `e2e-tests` | success: `92 passed`, 0 skipped |
+| `build-api` | success |
+| `build-ui` | success |
+| `deploy-selfhosted` (run 1) | **failed, by design**: `refusing: this image requires SETTINGS_ENCRYPTION_KEY and the environment has none. … Nothing was dumped, migrated or restarted.` → `exit code 68` |
+| `deploy-selfhosted` (run 2) | **failed, by design**: `backups/predeploy_…sql.gz.partial: Permission denied` → `refusing: pre-migration database dump failed; nothing was migrated or restarted` → `exit code 67` |
+| `deploy-selfhosted` (run 3) | success: `Checking SETTINGS_ENCRYPTION_KEY` → `Dumping database before migration` → `Running migrations (one-off container, new image)` → `Starting containers` → `Verifying health` → `Deploy complete: b3e067191c9c… (tag b3e0671)` |
 
 No job in either pipeline is skipped or manual. The two failed deploy runs are the `deploy.sh` guards working as
 intended: each one stopped before any dump, migration or restart, and left the old stack serving.
@@ -82,9 +82,9 @@ intended: each one stopped before any dump, migration or restart, and left the o
 
 | | Condition | State | Evidence |
 |---|---|---|---|
-| C1 | ADR 0002 accepted | **Closed** | `docs/adr/0002…` Status: `Accepted (2026-10-09, by the user)`. Layer-direction contract test is in #587 `backend-tests` (`53 passed`) |
-| C2a/b | R-016 functional bugs | **Closed** | All five strict xfails turned XPASS, then their markers were removed (QA-010). The integration tests pass in #587 |
-| C3 | e2e conditional skips | **Closed** | #587 `e2e-tests`: `92 passed`, 0 skipped |
+| C1 | ADR 0002 accepted | **Closed** | `docs/adr/0002…` Status: `Accepted (2026-10-09, by the user)`. Layer-direction contract test is in the `main` pipeline's `backend-tests` (`53 passed`) |
+| C2a/b | R-016 functional bugs | **Closed** | All five strict xfails turned XPASS, then their markers were removed (QA-010). The integration tests pass in the `main` pipeline |
+| C3 | e2e conditional skips | **Closed** | `main` pipeline `e2e-tests`: `92 passed`, 0 skipped |
 | C4 | Global `AgentError` handler pinned directly | **Closed, re-mutated** | See the mutation table: the handler's `AgentError` branch disabled → `2 failed`. This kills M31 survivor 3c |
 | C5 | Purge removes every summary and summary-version blob, including deleted courses' | **Closed, re-mutated** | `a3ab6ce` ledger purge. Ledger prefixes skipped → `3 failed`. Id-shape check removed → `1 failed` (S3 folder placeholder sweeps all of `summaries/`) |
 | C6 | `user_id` required on scoped functions, or the floor fails on a `None` default | **Closed, re-mutated** | `ea5e6a4` plus AI-012. `review_service.get_review_item` back to `user_id: str \| None = None` → `test_floor1_caller_parameter_is_never_optional` fails |
@@ -148,7 +148,7 @@ It is green on `94a1374`.
 | **BILL-01**: Stripe dedupe, ordering, `trialing` | **Closed** (residual noted) | `b7974d1`: `SET NX` per event id, a per-customer `created` high-water mark, `trialing` ∈ `PRO_STATUSES`. Floor-1 pins: mutates only the named customer, replay or stale event mutates nothing, an old subscription's delete keeps the current one (dedupe mutation red, SAFETY-027). Residual: dedupe and ordering live in Redis with a TTL, so a Redis flush reopens replay; events in the same second are unordered. Not a floor matter. R-034 is stale at `open` |
 | **TECH-04**: transient error = permanent failure; stuck items | **Closed** | `b011c3d`: retry with backoff through `resilience.handle_retryable` (owner-routing pin accepts it as a relay only when every call site passes a resolved owner), per-stage time limits, and the recovery beat job. Recovery is worker-only, resumes each artifact as its own row owner, and never deletes (`test_floor1_worker_jobs.py`, mutation-checked in SAFETY-027) |
 | **TECH-05**: concurrent same-week summarize | **Closed** | `b011c3d`: per-(course, week) lock. Orchestrator revert check: lock removed → concurrency test fails, restored → `9 passed`. Floor 4: re-summarize under the lock still snapshots (`test_floor4_resummarize_preserves_prior_version` green) |
-| **TECH-06**: backup can't run; deploy migrates without a dump | **Closed in code; first scheduled run not yet observed** | `50d769f`, AI-009/010. The predeploy dump ran in job 4794 (`Dumping database before migration` precedes `Running migrations`), and job 4793 shows it fails closed (exit 67). `BACKUP_ENABLED=true` in api and worker on prod. The first nightly `run_backup` falls after this deploy, so the Orchestrator should confirm it in the Operational dimension. Floor 4: backup retention removes only `studyaio_*` copies under the backup dir, never `data/` |
+| **TECH-06**: backup can't run; deploy migrates without a dump | **Closed in code; first scheduled run not yet observed** | `50d769f`, AI-009/010. The predeploy dump ran in deploy run 3 (`Dumping database before migration` precedes `Running migrations`), and deploy run 2 shows it fails closed (exit 67). `BACKUP_ENABLED=true` in api and worker on prod. The first nightly `run_backup` falls after this deploy, so the Orchestrator should confirm it in the Operational dimension. Floor 4: backup retention removes only `studyaio_*` copies under the backup dir, never `data/` |
 
 **Security, money and data integrity: none open.** Two residuals (SEC-03 rebinding, BILL-01 Redis-held state) are
 recorded in the threat model, B3 and B7.
@@ -184,7 +184,7 @@ carry a `safety` VETO. Non-zero ceilings in prod are out of scope here; the Orch
 |---|---|---|
 | SAFETY-004 (C4 handler pin, F-2, C5/C6 red pins) | red pins by design | All green; C4/C5/C6 re-mutated above |
 | SAFETY-009 / -013 (C5 review, C6 classification) | APPROVE with routed reds | Green (BACKEND-006, AI-012) |
-| **SAFETY-024** (GL#10 chat, R-022 SSE owner routing) | APPROVE floors 1–4 | Pins green in #587 |
+| **SAFETY-024** (GL#10 chat, R-022 SSE owner routing) | APPROVE floors 1–4 | Pins green in the `main` pipeline |
 | SAFETY-037 → **SAFETY-040** (R-023 zone validation) | VETO → lifted | Green; stale "RED until" notes removed from `FLOORS.md` here |
 | SAFETY-045 → SAFETY-046 (GL#8 host-credential retry) | VETO → lifted | Green |
 | SAFETY-053 → SAFETY-057 (R-027 CLI tools/env) | VETO → lifted | Green |
