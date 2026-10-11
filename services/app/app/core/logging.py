@@ -41,12 +41,25 @@ class EmailRedactingFilter(logging.Filter):
     """stdlib counterpart of :func:`redact_emails` for non-structlog records."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Rewrite the record's message so no address is emitted; never drops it."""
+        """Rewrite message, traceback and stack text so no address is emitted.
+
+        ``Logger.exception`` (and ``exc_info=True``) make the stdlib Formatter
+        append a traceback after the message; it is rendered here first and cached
+        in ``exc_text`` (which the Formatter reuses) so it can be scrubbed too.
+        Never drops the record. Only handlers carrying this filter are covered: a
+        handler attached after :func:`configure_logging` must add it itself.
+        """
         message = record.getMessage()
         scrubbed = _EMAIL_RE.sub(REDACTED_EMAIL, message)
         if scrubbed != message:
             record.msg = scrubbed
             record.args = None
+        if record.exc_info and not record.exc_text:
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
+        if record.exc_text:
+            record.exc_text = _EMAIL_RE.sub(REDACTED_EMAIL, record.exc_text)
+        if record.stack_info:
+            record.stack_info = _EMAIL_RE.sub(REDACTED_EMAIL, record.stack_info)
         return True
 
 

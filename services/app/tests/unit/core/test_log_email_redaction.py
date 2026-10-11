@@ -5,7 +5,9 @@ processor plus a stdlib filter redact anything address-shaped (defence in depth)
 """
 
 import ast
+import io
 import logging
+import sys
 from pathlib import Path
 
 import structlog
@@ -121,3 +123,43 @@ class TestCallSiteSweep:
     def test_the_sweep_accepts_ids(self):
         ok = ast.parse("logger.info('x', user_id=user.id, email_sent=True)")
         assert _offences(ok) == []
+
+
+class TestFilterRedactsExceptionText:
+    """GL#38 F1: stdlib's Formatter appends exc_info/stack_info after the message."""
+
+    def _record(self, exc_info=None, stack_info=None):
+        return logging.LogRecord(
+            "t", logging.ERROR, __file__, 1, "send_failed", None, exc_info, sinfo=stack_info
+        )
+
+    def test_exc_info_traceback_is_redacted_in_formatted_output(self):
+        try:
+            raise ValueError("rejected leak@example.com")
+        except ValueError:
+            record = self._record(exc_info=sys.exc_info())
+        assert EmailRedactingFilter().filter(record) is True
+        out = logging.Formatter("%(message)s").format(record)
+        assert "ValueError" in out and "send_failed" in out
+        assert "@example." not in out
+
+    def test_precomputed_exc_text_and_stack_info_are_redacted(self):
+        record = self._record(stack_info="stack for s@example.com")
+        record.exc_text = "Traceback x@example.org"
+        EmailRedactingFilter().filter(record)
+        out = logging.Formatter("%(message)s").format(record)
+        assert "@example." not in out
+
+    def test_handler_formatted_logger_exception_is_clean(self):
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.addFilter(EmailRedactingFilter())
+        lg = logging.getLogger("f1-probe")
+        lg.propagate = False
+        lg.addHandler(handler)
+        try:
+            raise ValueError("boom q@example.com")
+        except ValueError:
+            lg.exception("send_failed")
+        assert "ValueError" in stream.getvalue()
+        assert "@example." not in stream.getvalue()
