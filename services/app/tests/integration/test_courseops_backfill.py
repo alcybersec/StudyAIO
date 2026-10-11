@@ -5,8 +5,8 @@ answers from the statement's own bound parameters. That covers the branching but
 not the SQL: an `update()` that never lands, or a count that reads the wrong
 column, would pass there and fail here.
 
-It matters more than usual for this function, because the instance it was written
-for has **zero** `course_documents` rows — so running it in production reports
+It matters more than usual for this function, because an instance that never used CourseOps
+has **zero** `course_documents` rows — so running it there reports
 zeros and proves nothing. This is where the non-trivial case is exercised.
 """
 
@@ -203,9 +203,9 @@ class TestBackfillAgainstRealRows:
         )
 
     async def test_an_instance_with_no_course_documents_is_a_clean_no_op(self, db_session, storage):
-        """The production case: zero rows must not be an error.
+        """The no-CourseOps case: zero rows must not be an error.
 
-        Asserted because this is the only path the deployed instance takes — it
+        Asserted because this is the only path an instance that never used CourseOps takes — it
         has no `course_documents` rows and no `courseops/` directory at all.
         """
         counts = await courseops_service.backfill_courseops_storage_keys(db_session, storage)
