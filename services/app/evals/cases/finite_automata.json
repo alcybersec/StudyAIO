@@ -1,0 +1,83 @@
+{
+  "id": "finite_automata",
+  "title": "Finite Automata",
+  "course": "CSIT205",
+  "week": 2,
+  "shape": "diagram_heavy",
+  "notes": "Diagram-and-formula lecture on DFAs with a formal 5-tuple and one drawn machine. The summary must keep the 5-tuple and the language of the example machine. Traps: NFAs, regular expressions, pumping lemma, which come next in most courses but are not in this lecture.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 2 — Deterministic Finite Automata.\n\nA DFA is a 5-tuple (Q, Σ, δ, q0, F): a finite set of states Q, an input alphabet Σ, a transition function δ: Q × Σ → Q, a start state q0 and a set of accepting states F. From each state there is exactly one transition per symbol."
+    },
+    {
+      "page": 2,
+      "text": "Example over Σ = {0, 1}: states q0 and q1, start q0, accepting {q1}.\n\n  q0 --1--> q1\n  q0 --0--> q0\n  q1 --0--> q1\n  q1 --1--> q0\n\nThe machine accepts strings with an odd number of 1s. On input 0110 it ends in q0 (two 1s), so it rejects; on 0111 it ends in q1, so it accepts."
+    },
+    {
+      "page": 3,
+      "text": "The language of a DFA is the set of strings it accepts. A language is regular if some DFA accepts it."
+    }
+  ],
+  "must_mention": [
+    "DFA",
+    "5-tuple",
+    "transition function",
+    "start state",
+    "accepting states",
+    "alphabet",
+    "odd number of 1s",
+    "regular"
+  ],
+  "must_not_mention": [
+    "NFA",
+    "epsilon",
+    "pumping lemma",
+    "regular expression",
+    "Turing machine"
+  ],
+  "required_facts": [
+    {
+      "fact": "a DFA is a 5-tuple (Q, Σ, δ, q0, F)",
+      "all": [
+        "5-tuple",
+        "Q",
+        "q0"
+      ]
+    },
+    {
+      "fact": "exactly one transition per symbol from each state",
+      "all": [
+        "exactly one transition per symbol"
+      ]
+    },
+    {
+      "fact": "the example accepts strings with an odd number of 1s",
+      "all": [
+        "odd number of 1s"
+      ]
+    },
+    {
+      "fact": "0110 is rejected (ends in q0) and 0111 is accepted (ends in q1)",
+      "all": [
+        "0110",
+        "rejects",
+        "0111",
+        "accepts"
+      ]
+    },
+    {
+      "fact": "a language is regular if some DFA accepts it",
+      "all": [
+        "regular",
+        "some DFA accepts it"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "says a DFA may have several transitions per symbol",
+      "pattern": "several transitions|multiple transitions"
+    }
+  ]
+}

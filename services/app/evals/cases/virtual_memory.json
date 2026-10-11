@@ -1,0 +1,86 @@
+{
+  "id": "virtual_memory",
+  "title": "Virtual Memory and Paging",
+  "course": "CSIT203",
+  "week": 5,
+  "shape": "diagram_heavy",
+  "notes": "Diagram-heavy: an address split and a page-table lookup drawn in ASCII. The numbers in the worked example must survive (4 KB pages, 12-bit offset). Traps: TLB internals and multi-level tables, which are the natural next topic but are not in this lecture.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 5 — Virtual Memory.\n\nEach process sees its own virtual address space. Memory is divided into fixed-size pages (virtual) and frames (physical). With 4 KB pages the low 12 bits of an address are the offset within the page and the remaining high bits are the page number.\n\n  virtual address = | page number | offset (12 bits) |"
+    },
+    {
+      "page": 2,
+      "text": "A page table maps each page number to a frame number. Translation: look up the page number, take the frame number, append the unchanged offset.\n\n  page number --> [page table] --> frame number | offset\n\nEach page table entry also holds a valid bit. If the valid bit is 0 the page is not in memory and the access raises a page fault."
+    },
+    {
+      "page": 3,
+      "text": "On a page fault the operating system loads the page from disk, updates the page table and restarts the instruction. A page fault costs millions of cycles compared with a memory access, so a high fault rate (thrashing) makes the system crawl.\n\nWhen no frame is free a page replacement policy chooses a victim. FIFO evicts the oldest page; LRU evicts the least recently used."
+    }
+  ],
+  "must_mention": [
+    "virtual address",
+    "page table",
+    "frame",
+    "offset",
+    "valid bit",
+    "page fault",
+    "thrashing",
+    "LRU"
+  ],
+  "must_not_mention": [
+    "TLB",
+    "translation lookaside buffer",
+    "multi-level page table",
+    "inverted page table",
+    "huge pages"
+  ],
+  "required_facts": [
+    {
+      "fact": "4 KB pages use a 12-bit offset",
+      "all": [
+        "4 KB",
+        "12 bits",
+        "offset"
+      ]
+    },
+    {
+      "fact": "translation appends the unchanged offset to the frame number",
+      "all": [
+        "frame number",
+        "offset",
+        "unchanged"
+      ]
+    },
+    {
+      "fact": "valid bit 0 means page fault",
+      "all": [
+        "valid bit",
+        "page fault"
+      ]
+    },
+    {
+      "fact": "fault handling: load from disk, update table, restart",
+      "all": [
+        "disk",
+        "restart"
+      ]
+    },
+    {
+      "fact": "FIFO evicts the oldest page, LRU the least recently used",
+      "all": [
+        "FIFO",
+        "oldest",
+        "LRU",
+        "least recently used"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "claims a cache speeds up translation",
+      "pattern": "(cache|TLB)\\w* (speeds|accelerates)"
+    }
+  ]
+}

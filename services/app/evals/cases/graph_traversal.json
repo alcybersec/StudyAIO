@@ -1,0 +1,83 @@
+{
+  "id": "graph_traversal",
+  "title": "Graph Traversal",
+  "course": "CSIT201",
+  "week": 6,
+  "shape": "diagram_heavy",
+  "notes": "Diagram-heavy: the lecture describes small ASCII graphs and queue/stack traces. The summary must keep BFS-queue and DFS-stack pairing straight. Traps: shortest-path and spanning-tree algorithms that follow in most courses but are not in this lecture.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 6 — Graph Traversal.\n\nA graph has vertices and edges. We store it as an adjacency list: for each vertex, the list of its neighbours. Memory use is proportional to vertices plus edges.\n\n    A --- B\n    |     |\n    C --- D"
+    },
+    {
+      "page": 2,
+      "text": "Breadth-first search (BFS) uses a queue. Start at A: queue [A]. Visit A, enqueue B and C. Visit B, enqueue D. Order: A B C D. BFS visits vertices in order of distance from the start, so in an unweighted graph it finds the fewest-edge path.\n\nDepth-first search (DFS) uses a stack, or recursion. Start at A: go to B, then D, then C. Order: A B D C. DFS goes as deep as possible before backing up."
+    },
+    {
+      "page": 3,
+      "text": "Both mark vertices as visited so a cycle cannot cause an infinite loop. Both run in O(V + E) with an adjacency list."
+    }
+  ],
+  "must_mention": [
+    "adjacency list",
+    "breadth-first search",
+    "depth-first search",
+    "queue",
+    "stack",
+    "visited",
+    "cycle"
+  ],
+  "must_not_mention": [
+    "Dijkstra",
+    "Prim",
+    "Kruskal",
+    "topological sort",
+    "A*"
+  ],
+  "required_facts": [
+    {
+      "fact": "BFS uses a queue and DFS uses a stack or recursion",
+      "all": [
+        "queue",
+        "stack",
+        "recursion"
+      ]
+    },
+    {
+      "fact": "BFS finds the fewest-edge path in an unweighted graph",
+      "all": [
+        "fewest-edge",
+        "unweighted"
+      ]
+    },
+    {
+      "fact": "both run in O(V + E) with an adjacency list",
+      "all": [
+        "O(V + E)",
+        "adjacency list"
+      ]
+    },
+    {
+      "fact": "visited marks prevent infinite loops on cycles",
+      "all": [
+        "visited",
+        "cycle",
+        "infinite loop"
+      ]
+    },
+    {
+      "fact": "BFS order A B C D, DFS order A B D C on the example",
+      "all": [
+        "A B C D",
+        "A B D C"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "claims BFS finds weighted shortest paths",
+      "pattern": "weighted shortest path"
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "id": "git_branching",
+  "title": "Version Control with Git",
+  "course": "CSIT101",
+  "week": 8,
+  "shape": "code_heavy",
+  "notes": "Command-heavy lecture. The summary must keep merge vs rebase distinct and keep the warning about rewriting shared history. Traps: submodules, hooks and CI pipelines, which are outside this lecture.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 8 — Git Branching.\n\nA commit is a snapshot with a pointer to its parent. A branch is just a movable pointer to a commit; creating one is cheap.\n\n$ git switch -c feature     # create and move to a new branch\n$ git add file.py\n$ git commit -m 'add parser'\n$ git switch main"
+    },
+    {
+      "page": 2,
+      "text": "git merge feature joins the histories. If main has not moved, Git does a fast-forward: it just moves the main pointer. Otherwise it creates a merge commit with two parents. Conflicts happen when both branches changed the same lines; Git marks them with <<<<<<< and >>>>>>> and you resolve by hand, then commit."
+    },
+    {
+      "page": 3,
+      "text": "git rebase main replays the branch's commits on top of main, giving a linear history. It rewrites commits, creating new ones, so never rebase commits you have already pushed and others use.\n\ngit stash saves uncommitted changes aside; git stash pop restores them."
+    }
+  ],
+  "must_mention": [
+    "branch",
+    "commit",
+    "merge",
+    "fast-forward",
+    "merge commit",
+    "conflict",
+    "rebase",
+    "git stash"
+  ],
+  "must_not_mention": [
+    "submodule",
+    "pre-commit hook",
+    "cherry-pick",
+    "bisect",
+    "reflog"
+  ],
+  "required_facts": [
+    {
+      "fact": "a branch is a movable pointer to a commit",
+      "all": [
+        "branch",
+        "pointer",
+        "commit"
+      ]
+    },
+    {
+      "fact": "fast-forward moves the pointer when main has not moved; otherwise a merge commit with two parents",
+      "all": [
+        "fast-forward",
+        "merge commit",
+        "two parents"
+      ]
+    },
+    {
+      "fact": "conflicts when both branches changed the same lines, resolved by hand",
+      "all": [
+        "conflict",
+        "same lines",
+        "by hand"
+      ]
+    },
+    {
+      "fact": "rebase replays commits and rewrites them: never rebase pushed commits",
+      "all": [
+        "rebase",
+        "replays",
+        "never rebase"
+      ]
+    },
+    {
+      "fact": "stash saves uncommitted changes and pop restores them",
+      "all": [
+        "git stash",
+        "uncommitted",
+        "pop"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "recommends force-pushing",
+      "pattern": "force[- ]push"
+    }
+  ]
+}

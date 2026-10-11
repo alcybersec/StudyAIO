@@ -1,0 +1,61 @@
+{
+  "id": "deadlock",
+  "title": "Deadlock",
+  "course": "CSIT203",
+  "week": 7,
+  "shape": "short",
+  "notes": "Short lecture (one page). The four necessary conditions are the whole content; omitting one is the likely error. Traps: banker's algorithm and livelock, which are common companions but absent here.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 7 — Deadlock.\n\nA set of processes is deadlocked when each waits for a resource held by another in the set. Four conditions must hold together: mutual exclusion (a resource is held by one process at a time), hold and wait (a process holds one resource while waiting for another), no preemption (resources cannot be taken away) and circular wait (a cycle of processes each waiting on the next).\n\nBreak any one condition and deadlock cannot occur. Imposing a global order on resources and acquiring them in that order breaks circular wait."
+    }
+  ],
+  "must_mention": [
+    "deadlock",
+    "mutual exclusion",
+    "hold and wait",
+    "no preemption",
+    "circular wait",
+    "global order"
+  ],
+  "must_not_mention": [
+    "banker's algorithm",
+    "livelock",
+    "starvation",
+    "wait-for graph",
+    "ostrich"
+  ],
+  "required_facts": [
+    {
+      "fact": "all four conditions must hold together",
+      "all": [
+        "mutual exclusion",
+        "hold and wait",
+        "no preemption",
+        "circular wait",
+        "together"
+      ]
+    },
+    {
+      "fact": "breaking any one condition prevents deadlock",
+      "all": [
+        "any one",
+        "cannot occur"
+      ]
+    },
+    {
+      "fact": "a global resource order breaks circular wait",
+      "all": [
+        "global order",
+        "circular wait"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "claims deadlock can be detected automatically",
+      "pattern": "detect\\w* (it )?(automatically|at runtime)"
+    }
+  ]
+}

@@ -3,6 +3,7 @@
   "title": "TCP Congestion Control",
   "course": "CSIT314",
   "week": 7,
+  "shape": "standard",
   "notes": "The must_not_mention list names algorithms a model is likely to volunteer from general knowledge — CUBIC and BBR are what modern Linux actually uses, so they are the most tempting additions. This lecture covers only Tahoe and Reno. Naming CUBIC here would tell a student their lecture taught something it did not.",
   "pages": [
     {
@@ -36,5 +37,51 @@
     "ECN",
     "explicit congestion notification",
     "QUIC"
+  ],
+  "required_facts": [
+    {
+      "fact": "slow start doubles cwnd every round trip, exponentially",
+      "all": [
+        "slow start",
+        "doubles",
+        "exponential"
+      ]
+    },
+    {
+      "fact": "congestion avoidance adds about one segment per round trip",
+      "all": [
+        "congestion avoidance",
+        "one segment"
+      ]
+    },
+    {
+      "fact": "Tahoe halves ssthresh and drops cwnd to one on any loss",
+      "all": [
+        "Tahoe",
+        "ssthresh",
+        "one segment"
+      ]
+    },
+    {
+      "fact": "Reno uses fast retransmit on three duplicate ACKs",
+      "all": [
+        "Reno",
+        "fast retransmit",
+        "three duplicate ACKs"
+      ]
+    },
+    {
+      "fact": "the sawtooth is AIMD",
+      "all": [
+        "AIMD",
+        "sawtooth"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "says Reno is the default in modern systems",
+      "pattern": "default (congestion|algorithm)"
+    }
   ]
 }

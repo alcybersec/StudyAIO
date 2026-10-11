@@ -1,0 +1,92 @@
+{
+  "id": "rsa_public_key",
+  "title": "Public-Key Cryptography and RSA",
+  "course": "CSIT314",
+  "week": 9,
+  "shape": "formula_heavy",
+  "notes": "Formula-heavy with a toy worked example (p=3, q=11). The numbers must be reproduced exactly. The lecture explicitly says the toy primes are insecure; dropping that is a faithfulness slip. Traps: elliptic curves, padding schemes and named key sizes the lecture does not give.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 9 — Public-Key Cryptography.\n\nSymmetric encryption uses one shared secret key. Public-key encryption uses a pair: a public key to encrypt, a private key to decrypt. Anyone can encrypt to you; only you can decrypt.\n\nRSA security rests on the difficulty of factoring a large number n = p * q into its primes."
+    },
+    {
+      "page": 2,
+      "text": "Key generation: pick primes p and q, compute n = p * q and phi = (p-1)(q-1). Pick e coprime to phi. Compute d with e * d ≡ 1 (mod phi). Public key (n, e), private key (n, d).\n\nEncrypt: c = m^e mod n. Decrypt: m = c^d mod n."
+    },
+    {
+      "page": 3,
+      "text": "Toy example, far too small to be secure: p = 3, q = 11, n = 33, phi = 20, e = 3, d = 7 since 3 * 7 = 21 ≡ 1 (mod 20). Encrypt m = 4: c = 4^3 mod 33 = 31. Decrypt: 31^7 mod 33 = 4."
+    }
+  ],
+  "must_mention": [
+    "public key",
+    "private key",
+    "RSA",
+    "factoring",
+    "phi",
+    "coprime",
+    "mod n"
+  ],
+  "must_not_mention": [
+    "elliptic curve",
+    "OAEP",
+    "2048-bit",
+    "Diffie-Hellman",
+    "quantum"
+  ],
+  "required_facts": [
+    {
+      "fact": "public key encrypts, private key decrypts",
+      "all": [
+        "public key",
+        "encrypt",
+        "private key",
+        "decrypt"
+      ]
+    },
+    {
+      "fact": "RSA security rests on the difficulty of factoring n = p * q",
+      "all": [
+        "factoring",
+        "n = p * q"
+      ]
+    },
+    {
+      "fact": "c = m^e mod n and m = c^d mod n",
+      "all": [
+        "c = m^e mod n",
+        "m = c^d mod n"
+      ]
+    },
+    {
+      "fact": "toy example n = 33, phi = 20, e = 3, d = 7",
+      "all": [
+        "n = 33",
+        "phi = 20",
+        "e = 3",
+        "d = 7"
+      ]
+    },
+    {
+      "fact": "encrypting 4 gives 31 and decrypting 31 gives 4",
+      "all": [
+        "c = 4^3 mod 33 = 31",
+        "31^7 mod 33 = 4"
+      ]
+    },
+    {
+      "fact": "the toy example is too small to be secure",
+      "all": [
+        "too small",
+        "secure"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "recommends a specific key size",
+      "pattern": "\\b\\d{3,4}-bit\\b"
+    }
+  ]
+}

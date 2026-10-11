@@ -239,7 +239,12 @@ async def _judge(agent, case: dict, summary: str, score: CaseScore) -> None:
     )
 
 
-async def run(only: str | None = None, judge: bool = True, n: int = 1) -> RunReport:
+async def run(
+    only: str | None = None,
+    judge: bool = True,
+    n: int = 1,
+    save_summaries_to: Path | None = None,
+) -> RunReport:
     """Summarise every case `n` times and score each result.
 
     Args:
@@ -249,6 +254,9 @@ async def run(only: str | None = None, judge: bool = True, n: int = 1) -> RunRep
         n: Repetitions per case. Generation is non-deterministic, so one run is
             a sample — `n > 1` is what separates a fabrication that happens
             every time from one that happened once.
+        save_summaries_to: Write each case's first generated summary to
+            ``<dir>/<case id>.md``. This is how an operator refreshes the
+            stored fixtures the offline CI gate scores.
 
     Returns:
         The report.
@@ -277,6 +285,10 @@ async def run(only: str | None = None, judge: bool = True, n: int = 1) -> RunRep
             )
             result = await agent.generate_summary(extraction, None)
             score = score_deterministic(case, result.content_md)
+            if save_summaries_to is not None and attempt == 0:
+                save_summaries_to.mkdir(parents=True, exist_ok=True)
+                body = result.content_md.rstrip() + "\n"
+                (save_summaries_to / f"{case['id']}.md").write_text(body)
 
             if judge:
                 await _judge(agent, case, result.content_md, score)

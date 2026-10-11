@@ -3,6 +3,7 @@
   "title": "Database Normalisation",
   "course": "CSIT302",
   "week": 3,
+  "shape": "standard",
   "notes": "Synthetic, per .claude/rules/tests.md: never real student data. The must_not_mention terms are the point of this case — BCNF and 4NF are the obvious next topics for anyone who knows the subject, and the lecture deliberately stops at 3NF. A summary that names them is importing knowledge the student's lecture did not contain, which is the failure mode that matters for a study tool.",
   "pages": [
     {
@@ -34,5 +35,42 @@
     "fourth normal form",
     "5NF",
     "denormalisation"
+  ],
+  "required_facts": [
+    {
+      "fact": "1NF needs atomic column values",
+      "all": [
+        "1NF",
+        "atomic"
+      ]
+    },
+    {
+      "fact": "2NF forbids partial dependency on part of a composite key",
+      "all": [
+        "2NF",
+        "partial dependency",
+        "composite"
+      ]
+    },
+    {
+      "fact": "3NF forbids transitive dependency",
+      "all": [
+        "3NF",
+        "transitive dependency"
+      ]
+    },
+    {
+      "fact": "most operational schemas stop at 3NF",
+      "all": [
+        "3NF",
+        "stop"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "names Boyce-Codd as the next normal form",
+      "pattern": "next normal form is"
+    }
   ]
 }

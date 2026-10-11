@@ -1,0 +1,80 @@
+{
+  "id": "dns_resolution",
+  "title": "DNS Resolution",
+  "course": "CSIT314",
+  "week": 3,
+  "shape": "sparse_slides",
+  "notes": "Very sparse slides, mostly labels. A model is tempted to fill the gaps with protocol detail the slides do not give (record formats, DNSSEC, ports). Traps are those embellishments.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 3 — DNS\n\nname -> IP address\n\nHierarchy: root, top-level domain (TLD), authoritative server"
+    },
+    {
+      "page": 2,
+      "text": "Resolution steps for www.example.org:\n1. Stub resolver asks the recursive resolver\n2. Recursive resolver asks a root server -> referral to .org TLD server\n3. TLD server -> referral to authoritative server for example.org\n4. Authoritative server -> answer: the IP address"
+    },
+    {
+      "page": 3,
+      "text": "Caching: answers are cached for their TTL\n\nRecord types: A (IPv4 address), AAAA (IPv6 address), CNAME (alias), MX (mail server)"
+    }
+  ],
+  "must_mention": [
+    "recursive resolver",
+    "root server",
+    "TLD",
+    "authoritative",
+    "TTL",
+    "CNAME",
+    "AAAA",
+    "referral"
+  ],
+  "must_not_mention": [
+    "DNSSEC",
+    "DNS over HTTPS",
+    "port 53",
+    "anycast",
+    "zone transfer"
+  ],
+  "required_facts": [
+    {
+      "fact": "resolution walks root, then TLD, then authoritative server through referrals",
+      "all": [
+        "root server",
+        "TLD",
+        "authoritative",
+        "referral"
+      ]
+    },
+    {
+      "fact": "the stub resolver asks the recursive resolver",
+      "all": [
+        "stub resolver",
+        "recursive resolver"
+      ]
+    },
+    {
+      "fact": "answers are cached for their TTL",
+      "all": [
+        "cached",
+        "TTL"
+      ]
+    },
+    {
+      "fact": "A is IPv4, AAAA is IPv6, CNAME is alias, MX is mail",
+      "all": [
+        "A",
+        "AAAA",
+        "CNAME",
+        "MX",
+        "alias"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "states a port number or transport",
+      "pattern": "\\bport\\s*\\d+|\\bUDP\\b"
+    }
+  ]
+}

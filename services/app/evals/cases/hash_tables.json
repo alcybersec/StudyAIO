@@ -3,6 +3,7 @@
   "title": "Hash Tables and Collision Resolution",
   "course": "CSIT302",
   "week": 5,
+  "shape": "standard",
   "notes": "This case carries a deliberate trap in the source: the lecture states average O(1) and worst case O(n), and explicitly says the worst case is what you get with a bad hash function. A summary that reports only O(1) has dropped the qualification that makes the claim true, which is a faithfulness failure the judge should catch even though every must_mention term is present.",
   "pages": [
     {
@@ -34,5 +35,48 @@
     "bloom filter",
     "consistent hashing",
     "perfect hash"
+  ],
+  "required_facts": [
+    {
+      "fact": "average O(1) lookup is qualified by worst case O(n)",
+      "all": [
+        "O(1)",
+        "O(n)",
+        "worst case"
+      ]
+    },
+    {
+      "fact": "worst case arises from a bad hash function",
+      "all": [
+        "bad hash function"
+      ]
+    },
+    {
+      "fact": "load factor is entries over buckets",
+      "all": [
+        "load factor",
+        "buckets"
+      ]
+    },
+    {
+      "fact": "linear probing suffers primary clustering",
+      "all": [
+        "linear probing",
+        "primary clustering"
+      ]
+    },
+    {
+      "fact": "resize doubles and rehashes every key",
+      "all": [
+        "doubled",
+        "rehash"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "claims lookup is always O(1)",
+      "pattern": "always\\s+O\\(1\\)"
+    }
   ]
 }

@@ -1,0 +1,78 @@
+{
+  "id": "dp_knapsack",
+  "title": "Dynamic Programming: Knapsack",
+  "course": "CSIT201",
+  "week": 9,
+  "shape": "formula_heavy",
+  "notes": "Formula-heavy lecture built around one recurrence and a worked table. The summary must reproduce the recurrence correctly and the O(nW) cost. Traps: greedy-by-ratio (the fractional variant) and approximation schemes, which the lecture does not discuss.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 9 — Dynamic Programming: 0/1 Knapsack.\n\nGiven n items with weight w_i and value v_i and a capacity W, choose a subset with total weight at most W and maximum total value. Each item is taken whole or not at all, hence 0/1.\n\nLet best[i][c] be the maximum value using the first i items with capacity c."
+    },
+    {
+      "page": 2,
+      "text": "Recurrence:\nbest[i][c] = best[i-1][c] if w_i > c\nbest[i][c] = max(best[i-1][c], best[i-1][c - w_i] + v_i) otherwise\nBase case: best[0][c] = 0 for all c.\n\nThe two options are skip item i, or take it and spend w_i of the capacity."
+    },
+    {
+      "page": 3,
+      "text": "Worked example: W = 5, items (w=2, v=3), (w=3, v=4), (w=4, v=5). Best is the first two items: weight 5, value 7.\n\nThe table has n * W entries, each filled in constant time, so time and space are O(nW). This is pseudo-polynomial: W is a number, not a count of input items."
+    }
+  ],
+  "must_mention": [
+    "0/1 knapsack",
+    "capacity",
+    "recurrence",
+    "best[i][c]",
+    "base case",
+    "O(nW)",
+    "pseudo-polynomial"
+  ],
+  "must_not_mention": [
+    "greedy",
+    "fractional knapsack",
+    "FPTAS",
+    "branch and bound",
+    "NP-hard"
+  ],
+  "required_facts": [
+    {
+      "fact": "recurrence takes max of skipping item i or taking it and spending w_i",
+      "all": [
+        "max(best[i-1][c], best[i-1][c - w_i] + v_i)"
+      ]
+    },
+    {
+      "fact": "base case best[0][c] = 0",
+      "all": [
+        "best[0][c] = 0"
+      ]
+    },
+    {
+      "fact": "worked example W=5 gives value 7 from the first two items",
+      "all": [
+        "W = 5",
+        "value 7"
+      ]
+    },
+    {
+      "fact": "time and space O(nW) and pseudo-polynomial",
+      "all": [
+        "O(nW)",
+        "pseudo-polynomial"
+      ]
+    },
+    {
+      "fact": "if w_i > c item i cannot be taken",
+      "all": [
+        "w_i > c"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "states the problem is NP-hard",
+      "pattern": "NP-?\\s?hard"
+    }
+  ]
+}

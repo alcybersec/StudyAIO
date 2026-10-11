@@ -1,0 +1,159 @@
+{
+  "aggregate": {
+    "cases": 21,
+    "coverage": 1.0,
+    "faithfulness": 1.0,
+    "structure": 1.0
+  },
+  "cases": {
+    "acid_transactions": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "big_o_notation": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "binary_search_trees": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "deadlock": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "dijkstra_shortest_paths": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "dns_resolution": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "dp_knapsack": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "finite_automata": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "git_branching": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "graph_traversal": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "hash_tables": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "http_caching": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "memory_hierarchy": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "normalisation": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "process_scheduling": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "rsa_public_key": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "sorting_algorithms": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "sql_joins": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "stacks_queues": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "tcp_congestion": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    },
+    "virtual_memory": {
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
+      "forbidden_hits": 0,
+      "structure_ok": true
+    }
+  },
+  "threshold": 0.02,
+  "version": 1
+}

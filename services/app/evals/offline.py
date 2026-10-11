@@ -1,0 +1,255 @@
+"""Offline, deterministic scoring of stored summaries, and the CI regression gate.
+
+The live harness (`evals.runner`) generates summaries through the agent adapter:
+it costs money, needs credentials and is not repeatable, so it cannot gate a
+merge. This module scores **stored** summaries instead -- one markdown fixture
+per case under `evals/fixtures/` -- and compares the result with a committed
+baseline. No AI call, no secrets, same answer on every run.
+
+What that gate protects is the *contract*, not the model: the section list is
+re-derived from `prompts/summarize.txt` on every run, so a prompt edit that
+changes the format breaks the fixtures until an operator refreshes them live;
+a scorer change that loosens a check shows up as a baseline mismatch; a case
+edit that makes a fixture unfaithful shows up as a faithfulness drop.
+
+Faithfulness here is a proxy that needs no model:
+
+* ``fact_recall`` -- the share of the case's ``required_facts`` the summary
+  states. A fact is a set of terms that must co-occur (``all``) or alternatives
+  (``any``), so a qualified claim ("average O(1)" *and* "worst case O(n)") is
+  not satisfied by half of it.
+* ``forbidden_hits`` -- outside-material traps: ``must_not_mention`` terms and
+  ``forbidden_claims`` regexes. Each hit halves the score, because an invented
+  claim makes a summary unfaithful however complete it is.
+
+``faithfulness = fact_recall * 0.5 ** forbidden_hits``.
+"""
+
+import json
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from evals.scoring import (
+    _mentions,
+    check_connections,
+    required_sections,
+    score_deterministic,
+)
+
+EVALS_DIR = Path(__file__).resolve().parent
+FIXTURES_DIR = EVALS_DIR / "fixtures"
+BASELINE_PATH = EVALS_DIR / "baseline.json"
+
+#: How far aggregate faithfulness may fall below the baseline before `--check`
+#: fails. Offline scores are exact, so this is slack for deliberate, reviewed
+#: case edits rather than for noise.
+DEFAULT_THRESHOLD = 0.02
+
+_TITLE = re.compile(r"\A\s*#\s+\S.*Week\s+\d+\s*:\s*\S", re.IGNORECASE)
+_FOOTER = re.compile(r"^---\s*\n\s*\*Sources:.*Version:\s*\d+\.?\*\s*\Z", re.MULTILINE | re.DOTALL)
+_H2 = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+
+
+@dataclass
+class OfflineScore:
+    """One stored summary scored against one case."""
+
+    case_id: str
+    structure_ok: bool
+    structure_problems: list[str] = field(default_factory=list)
+    coverage: float = 1.0
+    fact_recall: float = 1.0
+    missing_facts: list[str] = field(default_factory=list)
+    forbidden_hits: list[str] = field(default_factory=list)
+    connection_violations: list[str] = field(default_factory=list)
+
+    @property
+    def faithfulness(self) -> float:
+        """``fact_recall`` halved for every outside-material hit."""
+        return self.fact_recall * 0.5 ** len(self.forbidden_hits)
+
+    def to_baseline(self) -> dict:
+        return {
+            "structure_ok": self.structure_ok,
+            "coverage": round(self.coverage, 4),
+            "fact_recall": round(self.fact_recall, 4),
+            "forbidden_hits": len(self.forbidden_hits),
+            "faithfulness": round(self.faithfulness, 4),
+        }
+
+
+def check_structure(summary: str) -> list[str]:
+    """Problems with a summary's shape against the `summarize.txt` contract.
+
+    Checks the title line, every required ``##`` section present and in the
+    prompt's order, and the ``---`` / ``*Sources: ... Version: N.*`` footer.
+
+    Returns:
+        One message per problem; empty when the structure is intact.
+    """
+    problems: list[str] = []
+    if not _TITLE.search(summary):
+        problems.append("title line '# <Course> — Week <N>: <Topic>' missing")
+
+    wanted = required_sections()
+    found = _H2.findall(summary)
+    for name in wanted:
+        if name not in found:
+            problems.append(f"missing section: {name}")
+    in_order = [h for h in found if h in wanted]
+    expected_order = [h for h in wanted if h in found]
+    if in_order != expected_order:
+        problems.append("sections out of order")
+
+    if not _FOOTER.search(summary.rstrip() + "\n"):
+        problems.append("footer '---' + '*Sources: ... Version: N.*' missing")
+    return problems
+
+
+def _fact_present(fact: dict, summary: str) -> bool:
+    all_terms = fact.get("all", [])
+    any_terms = fact.get("any", [])
+    if not all_terms and not any_terms:
+        raise ValueError(f"fact {fact.get('fact')!r} has neither 'all' nor 'any'")
+    if any(not _mentions(summary, t) for t in all_terms):
+        return False
+    return not any_terms or any(_mentions(summary, t) for t in any_terms)
+
+
+def score_offline(case: dict, summary: str) -> OfflineScore:
+    """Score one stored summary. Deterministic, no model.
+
+    Args:
+        case: A loaded case file.
+        summary: The stored summary markdown.
+    """
+    base = score_deterministic(case, summary)
+    facts = case.get("required_facts", [])
+    missing_facts = [f["fact"] for f in facts if not _fact_present(f, summary)]
+    fact_recall = (len(facts) - len(missing_facts)) / len(facts) if facts else base.coverage
+
+    hits = list(base.fabricated)
+    for claim in case.get("forbidden_claims", []):
+        if re.search(claim["pattern"], summary, re.IGNORECASE | re.DOTALL):
+            hits.append(claim["claim"])
+
+    problems = check_structure(summary)
+    return OfflineScore(
+        case_id=case["id"],
+        structure_ok=not problems and not base.connection_violations,
+        structure_problems=problems + [f"connections: {v}" for v in base.connection_violations],
+        coverage=base.coverage,
+        fact_recall=fact_recall,
+        missing_facts=missing_facts,
+        forbidden_hits=hits,
+        connection_violations=check_connections(case, summary),
+    )
+
+
+@dataclass
+class OfflineRun:
+    """Every case scored from its stored fixture."""
+
+    scores: list[OfflineScore] = field(default_factory=list)
+    #: Cases with no fixture file -- a gap, never silently skipped.
+    missing_fixtures: list[str] = field(default_factory=list)
+
+    @property
+    def faithfulness(self) -> float:
+        total = len(self.scores) + len(self.missing_fixtures)
+        return sum(s.faithfulness for s in self.scores) / total if total else 0.0
+
+    @property
+    def coverage(self) -> float:
+        total = len(self.scores) + len(self.missing_fixtures)
+        return sum(s.coverage for s in self.scores) / total if total else 0.0
+
+    @property
+    def structure(self) -> float:
+        total = len(self.scores) + len(self.missing_fixtures)
+        return sum(1 for s in self.scores if s.structure_ok) / total if total else 0.0
+
+    def to_baseline(self, threshold: float = DEFAULT_THRESHOLD) -> dict:
+        return {
+            "version": 1,
+            "threshold": threshold,
+            "aggregate": {
+                "cases": len(self.scores),
+                "faithfulness": round(self.faithfulness, 4),
+                "coverage": round(self.coverage, 4),
+                "structure": round(self.structure, 4),
+            },
+            "cases": {s.case_id: s.to_baseline() for s in self.scores},
+        }
+
+
+def run_offline(cases: list[dict], fixtures_dir: Path = FIXTURES_DIR) -> OfflineRun:
+    """Score each case's stored summary fixture (``<fixtures_dir>/<id>.md``)."""
+    run = OfflineRun()
+    for case in cases:
+        path = fixtures_dir / f"{case['id']}.md"
+        if not path.is_file():
+            run.missing_fixtures.append(case["id"])
+            continue
+        run.scores.append(score_offline(case, path.read_text()))
+    return run
+
+
+def load_baseline(path: Path = BASELINE_PATH) -> dict:
+    """Read the committed baseline; a missing file is an error, not a pass."""
+    if not path.is_file():
+        raise FileNotFoundError(f"baseline not found: {path} (run with --write-baseline)")
+    return json.loads(path.read_text())
+
+
+def check_against_baseline(run: OfflineRun, baseline: dict) -> list[str]:
+    """The CI gate. Returns failure messages; empty means the gate passes.
+
+    Fails when: a case has no fixture; a case is absent from the baseline
+    (stale baseline); any case's structure is broken; or aggregate faithfulness
+    is below ``baseline - threshold``.
+    """
+    failures: list[str] = []
+    for case_id in run.missing_fixtures:
+        failures.append(f"{case_id}: no stored summary fixture")
+
+    known = baseline.get("cases", {})
+    for score in run.scores:
+        if score.case_id not in known:
+            failures.append(f"{score.case_id}: not in baseline (refresh with --write-baseline)")
+        if not score.structure_ok:
+            failures.append(
+                f"{score.case_id}: structure broken: {'; '.join(score.structure_problems)}"
+            )
+
+    threshold = float(baseline.get("threshold", DEFAULT_THRESHOLD))
+    floor = float(baseline["aggregate"]["faithfulness"]) - threshold
+    if run.faithfulness < floor:
+        failures.append(
+            f"aggregate faithfulness {run.faithfulness:.3f} is below the floor {floor:.3f}"
+            f" (baseline {baseline['aggregate']['faithfulness']:.3f} - threshold {threshold})"
+        )
+    return failures
+
+
+def format_offline_report(run: OfflineRun, baseline: dict | None, failures: list[str]) -> str:
+    """A short report: one line per case, aggregate, verdict."""
+    lines = []
+    for s in sorted(run.scores, key=lambda s: s.case_id):
+        flag = "ok  " if s.structure_ok and s.faithfulness >= 1.0 else "WARN"
+        lines.append(
+            f"  [{flag}] {s.case_id:<26} faithfulness {s.faithfulness:.2f}"
+            f"  coverage {s.coverage:.0%}  structure {'ok' if s.structure_ok else 'BROKEN'}"
+        )
+        for fact in s.missing_facts:
+            lines.append(f"         missing fact: {fact}")
+        for hit in s.forbidden_hits:
+            lines.append(f"         forbidden claim: {hit}")
+    agg = f"{len(run.scores)} case(s) · faithfulness {run.faithfulness:.3f}"
+    agg += f" · coverage {run.coverage:.3f} · structure {run.structure:.0%}"
+    if baseline:
+        agg += f" · baseline {baseline['aggregate']['faithfulness']:.3f}"
+    lines += ["", agg, "RESULT: " + ("FAIL" if failures else "PASS")]
+    lines += [f"  - {f}" for f in failures]
+    return "\n".join(lines)

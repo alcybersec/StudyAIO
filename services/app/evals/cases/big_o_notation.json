@@ -1,0 +1,82 @@
+{
+  "id": "big_o_notation",
+  "title": "Asymptotic Analysis",
+  "course": "CSIT101",
+  "week": 2,
+  "shape": "sparse_slides",
+  "notes": "Sparse slides: bullet fragments with almost no prose. Tests that the summary expands fragments without inventing detail. Trap terms are the sibling notations and techniques (Theta, Omega, master theorem, amortized) that the slides do not mention.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 2 — Asymptotic Analysis\n\n- count steps, not seconds\n- Big-O: upper bound, ignore constants and lower-order terms\n- 3n^2 + 5n + 2 is O(n^2)"
+    },
+    {
+      "page": 2,
+      "text": "Common growth rates, slowest growing first:\n- O(1)\n- O(log n)\n- O(n)\n- O(n log n)\n- O(n^2)\n- O(2^n)\n\nO(2^n) is infeasible beyond small n"
+    },
+    {
+      "page": 3,
+      "text": "Example: nested loops over n items = n * n = O(n^2)\n\nOne loop that halves n each pass = O(log n)"
+    }
+  ],
+  "must_mention": [
+    "Big-O",
+    "upper bound",
+    "constants",
+    "O(n^2)",
+    "O(log n)",
+    "O(n log n)",
+    "nested loops"
+  ],
+  "must_not_mention": [
+    "Theta",
+    "Omega",
+    "master theorem",
+    "amortized",
+    "Stirling"
+  ],
+  "required_facts": [
+    {
+      "fact": "Big-O is an upper bound ignoring constants and lower-order terms",
+      "all": [
+        "upper bound",
+        "constants",
+        "lower-order"
+      ]
+    },
+    {
+      "fact": "3n^2 + 5n + 2 is O(n^2)",
+      "all": [
+        "3n^2 + 5n + 2",
+        "O(n^2)"
+      ]
+    },
+    {
+      "fact": "nested loops over n items are O(n^2)",
+      "all": [
+        "nested loops",
+        "O(n^2)"
+      ]
+    },
+    {
+      "fact": "a loop halving n each pass is O(log n)",
+      "all": [
+        "halves",
+        "O(log n)"
+      ]
+    },
+    {
+      "fact": "O(2^n) is infeasible beyond small n",
+      "all": [
+        "O(2^n)",
+        "infeasible"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "introduces tight bounds",
+      "pattern": "tight bound"
+    }
+  ]
+}
