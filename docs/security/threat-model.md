@@ -38,7 +38,7 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | B5 | App → storage (`data/`, DB) | Floor 4: every blob delete is classified against ADR 0004. Re-summarize and regeneration keep versions and history. The account purge sweeps every summary blob, including deleted courses' (C5 ledger, id-shaped segments only) | Courses deleted before `a3ab6ce` are unattributable (R-020 residual) |
 | B6 | Credentials at rest | SEC-06: `enc:v1:` MultiFernet. A multi-user start refuses with no key and refuses the all-zero test key outside pytest. Ciphertext-shaped input is never stored verbatim. Export never returns credentials | OAuth and calendar tokens are plaintext (R-017). Rotation is manual (`encrypt-user-secrets`). The key lives in the same `.env` as every other secret |
 | B7 | Billing webhook | Stripe signature, dedupe by event id (`SET NX`), per-customer ordering, customer-scoped mutation (BILL-01, floor-1 pins) | Dedupe and ordering state lives in Redis with a TTL. Redis is ephemeral by policy, so a flush reopens replay and reordering for old events. Events in the same second are not ordered |
-| B8 | Cost | Per-user quota, global daily ceilings and metering on upload, batch, retry, reclassify, merge, review-resolve, CourseOps, chat, Q&A and concepts (QUOTA-01/COST-01) | **`POST /api/settings/test-ai` spends instance AI with no quota, no ceiling, no metering and no rate limit** (M32 gate finding) |
+| B8 | Cost | Per-user quota, global daily ceilings and metering on upload, batch, retry, reclassify, merge, review-resolve, CourseOps, chat, Q&A, concepts and, since `421dfa9`, the instance-provider path of `POST /api/settings/test-ai` (QUOTA-01/COST-01, M32 G1). Every ADR 0003 request-time site's route checks the caller's quota before the spend and records against the caller (`test_floor3_request_time_ai_quota.py`) | Own-credential test-ai is rate limited (5/min) but not quota-checked, by design: it spends the user's money. Concepts records only a successful call; a failed provider call there is not metered |
 | B9 | CI/CD → prod | Images by SHA from GHCR. `deploy.sh` refuses without the encryption key (exit 68) or without a good pre-migration dump (exit 67), and migrates in a one-off container before start (R-028). `dependency-audit` CI job (pip-audit on the lock, npm audit high/critical; allowlist empty) | The key check tests presence, not validity: a malformed or test key passes the guard, then crash-loops after migrating. `pip-audit` is installed unpinned in CI. The VM's `deploy.sh` is a manually installed copy and can drift from the repo |
 
 ## 4. Out of scope or accepted
@@ -73,3 +73,27 @@ New surfaces and their judgement. Detail is in `docs/gates/M32/floors.md`.
    99 owned-reaching, against 149, 115 and 98 before it.
 7. **`deploy.sh` guards.** Both refusals fired on the first wave-2 deploy (jobs 4785 and 4793) and left the old
    stack untouched, then job 4794 deployed. Residuals are in B9.
+
+### 2026-10-11, G1 follow-up (M33-S1-SAFETY-005)
+
+1. **`POST /api/settings/test-ai` is no longer an open cost surface.** Backend `421dfa9` checks
+   `check_ai_quota(session, user.id, user.tier)` (per-user quota and global ceilings) before `get_agent` when the
+   caller is on the instance provider, records `record_ai_call` against the caller on success and on provider
+   failure, and rate limits every path to 5/minute. The own-credential path is unmetered, and it cannot reach the
+   operator's key: the factory refuses an own-provider config with no credential (`ProviderCredentialError`).
+   Refusals are the generic 402/429 bodies and name no credential. Provider errors stay redacted
+   (`test_floor2_provider_error_never_echoes_a_stored_credential[POST /api/settings/test-ai]`). The ADR 0003 site count is
+   unchanged at five. M32 N-1 is **resolved**; `docs/gates/M32/floors.md` is left as the gate record.
+2. **Pinned structurally.** Every ADR 0003 request-time `get_agent` site is mapped to the routes that reach it,
+   and each route must check the caller's quota before the spend (unconditionally, or behind only "the caller's
+   config is None") and record against the caller. A sixth site cannot be added to the ADR without a route entry
+   here (`services/app/tests/safety/FLOORS.md`, floor 3).
+3. **Worker and api metrics (G3, ai `0d48287`, infra `3339ac7`).** Labels are `stage`, `outcome` and
+   `error_class` only. `error_class` is `type(exc).__name__`, a class name fixed by code, so it cannot carry a
+   message. The api's Instrumentator labels by route template (`/api/courses/{code}`) and groups unmatched paths
+   as `none`, so no id, course code or email reaches a scrape. Pinned in `test_floor2_metrics_labels.py`. The
+   multiprocess tmpfs holds only sample files (metric name, labels, value), not secrets. Residual: it is mounted
+   `mode=1777`, so the uid-10001 CLI child could write into it if it ever had tools. It has none (`--tools ""`,
+   B4), but `0700` would be enough because the worker runs as root (devops). Both `/metrics` endpoints are
+   unauthenticated and the api's is reachable on the LAN at `:8000`. That exposes route-level traffic volume and
+   latency, which identify no one.

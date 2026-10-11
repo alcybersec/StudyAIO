@@ -183,6 +183,23 @@ Mutation-checked, all caught: the factory dropping `user_supplied_url` for zai a
 
 Mutation-checked in SAFETY-026, all caught: cwd not passed; cwd not removed; `model or …` restored; `--system-prompt` dropped; a flag after `--tools ""`; host copy read back (`not host`/`credentials` guards removed); copy dir not removed; uid not passed to spawn.
 
+### Metrics labels (M32 G3; ai `0d48287`, infra `3339ac7`)
+
+Both `/metrics` endpoints are unauthenticated: the worker's on `127.0.0.1:9101` and the
+api's on `:8000`, reachable on the LAN. Labels are also written to the worker's
+multiprocess tmpfs. The policy is the one in `app/pipeline/metrics.py`.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_metrics_labels.py::test_floor2_metric_label_names_are_the_allowed_enums` | A `prometheus_client` metric anywhere under `app/**` declares a label other than `stage`, `outcome` or `error_class`, or declares its labels non-literally. |
+| `…::test_floor2_metric_label_values_are_never_identifiers_or_messages` | A `.labels(...)` call passes a positional value, an unlisted label, a value that is not a string literal or the local `stage`/`outcome`, or an `error_class` that is anything but `type(<x>).__name__` (so never `str(exc)` or an f-string with the message). |
+| `…::test_floor2_api_instrumentator_keeps_route_templates` | `Instrumentator(...)` is given `should_group_untemplated=False` or opaque `**kwargs`. |
+| `…::test_floor1_api_metrics_name_route_templates_not_raw_paths` | With the defaults `main.py` uses, a course code, an email or an unmatched raw path reaches the scrape, or the `handler` label is not the route template. This pins the library's behaviour across upgrades. |
+| `…::test_floor2_metric_policy_is_not_vacuous`, `…::test_floor2_label_*_detector[…]`, `…::test_floor2_instrumentator_detector[…]` | The checks stop seeing the worker metrics (8 or more, 10 or more `.labels` sites) or the api Instrumentator, or the detectors misjudge synthetic source. |
+
+Mutation-checked in SAFETY-005, all red: a `user_id` label on `STAGE_FAILURES`; `error_class` carrying
+`f"{type(exc).__name__}: {exc}"`; `STUCK_FAILED.labels(stage=artifact.id)`; `Instrumentator(should_group_untemplated=False)`.
+
 ## 3. AI only via the adapter (amended by ADR 0003 and ADR 0005)
 
 > every AI call goes through a sanctioned gateway, either AgentAdapter obtained via
@@ -217,6 +234,30 @@ listed site, a new `embed_texts`, a `getattr` string, the startup probe embeddin
 request-side caller of `index_artifact_chunks`, a factory call in a non-task pipeline
 module, a `sentence_transformers` import, a backend class, `reset_embedding_provider`,
 an `EmbeddingProvider` subclass, and the worker site removed.
+
+### Request-time AI spend is quota-checked and metered as the caller (M32 G1; backend `421dfa9`)
+
+Pinned in M33-S1-SAFETY-005. Gate condition G1 (`docs/gates/M32/floors.md` N-1):
+`POST /api/settings/test-ai` spent the instance provider with no quota, ceiling,
+metering or rate limit. The pin rides the ADR 0003 list, so a new site cannot join
+it unmetered. The caller-identity half is floor-1 wiring.
+
+| Test | Fails when |
+|---|---|
+| `test_floor3_request_time_ai_quota.py::test_floor3_every_adr_0003_site_has_a_pinned_route` | `SPEND_ROUTES` (site to route handlers) does not cover exactly `REQUEST_TIME_GET_AGENT_CALL_SITES`. |
+| `…::test_floor3_service_site_routes_are_exactly_the_pinned_ones[<site>]` | A service site (`chat_service.send_message`/`stream_message`, `concept_service.extract_and_save_concepts`) gains or loses a caller outside its own module, `app/pipeline/` and `app/agents/` (import aliases followed). An extra request-time caller would be unchecked. |
+| `…::test_floor3_instance_ai_spend_is_quota_checked_for_the_caller[<site>-<route>]` | The route handler has no `check_ai_quota(session, <caller>.id, …)` (caller = the `Depends(get_current_user[_or_default])` parameter) before the line where it reaches `get_agent` or the site function, run unconditionally or behind only "the caller's loaded agent config `is None`" (the instance provider), with no `try`, loop, closure or other guard around it. |
+| `…::test_floor3_instance_ai_spend_is_recorded_against_the_caller[<site>-<route>]` | No `record_ai_call(session, <caller>.id, …)` in the handler, and the site function does not record on a `user_id` that the handler fills with `<caller>.id`. |
+| `…::test_floor3_test_ai_on_instance_checks_then_meters_the_caller[ok\|provider-error]` | Through the app, as a non-default free-tier caller on the instance provider: the order is not check, `get_agent`, record; or the check or the record names anyone but the caller (or the tier is not theirs). Covers the failed call too. |
+| `…::test_floor3_test_ai_refused_by_the_ceiling_never_builds_an_agent` | A `GlobalCeilingError` refusal is not a 429, or an agent is built or a call recorded anyway. |
+| `…::test_floor3_own_provider_config_never_builds_the_instance_agent` | A non-`None` config from `_agent_config_from_overrides` with no credential is built into an adapter instead of `ProviderCredentialError`. This is what makes test-ai's `metered = cfg is None` sound: an own-provider config can never fall back to the operator's key. |
+| `…::test_floor3_quota_detector_*`, `…::test_floor3_metering_detector[…]`, `…::test_floor3_route_derivation_is_not_vacuous` | On synthetic source, the detectors accept a missing check, another user's id, a literal id, a check after the spend, a swallowed check, an unrelated, inverted, reassigned or `else` guard, a guard on a config that is not the caller's, or a record for someone else, or reject the two accepted shapes. |
+
+Mutation-checked in SAFETY-005 on a scratch copy, all red: test-ai without `check_ai_quota` (4 tests);
+the check for the default admin's id (3); both `record_ai_call`s removed (3); recorded for another id (3);
+`if not metered` (4); chat send without its check (1); `concept_service` recording on `course_id` (1);
+qa's check inside `try/except: pass` (1); the factory falling back to the instance on an own config with
+no key (1).
 
 ## 4. User data is never lost (amended by ADR 0004)
 
