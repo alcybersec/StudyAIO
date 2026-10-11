@@ -4,6 +4,7 @@ Import all models here so Alembic's autogenerate can discover them.
 """
 
 from app.models.achievement import Achievement
+from app.models.ai_feedback import AIFeedback
 from app.models.analytics_snapshot import AnalyticsSnapshot
 from app.models.artifact import LectureArtifact
 from app.models.assessment import Assessment
@@ -38,6 +39,7 @@ from app.models.subscription import Subscription
 from app.models.summary import Summary
 from app.models.summary_version import SummaryVersion
 from app.models.telegram_link import TelegramLink
+from app.models.usage_event import UsageEvent
 from app.models.usage_record import UsageRecord
 from app.models.user import User
 from app.models.user_achievement import UserAchievement
@@ -47,6 +49,7 @@ from app.models.user_xp import UserXP
 from app.models.xp_event import XPEvent
 
 __all__ = [
+    "AIFeedback",
     "Achievement",
     "AnalyticsSnapshot",
     "CalendarEvent",
@@ -82,6 +85,7 @@ __all__ = [
     "Summary",
     "SummaryVersion",
     "TelegramLink",
+    "UsageEvent",
     "UsageRecord",
     "User",
     "UserAchievement",
