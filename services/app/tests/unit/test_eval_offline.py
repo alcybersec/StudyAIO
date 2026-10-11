@@ -162,10 +162,31 @@ class TestGate:
         assert run.faithfulness == pytest.approx(0.995)
         assert offline.check_against_baseline(run, baseline) == []
 
-    def test_broken_structure_fails_even_when_faithful(self, tmp_path, baseline):
+    def test_new_structure_break_fails_even_when_faithful(self, tmp_path, baseline):
+        baseline["cases"] = {"c": {"structure_ok": True}}
         run = self._run(tmp_path, _summary(drop=("Key Takeaways",)))
         failures = offline.check_against_baseline(run, baseline)
-        assert any("structure broken" in f and "Key Takeaways" in f for f in failures)
+        assert any("structure broke" in f and "Key Takeaways" in f for f in failures)
+
+    def test_structure_break_unknown_to_baseline_fails(self, tmp_path, baseline):
+        run = self._run(tmp_path, _summary(drop=("Key Takeaways",)))
+        assert any("structure broke" in f for f in offline.check_against_baseline(run, baseline))
+
+    def test_baseline_known_structure_break_is_a_warning_not_a_failure(self, tmp_path, baseline):
+        baseline["cases"] = {"c": {"structure_ok": False}}
+        run = self._run(tmp_path, _summary(drop=("Key Takeaways",)))
+        assert offline.check_against_baseline(run, baseline) == []
+        assert offline.known_broken(run, baseline) == ["c"]
+        report = offline.format_offline_report(run, baseline, [])
+        assert "WARN: c" in report
+        assert "RESULT: PASS" in report
+
+    def test_baseline_case_without_a_case_file_is_stale(self, tmp_path, baseline):
+        baseline["cases"]["gone"] = {"structure_ok": True}
+        run = self._run(tmp_path, _summary())
+        failures = offline.check_against_baseline(run, baseline)
+        assert any("gone" in f and "stale" in f for f in failures)
+        assert offline.check_against_baseline(run, baseline, expect_all_cases=False) == []
 
     def test_missing_fixture_fails(self, tmp_path, baseline):
         run = offline.run_offline([_case()], tmp_path)
@@ -221,13 +242,17 @@ class TestCommittedSuite:
             )
 
     @pytest.mark.parametrize("case", CASES, ids=lambda c: c["id"])
-    def test_stored_fixture_is_faithful_and_well_structured(self, case):
+    def test_stored_fixture_matches_its_baseline_entry(self, case):
+        """Fixtures are real model output, so they are imperfect; they must equal the baseline."""
         text = (offline.FIXTURES_DIR / f"{case['id']}.md").read_text()
         score = offline.score_offline(case, text)
-        assert score.structure_ok, score.structure_problems
-        assert score.missing_facts == []
-        assert score.forbidden_hits == []
-        assert score.coverage == 1.0
+        assert score.to_baseline() == offline.load_baseline()["cases"][case["id"]]
+
+    def test_baseline_records_where_the_fixtures_came_from(self):
+        provenance = offline.load_baseline()["provenance"]
+        assert provenance["source"] == "live"
+        assert provenance["model"]
+        assert provenance["date"]
 
     def test_committed_gate_passes(self):
         run = offline.run_offline(CASES)

@@ -170,8 +170,10 @@ class OfflineRun:
         total = len(self.scores) + len(self.missing_fixtures)
         return sum(1 for s in self.scores if s.structure_ok) / total if total else 0.0
 
-    def to_baseline(self, threshold: float = DEFAULT_THRESHOLD) -> dict:
-        return {
+    def to_baseline(
+        self, threshold: float = DEFAULT_THRESHOLD, provenance: dict | None = None
+    ) -> dict:
+        out = {
             "version": 1,
             "threshold": threshold,
             "aggregate": {
@@ -182,6 +184,9 @@ class OfflineRun:
             },
             "cases": {s.case_id: s.to_baseline() for s in self.scores},
         }
+        if provenance:
+            out["provenance"] = provenance
+        return out
 
 
 def run_offline(cases: list[dict], fixtures_dir: Path = FIXTURES_DIR) -> OfflineRun:
@@ -203,24 +208,48 @@ def load_baseline(path: Path = BASELINE_PATH) -> dict:
     return json.loads(path.read_text())
 
 
-def check_against_baseline(run: OfflineRun, baseline: dict) -> list[str]:
-    """The CI gate. Returns failure messages; empty means the gate passes.
+def known_broken(run: OfflineRun, baseline: dict) -> list[str]:
+    """Cases whose structure is broken now *and* was already broken in the baseline."""
+    known = baseline.get("cases", {})
+    return [
+        s.case_id
+        for s in run.scores
+        if not s.structure_ok
+        and s.case_id in known
+        and known[s.case_id].get("structure_ok", True) is False
+    ]
 
-    Fails when: a case has no fixture; a case is absent from the baseline
-    (stale baseline); any case's structure is broken; or aggregate faithfulness
-    is below ``baseline - threshold``.
+
+def check_against_baseline(
+    run: OfflineRun, baseline: dict, *, expect_all_cases: bool = True
+) -> list[str]:
+    """The CI gate (regression semantics). Returns failures; empty means pass.
+
+    Fails when: a case has no fixture; a case is absent from the baseline or
+    (with ``expect_all_cases``) a baseline case has no case file (stale
+    baseline); a case's structure is broken now but was OK in the baseline; or
+    aggregate faithfulness is below ``baseline - threshold``. A structure break
+    the baseline already records is a warning (see `known_broken`), not a
+    failure, so measured real-model output can be committed as the starting
+    point and improved.
     """
     failures: list[str] = []
     for case_id in run.missing_fixtures:
         failures.append(f"{case_id}: no stored summary fixture")
 
     known = baseline.get("cases", {})
+    if expect_all_cases:
+        seen = {s.case_id for s in run.scores} | set(run.missing_fixtures)
+        for case_id in sorted(set(known) - seen):
+            failures.append(f"{case_id}: in baseline but no such case (stale baseline)")
     for score in run.scores:
-        if score.case_id not in known:
+        entry = known.get(score.case_id)
+        if entry is None:
             failures.append(f"{score.case_id}: not in baseline (refresh with --write-baseline)")
-        if not score.structure_ok:
+        if not score.structure_ok and (entry is None or entry.get("structure_ok", True)):
             failures.append(
-                f"{score.case_id}: structure broken: {'; '.join(score.structure_problems)}"
+                f"{score.case_id}: structure broke (was OK in baseline): "
+                f"{'; '.join(score.structure_problems)}"
             )
 
     threshold = float(baseline.get("threshold", DEFAULT_THRESHOLD))
@@ -250,6 +279,10 @@ def format_offline_report(run: OfflineRun, baseline: dict | None, failures: list
     agg += f" · coverage {run.coverage:.3f} · structure {run.structure:.0%}"
     if baseline:
         agg += f" · baseline {baseline['aggregate']['faithfulness']:.3f}"
-    lines += ["", agg, "RESULT: " + ("FAIL" if failures else "PASS")]
+    lines += ["", agg]
+    if baseline:
+        for case_id in known_broken(run, baseline):
+            lines.append(f"WARN: {case_id}: structure broken, known at baseline (not a failure)")
+    lines.append("RESULT: " + ("FAIL" if failures else "PASS"))
     lines += [f"  - {f}" for f in failures]
     return "\n".join(lines)

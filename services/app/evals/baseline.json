@@ -1,9 +1,9 @@
 {
   "aggregate": {
     "cases": 21,
-    "coverage": 1.0,
-    "faithfulness": 1.0,
-    "structure": 1.0
+    "coverage": 0.9932,
+    "faithfulness": 0.8778,
+    "structure": 0.9048
   },
   "cases": {
     "acid_transactions": {
@@ -11,7 +11,7 @@
       "fact_recall": 1.0,
       "faithfulness": 1.0,
       "forbidden_hits": 0,
-      "structure_ok": true
+      "structure_ok": false
     },
     "big_o_notation": {
       "coverage": 1.0,
@@ -23,8 +23,8 @@
     "binary_search_trees": {
       "coverage": 1.0,
       "fact_recall": 1.0,
-      "faithfulness": 1.0,
-      "forbidden_hits": 0,
+      "faithfulness": 0.5,
+      "forbidden_hits": 1,
       "structure_ok": true
     },
     "deadlock": {
@@ -36,8 +36,8 @@
     },
     "dijkstra_shortest_paths": {
       "coverage": 1.0,
-      "fact_recall": 1.0,
-      "faithfulness": 1.0,
+      "fact_recall": 0.8,
+      "faithfulness": 0.8,
       "forbidden_hits": 0,
       "structure_ok": true
     },
@@ -50,15 +50,15 @@
     },
     "dp_knapsack": {
       "coverage": 1.0,
-      "fact_recall": 1.0,
-      "faithfulness": 1.0,
-      "forbidden_hits": 0,
+      "fact_recall": 0.8,
+      "faithfulness": 0.4,
+      "forbidden_hits": 1,
       "structure_ok": true
     },
     "finite_automata": {
       "coverage": 1.0,
-      "fact_recall": 1.0,
-      "faithfulness": 1.0,
+      "fact_recall": 0.8,
+      "faithfulness": 0.8,
       "forbidden_hits": 0,
       "structure_ok": true
     },
@@ -92,10 +92,10 @@
     },
     "memory_hierarchy": {
       "coverage": 1.0,
-      "fact_recall": 1.0,
-      "faithfulness": 1.0,
+      "fact_recall": 0.8333,
+      "faithfulness": 0.8333,
       "forbidden_hits": 0,
-      "structure_ok": true
+      "structure_ok": false
     },
     "normalisation": {
       "coverage": 1.0,
@@ -112,16 +112,16 @@
       "structure_ok": true
     },
     "rsa_public_key": {
-      "coverage": 1.0,
-      "fact_recall": 1.0,
-      "faithfulness": 1.0,
+      "coverage": 0.8571,
+      "fact_recall": 0.5,
+      "faithfulness": 0.5,
       "forbidden_hits": 0,
       "structure_ok": true
     },
     "sorting_algorithms": {
       "coverage": 1.0,
-      "fact_recall": 1.0,
-      "faithfulness": 1.0,
+      "fact_recall": 0.6,
+      "faithfulness": 0.6,
       "forbidden_hits": 0,
       "structure_ok": true
     },
@@ -153,6 +153,12 @@
       "forbidden_hits": 0,
       "structure_ok": true
     }
+  },
+  "provenance": {
+    "date": "2026-10-11",
+    "judge": false,
+    "model": "glm-5.3-flash",
+    "source": "live"
   },
   "threshold": 0.02,
   "version": 1

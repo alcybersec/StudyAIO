@@ -42,7 +42,15 @@ def _offline(args: argparse.Namespace) -> int:
         if run.missing_fixtures:
             print(f"cannot write a baseline: no fixture for {', '.join(run.missing_fixtures)}")
             return 1
-        text = json.dumps(run.to_baseline(args.threshold), indent=2, sort_keys=True)
+        provenance = None
+        if args.model:
+            provenance = {
+                "source": "live",
+                "model": args.model,
+                "date": args.date,
+                "judge": not args.no_judge,
+            }
+        text = json.dumps(run.to_baseline(args.threshold, provenance), indent=2, sort_keys=True)
         BASELINE_PATH.write_text(text + "\n")
         print(format_offline_report(run, None, []))
         print(f"\nBaseline written to {BASELINE_PATH}")
@@ -56,7 +64,7 @@ def _offline(args: argparse.Namespace) -> int:
         except FileNotFoundError as e:
             print(f"RESULT: FAIL\n  - {e}")
             return 1
-        failures = check_against_baseline(run, baseline)
+        failures = check_against_baseline(run, baseline, expect_all_cases=args.case is None)
 
     print(format_offline_report(run, baseline, failures))
     if args.out:
@@ -86,6 +94,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--case", default=None, help="Restrict to one case id")
     parser.add_argument("--check", action="store_true", help="Offline: fail on a regression")
     parser.add_argument("--write-baseline", action="store_true", help="Offline: rewrite baseline")
+    parser.add_argument("--model", default=None, help="Write-baseline: model id of the fixtures")
+    parser.add_argument("--date", default=None, help="Write-baseline: date the fixtures were made")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--fixtures", default=str(FIXTURES_DIR), help="Fixture directory")
     parser.add_argument("--save-fixtures", action="store_true", help="Live: store as fixtures")
