@@ -314,7 +314,7 @@ keys from `ALLOWED_PROPERTY_KEYS`, values are `bool`, `int`, `float` or a short
 
 A cohort is the users who signed up in an ISO week (UTC, Monday). `dN` is the number of cohort
 users with any event on day N after signup (calendar day offset from the signup date, UTC); a
-cohort younger than N days reports `null` for `dN`. Admin and demo accounts are excluded. Server
+cohort whose first possible signup day has not yet reached day N reports `null` for `dN`. Admin and demo accounts are excluded. Server
 side events are emitted where the action happens: flashcard review, quiz answer, study session,
 chat send, upload accepted, AI feedback. Account deletion removes the rows (`user_id` column).
 

@@ -18,6 +18,7 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 from app.agents.embeddings import get_embedding_provider
 from app.api import (
     admin_router,
+    ai_feedback_router,
     analytics_router,
     artifacts_router,
     assets_router,
@@ -43,6 +44,7 @@ from app.api import (
     study_router,
     summaries_router,
     uploads_router,
+    usage_router,
 )
 from app.config import settings
 from app.core import secret_box
@@ -410,6 +412,8 @@ app.add_middleware(
 # Register API routers
 app.include_router(dashboard_router, prefix="/api", tags=["dashboard"])
 app.include_router(feedback_router, prefix="/api", tags=["feedback"])
+app.include_router(ai_feedback_router, prefix="/api", tags=["feedback"])
+app.include_router(usage_router, prefix="/api", tags=["usage"])
 app.include_router(courses_router, prefix="/api", tags=["courses"])
 app.include_router(uploads_router, prefix="/api", tags=["uploads"])
 app.include_router(artifacts_router, prefix="/api", tags=["uploads"])

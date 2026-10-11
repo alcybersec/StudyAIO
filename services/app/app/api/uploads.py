@@ -39,6 +39,7 @@ from app.services import (
     billing_service,
     pipeline_service,
     quota_service,
+    usage_service,
     xp_service,
 )
 from app.services.event_service import pipeline_events_channel
@@ -166,6 +167,7 @@ async def upload_file(
     result = run_pipeline(artifact.file_path, user_id=user.id, artifact_id=artifact.id)
 
     # Record upload usage for quota tracking (best-effort)
+    await usage_service.record(session, user.id, "upload_completed")
     try:
         await billing_service.record_usage(session, user.id, uploads=1)
         await session.commit()
@@ -360,6 +362,7 @@ async def batch_upload(
             )
             succeeded += 1
             # Count it now, so the next file in this same request sees it.
+            await usage_service.record(session, user.id, "upload_completed")
             try:
                 await billing_service.record_usage(session, user.id, uploads=1)
                 await session.commit()

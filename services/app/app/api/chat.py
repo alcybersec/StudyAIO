@@ -24,7 +24,7 @@ from app.core.database import get_session
 from app.core.rate_limit import limiter
 from app.models.course import Course
 from app.models.user import User
-from app.services import billing_service, chat_service, quota_service
+from app.services import billing_service, chat_service, quota_service, usage_service
 
 logger = structlog.get_logger()
 
@@ -194,6 +194,14 @@ async def send_message(
         logger.error("chat_send_error", error=str(e), session_id=session_id)
         raise HTTPException(status_code=500, detail="Failed to process message") from e
 
+    await usage_service.record(
+        session,
+        user.id,
+        "chat_message_sent",
+        course_id=scope_course_id,
+        properties={"stream": False},
+    )
+
     # Record AI usage (best-effort). The adapter is not visible from here, so
     # tokens are an estimate from the text exchanged (billing_service.record_ai_call).
     await billing_service.record_ai_call(
@@ -255,6 +263,15 @@ async def stream_message(
         except Exception as e:
             logger.error("chat_stream_error", error=str(e), session_id=session_id)
             yield {"event": "error", "data": "Failed to process message"}
+
+        if streamed:
+            await usage_service.record(
+                session,
+                user.id,
+                "chat_message_sent",
+                course_id=scope_course_id,
+                properties={"stream": True},
+            )
 
         # Record AI usage (best-effort); tokens estimated from the text streamed.
         await billing_service.record_ai_call(

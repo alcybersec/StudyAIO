@@ -1,6 +1,7 @@
 """FastAPI API routers."""
 
 from app.api.admin import router as admin_router
+from app.api.ai_feedback import router as ai_feedback_router
 from app.api.analytics import router as analytics_router
 from app.api.artifacts import router as artifacts_router
 from app.api.assets import router as assets_router
@@ -26,9 +27,11 @@ from app.api.settings import router as settings_router
 from app.api.study import router as study_router
 from app.api.summaries import router as summaries_router
 from app.api.uploads import router as uploads_router
+from app.api.usage import router as usage_router
 
 __all__ = [
     "admin_router",
+    "ai_feedback_router",
     "artifacts_router",
     "analytics_router",
     "assets_router",
@@ -54,4 +57,5 @@ __all__ = [
     "study_router",
     "summaries_router",
     "uploads_router",
+    "usage_router",
 ]

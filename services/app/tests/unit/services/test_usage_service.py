@@ -89,7 +89,7 @@ class TestRecord:
         session.begin_nested.assert_called_once()
 
     def test_client_events_are_view_events_only(self):
-        assert svc.CLIENT_EVENTS == frozenset({"summary_viewed", "study_plan_viewed"})
+        assert frozenset({"summary_viewed", "study_plan_viewed"}) == svc.CLIENT_EVENTS
         assert svc.CLIENT_EVENTS <= svc.USAGE_EVENTS
 
 

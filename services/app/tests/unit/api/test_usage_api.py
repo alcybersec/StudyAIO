@@ -1,5 +1,6 @@
 """Usage events API (GL#37): view-event endpoint, admin readout, server-side emission."""
 
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -148,8 +149,8 @@ class TestServerSideEmission:
         review.ease_factor = 2.5
         review.interval_days = 1
         review.repetition_count = 1
-        review.next_review_at = None
-        review.last_reviewed_at = None
+        review.next_review_at = datetime(2026, 10, 12)
+        review.last_reviewed_at = datetime(2026, 10, 11)
         record = AsyncMock(return_value=True)
         with (
             patch(
@@ -190,7 +191,7 @@ class TestServerSideEmission:
         attempt.time_spent_ms = 1000
         attempt.exam_id = None
         attempt.attempted_at = None
-        attempt.created_at = None
+        attempt.created_at = datetime(2026, 10, 11)
         record = AsyncMock(return_value=True)
         with (
             patch(
