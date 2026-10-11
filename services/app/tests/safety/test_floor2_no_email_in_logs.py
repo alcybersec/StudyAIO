@@ -224,15 +224,6 @@ def test_floor2_structlog_line_reaches_the_handler_without_an_address(configured
     assert "@example." not in out, out
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "SAFETY-033 finding F1: structlog's .exception() hands the rendered line to "
-        "stdlib Logger.exception, whose Formatter appends a second, unredacted "
-        "traceback; EmailRedactingFilter rewrites only the message. Fix in "
-        "app/core/logging.py (backend); strict, so the fix turns this red until promoted."
-    ),
-)
 def test_floor2_logger_exception_traceback_is_redacted(configured_logging):
     _handlers, stream = configured_logging
     try:
@@ -244,21 +235,32 @@ def test_floor2_logger_exception_traceback_is_redacted(configured_logging):
     assert "@example." not in out, out
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "SAFETY-033 finding F2: the Celery worker never calls configure_logging, so "
-        "worker-side logs (notifications, email delivery, pipeline) run on structlog "
-        "defaults with no redact_emails processor. Fix in app/worker.py (ai), e.g. on "
-        "the setup_logging / worker_process_init signal."
-    ),
-)
 def test_floor2_worker_configures_redacting_logging():
     tree = parse(APP_ROOT / "worker.py")
     called = {
         ast.unparse(n.func).rsplit(".", 1)[-1] for n in ast.walk(tree) if isinstance(n, ast.Call)
     }
     assert "configure_logging" in called
+
+
+def test_floor2_worker_setup_logging_signal_installs_the_filter(configured_logging):
+    """Celery fires ``setup_logging`` in worker and beat; prefork children inherit it."""
+    from celery.signals import setup_logging
+
+    import app.worker  # noqa: F401  (connects the receiver)
+    from app.core.logging import EmailRedactingFilter, redact_emails
+
+    root = logging.getLogger()
+    structlog.reset_defaults()
+    root.handlers = [logging.StreamHandler(io.StringIO())]
+    responses = setup_logging.send(
+        sender=None, loglevel="INFO", logfile=None, format="", colorize=False
+    )
+    assert responses, "no receiver on celery setup_logging: Celery hijacks the root logger"
+    assert redact_emails in structlog.get_config()["processors"]
+    assert root.handlers
+    for handler in root.handlers:
+        assert any(isinstance(f, EmailRedactingFilter) for f in handler.filters), handler
 
 
 # ── payloads ───────────────────────────────────────────────────────────

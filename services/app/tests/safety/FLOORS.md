@@ -9,10 +9,9 @@ test listed for it passes. A floor question that only the user can decide is hel
 in a `*_PENDING_RULING` dict, and a test per floor is red while that dict is not
 empty. The 2026-10-04 rulings emptied every one of them. The tier holds no `xfail`:
 the SAFETY-027 veto marker on the JWT default-secret check (floor 2) XPASSed on
-`8356b15` and was removed in SAFETY-028. Since SAFETY-033 it holds two **strict** `xfail`s, both in
-`test_floor2_no_email_in_logs.py` and both on the email-redaction *backstop* (SEC-08), not
-on a floor: findings F1 and F2 below. Strict means the fix turns them red until they are
-promoted to plain tests. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate.
+`8356b15` and was removed in SAFETY-028. SAFETY-033 added two **strict** `xfail`s on the
+email-redaction *backstop* (SEC-08), findings F1 and F2; both fixes landed (`06c4fcb`, `344ce7e`) and
+SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate.
 
 Run:
 
@@ -250,13 +249,17 @@ filter are a backstop.
 | `…::test_floor2_redaction_runs_after_exc_formatting_and_right_before_the_renderer` | After `configure_logging`, `redact_emails` is missing, runs before `format_exc_info`, or anything but the renderer follows it. |
 | `…::test_floor2_every_root_handler_has_the_email_filter` | A root handler present after `configure_logging` lacks `EmailRedactingFilter`. |
 | `…::test_floor2_structlog_line_reaches_the_handler_without_an_address` | An address in a field, the event, a nested value, an `exc_info=True` traceback or a stdlib record reaches the handler stream. |
-| `…::test_floor2_logger_exception_traceback_is_redacted` | **strict xfail, finding F1** (owner: backend, `app/core/logging.py`). `log.exception(...)` reaches stdlib `Logger.exception`, whose formatter appends a second, unredacted traceback; the filter rewrites only the message. |
-| `…::test_floor2_worker_configures_redacting_logging` | **strict xfail, finding F2** (owner: ai, `app/worker.py`). The Celery worker never calls `configure_logging`, so notification, email and pipeline logs run on structlog defaults with no redaction. |
+| `…::test_floor2_logger_exception_traceback_is_redacted` | Finding F1 (fixed `06c4fcb`, promoted SAFETY-040). `log.exception(...)` reaches stdlib `Logger.exception`, whose formatter appends a traceback after the message; it fails when `EmailRedactingFilter` stops rendering and scrubbing `exc_text` (and `stack_info`). Covers only handlers carrying the filter: a handler attached after `configure_logging` must add it itself. |
+| `…::test_floor2_worker_configures_redacting_logging` | Finding F2 (fixed `344ce7e`, promoted SAFETY-040). `app/worker.py` no longer calls `configure_logging`. |
+| `…::test_floor2_worker_setup_logging_signal_installs_the_filter` | Firing Celery's `setup_logging` signal (as worker and beat do at start) finds no receiver from `app.worker`, or leaves `redact_emails` out of structlog or a root handler without `EmailRedactingFilter`. Prefork children inherit the parent's configured root logger. |
 | `…::test_floor2_profile_payload_hides_the_raw_consent_record` | The profile payload or its serialization schema exposes `ai_processing_consent_at`/`_version` (only `ai_consent_required` is public). |
 | `…::test_floor2_usage_properties_cannot_carry_free_text`, `…::test_floor2_feedback_comment_never_reaches_a_log_or_usage_event`, `…::test_floor2_comment_leak_detector_is_red`, `…::test_floor2_feedback_comment_absent_from_events_and_logs` | Usage-event properties admit a free-text key or value, or an AI-feedback comment is passed to a log call or `usage_service.record` (statically, and through `PUT /api/feedback`). |
 
 Mutation-checked in SAFETY-033, all red: `logger.info(..., email=user.email)` in `consent_service`;
 `exclude=True` removed from the consent timestamp; the comment added to the usage properties.
+Mutation-checked in SAFETY-040, all red: `app/core/logging.py` reverted to before `06c4fcb` (the F1 test);
+`app/worker.py` reverted to before `344ce7e` (both worker tests); only the `@setup_logging.connect` decorator
+removed (the signal test, which the AST check alone misses).
 
 ## 3. AI only via the adapter (amended by ADR 0003 and ADR 0005)
 

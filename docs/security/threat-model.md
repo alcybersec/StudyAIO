@@ -114,8 +114,9 @@ New surfaces and their judgement. Detail is in `docs/gates/M32/floors.md`.
    with two holes, recorded as strict `xfail`s: (F1) `log.exception(...)` makes stdlib append a second,
    unredacted traceback; (F2) the Celery worker never calls `configure_logging`, so worker logs (notifications,
    email delivery, pipeline) are not redacted at all. Neither is a floor breach: the call-site rule holds, and an
-   address only reaches a log through exception text. Also unfiltered: handlers that loggers such as
-   `uvicorn.access` attach for themselves, and any handler added after `configure_logging`.
+   address only reaches a log through exception text. Both are closed (see M33-S1-SAFETY-040 below). Still
+   unfiltered: handlers that loggers such as `uvicorn.access` attach for themselves, and any handler added after
+   `configure_logging`.
 3. **AI feedback and usage events (GL#36, GL#37).** New user-owned tables, both deleted with the account. Votes
    land only on the caller's own targets; a foreign and a missing target return the same 404. Usage events are
    always keyed on the caller, and a client may report only two view events, for its own course. The two admin
@@ -134,3 +135,13 @@ New surfaces and their judgement. Detail is in `docs/gates/M32/floors.md`.
    extraction, and AI-generated summaries sent back to generate flashcards and quizzes. (c) With a remote
    embedding backend, lecture text and questions also go to the embedding provider, which can differ from the
    chat provider.
+
+### 2026-10-12, M33 S1 (M33-S1-SAFETY-040)
+
+1. **F1 and F2 closed (SEC-08, GL#38).** `EmailRedactingFilter` now renders `exc_text` before the stdlib
+   Formatter does and scrubs it and `stack_info`, so `log.exception(...)` emits no address (`06c4fcb`). The
+   worker connects `configure_logging` to Celery's `setup_logging` signal, which also stops Celery from
+   replacing the root logger; worker and beat both fire it, and prefork children inherit the configured
+   handlers (`344ce7e`). Both pins are plain floor-tier tests now, plus a runtime test that fires the signal.
+   Limit unchanged: the filter covers only handlers that carry it, so a handler attached after
+   `configure_logging` (or one a library attaches to its own logger) must add the filter itself.
