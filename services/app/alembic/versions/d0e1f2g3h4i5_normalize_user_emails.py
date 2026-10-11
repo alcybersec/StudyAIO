@@ -18,8 +18,8 @@ future call site forgets.
 folding them means choosing which account survives — which sessions, courses,
 artifacts and OAuth links are kept and which are orphaned. That is an operator
 decision with no safe default, so the migration aborts and names the rows
-instead of silently picking one. On the live instance there are two accounts
-and this is expected to be a no-op; it is written as though it is not.
+instead of silently picking one. On a small instance
+this is expected to be a no-op; it is written as though it is not.
 
 The downgrade drops the index only. The original casing is not recoverable —
 it was overwritten, not copied aside — and inventing one would be worse than
