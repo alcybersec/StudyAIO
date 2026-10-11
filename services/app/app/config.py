@@ -115,6 +115,11 @@ class Settings(BaseSettings):
 
     # Observability
     prometheus_enabled: bool = False
+    #: Port on which the Celery worker serves Prometheus metrics, aggregated
+    #: across prefork children via PROMETHEUS_MULTIPROC_DIR. 0 disables it.
+    #: The api runs single-process uvicorn, so its /metrics needs no
+    #: multiprocess collector.
+    worker_metrics_port: int = 0
 
     # Backup
     backup_enabled: bool = False
