@@ -20,6 +20,7 @@ from app.services import (
     settings_service,
 )
 from app.services.chat_scope import build_sources
+from app.services.retrieval import filter_by_floor, not_found_reply, record_below_floor
 
 logger = structlog.get_logger()
 
@@ -80,10 +81,14 @@ async def ask_question(
         user_id=user.id,
     )
 
+    searched = len(chunks)
+    chunks = filter_by_floor(chunks)
     if not chunks:
+        if searched:
+            record_below_floor("qa", searched=searched, scope_code=body.course_code, week=body.week)
+        # Nothing relevant: answer deterministically, no AI call, no usage.
         return QAResponse(
-            answer="I couldn't find any relevant content in the indexed lecture materials for your question. "
-            "Make sure the relevant lectures have been uploaded and processed.",
+            answer=not_found_reply(body.course_code, body.week),
             citations=[],
             chunks_searched=0,
         )

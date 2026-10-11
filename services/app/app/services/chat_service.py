@@ -15,7 +15,7 @@ from app.models.artifact import LectureArtifact
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.course import Course
-from app.services import course_service, search_service, settings_service
+from app.services import course_service, retrieval, search_service, settings_service
 from app.services.chat_scope import build_sources, detect_quiz_intent, parse_scope
 
 logger = structlog.get_logger()
@@ -164,6 +164,71 @@ async def _plan_message(
         else:
             plan.reply = f"None of your courses have Week {parsed.week} material indexed yet."
     return plan
+
+
+def _previous_user_message(content: str, recent_user: list[str]) -> str | None:
+    """Newest earlier user message (``recent_user`` is newest first).
+
+    The history query may already contain the message being sent; a leading
+    copy of ``content`` is skipped so a follow-up never uses itself as context.
+    """
+    earlier = recent_user[1:] if recent_user and recent_user[0] == content else recent_user
+    return earlier[0] if earlier else None
+
+
+async def _retrieve(
+    session: AsyncSession,
+    user_id: str,
+    content: str,
+    plan: _Plan,
+    recent_user: list[str],
+    failure_event: str,
+) -> list[dict]:
+    """Search the caller's chunks for ``content`` and apply the relevance floor.
+
+    Follow-up turns embed the carried scope plus the previous question and the
+    message (deterministic rewrite, no AI call). When the search succeeded but
+    nothing clears the floor, ``plan.reply`` is set to a fixed reply so the
+    agent is never called. A failed search still falls through to a general
+    answer, as before.
+    """
+    query = retrieval.build_retrieval_query(
+        content,
+        code=plan.code,
+        week=plan.week,
+        previous_user_message=_previous_user_message(content, recent_user),
+    )
+    raw: list[dict] = []
+    search_ok = False
+    try:
+        provider = get_embedding_provider()
+        query_embeddings = provider.embed_texts([query])
+        if query_embeddings:
+            raw = await search_service.search_chunks(
+                session=session,
+                query_embedding=query_embeddings[0],
+                top_k=MAX_RAG_CHUNKS,
+                course_id=plan.course_id,
+                week=plan.week,
+                user_id=user_id,
+            )
+            search_ok = True
+    except Exception as e:
+        logger.warning(
+            failure_event,
+            error=await settings_service.redacted_error(session, user_id, e),
+        )
+        # Continue without RAG context -- still useful for general conversation
+    chunks = retrieval.filter_by_floor(raw)
+    if search_ok and not chunks:
+        if raw:
+            plan.reply = retrieval.not_found_reply(plan.code, plan.week)
+            retrieval.record_below_floor(
+                "chat", searched=len(raw), scope_code=plan.code, week=plan.week
+            )
+        elif plan.from_message:
+            plan.reply = _no_material_reply(plan)
+    return chunks
 
 
 async def create_session(
@@ -343,28 +408,9 @@ async def send_message(
     answer_text = ""
     answer_citations: list[dict] = []
     if plan.reply is None:
-        search_ok = False
-        try:
-            provider = get_embedding_provider()
-            query_embeddings = provider.embed_texts([content])
-            if query_embeddings:
-                chunks = await search_service.search_chunks(
-                    session=session,
-                    query_embedding=query_embeddings[0],
-                    top_k=MAX_RAG_CHUNKS,
-                    course_id=plan.course_id,
-                    week=plan.week,
-                    user_id=user_id,
-                )
-                search_ok = True
-        except Exception as e:
-            logger.warning(
-                "chat_rag_search_failed",
-                error=await settings_service.redacted_error(session, user_id, e),
-            )
-            # Continue without RAG context — still useful for general conversation
-        if search_ok and plan.from_message and not chunks:
-            plan.reply = _no_material_reply(plan)
+        chunks = await _retrieve(
+            session, user_id, content, plan, recent_user, "chat_rag_search_failed"
+        )
 
     if plan.reply is not None:
         answer_text = plan.reply
@@ -494,27 +540,9 @@ async def stream_message(
     )
     chunks: list[dict] = []
     if plan.reply is None:
-        search_ok = False
-        try:
-            provider = get_embedding_provider()
-            query_embeddings = provider.embed_texts([content])
-            if query_embeddings:
-                chunks = await search_service.search_chunks(
-                    session=session,
-                    query_embedding=query_embeddings[0],
-                    top_k=MAX_RAG_CHUNKS,
-                    course_id=plan.course_id,
-                    week=plan.week,
-                    user_id=user_id,
-                )
-                search_ok = True
-        except Exception as e:
-            logger.warning(
-                "chat_stream_rag_failed",
-                error=await settings_service.redacted_error(session, user_id, e),
-            )
-        if search_ok and plan.from_message and not chunks:
-            plan.reply = _no_material_reply(plan)
+        chunks = await _retrieve(
+            session, user_id, content, plan, recent_user, "chat_stream_rag_failed"
+        )
 
     # Yield user message ID
     yield {

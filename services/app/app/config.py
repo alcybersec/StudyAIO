@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dimensions: int = 384
     search_top_k: int = 10
+    # Minimum cosine similarity (1 - pgvector cosine distance) for a retrieved
+    # chunk to be used by chat and Q&A. all-MiniLM-L6-v2 scores unrelated
+    # text around 0.0-0.15, loosely topical text 0.2-0.3 and a passage that
+    # actually answers the question typically >= 0.35. 0.25 sits at the top of
+    # the noise band: weak topical neighbours are dropped, genuine matches
+    # stay. Re-tune if EMBEDDING_MODEL changes; 0 disables the floor.
+    retrieval_min_similarity: float = 0.25
 
     # Security
     cookie_secure: bool = False
