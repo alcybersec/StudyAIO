@@ -15,9 +15,10 @@ Orchestrator updates here.
 
 ## Next task
 
-**Awaiting the user's strategic-bet choice** (audit §5, required to cut M33 tasks). Carried from the M32 gate:
-**M33-S1-OPS-004 (G4)** — observe the first scheduled `daily-backup` (02:00 UTC) succeed. Follow-ups from the
-2026-10-11 leak sweep: GitHub push mirror paused (re-enable is a user decision); history rewrite deferred.
+**M33-S1** (strategic bet: weak-spot engine, user 2026-10-11). Unblocked now: M33-S1-OPS-004 (G4, after the next
+02:00 UTC backup), M33-S1-AI-012 (eval set in CI), M33-S1-AI-014 (relevance floor), M33-S1-BACKEND-015/016/017
+(feedback, usage events, consent). M33-S1-AI-013 after AI-012 (needs the baseline). M33-S2 starts with
+M33-S2-ARCH-018 (ADR 0007), which needs the user's acceptance before S2 implementation.
 
 ## Active
 
