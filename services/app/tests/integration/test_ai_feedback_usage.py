@@ -22,7 +22,7 @@ from app.models.chat_session import ChatSession
 from app.models.usage_event import UsageEvent
 from app.services import account_service, usage_service
 
-from ._support import make_pdf, make_docx, seed_course
+from ._support import make_docx, make_pdf, seed_course
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
