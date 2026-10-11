@@ -21,6 +21,7 @@ requests to (the default admin, created here if no API request has made it yet).
 import argparse
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parents[2] / "app"
@@ -56,6 +57,8 @@ def _owner(session: Session) -> User:
             tier="pro",
             is_active=True,
             email_verified=True,
+            ai_processing_consent_at=datetime.now(UTC),
+            ai_processing_consent_version=1,
         )
         session.add(user)
         session.flush()
@@ -104,6 +107,9 @@ def seed_admin(session: Session, email: str, password: str) -> None:
     user.tier = "pro"
     user.is_active = True
     user.email_verified = True
+    # AI-spending routes answer 403 until consent is recorded (GL#38).
+    user.ai_processing_consent_at = datetime.now(UTC)
+    user.ai_processing_consent_version = 1
 
 
 def main() -> None:

@@ -32,6 +32,18 @@ export async function loginViaAPI(
   expect(resp.ok()).toBeTruthy()
 }
 
+/**
+ * Record AI-processing consent for the logged-in user. AI-spending routes
+ * (uploads, chat, Q&A, ...) answer 403 `ai_consent_required` until this is
+ * called; a single-user stack never asks, so it is a harmless 200 there.
+ */
+export async function giveAiConsent(page: Page): Promise<void> {
+  const resp = await page.request.post(`${API_URL}/api/auth/consent`)
+  expect(resp.ok()).toBeTruthy()
+  const body = await resp.json()
+  expect(body.ai_consent_required).toBe(false)
+}
+
 /** Login via the demo endpoint (self-hosted shortcut) */
 export async function loginAsDemo(page: Page): Promise<void> {
   const resp = await page.request.get(`${API_URL}/api/auth/demo-login`)
