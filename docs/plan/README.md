@@ -20,6 +20,8 @@ Orchestrator updates here.
 (feedback, usage events, consent). M33-S1-AI-013 after AI-012 (needs the baseline). M33-S2 starts with
 M33-S2-ARCH-018 (ADR 0007), which needs the user's acceptance before S2 implementation.
 
+**M33 GitLab issues (2026-10-11):** GL#32–#51 = M33-S1-OPS-004 … M33-S3-DEVOPS-030 in §11 order (label `M33`).
+
 ## Active
 
 | Task | Owner | Dispatched | Worktree |
