@@ -92,8 +92,8 @@ note without a pasted run is not evidence and the Orchestrator re-runs the tests
 | ID | Name | Status |
 |---|---|---|
 | M31 | Maintenance | closed 2026-10-08 (CONDITIONAL; C1–C6 → M32) |
-| M32 | Safe to grow (audit S1 + security/money/integrity S2) | open |
-| M33 | Trust and retention (audit AI quality, usage, onboarding, strategic bet) | not started |
+| M32 | Safe to grow (audit S1 + security/money/integrity S2) | closed 2026-10-11 (CONDITIONAL accepted; G4 → M33) |
+| M33 | Trust and retention (audit AI quality, usage, onboarding, strategic bet) | open — awaiting strategic bet |
 
 ## 11. Task graph
 
