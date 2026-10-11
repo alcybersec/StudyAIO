@@ -1,11 +1,14 @@
 """Celery task for automated database backups."""
 
 import subprocess
+import time
 from urllib.parse import quote, unquote, urlparse
 
 import structlog
+from celery.exceptions import Retry
 
 from app.config import settings
+from app.pipeline import metrics
 from app.worker import celery_app
 
 logger = structlog.get_logger()
@@ -49,9 +52,11 @@ def run_backup(self) -> dict[str, str]:
     """
     if not settings.backup_enabled:
         logger.info("backup_skipped", reason="backup_enabled=false")
+        metrics.BACKUP_RUNS.labels(outcome="skipped").inc()
         return {"status": "skipped", "reason": "backups disabled"}
 
     db_env, password = _db_env()
+    started = time.monotonic()
     try:
         logger.info("backup_starting", db_host=db_env["PGHOST"], db_name=db_env["PGDATABASE"])
         result = subprocess.run(
@@ -68,7 +73,9 @@ def run_backup(self) -> dict[str, str]:
             },
         )
 
+        metrics.BACKUP_DURATION.observe(time.monotonic() - started)
         if result.returncode != 0:
+            metrics.BACKUP_RUNS.labels(outcome="failure").inc()
             stderr = _scrub(result.stderr, password)
             logger.error("backup_failed", stderr=stderr[:500])
             raise self.retry(
@@ -80,12 +87,18 @@ def run_backup(self) -> dict[str, str]:
         # straddling the cut leak its tail. Celery logs the return value.
         output = _scrub(result.stdout, password)[-200:]
         logger.info("backup_completed", stdout=output)
+        metrics.BACKUP_RUNS.labels(outcome="success").inc()
+        metrics.BACKUP_LAST_SUCCESS.set_to_current_time()
         return {"status": "ok", "output": output}
 
     except subprocess.TimeoutExpired:
         logger.error("backup_timeout")
+        metrics.BACKUP_DURATION.observe(time.monotonic() - started)
+        metrics.BACKUP_RUNS.labels(outcome="timeout").inc()
         return {"status": "error", "reason": "timeout after 600s"}
     except Exception as exc:
+        if not isinstance(exc, Retry):  # a failed run already counted before it retried
+            metrics.BACKUP_RUNS.labels(outcome="error").inc()
         # Never log str(exc) raw: it may embed the child env or command.
         safe = _scrub(str(exc), password)
         logger.error("backup_error", error=safe)

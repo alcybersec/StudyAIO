@@ -36,6 +36,7 @@ from app.models.artifact import LectureArtifact
 from app.models.chunk import Chunk
 from app.models.user import User
 from app.pipeline.index import _index
+from app.pipeline.metrics import REEMBED_ARTIFACTS
 from app.worker import celery_app
 
 logger = structlog.get_logger()
@@ -122,6 +123,8 @@ async def reembed_user_chunks_async(
                     error=str(exc),
                 )
             counters[outcome] += 1
+            if not dry_run:
+                REEMBED_ARTIFACTS.labels(outcome=outcome).inc()
         after_id = ids[-1]
         logger.info("reembed_progress", dry_run=dry_run, **counters)
     logger.info("reembed_user_done", dry_run=dry_run, **counters)

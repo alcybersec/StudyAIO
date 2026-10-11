@@ -26,6 +26,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from app.agents.transient import TransientAgentError
 from app.core.database import run_async
 from app.core.exceptions import SummarizationError
+from app.pipeline import metrics
 from app.pipeline.failures import record_stage_event
 from app.pipeline.limits import (
     BACKOFF_BASE_SECONDS,
@@ -109,6 +110,7 @@ def handle_retryable(
         raise exc
     countdown = backoff_countdown(retries)
     count_metric("pipeline_stage_retries_total", stage=stage)
+    metrics.STAGE_RETRIES.labels(stage=stage, error_class=type(exc).__name__).inc()
     logger.warning(
         "pipeline_stage_retrying",
         stage=stage,
