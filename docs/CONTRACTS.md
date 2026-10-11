@@ -271,6 +271,53 @@ AI-processing disclosure and consent (SEC-08, GL#38). Provider: `backend` —
   `app.core.logging.redact_emails` and the stdlib `EmailRedactingFilter` redact any address-shaped
   value as defence in depth.
 
+### api.ai_feedback v1
+
+Per-item thumbs up/down on AI output (M33-S1-BACKEND-015, GL#36). Provider: `backend` —
+`services/app/app/api/ai_feedback.py`, `services/app/app/services/ai_feedback_service.py`. Consumer:
+`frontend`. Storage: `ai_feedback` (`AIFeedback`), unique on `(user_id, target_type, target_id)`;
+the database enforces none of the value rules, the service does. Distinct from the app-bug
+`POST /api/feedback`.
+
+| Endpoint | Body / query | Result |
+|---|---|---|
+| `PUT /api/feedback` | `{target_type, target_id, rating, reason?, comment?}` | `200` `{target_type, target_id, rating, reason, comment, course_id, updated_at}`; replaces the caller's earlier vote |
+| `DELETE /api/feedback/{target_type}/{target_id}` | none | `204`; removes the caller's own vote, `404` when there is none |
+| `GET /api/feedback/mine` | `target_type`, repeated `target_ids` (max 100) | `200` `{items: [vote]}` — only the caller's votes |
+| `GET /api/admin/ai-feedback` (admin) | `days` (1-365, default 30) | `200` `{total, by_target_type, by_reason, by_rating, recent_negative: [{target_type, reason, comment, course_id, created_at}]}` — no user ids or emails |
+
+Rules: `target_type` in `AI_FEEDBACK_TARGET_TYPES`; `rating` is `1` or `-1`; `reason` in
+`AI_FEEDBACK_REASONS` and only with `-1`; `comment` at most 1000 characters. A target that does not
+exist **and** one owned by someone else both return `404` (no existence probe), resolved through the
+owner-scoped getters (floor 1). `course_id` is inferred from the target, never taken from the
+client. The admin route lives at `/admin/ai-feedback` because `/admin/feedback` is the app-bug
+inbox. `answer` resolves to an assistant `chat_message`; `/qa/ask` answers are not persisted and
+carry no id, so they cannot be rated. Account deletion removes the rows (`user_id` column).
+
+### services.usage v1
+
+Per-feature usage events for retention (M33-S1-BACKEND-016, GL#37). Provider: `backend` —
+`services/app/app/services/usage_service.py`, `services/app/app/api/usage.py`. Storage:
+`usage_events` (`UsageEvent`), append-only.
+
+`usage_service.record(session, user_id, event, *, course_id=None, properties=None) -> bool` — flushes
+one row inside a savepoint and **never raises into the caller**: an unknown event, bad properties
+or a database error is logged, counted (`studyaio_usage_events_total{outcome}`) and returns
+`False`. The caller owns the commit. `event` is one of `USAGE_EVENTS`; `properties` has at most 8
+keys from `ALLOWED_PROPERTY_KEYS`, values are `bool`, `int`, `float` or a short
+`[a-z0-9_.-]` token (at most 40 characters). No free text, no content, no PII.
+
+| Endpoint | Body / query | Result |
+|---|---|---|
+| `POST /api/usage-events` | `{event, course_id?}`; `event` in `summary_viewed`, `study_plan_viewed` only | `204`; rate limited; `course_id` must be the caller's (`404` otherwise) |
+| `GET /api/admin/usage/retention` (admin) | `weeks` (1-26, default 8) | `200` `{cohorts: [{week_start, signups, d1, d7, d30}], features: [{week_start, event, active_users}]}` |
+
+A cohort is the users who signed up in an ISO week (UTC, Monday). `dN` is the number of cohort
+users with any event on day N after signup (calendar day offset from the signup date, UTC); a
+cohort younger than N days reports `null` for `dN`. Admin and demo accounts are excluded. Server
+side events are emitted where the action happens: flashcard review, quiz answer, study session,
+chat send, upload accepted, AI feedback. Account deletion removes the rows (`user_id` column).
+
 ## Change log
 
 The `Contract` column holds the name from that contract's `###` heading in Current.
@@ -281,3 +328,5 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-04 | agents.AgentAdapter | v1 | Floor-3 open question closed by reference to ADR 0003, which enumerates the five request-time `get_agent` call sites. Interface unchanged, so no version bump. | M31-S1-ARCH-006 |
 | 2026-10-09 | core.clock | v1 | New contract, recorded before implementation: five functions, `user_settings.timezone` as the zone source, `None`/invalid → UTC. Contract test committed red. | M32-S2-ARCH-033 |
 | 2026-10-11 | api.ai-consent | v1 | New contract, recorded before implementation: consent endpoint, `ai_consent_required` on the profile, 403 `ai_consent_required` gate, email-free logs. | M33-S1-BACKEND-017 |
+| 2026-10-11 | api.ai_feedback | v1 | New contract, recorded before implementation: vote upsert/delete/list, admin aggregate at `/admin/ai-feedback`. | M33-S1-BACKEND-015 |
+| 2026-10-11 | services.usage | v1 | New contract, recorded before implementation: allowlisted never-raising `record`, view-event endpoint, admin retention readout. | M33-S1-BACKEND-016 |
