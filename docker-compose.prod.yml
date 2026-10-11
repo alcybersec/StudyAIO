@@ -28,7 +28,7 @@ services:
       # default -- the api and worker refuse to start without it unless
       # SINGLE_USER_MODE=true. See docs/deployment.md.
       SETTINGS_ENCRYPTION_KEY:
-      # Exposes /metrics on :8000. Caddy forwards only /api/* and /health/*,
+      # Exposes /metrics on :8000. the reverse proxy should forward only /api/* and /health/*,
       # so it is not public; scrape it host-locally (docs/deployment.md#metrics).
       PROMETHEUS_ENABLED: "true"
     # --forwarded-allow-ips names the reverse proxy whose X-Forwarded-For may be
@@ -82,7 +82,7 @@ services:
       PROMETHEUS_ENABLED: "true"
       WORKER_METRICS_PORT: "9101"
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
-    # Loopback only: a host-local scraper (a host-local scraper) reaches it, nothing else.
+    # Loopback only: a host-local scraper reaches it, nothing else.
     ports:
       - "127.0.0.1:9101:9101"
     tmpfs:
