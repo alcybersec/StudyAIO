@@ -204,12 +204,14 @@ async def send_message(
 
     # Record AI usage (best-effort). The adapter is not visible from here, so
     # tokens are an estimate from the text exchanged (billing_service.record_ai_call).
-    await billing_service.record_ai_call(
-        session,
-        user.id,
-        prompt_text=body.content,
-        output_text=str(getattr(assistant_msg, "content", "") or ""),
-    )
+    # A fixed reply (e.g. nothing above the relevance floor) made no AI call.
+    if getattr(assistant_msg, "ai_called", True) is not False:
+        await billing_service.record_ai_call(
+            session,
+            user.id,
+            prompt_text=body.content,
+            output_text=str(getattr(assistant_msg, "content", "") or ""),
+        )
 
     await session.commit()
 
@@ -241,6 +243,7 @@ async def stream_message(
 
     async def event_generator():
         streamed: list[str] = []
+        ai_called = True
         try:
             async for event in chat_service.stream_message(
                 session=session,
@@ -252,6 +255,8 @@ async def stream_message(
             ):
                 event_type = event["event"]
                 data = event["data"]
+                if event.get("ai_called") is False:
+                    ai_called = False
                 if event_type == "token" and isinstance(data, str):
                     streamed.append(data)
                 if isinstance(data, dict):
@@ -274,9 +279,10 @@ async def stream_message(
             )
 
         # Record AI usage (best-effort); tokens estimated from the text streamed.
-        await billing_service.record_ai_call(
-            session, user.id, prompt_text=body.content, output_text="".join(streamed)
-        )
+        if ai_called:
+            await billing_service.record_ai_call(
+                session, user.id, prompt_text=body.content, output_text="".join(streamed)
+            )
 
         await session.commit()
 

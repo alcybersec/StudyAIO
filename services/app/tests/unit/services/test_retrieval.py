@@ -25,7 +25,7 @@ def _chunk(sim: float) -> dict:
 
 
 def _counter(surface: str) -> float:
-    return retrieval.RETRIEVAL_BELOW_FLOOR.labels(surface=surface)._value.get()
+    return retrieval.RETRIEVAL_BELOW_FLOOR.labels(stage=surface)._value.get()
 
 
 class TestHelpers:
@@ -89,6 +89,7 @@ class TestChatFloor:
             _, assistant = await send_message(session, "session-001", USER, "lecture 3 trivia?")
         assert assistant.content == NOT_FOUND
         assert assistant.citations_json is None
+        assert assistant.ai_called is False
         agent.answer_question.assert_not_awaited()
         usage.assert_not_awaited()
         assert _counter("chat") == before + 1
@@ -103,6 +104,7 @@ class TestChatFloor:
         with p1, p2, p3, p4, _patch_lookup(_owned(_course("CSCI369", "c369"))):
             _, assistant = await send_message(session, "session-001", USER, "lecture 3?")
         assert assistant.content == "ASLR [1]"
+        assert assistant.ai_called is True
         sent = agent.answer_question.await_args.args[1]
         assert [c["similarity"] for c in sent] == [0.8]
 
@@ -130,6 +132,7 @@ class TestChatFloor:
         agent.stream_answer.assert_not_called()
         done = next(e for e in events if e["event"] == "done")
         assert done["data"]["citations_json"] is None
+        assert done["ai_called"] is False
 
 
 def _embed_patches(agent, search):

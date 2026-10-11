@@ -7,12 +7,12 @@ from app.config import settings
 
 logger = structlog.get_logger()
 
-#: Retrievals that found nothing above the relevance floor, by surface. The
-#: only label is the low-cardinality ``surface`` enum (chat | qa).
+#: Retrievals that found nothing above the relevance floor, by stage (chat | qa).
+#: The only label is that low-cardinality enum (floor 2 label policy).
 RETRIEVAL_BELOW_FLOOR = Counter(
     "studyaio_retrieval_below_floor_total",
     "Retrievals answered 'not in your materials' because no chunk cleared the floor.",
-    ["surface"],
+    ["stage"],
 )
 
 #: Characters of the previous question folded into a follow-up retrieval query.
@@ -43,13 +43,13 @@ def not_found_reply(code: str | None, week: int | None) -> str:
 
 
 def record_below_floor(
-    surface: str, *, searched: int, scope_code: str | None, week: int | None
+    stage: str, *, searched: int, scope_code: str | None, week: int | None
 ) -> None:
     """Count and log a below-floor retrieval (no AI call is made)."""
-    RETRIEVAL_BELOW_FLOOR.labels(surface=surface).inc()
+    RETRIEVAL_BELOW_FLOOR.labels(stage=stage).inc()
     logger.info(
         "retrieval_below_floor",
-        surface=surface,
+        stage=stage,
         candidates=searched,
         floor=settings.retrieval_min_similarity,
         course_code=scope_code,
