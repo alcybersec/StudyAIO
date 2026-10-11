@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Navigate, Outlet, createBrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { QuotaProvider } from './contexts/QuotaContext'
+import { ConsentProvider } from './contexts/ConsentContext'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthLayout } from './components/layout/AuthLayout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
@@ -55,7 +56,9 @@ function RootLayout() {
   return (
     <AuthProvider>
       <QuotaProvider>
-        <Outlet />
+        <ConsentProvider>
+          <Outlet />
+        </ConsentProvider>
       </QuotaProvider>
     </AuthProvider>
   )

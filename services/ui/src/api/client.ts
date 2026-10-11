@@ -73,6 +73,44 @@ async function fetchWithRefresh(input: RequestInfo | URL, init?: RequestInit): P
   return fetch(input, init)
 }
 
+// Global AI-consent handler, set by ConsentProvider. Resolves true once the
+// user has accepted the disclosure (so the original request may be retried).
+export type ConsentHandler = (consentVersion: number | null) => Promise<boolean>
+let onConsentRequired: ConsentHandler | null = null
+
+export function setConsentRequiredHandler(handler: ConsentHandler | null) {
+  onConsentRequired = handler
+}
+
+/** Read the `consent_version` of a 403 `ai_consent_required` body; undefined for any other response. */
+async function consentGate(response: Response): Promise<{ version: number | null } | undefined> {
+  if (response.status !== 403) return undefined
+  const body = await response
+    .clone()
+    .json()
+    .catch(() => null)
+  if (!body || typeof body !== 'object' || body.code !== 'ai_consent_required') return undefined
+  return { version: typeof body.consent_version === 'number' ? body.consent_version : null }
+}
+
+/**
+ * Run `send`; on a 403 `ai_consent_required` ask the user for consent and, if
+ * they accept, send the request once more. Declining returns the original 403.
+ */
+export async function withConsentRetry(send: () => Promise<Response>): Promise<Response> {
+  const response = await send()
+  if (!onConsentRequired) return response
+  const gate = await consentGate(response)
+  if (!gate) return response
+  const accepted = await onConsentRequired(gate.version)
+  return accepted ? send() : response
+}
+
+/** `fetch` with the AI-consent retry, for call sites that need the raw Response (streams, uploads). */
+export function fetchWithConsent(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return withConsentRetry(() => fetch(input, init))
+}
+
 /**
  * Perform a request with the shared timeout + refresh behavior.
  * Network failures and timeouts are normalized to NetworkError;
@@ -82,7 +120,7 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   const callerSignal = init.signal
   const signal = composeSignals(callerSignal, timeoutSignal(requestTimeoutMs))
   try {
-    return await fetchWithRefresh(`${BASE_URL}${path}`, { ...init, signal })
+    return await withConsentRetry(() => fetchWithRefresh(`${BASE_URL}${path}`, { ...init, signal }))
   } catch (err) {
     if (err instanceof AppApiError) throw err
     const name = (err as Error)?.name

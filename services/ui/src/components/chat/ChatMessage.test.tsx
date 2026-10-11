@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { vi } from 'vitest'
 import { ChatMessage } from './ChatMessage'
+
+vi.mock('../../api/aiFeedback', () => ({
+  aiFeedbackApi: { mine: vi.fn().mockResolvedValue([]), put: vi.fn(), clear: vi.fn() },
+}))
+
 import type { ChatAction, ChatMessage as ChatMessageType } from '../../types'
 
 function Where() {
@@ -25,6 +32,7 @@ function msg(over: Partial<ChatMessageType> = {}): ChatMessageType {
 
 function renderMsg(message: ChatMessageType) {
   return render(
+    <QueryClientProvider client={new QueryClient()}>
     <MemoryRouter initialEntries={['/ask']}>
       <Routes>
         <Route
@@ -37,7 +45,8 @@ function renderMsg(message: ChatMessageType) {
           }
         />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 

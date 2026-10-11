@@ -485,6 +485,10 @@ export interface AuthUser {
   created_at: string
   /** False for OAuth-only accounts, which have no password to re-enter. */
   has_password: boolean
+  /** True until the user accepts the AI-processing disclosure (api.ai-consent v1). */
+  ai_consent_required?: boolean
+  /** Current disclosure wording version, when the server reports it. */
+  ai_consent_version?: number
   /**
    * Set only on a sign-in that spent an MFA backup code, and absent on every
    * other response — it is not account state to poll. 0 is a real value, so
@@ -1377,4 +1381,69 @@ export interface AdminMfaCleared {
   detail: string
   /** False means MFA was already off and nothing changed — report that honestly. */
   mfa_was_enabled: boolean
+}
+
+// ── AI consent (api.ai-consent v1) ──────────────────────────────
+
+export interface ConsentResponse {
+  ai_consent_required: boolean
+  ai_consent_version: number
+}
+
+// ── AI feedback (api.ai_feedback v1) ────────────────────────────
+
+export type AIFeedbackTargetType = 'summary' | 'answer' | 'flashcard' | 'quiz_question' | 'chat_message'
+export type AIFeedbackReason = 'inaccurate' | 'not_in_my_lectures' | 'unclear' | 'wrong_format' | 'other'
+
+export interface AIFeedbackVote {
+  target_type: AIFeedbackTargetType
+  target_id: string
+  rating: 1 | -1
+  reason: AIFeedbackReason | null
+  comment: string | null
+  course_id?: string | null
+  updated_at?: string
+}
+
+export interface AIFeedbackPut {
+  target_type: AIFeedbackTargetType
+  target_id: string
+  rating: 1 | -1
+  reason?: AIFeedbackReason
+  comment?: string
+}
+
+export interface AIFeedbackSummary {
+  total: number
+  by_target_type: Record<string, number>
+  by_reason: Record<string, number>
+  by_rating: Record<string, number>
+  recent_negative: {
+    target_type: string
+    reason: string | null
+    comment: string | null
+    course_id: string | null
+    created_at: string
+  }[]
+}
+
+// ── Usage events (services.usage v1) ────────────────────────────
+
+export interface RetentionCohort {
+  week_start: string
+  signups: number
+  d1: number | null
+  d7: number | null
+  d30: number | null
+}
+
+export interface RetentionFeatureWeek {
+  week_start: string
+  event: string
+  active_users: number
+}
+
+export interface RetentionReadout {
+  cohorts: RetentionCohort[]
+  features: RetentionFeatureWeek[]
 }

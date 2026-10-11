@@ -1,8 +1,12 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Badge } from '../ui'
+import { AiFeedbackControl } from '../ui/AiFeedbackControl'
+import { CitationChip } from './CitationChip'
+import { recordUsageEvent } from '../../api/usage'
+import { remarkCitations } from '../../lib/citations'
 import type { SummaryData } from '../../types'
 
 interface SummaryTabProps {
@@ -33,6 +37,13 @@ export function SummaryTab({ summary, artifactId }: SummaryTabProps) {
     [sourceArtifacts],
   )
 
+  // One view event per summary shown. Fire-and-forget: it never blocks the page.
+  const summaryId = summary?.id
+  const courseId = summary?.course_id
+  useEffect(() => {
+    if (summaryId) recordUsageEvent('summary_viewed', courseId)
+  }, [summaryId, courseId])
+
   if (!summary) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -58,8 +69,16 @@ export function SummaryTab({ summary, artifactId }: SummaryTabProps) {
       </div>
       <div className="prose prose-sm max-w-none prose-headings:text-text prose-p:text-text prose-li:text-text prose-td:text-text prose-a:text-peri-fg prose-strong:text-text prose-code:text-peri-fg prose-code:bg-peri/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-table:text-sm prose-th:bg-surface-2 prose-th:text-text prose-pre:bg-surface-2 prose-pre:text-text [&_pre_code]:text-text [&_pre_code]:bg-transparent [&_pre_code]:p-0">
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={[remarkGfm, remarkCitations]}
           components={{
+            span: ({ node, ...rest }) => {
+              void node // react-markdown's AST node; must not reach the DOM
+              const attrs = rest as Record<string, string | undefined>
+              const page = attrs['data-cite-page']
+              if (page === undefined) return <span {...rest} />
+              const doc = attrs['data-cite-doc']
+              return <CitationChip page={Number(page)} doc={doc ? Number(doc) : undefined} />
+            },
             img: ({ src, alt, ...props }) => {
               let resolvedSrc = src
               const filename = src ?? ''
@@ -85,6 +104,9 @@ export function SummaryTab({ summary, artifactId }: SummaryTabProps) {
         >
           {summary.content_md}
         </ReactMarkdown>
+      </div>
+      <div className="mt-4 pt-3 border-t border-border/50">
+        <AiFeedbackControl targetType="summary" targetId={summary.id} />
       </div>
     </div>
   )

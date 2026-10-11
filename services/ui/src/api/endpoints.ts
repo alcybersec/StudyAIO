@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, fetchWithConsent } from './client'
 import type {
   AnalyticsOverview,
   Assessment,
@@ -239,7 +239,7 @@ export const chatApi = {
   deleteSession: (sessionId: string) =>
     api.delete(`/chat/sessions/${sessionId}`),
   streamMessage: (sessionId: string, content: string, scope?: MessageScope) =>
-    fetch(`/api/chat/sessions/${sessionId}/messages/stream`, {
+    fetchWithConsent(`/api/chat/sessions/${sessionId}/messages/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -290,7 +290,7 @@ export const courseopsApi = {
     const formData = new FormData()
     formData.append('file', file)
     const params = new URLSearchParams({ course_code: courseCode, document_type: documentType })
-    const response = await fetch(`/api/courseops/documents?${params}`, {
+    const response = await fetchWithConsent(`/api/courseops/documents?${params}`, {
       method: 'POST',
       body: formData,
     })
@@ -316,7 +316,7 @@ export const courseopsApi = {
     const formData = new FormData()
     formData.append('file', file)
     const params = new URLSearchParams({ document_type: documentType })
-    const response = await fetch(`/api/courseops/assessments/${assessmentId}/documents?${params}`, {
+    const response = await fetchWithConsent(`/api/courseops/assessments/${assessmentId}/documents?${params}`, {
       method: 'POST',
       body: formData,
     })

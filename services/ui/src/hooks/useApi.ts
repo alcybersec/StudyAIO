@@ -731,6 +731,20 @@ export function useBetaFunnel(includeAdmins = false) {
   })
 }
 
+export function useAdminAiFeedback(days = 30) {
+  return useQuery({
+    queryKey: ['admin', 'ai-feedback', days],
+    queryFn: () => adminApi.getAiFeedback(days),
+  })
+}
+
+export function useAdminRetention(weeks = 8) {
+  return useQuery({
+    queryKey: ['admin', 'retention', weeks],
+    queryFn: () => adminApi.getRetention(weeks),
+  })
+}
+
 export function useAdminUserDetail(userId: string | undefined) {
   return useQuery({
     queryKey: ['admin', 'users', userId, 'details'],

@@ -4,9 +4,12 @@ import remarkGfm from 'remark-gfm'
 import { Link } from 'react-router-dom'
 import type { ChatMessage as ChatMessageType } from '../../types'
 import { ChatActionButton } from './ChatActionButton'
+import { AiFeedbackControl } from '../ui/AiFeedbackControl'
 
 interface ChatMessageProps {
   message: ChatMessageType
+  /** Ids of every assistant message on screen, so their votes load in one request. */
+  feedbackBatchIds?: string[]
 }
 
 interface CitationData {
@@ -60,7 +63,7 @@ function CitationLinks({ citations }: { citations: CitationData[] }) {
   )
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, feedbackBatchIds }: ChatMessageProps) {
   const isUser = message.role === 'user'
   const citations = (message.citations_json as CitationData[] | null) ?? []
 
@@ -87,6 +90,12 @@ export function ChatMessage({ message }: ChatMessageProps) {
         </div>
         {message.action && <ChatActionButton action={message.action} />}
         <CitationLinks citations={citations} />
+        <AiFeedbackControl
+          targetType="answer"
+          targetId={message.id}
+          batchIds={feedbackBatchIds}
+          className="mt-2"
+        />
         <p className="text-[10px] text-text-muted mt-1.5">
           {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </p>

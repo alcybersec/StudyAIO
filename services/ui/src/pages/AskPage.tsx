@@ -156,6 +156,10 @@ function ConversationWithScope({
 
   const { data: messagesData, isLoading } = useChatMessages(sessionId)
   const messages = useMemo(() => messagesData?.messages ?? [], [messagesData])
+  const assistantIds = useMemo(
+    () => messages.filter((m) => m.role === 'assistant').map((m) => m.id),
+    [messages],
+  )
   const { isStreaming, streamingText, error, action, sendStreaming } = useStreamingChat(sessionId)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -180,7 +184,7 @@ function ConversationWithScope({
         ) : (
           <div className="space-y-5 max-w-3xl mx-auto w-full">
             {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
+              <ChatMessage key={msg.id} message={msg} feedbackBatchIds={assistantIds} />
             ))}
             {isStreaming && streamingText && <StreamingMessage text={streamingText} />}
             {isStreaming && action && <ChatActionButton action={action} />}

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuizQuestions, useRecordQuizAttempt } from '../../hooks/useApi'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { EmptyState, ErrorState, Skeleton } from '../ui'
+import { AiFeedbackControl } from '../ui/AiFeedbackControl'
 import type { QuizQuestion } from '../../types'
 
 interface QuizTabProps {
@@ -207,6 +208,7 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
 
   const total = questions?.length ?? 0
   const question = questions?.[currentIndex]
+  const questionIds = useMemo(() => (questions ?? []).map((q) => q.id), [questions])
 
   const correctCount = useMemo(
     () => Object.values(answers).filter(Boolean).length,
@@ -338,6 +340,13 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
           onAnswer={handleAnswer}
         />
       )}
+
+      <AiFeedbackControl
+        key={question!.id}
+        targetType="quiz_question"
+        targetId={question!.id}
+        batchIds={questionIds}
+      />
 
       {/* Next button (shown after answering) */}
       {currentIndex in answers && (
