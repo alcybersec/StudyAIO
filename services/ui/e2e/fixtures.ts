@@ -9,13 +9,28 @@ export function testEmail(): string {
   return `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@example.com`
 }
 
-/** Register a new user via the API and return credentials */
+/**
+ * Fail with a legible message when an auth route's rate limit (register 3/min,
+ * login 5/min per client) is hit, rather than a bare `false to be truthy`.
+ * Specs should seed users (seedUser) instead of registering.
+ */
+export function expectNotThrottled(status: number, what: string): void {
+  if (status === 429) {
+    throw new Error(
+      `${what} was rate limited (429): the auth budget is shared by every spec in the run; ` +
+        'seed the user with seedUser() instead of registering/logging in repeatedly',
+    )
+  }
+}
+
+/** Register a new user via the API and return credentials. Spends the 3/min register budget. */
 export async function registerUser(page: Page): Promise<{ email: string; password: string }> {
   const email = testEmail()
   const password = 'TestPass123!'
   const resp = await page.request.post(`${API_URL}/api/auth/register`, {
     data: { email, password, username: email.split('@')[0] },
   })
+  expectNotThrottled(resp.status(), 'register')
   expect(resp.ok()).toBeTruthy()
   return { email, password }
 }
@@ -29,6 +44,7 @@ export async function loginViaAPI(
   const resp = await page.request.post(`${API_URL}/api/auth/login`, {
     data: { email, password },
   })
+  expectNotThrottled(resp.status(), 'login')
   expect(resp.ok()).toBeTruthy()
 }
 
@@ -94,6 +110,11 @@ export function seedDb(...args: string[]): void {
     const e = err as { stderr?: Buffer; message: string }
     throw new Error(`seed_e2e.py ${args.join(' ')} failed: ${e.stderr?.toString() || e.message}`)
   }
+}
+
+/** Seed an ordinary, AI-consented user who can log in (spends no register budget). */
+export function seedUser(email: string, password: string): void {
+  seedDb('user', email, password)
 }
 
 /** Seed a course (and optional concepts) owned by the self-hosted default user. */
