@@ -10,6 +10,7 @@ import json
 import re
 
 import structlog
+from prometheus_client import Counter
 
 from app.agents.base import (
     ConceptData,
@@ -23,6 +24,16 @@ from app.agents.base import (
 from app.core.exceptions import AgentError
 
 logger = structlog.get_logger()
+
+#: Outcome enum only (floor 1/2 label policy): ``ok`` already well-formed,
+#: ``normalised`` repaired, ``no_sources`` no Sources line found (left as is).
+SUMMARY_FOOTER = Counter(
+    "studyaio_summary_footer_total",
+    "Summaries by footer state after post-processing.",
+    ["outcome"],
+)
+
+_SOURCES_LINE = re.compile(r"^\s*(?:-{3,}\s*)?(\*Sources:.*)$")
 
 
 def _clean_json_text(text: str) -> str:
@@ -201,6 +212,42 @@ def parse_json_array_response(text: str) -> list[dict]:
     raise AgentError(f"Failed to parse JSON array from AI response: {text[:200]}...")
 
 
+def normalise_summary_footer(markdown: str) -> str:
+    """Make the summary end with ``---`` and the ``*Sources: ... Version: N.*`` line.
+
+    Models sometimes glue the separator to the Sources line (``---*Sources: ...``),
+    drop the ``---``, or leave it jammed under the last paragraph (which markdown
+    reads as a setext heading). The result has a blank line, a line containing
+    only ``---``, then the Sources line on the very next line. Sources text is
+    never invented: with no ``*Sources:`` line the text is returned unchanged and
+    ``studyaio_summary_footer_total{outcome="no_sources"}`` is incremented.
+    Idempotent.
+
+    Args:
+        markdown: Summary markdown, JSON_META block already removed.
+
+    Returns:
+        The markdown with a well-formed footer.
+    """
+    lines = markdown.rstrip().splitlines()
+    idx = next((i for i in range(len(lines) - 1, -1, -1) if _SOURCES_LINE.match(lines[i])), None)
+    if idx is None:
+        SUMMARY_FOOTER.labels(outcome="no_sources").inc()
+        logger.warning("summary_footer_no_sources")
+        return markdown
+    sources = _SOURCES_LINE.match(lines[idx]).group(1).rstrip()  # type: ignore[union-attr]
+    head = lines[:idx]
+    while head and (not head[-1].strip() or re.fullmatch(r"\s*-{3,}\s*", head[-1])):
+        head.pop()
+    fixed = "\n".join([*head, "", "---", sources, *lines[idx + 1 :]])
+    if fixed == markdown.rstrip():
+        SUMMARY_FOOTER.labels(outcome="ok").inc()
+        return markdown
+    SUMMARY_FOOTER.labels(outcome="normalised").inc()
+    logger.info("summary_footer_normalised")
+    return fixed
+
+
 def parse_summary_response(text: str) -> tuple[str, list[str]]:
     """Split summary markdown from ---JSON_META--- block.
 
@@ -208,7 +255,9 @@ def parse_summary_response(text: str) -> tuple[str, list[str]]:
         text: Raw response from the AI.
 
     Returns:
-        Tuple of (markdown_content, embedded_images list).
+        Tuple of (markdown_content, embedded_images list). The footer is
+        normalised here, so every adapter, the worker and the live evals see
+        the same ending.
     """
     embedded_images: list[str] = []
 
@@ -225,7 +274,7 @@ def parse_summary_response(text: str) -> tuple[str, list[str]]:
     else:
         markdown = text.strip()
 
-    return markdown, embedded_images
+    return normalise_summary_footer(markdown), embedded_images
 
 
 def build_extraction_text(extraction: ExtractionData) -> str:

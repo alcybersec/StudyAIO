@@ -14,6 +14,10 @@ Refreshing, as an operator::
 
     python -m evals --live --no-judge --save-fixtures
     python -m evals --offline --write-baseline
+
+Several runs per case (``-n/--runs N``) save ``<case>.run<k>.md``; score them with
+``--offline --per-run --fixtures <dir>``. Saved text is post-footer-normaliser (what
+users get), not the raw model output.
 """
 
 import argparse
@@ -27,15 +31,21 @@ from evals.offline import (
     DEFAULT_THRESHOLD,
     FIXTURES_DIR,
     check_against_baseline,
+    format_multirun_report,
     format_offline_report,
     load_baseline,
     run_offline,
+    run_offline_runs,
 )
 from evals.runner import format_report, load_cases
 
 
 def _offline(args: argparse.Namespace) -> int:
     cases = load_cases(args.case)
+    if args.per_run:
+        multi = run_offline_runs(cases, Path(args.fixtures))
+        print(format_multirun_report(multi))
+        return 1 if multi.bar_failures() else 0
     run = run_offline(cases, Path(args.fixtures))
 
     if args.write_baseline:
@@ -100,7 +110,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fixtures", default=str(FIXTURES_DIR), help="Fixture directory")
     parser.add_argument("--save-fixtures", action="store_true", help="Live: store as fixtures")
     parser.add_argument("--no-judge", action="store_true", help="Live: skip the model judge")
-    parser.add_argument("-n", type=int, default=1, help="Live: runs per case")
+    parser.add_argument(
+        "--per-run",
+        action="store_true",
+        help="Offline: score <id>.run<k>.md files, report per-run and mean, judge the bar",
+    )
+    parser.add_argument("-n", "--runs", dest="n", type=int, default=1, help="Live: runs per case")
     parser.add_argument("--out", default=None, help="Write the JSON report here")
     return parser
 
@@ -109,8 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     """Parse arguments and run the chosen mode. Returns a process exit code."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.live and (args.check or args.write_baseline):
-        parser.error("--check and --write-baseline are offline-only")
+    if args.live and (args.check or args.write_baseline or args.per_run):
+        parser.error("--check, --write-baseline and --per-run are offline-only")
+    if args.per_run and (args.check or args.write_baseline):
+        parser.error("--per-run cannot be combined with --check or --write-baseline")
     if args.offline:
         return _offline(args)
     return asyncio.run(_live(args))

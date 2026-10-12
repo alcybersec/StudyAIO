@@ -1,8 +1,27 @@
-{# Summarize prompt template — v2.4
+{# Summarize prompt template — v2.5
    Purpose: Generate a comprehensive, pedagogically-structured lecture summary.
    Variables: course_code, week, extraction_text, image_references,
               other_weeks (optional: list of "Week N: topic" strings),
               must_keep (optional: formula / worked-example lines, each with its marker)
+
+   v2.5 (2026-10-12, GL#34 iteration 3): Overview and Connections name only
+   topics that are in this prompt, and citations get one example per line shape.
+   Why: the live run of v2.4 (faithfulness 0.952, Key Concepts citation 89%)
+   brought back two outside-material slips v2.3 did not have: dp_knapsack
+   wrote "greedy-style reasoning ... cannot be trusted here" (the lecture never
+   mentions greedy) and binary_search_trees wrote that the degenerate tree
+   "naturally points toward self-balancing structures". Both are bridges
+   ("points toward", "unlike", "compared with") to a topic the source does not
+   contain, and they sit in Overview/Connections; v2.4's pressure to complete
+   and connect plausibly invited them. The rule now names the bridge phrasings
+   as banned. Citation lows (graph_traversal 64%, http_caching 70%,
+   dns_resolution 74%, dijkstra 75%) were again lead-ins, steps, table rows,
+   formula and code-introducing lines, so each shape gets a one-line example.
+   Kept from v2.4: plain-text formulas, Must-Keep checklist, line-level
+   citations. The `---` + Sources footer is also repaired deterministically in
+   app/agents/parsing.py (the model glued them on one line twice), but the
+   prompt still asks for it. Measured effect: evals/BASELINE.md once the live
+   run is recorded.
 
    v2.4 (2026-10-12, GL#34 iteration 2): nothing the lecture states may be
    dropped, formulas and worked examples above all, and citations reach every
@@ -135,7 +154,7 @@ Generate a complete markdown summary with EXACTLY these sections in this order:
 
 1. `# {{ course_code }} — Week {{ week }}: <Topic>` (determine the topic from the content)
 
-2. `## Overview` — 1-2 paragraphs that contextualize the topic: what it is, why it matters, and how it fits into the broader subject. Set the stage before diving into details.
+2. `## Overview` — 1-2 paragraphs that contextualize the topic: what it is, why it matters, and how it fits into the broader subject, using only what the lecture says (see the no-outside-topics rule under Rules). Set the stage before diving into details.
 
 3. `## Key Concepts` — This is the core of the summary and should be the longest section. Organize concepts into hierarchical subsections using `###` and `####` headers that reflect the logical structure of the material. For each concept:
    - Explain the "what", "why", and "how" — not just definitions
@@ -144,7 +163,12 @@ Generate a complete markdown summary with EXACTLY these sections in this order:
    - Use tables where comparison or structured data is natural (e.g. tool comparisons, attack type vs. defense)
    - Use bullet lists only for genuinely list-like content (tool names, enumerated steps, short items)
    - Build concepts progressively — introduce foundations before advanced topics
-   - CITE EVERY LINE: every paragraph, sentence-length lead-in ("Here we define:"), bullet, numbered step, table row, formula line and code line ends with the marker(s) of the block(s) it comes from, e.g. `... is O(nW) [p.3].` Two blocks: `[p.2][p.3]`. In a table the marker goes inside the last cell of each row; for a formula or code block in a fence, the line that introduces it ends with the marker. Cite only markers that appear in the lecture content above; never invent a page. A claim you cannot cite does not belong in the summary, and a line without a marker is a defect.
+   - CITE EVERY LINE: every paragraph, sentence-length lead-in ("Here we define:"), bullet, numbered step, table row, formula line and code line ends with the marker(s) of the block(s) it comes from, e.g. `... is O(nW) [p.3].` Two blocks: `[p.2][p.3]`. In a table the marker goes inside the last cell of each row; for a formula or code block in a fence, the line that introduces it ends with the marker. Cite only markers that appear in the lecture content above; never invent a page. A claim you cannot cite does not belong in the summary, and a line without a marker is a defect. One example per line shape (the page numbers are illustrative):
+     - bullet: `- Search visits at most one node per level [p.3].`
+     - table row: `| Stable sort | Equal keys keep their order [p.4] |`
+     - numbered step: `2. Compare the key with the root; go left if smaller [p.2].`
+     - formula line: the sentence before the fence ends `The recurrence is [p.5]:`, and the fence holds `T(n) = 2T(n/2) + n`
+     - line that introduces code: `The loop below walks the list once [p.6]:` followed by the fence
    - Keep the lecture's own numbers, constants, thresholds and named properties (complexities, stability, base cases, key sizes) exactly as stated
    - Write every formula in plain text exactly as the lecture writes it (`best[i][c] = max(best[i-1][c], best[i-1][c - w_i] + v_i)`, `c = m^e mod n`, `AMAT = hit time + miss rate * miss penalty`), in inline code or a code block. Do NOT use LaTeX (`$...$`, `\text{}`, `\bmod`): it does not render for the student and it re-spells the lecture's symbols.
    Do NOT produce a flat bullet-point dump. Think like a tutor explaining the material to a student.
@@ -182,6 +206,7 @@ Generate a complete markdown summary with EXACTLY these sections in this order:
 - Preserve technical accuracy — do not invent information not present in the lecture content
 - If the lecture doesn't say it, don't write it. This covers facts, caveats, alternatives, improvements and variants you know from elsewhere: if the lecture presents a method without mentioning that a variant works, or that a structure rebalances itself, or that a greedy shortcut applies, do not add it, even when it is true. A student revising from this summary cannot tell your additions from the lecturer's, and the exam tests the lecturer's.
 - Completeness checklist, mandatory. Before you write, list for yourself every formula, recurrence (each case), base case, condition, complexity, stability/ordering property, worked example (with its numbers and result) and exercise answer in the lecture. After you write, tick each one off against the summary: it must appear, with the lecture's exact symbols and numbers, in `## Formulas & Algorithms` (and in Key Concepts where it is explained). Anything unticked goes in before you finish. Dropping a stated fact is as bad as adding an unstated one.
+- No outside topics, in Overview and Connections above all. They may name only topics, techniques, structures or algorithms that appear in the lecture text above{% if other_weeks %} or in the "Other Weeks" list{% endif %}. Do not write bridges to anything else: "points toward X", "leads to X", "motivates X", "unlike X", "compared with X", "a natural follow-on is X", "cannot be trusted because of X", where X is not in the source. Writing that the material "naturally leads on" to an unnamed or unlisted topic is the same bridge. If the lecture does not name the next topic, say nothing about one.
 - Last check, the footer: the output ends with `---` and the `*Sources: ... Version: 1.*` line, then the metadata block.
 - Prefer paragraph-form explanations over flat bullet lists for conceptual material
 

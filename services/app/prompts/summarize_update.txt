@@ -1,7 +1,15 @@
-{# Summarize update prompt template — v2.3
+{# Summarize update prompt template — v2.4
    Purpose: Update an existing summary with new lecture content.
    Variables: course_code, week, extraction_text, image_references, existing_summary,
               must_keep (optional: formula / worked-example lines, each with its marker)
+
+   v2.4 (2026-10-12, GL#34 iteration 3): same rules as summarize.txt v2.5.
+   Overview and Connections may name only topics in the new content, the
+   existing summary or the provided course context, and the "points toward /
+   leads to / unlike / compared with X" bridge to anything else is banned (the
+   v2.4 live run bridged to greedy and self-balancing trees, neither in its
+   lecture). One citation example per line shape added, because bullets, table
+   rows, steps, formula lines and code lead-ins were what stayed uncited.
 
    v2.3 (2026-10-12, GL#34 iteration 2): same completeness and citation rules as
    summarize.txt v2.4. Formulas stay plain text (no LaTeX, which does not render
@@ -77,7 +85,12 @@ Produce an UPDATED markdown summary that merges the existing summary with the ne
    - Weave in real-world examples and case studies from the new content
    - Use tables where comparison or structured data is natural
    - Place new concepts in logical order relative to existing ones
-   - CITE EVERY LINE: every paragraph, lead-in sentence, bullet, numbered step, table row, formula line and code line ends with the source marker(s) it comes from, e.g. `[p.3]`. In a table the marker goes inside the last cell of each row; for a fenced formula or code block, the line introducing it ends with the marker. Cite only markers that appear in the content above or already in the existing summary; never invent a page. A claim you cannot cite does not belong, and a line without a marker is a defect.
+   - CITE EVERY LINE: every paragraph, lead-in sentence, bullet, numbered step, table row, formula line and code line ends with the source marker(s) it comes from, e.g. `[p.3]`. In a table the marker goes inside the last cell of each row; for a fenced formula or code block, the line introducing it ends with the marker. Cite only markers that appear in the content above or already in the existing summary; never invent a page. A claim you cannot cite does not belong, and a line without a marker is a defect. One example per line shape (page numbers illustrative):
+     - bullet: `- Search visits at most one node per level [p.3].`
+     - table row: `| Stable sort | Equal keys keep their order [p.4] |`
+     - numbered step: `2. Compare the key with the root; go left if smaller [p.2].`
+     - formula line: the sentence before the fence ends `The recurrence is [p.5]:`, and the fence holds `T(n) = 2T(n/2) + n`
+     - line that introduces code: `The loop below walks the list once [p.6]:` followed by the fence
    - Write every formula in plain text exactly as the lecture writes it, in inline code or a code block. Do NOT use LaTeX (`$...$`, `\text{}`, `\bmod`): it does not render for the student and it re-spells the lecture's symbols.
    - Convert any flat bullet-point lists from the existing summary into proper subsection explanations
    Do NOT produce a flat bullet-point dump. Think like a tutor explaining the material.
@@ -105,6 +118,7 @@ Produce an UPDATED markdown summary that merges the existing summary with the ne
 - Preserve technical accuracy
 - Completeness checklist, mandatory. Before you write, list every formula, recurrence (each case), base case, condition, complexity, property, worked example (with numbers and result) in BOTH the existing summary and the new content. After you write, tick each off against the updated summary; anything unticked goes in before you finish.
 - If the lecture doesn't say it, don't write it: add no fact, caveat, variant or improvement that neither the new content nor the existing summary contains, even when it is true. Do not drop a fact the lecture states.
+- No outside topics, in Overview and Connections above all: name only topics, techniques, structures or algorithms that appear in the new content or the existing summary. Do not write bridges to anything else: "points toward X", "leads to X", "motivates X", "unlike X", "compared with X", "a natural follow-on is X", where X is not in the source. If the lecture does not name the next topic, say nothing about one.
 - Write as a tutor teaching the material, not listing facts
 - Prefer paragraph-form explanations over flat bullet lists for conceptual material
 

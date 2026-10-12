@@ -331,3 +331,70 @@ class TestLiveSavesFixtures:
             asyncio.run(runner.run(only="deadlock", judge=False, save_summaries_to=tmp_path))
 
         assert (tmp_path / "deadlock.md").read_text().startswith("# CSIT101")
+
+    def test_live_n_runs_store_one_fixture_per_run(self, tmp_path):
+        class FakeAgent:
+            usage = SimpleNamespace(calls=1, input_tokens=1, output_tokens=1)
+
+            def reset_usage(self):
+                pass
+
+            async def generate_summary(self, extraction, other_weeks):
+                return SimpleNamespace(content_md=_summary())
+
+        with patch("app.agents.factory.get_agent", return_value=FakeAgent()):
+            asyncio.run(runner.run(only="deadlock", judge=False, n=2, save_summaries_to=tmp_path))
+
+        assert sorted(p.name for p in tmp_path.iterdir()) == [
+            "deadlock.run1.md",
+            "deadlock.run2.md",
+        ]
+
+    def test_runs_flag_is_the_n_option(self):
+        args = cli.build_parser().parse_args(["--live", "--runs", "2"])
+        assert args.n == 2
+        assert cli.build_parser().parse_args(["--live", "-n", "3"]).n == 3
+
+
+class TestPerRunAggregation:
+    """`--offline --per-run`: per-run and mean, the bar judged on the mean."""
+
+    def _write(self, tmp_path, case_id, bodies):
+        for i, body in enumerate(bodies, 1):
+            (tmp_path / f"{case_id}.run{i}.md").write_text(body)
+
+    def test_mean_across_runs_decides_a_target_case(self, tmp_path):
+        case = _case(id="dp_knapsack")
+        good = _summary()
+        bad = _summary(body="A stack is LIFO. Also priority queues.")  # forbidden hit
+        self._write(tmp_path, "dp_knapsack", [good, bad])
+        report = offline.run_offline_runs([case], tmp_path)
+        scores = report.runs["dp_knapsack"]
+        assert [s.faithfulness for s in scores] == [1.0, 0.25]
+        assert report.case_mean("dp_knapsack") == pytest.approx(0.625)
+        assert any("dp_knapsack: mean faithfulness 0.62" in f for f in report.bar_failures())
+
+    def test_report_shows_per_run_and_mean(self, tmp_path):
+        self._write(tmp_path, "dp_knapsack", [_summary(), _summary()])
+        report = offline.run_offline_runs([_case(id="dp_knapsack")], tmp_path)
+        assert "runs [1.00 1.00]  mean 1.00" in offline.format_multirun_report(report)
+        assert report.broken_footers == []
+
+    def test_broken_footer_in_any_run_fails_the_bar(self, tmp_path):
+        broken = _summary(footer=False) + "\n---*Sources: a.pdf. Version: 1.*\n"
+        self._write(tmp_path, "c", [_summary(), broken])
+        report = offline.run_offline_runs([_case(id="c")], tmp_path)
+        assert report.broken_footers == ["c.run2"]
+        assert any("broken footer" in f for f in report.bar_failures())
+
+    def test_case_without_runs_is_reported_missing(self, tmp_path):
+        report = offline.run_offline_runs([_case(id="nope")], tmp_path)
+        assert report.missing_fixtures == ["nope"]
+        assert report.bar_failures()
+
+    def test_cli_per_run_exit_code_and_flag_conflicts(self, tmp_path):
+        assert cli.main(["--offline", "--per-run", "--fixtures", str(tmp_path)]) == 1
+        with pytest.raises(SystemExit):
+            cli.main(["--offline", "--per-run", "--check"])
+        with pytest.raises(SystemExit):
+            cli.main(["--live", "--per-run"])

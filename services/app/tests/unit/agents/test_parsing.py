@@ -2,12 +2,14 @@
 
 import pytest
 
+from app.agents import parsing
 from app.agents.base import ExtractionData
 from app.agents.parsing import (
     _clean_json_text,
     build_extraction_text,
     collect_image_references,
     find_must_keep_items,
+    normalise_summary_footer,
     parse_json_array_response,
     parse_json_response,
     parse_summary_response,
@@ -371,3 +373,52 @@ class TestFindMustKeepItems:
 
     def test_no_formulas_gives_empty_list(self):
         assert find_must_keep_items(self._extraction("Just words here.")) == []
+
+
+class TestNormaliseSummaryFooter:
+    """The footer is exactly `---` then the Sources line (GL#34)."""
+
+    GOOD = "## Connections\n\nText.\n\n---\n*Sources: Notes (pp. 1-3). Version: 1.*"
+
+    def test_glued_separator_is_split(self):
+        """Observed shape: `---*Sources: ...` on one line."""
+        out = normalise_summary_footer(
+            "## Connections\n\nText.\n\n---*Sources: Notes (pp. 1-3). Version: 1.*\n"
+        )
+        assert out == self.GOOD
+
+    def test_missing_separator_is_added(self):
+        """Observed shape: a Sources line with no `---` above it."""
+        out = normalise_summary_footer(
+            "## Connections\n\nText.\n*Sources: Notes (pp. 1-3). Version: 1.*"
+        )
+        assert out == self.GOOD
+
+    def test_blank_lines_and_trailing_whitespace_are_tidied(self):
+        out = normalise_summary_footer(
+            "## Connections\n\nText.\n\n\n---  \n\n  *Sources: Notes (pp. 1-3). Version: 1.*   \n\n"
+        )
+        assert out == self.GOOD
+
+    def test_separator_jammed_under_paragraph_gets_a_blank_line(self):
+        """`Text.\n---` would render as a setext heading."""
+        out = normalise_summary_footer("Text.\n---\n*Sources: Notes. Version: 1.*")
+        assert out == "Text.\n\n---\n*Sources: Notes. Version: 1.*"
+
+    def test_well_formed_footer_is_unchanged_and_idempotent(self):
+        assert normalise_summary_footer(self.GOOD) == self.GOOD
+        assert normalise_summary_footer(
+            normalise_summary_footer("a\n---*Sources: x. Version: 2.*")
+        ) == ("a\n\n---\n*Sources: x. Version: 2.*")
+
+    def test_no_sources_line_is_left_alone_and_counted(self):
+        text = "## Connections\n\nText."
+        counter = parsing.SUMMARY_FOOTER.labels(outcome="no_sources")
+        before = counter._value.get()
+        assert normalise_summary_footer(text) == text
+        assert counter._value.get() == before + 1
+
+    def test_parse_summary_response_normalises_before_meta(self):
+        raw = '# T\n\nbody\n\n---*Sources: n. Version: 1.*\n---JSON_META---\n{"embedded_images": []}\n---JSON_META---'
+        markdown, _ = parse_summary_response(raw)
+        assert markdown.endswith("\n\n---\n*Sources: n. Version: 1.*")

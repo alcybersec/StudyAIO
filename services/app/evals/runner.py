@@ -254,9 +254,13 @@ async def run(
         n: Repetitions per case. Generation is non-deterministic, so one run is
             a sample — `n > 1` is what separates a fabrication that happens
             every time from one that happened once.
-        save_summaries_to: Write each case's first generated summary to
-            ``<dir>/<case id>.md``. This is how an operator refreshes the
-            stored fixtures the offline CI gate scores.
+        save_summaries_to: Write the generated summaries: with ``n == 1`` to
+            ``<dir>/<case id>.md`` (how an operator refreshes the stored
+            fixtures the offline CI gate scores), with ``n > 1`` every run to
+            ``<dir>/<case id>.run<k>.md``. What is saved is
+            ``result.content_md``, i.e. after the footer normaliser in
+            ``app.agents.parsing`` -- the text a user receives, not the raw
+            model output.
 
     Returns:
         The report.
@@ -290,10 +294,13 @@ async def run(
             )
             result = await agent.generate_summary(extraction, None)
             score = score_deterministic(case, result.content_md)
-            if save_summaries_to is not None and attempt == 0:
+            if save_summaries_to is not None and (attempt == 0 or n > 1):
                 save_summaries_to.mkdir(parents=True, exist_ok=True)
                 body = result.content_md.rstrip() + "\n"
-                (save_summaries_to / f"{case['id']}.md").write_text(body)
+                # One run keeps the committed fixture name; several runs are
+                # `<id>.run1.md` ... so `--offline --per-run` can aggregate them.
+                name = f"{case['id']}.run{attempt + 1}.md" if n > 1 else f"{case['id']}.md"
+                (save_summaries_to / name).write_text(body)
 
             if judge:
                 await _judge(agent, case, result.content_md, score)

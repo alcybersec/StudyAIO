@@ -407,3 +407,124 @@ def format_offline_report(run: OfflineRun, baseline: dict | None, failures: list
     lines.append("RESULT: " + ("FAIL" if failures else "PASS"))
     lines += [f"  - {f}" for f in failures]
     return "\n".join(lines)
+
+
+#: The cases the GL#34 bar names individually (docs/decisions.md).
+TARGET_CASES = ("dp_knapsack", "binary_search_trees", "rsa_public_key", "sorting_algorithms")
+BAR_FAITHFULNESS = 0.93
+BAR_TARGET = 0.80
+BAR_CITATION = 0.90
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+@dataclass
+class MultiRunReport:
+    """Several stored runs per case (``<id>.run<k>.md``), aggregated.
+
+    The bar is evaluated on the mean across runs: a single draw is a sample.
+    """
+
+    #: case id -> one score per run, in run order.
+    runs: dict[str, list[OfflineScore]] = field(default_factory=dict)
+    missing_fixtures: list[str] = field(default_factory=list)
+
+    @property
+    def n_runs(self) -> int:
+        return max((len(v) for v in self.runs.values()), default=0)
+
+    def case_mean(self, case_id: str) -> float:
+        """Mean faithfulness of one case over its runs."""
+        return _mean([s.faithfulness for s in self.runs[case_id]])
+
+    def run_faithfulness(self, k: int) -> float:
+        """Aggregate faithfulness of run ``k`` (0-based) over cases that have it."""
+        vals = [v[k].faithfulness for v in self.runs.values() if len(v) > k]
+        return _mean(vals)
+
+    @property
+    def faithfulness(self) -> float:
+        """Mean over cases of the per-case mean (missing cases count as 0)."""
+        total = len(self.runs) + len(self.missing_fixtures)
+        return sum(self.case_mean(c) for c in self.runs) / total if total else 0.0
+
+    @property
+    def citation_coverage(self) -> float:
+        total = len(self.runs) + len(self.missing_fixtures)
+        per_case = [_mean([s.citations.coverage for s in v]) for v in self.runs.values()]
+        return sum(per_case) / total if total else 0.0
+
+    @property
+    def broken_footers(self) -> list[str]:
+        """``<case>.run<k>`` entries whose footer is not ``---`` + Sources."""
+        return [
+            f"{cid}.run{i + 1}"
+            for cid, v in self.runs.items()
+            for i, s in enumerate(v)
+            if any(p.startswith("footer") for p in s.structure_problems)
+        ]
+
+    def bar_failures(self) -> list[str]:
+        """Why the approved GL#34 bar is not met (empty means it is)."""
+        out = [f"{c}: no stored runs" for c in self.missing_fixtures]
+        if self.faithfulness < BAR_FAITHFULNESS:
+            out.append(f"mean faithfulness {self.faithfulness:.3f} < {BAR_FAITHFULNESS}")
+        for cid in TARGET_CASES:
+            if cid in self.runs and self.case_mean(cid) < BAR_TARGET:
+                out.append(f"{cid}: mean faithfulness {self.case_mean(cid):.2f} < {BAR_TARGET}")
+        if self.broken_footers:
+            out.append(f"broken footer: {', '.join(self.broken_footers)}")
+        if self.citation_coverage < BAR_CITATION:
+            out.append(f"citation coverage {self.citation_coverage:.0%} < {BAR_CITATION:.0%}")
+        return out
+
+
+def run_offline_runs(cases: list[dict], fixtures_dir: Path) -> MultiRunReport:
+    """Score every ``<fixtures_dir>/<id>.run<k>.md`` per case, ordered by k."""
+    report = MultiRunReport()
+    for case in cases:
+        paths = sorted(
+            fixtures_dir.glob(f"{case['id']}.run*.md"),
+            key=lambda p: int(re.search(r"\.run(\d+)\.md$", p.name).group(1)),  # type: ignore[union-attr]
+        )
+        paths = [p for p in paths if re.search(r"\.run\d+\.md$", p.name)]
+        if not paths:
+            report.missing_fixtures.append(case["id"])
+            continue
+        report.runs[case["id"]] = [score_offline(case, p.read_text()) for p in paths]
+    return report
+
+
+def format_multirun_report(report: MultiRunReport) -> str:
+    """Per-run and mean scores, then the bar verdict."""
+    lines = []
+    for cid in sorted(report.runs):
+        scores = report.runs[cid]
+        per_run = " ".join(f"{s.faithfulness:.2f}" for s in scores)
+        tag = " [target]" if cid in TARGET_CASES else ""
+        cited = _mean([s.citations.coverage for s in scores])
+        lines.append(
+            f"  {cid:<26} runs [{per_run}]  mean {report.case_mean(cid):.2f}"
+            f"  cited {cited:.0%}{tag}"
+        )
+        for i, s in enumerate(scores, 1):
+            for hit in s.forbidden_hits:
+                lines.append(f"         run{i} forbidden claim: {hit}")
+            for fact in s.missing_facts:
+                lines.append(f"         run{i} missing fact: {fact}")
+            if any(p.startswith("footer") for p in s.structure_problems):
+                lines.append(f"         run{i} BROKEN footer")
+    per_run_agg = " ".join(f"{report.run_faithfulness(k):.3f}" for k in range(report.n_runs))
+    lines += [
+        "",
+        f"{len(report.runs)} case(s) x {report.n_runs} run(s)"
+        f" · per-run faithfulness [{per_run_agg}]"
+        f" · mean faithfulness {report.faithfulness:.3f}"
+        f" · citation coverage {report.citation_coverage:.0%}",
+    ]
+    failures = report.bar_failures()
+    lines.append("BAR: " + ("MET" if not failures else "NOT MET"))
+    lines += [f"  - {f}" for f in failures]
+    return "\n".join(lines)
