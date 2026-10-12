@@ -21,6 +21,69 @@
 # tested. Pulling the exact tag keeps "what was tested" and "what runs" identical.
 set -euo pipefail
 
+# --- Image retention ----------------------------------------------------------
+# Defined BEFORE the work starts so a test can `source` this file for the
+# functions alone (see the guard below the definitions).
+#
+# select_stale_app_refs KEEP CURRENT_TAG OWNER < listing
+#   listing: one image per line, TAB-separated: repository, tag, created
+#            (docker images --format '{{.Repository}}\t{{.Tag}}\t{{.CreatedAt}}')
+#   prints:  repository:tag of every APP image (ghcr.io/OWNER/studyaio-api and
+#            studyaio-ui) whose tag is not among the KEEP most recent releases,
+#            CURRENT_TAG always being one of them. A "release" is a tag; recency
+#            is the newest creation time of any app image carrying it. Images
+#            of other repositories (db, redis, ...) are never listed.
+select_stale_app_refs() {
+    local keep="$1" current="$2" owner="$3"
+    awk -F'\t' -v keep="$keep" -v cur="$current" -v owner="$owner" '
+        BEGIN { api = "ghcr.io/" owner "/studyaio-api"; ui = "ghcr.io/" owner "/studyaio-ui" }
+        ($1 == api || $1 == ui) {
+            n++; refs[n] = $1 ":" $2; tags[n] = $2
+            if ($2 != "<none>" && $3 > newest[$2]) newest[$2] = $3
+        }
+        END {
+            # Rank tags newest-first (selection sort; a handful of tags at most).
+            for (t in newest) if (t != cur) order[++m] = t
+            for (i = 1; i <= m; i++)
+                for (j = i + 1; j <= m; j++)
+                    if (newest[order[j]] > newest[order[i]]) { x = order[i]; order[i] = order[j]; order[j] = x }
+            kept[cur] = 1
+            for (i = 1; i <= keep - 1 && i <= m; i++) kept[order[i]] = 1
+            for (i = 1; i <= n; i++) if (!(tags[i] in kept) && tags[i] != "<none>") print refs[i]
+        }
+    '
+}
+
+# prune_old_app_images KEEP CURRENT_TAG OWNER
+# Untags stale app images, then drops what became dangling. Never removes an
+# image a container (running or stopped) references, and never touches a
+# non-app image.
+prune_old_app_images() {
+    local keep="$1" current="$2" owner="$3" in_use ref
+    in_use="$(docker ps -a --format '{{.Image}}' 2>/dev/null || true)"
+    while read -r ref; do
+        [ -n "$ref" ] || continue
+        if grep -qxF -- "$ref" <<< "$in_use"; then
+            echo "    keeping ${ref} (used by a container)"
+            continue
+        fi
+        echo "    removing ${ref}"
+        docker rmi "$ref" >/dev/null 2>&1 || echo "    (could not remove ${ref}; left in place)"
+    done < <(docker images --format '{{.Repository}}\t{{.Tag}}\t{{.CreatedAt}}' \
+                | select_stale_app_refs "$keep" "$current" "$owner")
+    docker image prune -f >/dev/null 2>&1 || true
+}
+
+# Sourced (by a test): stop after the definitions instead of deploying.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
+
+
+KEEP_RELEASES="${KEEP_RELEASES:-2}"
+if ! [[ "$KEEP_RELEASES" =~ ^[1-9][0-9]*$ ]]; then
+    echo "refusing: KEEP_RELEASES must be a positive integer, got '${KEEP_RELEASES}'" >&2
+    exit 64
+fi
+
 cd /opt/studyaio
 
 # Validate strictly. The forced command means this is the only entry point, so
@@ -92,7 +155,7 @@ AVAIL_GB="$(( $(df -P -k "${DOCKER_ROOT}" | awk 'NR==2{print $4}') / 1024 / 1024
 if [ "${AVAIL_GB}" -lt "${REQUIRED_GB}" ]; then
     echo "refusing: need ~${REQUIRED_GB}G free on ${DOCKER_ROOT} to pull and extract, have ${AVAIL_GB}G" >&2
     echo "  reclaim with:" >&2
-    echo "    docker image prune -af --filter 'until=168h'" >&2
+    echo "    docker image prune -f   # then docker rmi old studyaio-api / studyaio-ui tags" >&2
     echo "    docker builder prune -af" >&2
     exit 66
 fi
@@ -188,17 +251,15 @@ sleep 5
 $COMPOSE exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
 curl -fsS -o /dev/null "http://localhost:${UI_PORT:-3001}/"
 
-# -a, NOT a bare -f. Without -a this removes only DANGLING images, so every
-# deploy since this script was written left its predecessor's tagged image on
-# disk permanently: dozens of images totalling many GB, most of it unused.
-# That is how the host ran out of disk and failed the deploy above -- the cleanup
-# step existed the whole time and was reclaiming next to nothing.
-#
-# The until filter keeps roughly a week of recent tags as local rollback
-# targets; anything older is re-pullable from GHCR. Images belonging to a
-# RUNNING container are never removed by prune, so the live stack is safe.
-echo "==> Pruning old images..."
-docker image prune -af --filter "until=168h" >/dev/null
+# Retention is by RELEASE, not by age. The previous rule (`prune -af --filter
+# until=168h`) kept every image younger than a week; at ~4.5G per api image on a
+# 30G disk, four or five recent tags filled it and the NEXT deploy was refused
+# by the disk guard above. Now: keep the release that is running (this one) and
+# the previous KEEP_RELEASES-1 (default: one rollback target), untag every other
+# app image regardless of age, and leave non-app images alone. Anything dropped
+# is re-pullable from GHCR. Images used by a container are never removed.
+echo "==> Pruning old images (keeping ${KEEP_RELEASES} release(s))..."
+prune_old_app_images "${KEEP_RELEASES}" "${TAG}" "alcybersec"
 docker builder prune -af >/dev/null 2>&1 || true
 
 echo "==> Deploy complete: ${SHA} (tag ${TAG})"
