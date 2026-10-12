@@ -46,6 +46,14 @@ BASELINE_PATH = EVALS_DIR / "baseline.json"
 #: case edits rather than for noise.
 DEFAULT_THRESHOLD = 0.02
 
+#: Key Concepts citation coverage is gated: `--check` fails when the mean falls
+#: below ``CITATION_FLOOR`` (the GL#34 bar) or more than ``CITATION_THRESHOLD``
+#: below the baseline's, whichever floor is higher. Coverage is a mean of
+#: fractions over many lines, so it needs no slack for noise; the 0.05 gives a
+#: deliberate, reviewed prompt change a little room.
+CITATION_FLOOR = 0.90
+CITATION_THRESHOLD = 0.05
+
 _TITLE = re.compile(r"\A\s*#\s+\S.*Week\s+\d+\s*:\s*\S", re.IGNORECASE)
 _FOOTER = re.compile(r"^---\s*\n\s*\*Sources:.*Version:\s*\d+\.?\*\s*\Z", re.MULTILINE | re.DOTALL)
 _H2 = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
@@ -133,7 +141,7 @@ def check_citations(case: dict, summary: str) -> CitationReport:
 
     A claim counts as cited only when every marker in it names a page the case
     has; a marker for page 40 of a 3-page lecture is invented, not a citation.
-    Report only: not part of the gate threshold yet.
+    Gated in aggregate (see `CITATION_FLOOR`).
     """
     pages = case.get("pages", [])
     valid = {int(pg.get("page", pg.get("page_number", 0))) for pg in pages}
@@ -184,6 +192,7 @@ class OfflineScore:
             "fact_recall": round(self.fact_recall, 4),
             "forbidden_hits": len(self.forbidden_hits),
             "faithfulness": round(self.faithfulness, 4),
+            "citation_coverage": round(self.citations.coverage, 4),
         }
 
 
@@ -276,7 +285,7 @@ class OfflineRun:
 
     @property
     def citation_coverage(self) -> float:
-        """Mean Key Concepts citation coverage (report only, not gated)."""
+        """Mean Key Concepts citation coverage (gated, see `CITATION_FLOOR`)."""
         total = len(self.scores) + len(self.missing_fixtures)
         return sum(s.citations.coverage for s in self.scores) / total if total else 0.0
 
@@ -296,6 +305,7 @@ class OfflineRun:
                 "faithfulness": round(self.faithfulness, 4),
                 "coverage": round(self.coverage, 4),
                 "structure": round(self.structure, 4),
+                "citation_coverage": round(self.citation_coverage, 4),
             },
             "cases": {s.case_id: s.to_baseline() for s in self.scores},
         }
@@ -343,7 +353,9 @@ def check_against_baseline(
     Fails when: a case has no fixture; a case is absent from the baseline or
     (with ``expect_all_cases``) a baseline case has no case file (stale
     baseline); a case's structure is broken now but was OK in the baseline; or
-    aggregate faithfulness is below ``baseline - threshold``. A structure break
+    aggregate faithfulness is below ``baseline - threshold``; or, when the
+    baseline records it, Key Concepts citation coverage is below
+    ``max(CITATION_FLOOR, baseline - CITATION_THRESHOLD)``. A structure break
     the baseline already records is a warning (see `known_broken`), not a
     failure, so measured real-model output can be committed as the starting
     point and improved.
@@ -374,6 +386,16 @@ def check_against_baseline(
             f"aggregate faithfulness {run.faithfulness:.3f} is below the floor {floor:.3f}"
             f" (baseline {baseline['aggregate']['faithfulness']:.3f} - threshold {threshold})"
         )
+
+    base_cit = baseline["aggregate"].get("citation_coverage")
+    if base_cit is not None:
+        cit_floor = max(CITATION_FLOOR, float(base_cit) - CITATION_THRESHOLD)
+        if run.citation_coverage < cit_floor - 1e-9:
+            failures.append(
+                f"Key Concepts citation coverage {run.citation_coverage:.3f} is below the floor"
+                f" {cit_floor:.3f} (max of {CITATION_FLOOR} and baseline {float(base_cit):.3f}"
+                f" - {CITATION_THRESHOLD})"
+            )
     return failures
 
 
@@ -397,7 +419,7 @@ def format_offline_report(run: OfflineRun, baseline: dict | None, failures: list
             lines.append(f"         forbidden claim: {hit}")
     agg = f"{len(run.scores)} case(s) · faithfulness {run.faithfulness:.3f}"
     agg += f" · coverage {run.coverage:.3f} · structure {run.structure:.0%}"
-    agg += f" · citation coverage {run.citation_coverage:.0%} (report only)"
+    agg += f" · citation coverage {run.citation_coverage:.0%} (gated)"
     if baseline:
         agg += f" · baseline {baseline['aggregate']['faithfulness']:.3f}"
     lines += ["", agg]
@@ -413,7 +435,7 @@ def format_offline_report(run: OfflineRun, baseline: dict | None, failures: list
 TARGET_CASES = ("dp_knapsack", "binary_search_trees", "rsa_public_key", "sorting_algorithms")
 BAR_FAITHFULNESS = 0.93
 BAR_TARGET = 0.80
-BAR_CITATION = 0.90
+BAR_CITATION = CITATION_FLOOR
 
 
 def _mean(values: list[float]) -> float:

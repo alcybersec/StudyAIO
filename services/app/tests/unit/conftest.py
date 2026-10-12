@@ -34,7 +34,7 @@ REDIS_IMPORTING_MODULES = (
 class FakeRedis:
     """Minimal in-memory stand-in for `redis.asyncio.Redis`.
 
-    Implements only what the app actually calls: get/setex/delete/scan/ping,
+    Implements only what the app actually calls: get/set/setex/incr/expire/ttl/delete/scan/ping,
     publish, pubsub and aclose. Anything else should raise loudly rather than
     silently pass, so a new Redis call site is noticed here rather than
     discovered as a hang on someone's laptop.
@@ -80,6 +80,29 @@ class FakeRedis:
             return None
         self._store[key] = (value, None if ex is None else time.monotonic() + ex)
         return True
+
+    async def incr(self, key: str) -> int:
+        """Atomically increment (single-threaded here); keeps any existing TTL."""
+        current = self._live(key)
+        expires_at = self._store[key][1] if current is not None else None
+        value = int(current or 0) + 1
+        self._store[key] = (str(value), expires_at)
+        return value
+
+    async def expire(self, key: str, seconds: int) -> bool:
+        if self._live(key) is None:
+            return False
+        self._store[key] = (self._store[key][0], time.monotonic() + seconds)
+        return True
+
+    async def ttl(self, key: str) -> int:
+        """Seconds left; -2 if the key is missing, -1 if it has no expiry."""
+        if self._live(key) is None:
+            return -2
+        expires_at = self._store[key][1]
+        if expires_at is None:
+            return -1
+        return max(int(expires_at - time.monotonic() + 0.999), 0)
 
     async def setex(self, key: str, ttl: int, value: str) -> bool:
         self._store[key] = (value, time.monotonic() + ttl)

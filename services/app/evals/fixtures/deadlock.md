@@ -2,100 +2,74 @@
 
 ## Overview
 
-Modern operating systems run many processes concurrently, and those processes must share limited resources — memory, files, printers, locks. This sharing creates the possibility of **deadlock**: a situation in which a set of processes is blocked forever because each process is waiting for a resource that another process in the set holds. No process can proceed, no process releases anything, and the system grinds to a halt for everyone involved.
+Deadlock is a situation in which a set of processes is stuck: each process in the set is waiting for a resource that is held by another process in the same set, so none of them can ever make progress [p.1]. Nothing external interrupts them, and nothing they do on their own can break the cycle — the wait is mutual and permanent [p.1].
 
-Deadlock matters because it is not a crash you can recover from easily — the processes involved simply stop making progress. Understanding deadlock requires knowing exactly which conditions allow it to arise (there are four, and all must hold simultaneously), and that insight immediately suggests a strategy: if you can prevent even one of those conditions from ever occurring, deadlock becomes impossible. This week introduces both the theory of deadlock and its core prevention technique.
+This matters because modern systems run many processes concurrently, all competing for limited resources such as devices, files or locks. If the operating system does not manage resource allocation carefully, deadlock can freeze part of a system indefinitely. Understanding what makes deadlock possible — and what makes it impossible — is therefore a core part of studying operating systems, and the key insight of this lecture is elegant: four specific conditions must *all* hold simultaneously for deadlock to exist, so breaking even one of them prevents deadlock entirely [p.1].
 
 ## Key Concepts
 
-### What Is Deadlock?
+### What Deadlock Is
 
-A set of processes is **deadlocked** when each process in the set is waiting for a resource that is held by another process in the same set. The critical word is *set*: deadlock is a property of a group, not an individual process. A single process waiting for a busy printer is just blocked — it will proceed once the printer frees up. Deadlock occurs only when the waiting is mutual and circular, so no amount of patience resolves it.
+A set of processes is deadlocked when each process in the set is waiting for a resource that is held by another process in the set [p.1]. The word "set" is important: it is not enough for one process to be blocked waiting for something. The blocking must form a closed loop among the processes themselves, so that nobody in the group can proceed and release what the others need.
 
-Think of two people, each holding a document the other needs to read before continuing. Each politely waits for the other to finish first. Neither will ever proceed — that is the essence of deadlock in a resource-sharing system.
+Think of four cars at an intersection, each having entered before the one to its left could clear the way: each car is waiting for the road space held by another car, and no car can move. Translated to processes, each one is stopped, holding a resource somebody else wants, while wanting a resource somebody else holds.
 
-### The Four Necessary Conditions
+### The Four Conditions for Deadlock
 
-For deadlock to occur, **four conditions must hold simultaneously**. This is the central theoretical result of the lecture: remove any one condition and deadlock cannot happen.
+All four of the following conditions must hold together for deadlock to occur [p.1]. They are worth learning as a set, because the practical strategies against deadlock are exactly strategies for defeating one of them.
 
-#### 1. Mutual Exclusion
+#### Mutual Exclusion
 
-A resource can be held by only one process at a time. This condition exists because some resources are inherently non-shareable — a printer cannot print two jobs at once, and a lock protects data from concurrent modification. Mutual exclusion is usually a requirement of correctness, not a design flaw, which is why it is rarely the condition we choose to break.
+A resource is held by one process at a time [p.1]. If several processes could share a resource simultaneously, nobody would ever need to wait for it, and this link in the deadlock chain would disappear. Resources that genuinely cannot be shared force processes to queue for exclusive access.
 
-#### 2. Hold and Wait
+#### Hold and Wait
 
-A process holds at least one resource while simultaneously waiting for another. This is the "greed" condition: a process that grabbed one resource and now wants a second that someone else has. If processes either requested all their resources at once or held nothing while waiting, this condition could not arise.
+A process holds one resource while waiting for another [p.1]. This is what makes waits dangerous: a blocked process is not idle and empty-handed — it is gripping resources that other processes may need, while itself unable to continue.
 
-#### 3. No Preemption
+#### No Preemption
 
-Resources cannot be forcibly taken away from the process holding them. The OS does not snatch a file lock from a running process; the holder must release it voluntarily. Without preemption, a stuck process cannot be relieved of its resources to unblock others.
+Resources cannot be taken away from a process [p.1]. The system cannot forcibly snatch a resource from a process that holds it; the process must release it voluntarily. This means a waiting process cannot be "unlocked" by the operating system reallocating its resources to whoever they are waiting for.
 
-#### 4. Circular Wait
+#### Circular Wait
 
-There is a cycle of processes: P₁ waits for a resource held by P₂, P₂ waits for one held by P₃, ..., and the last waits for a resource held by P₁. This is the condition that ties everything together — the actual "circle" of mutual waiting. The classic two-process case: P₁ holds A and wants B; P₂ holds B and wants A.
+There is a cycle of processes, each waiting on the next [p.1]. This is the structural heart of deadlock: P1 waits for P2, P2 waits for P3, and so on until the last process waits for P1 again. The waiting forms a closed loop with no entry or exit point.
 
-#### Why All Four Must Hold Together
+### Preventing Deadlock by Breaking a Condition
 
-Each condition is necessary; jointly they are sufficient. This gives deadlock prevention a clean logical shape:
+Because the four conditions must hold *together*, deadlock cannot occur if any single one of them is broken [p.1]. This turns deadlock prevention into a design question: which condition is easiest and safest to eliminate in a given system?
 
-| Condition | Meaning | Can we break it? |
-|---|---|---|
-| Mutual exclusion | Resource usable by one process at a time | Hard — often required for correctness |
-| Hold and wait | Holding one resource while waiting for another | Possible — request all resources upfront |
-| No preemption | Resources can't be forcibly taken | Possible in some cases, disruptive |
-| Circular wait | A cycle of waiting processes | **Practical and common** |
+The lecture highlights one classic technique: imposing a global order on resources and acquiring them in that order breaks circular wait [p.1]. If every process must request resources in the same fixed sequence (say, always request resource A before resource B), then a cycle of waiting processes cannot form — the ordering makes a "wait-for" loop impossible to construct. Each process still holds and waits, and resources are still exclusive and non-preemptible, but the circular structure, the last ingredient, can never arise.
 
-### Breaking a Condition: Deadlock Prevention
-
-Since all four conditions are required, imposing any one less is enough to prevent deadlock. Among these, the lecture highlights the most practical technique:
-
-#### Resource Ordering (Breaking Circular Wait)
-
-Impose a **global order** on all resources, and require every process to acquire resources in that order. If resources are numbered 1, 2, 3, ..., a process needing both resources 3 and 7 must take 3 before 7. With this discipline, the circular-wait chain cannot form: in any cycle, resource numbers would have to strictly increase around the loop and return to the start, which is impossible.
-
-For the two-process example: if both P₁ and P₂ must acquire A before B (because A precedes B in the global order), then either P₁ gets both first and P₂ waits (but only until P₁ finishes), or vice versa. One of them always makes progress — no deadlock.
-
-Resource ordering is the technique of choice in practice because it is simple to enforce, has low runtime cost, and only requires programmers to agree on a consistent acquisition order.
+In practice, this is like a building where everyone agrees to always lock corridor doors in numbered order: two people can each hold one door only if both follow the same rule, and the mutual "you first" standoff never happens.
 
 ## Definitions
 
 | Term | Definition |
 |---|---|
-| Deadlock | A situation where a set of processes is blocked because each process is waiting for a resource held by another process in the set |
-| Mutual exclusion | The condition that a resource can be held by only one process at a time |
-| Hold and wait | The condition that a process holds at least one resource while waiting to acquire another |
-| No preemption | The condition that resources cannot be forcibly taken from the process holding them |
-| Circular wait | The condition that a cycle of processes exists, each waiting for a resource held by the next |
-| Deadlock prevention | Guaranteeing deadlock cannot occur by ensuring at least one of the four conditions never holds |
-| Resource ordering | A prevention technique that imposes a global order on resources and requires acquisition in that order, breaking circular wait |
+| Deadlock | A situation where a set of processes is deadlocked when each waits for a resource held by another in the set [p.1] |
+| Mutual exclusion | A resource is held by one process at a time [p.1] |
+| Hold and wait | A process holds one resource while waiting for another [p.1] |
+| No preemption | Resources cannot be taken away [p.1] |
+| Circular wait | A cycle of processes each waiting on the next [p.1] |
+| Deadlock prevention | Breaking any one of the four conditions so deadlock cannot occur [p.1] |
+| Resource ordering | Imposing a global order on resources and acquiring them in that order, which breaks circular wait [p.1] |
 
 ## Diagrams & Visual Descriptions
 
-**Circular wait (the deadlock condition):**
+The circular wait condition can be drawn as a cycle of processes, each holding a resource the next one wants [p.1]:
 
 ```
-        ┌──────────┐   wants B    ┌──────────┐
-        │    P₁    │ ───────────► │    P₂    │
-        │ holds A  │              │ holds B  │
-        └──────────┘ ◄─────────── └──────────┘
-                          wants A
-
-        P₁ holds A, waits for B.
-        P₂ holds B, waits for A.
-        Neither can proceed → deadlock.
+        holds R1        holds R2
+   P1 ─────────────► R1        R2 ◄───────────── P2
+    ▲                                            │
+    │                                            │ waits for R1
+    │ waits for R2                               │
+   P4 ◄───────────── R4        R3 ◄───────────── P3
+        holds R4        holds R3
+        (P4 holds R4, waits for R3's holder's chain back to P1)
 ```
 
-**Breaking the cycle with resource ordering (acquire in global order A → B):**
-
-```
-        P₁ acquires A, then B      P₂ tries A, is blocked
-        ┌──────────┐               ┌──────────┐
-        │    P₁    │               │    P₂    │
-        │ A → B ✓  │               │ waits    │
-        └──────────┘               └──────────┘
-        P₁ finishes, releases both; P₂ proceeds.
-        No cycle → no deadlock.
-```
+Each arrow of "waits for" points to a resource held by the next process; following the arrows always returns to the starting process, which is exactly the cycle that defines deadlock [p.1].
 
 ## Code Examples
 
@@ -103,33 +77,31 @@ No code examples in this lecture.
 
 ## Formulas & Algorithms
 
-The deadlock condition can be stated logically:
+No formulas in this lecture. The quantitative/logical content of the week is the set of four conditions and the prevention rule:
 
-$$\text{Deadlock} \Rightarrow (\text{mutual exclusion} \wedge \text{hold and wait} \wedge \text{no preemption} \wedge \text{circular wait})$$
+```
+Deadlock occurs only if ALL hold simultaneously:
+  1. Mutual exclusion   — a resource is held by one process at a time
+  2. Hold and wait      — a process holds one resource while waiting for another
+  3. No preemption      — resources cannot be taken away
+  4. Circular wait      — a cycle of processes each waiting on the next
 
-Equivalently, deadlock requires all four conditions:
-
-$$\text{Deadlock} \iff \bigcap_{i=1}^{4} C_i \neq \emptyset$$
-
-**Prevention algorithm (resource ordering):**
-1. Assign each resource type a unique number in a global order.
-2. A process may request a resource only if its number is greater than all numbers of resources it currently holds.
-3. Circular wait becomes impossible: resource numbers would need to strictly increase around any wait cycle, which cannot return to the starting process.
+Prevention rule: break ANY ONE condition and deadlock cannot occur.
+Technique: impose a global order on resources and acquire them in that
+order — this breaks circular wait.
+```
+[p.1]
 
 ## Key Takeaways
 
-- Deadlock is a property of a *set* of processes: each waits for a resource held by another in the same set, so no one can ever proceed.
-- Four conditions — mutual exclusion, hold and wait, no preemption, and circular wait — must **all** hold together for deadlock; this is the foundation for all prevention strategies.
-- Breaking any single condition makes deadlock impossible; you don't need to attack all four.
-- The most practical condition to break is circular wait, via a **global resource ordering** with acquisition in that order.
-- Resource ordering works because a strictly increasing sequence cannot loop back on itself — a cycle of waiting processes can never form.
-- Mutual exclusion is usually the hardest condition to remove, since single-exclusivity is often required for correctness.
+- Deadlock is a group property, not an individual one: it requires a whole set of processes each waiting on another in the set [p.1].
+- Four conditions — mutual exclusion, hold and wait, no preemption, and circular wait — must all hold together for deadlock to exist [p.1].
+- Because the conditions are jointly required, breaking any single one prevents deadlock entirely — this is the foundation of deadlock prevention [p.1].
+- The most concrete prevention technique from the lecture is resource ordering: define a global order on resources and always acquire them in that order, which makes circular wait impossible [p.1].
 
 ## Connections
 
-This lecture's topic sits naturally at the intersection of processes and resource management — the same resource-allocation activity that earlier material on processes and scheduling addresses. Here the concern shifts from *efficiency* of resource use to *liveness*: whether progress is possible at all.
-
-The lecture's prevention strategy (resource ordering) relies on the notion of processes acquiring resources in a disciplined way, which connects to how concurrent processes coordinate their access to shared data; the locks processes wait on are exactly the resources at the heart of this week's deadlock conditions.
+This lecture is part of the study of processes and resources in operating systems: deadlock arises precisely because concurrent processes compete for resources that can be held by only one process at a time [p.1]. The lecture itself does not name any other week or upcoming topic, and no other weeks were available to compare against.
 
 ---
-*Sources: CSIT203 Week 7 lecture content (Deadlock). Version: 1.*
+*Sources: Week 7 lecture slides on Deadlock (pages 1). Version: 1.*

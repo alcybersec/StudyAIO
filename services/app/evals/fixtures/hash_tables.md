@@ -2,104 +2,91 @@
 
 ## Overview
 
-A hash table is one of the most important data structures in computer science because it promises something remarkable: lookup of a key in **O(1) average time**. Instead of searching through data sequentially or navigating a tree, a hash table uses a *hash function* to compute, directly from the key, the index of the bucket where the value is stored. Want to find `"student_id=12345"` in a table of a million records? You don't scan a million entries — you compute a number and jump straight to the answer.
+A hash table maps a key to an index using a hash function, giving average case O(1) lookup [p.1]. This makes hash tables one of the fastest data structures for lookup-heavy workloads, but that speed comes with an important caveat: the worst case is O(n). With a bad hash function, every key lands in the same bucket and the table degrades to a linear scan — no better than searching an unsorted list [p.1].
 
-This week's lecture focuses on the mechanics behind that promise and, crucially, on when the promise breaks. The average O(1) is **a claim about the quality of the hash function, not a guarantee built into the structure itself**: with a bad hash function, every key can land in the same bucket, and the table degenerates into an O(n) linear scan. The lecture therefore examines collision handling (separate chaining, linear probing, quadratic probing), the *load factor* as the key performance indicator, and *rehashing* as the mechanism that restores performance — with an amortised analysis explaining why the occasional O(n) rebuild doesn't ruin overall efficiency.
+The lecture makes a subtle but crucial point: the average case is a claim about the hash function, not about the data structure [p.1]. In other words, the O(1) guarantee depends on the hash function spreading keys evenly across buckets. This is why the rest of the lecture is devoted to managing collisions and controlling the *load factor* — the ratio of stored entries to buckets, which degrades performance as it approaches 1 [p.1].
 
 ## Key Concepts
 
 ### The Hash Table Model
 
-A hash table maintains an array of *buckets*. When you insert or look up a key–value pair, a hash function maps the key to an integer index into that array. The "O(1)" behaviour comes from this direct address calculation: the amount of work is independent of how many entries are stored.
-
-The critical subtlety the lecture emphasises: the average case is a *probabilistic* claim that depends on the hash function distributing keys well across buckets. If the hash function is poor (for example, mapping many keys to the same index), every key collides and lookup degrades to O(n) — the hash table becomes no better than a plain list. So when you analyse a hash table, you are really analysing two things: the structure (buckets, collisions, probing) and the assumption about hash quality.
+A hash table works by applying a hash function to a key to produce an index into an array of buckets, so lookup avoids scanning the whole structure [p.1]. The central tension is between the ideal O(1) average case and the O(n) worst case that occurs when the hash function is poor and all keys collide into one bucket [p.1]. Because the average case depends entirely on hash quality, good hash table design is largely about (a) keeping the load factor low and (b) handling collisions gracefully.
 
 ### Load Factor
 
-The **load factor** is the ratio:
-
-$$\alpha = \frac{\text{number of stored entries}}{\text{number of buckets}}$$
-
-It measures how "full" the table is, and it is the single best predictor of hash table performance. As α approaches 1, collisions become frequent, chains (or probe sequences) grow long, and lookup slows noticeably. This is why well-designed hash tables resize themselves *before* the table fills completely — performance is managed by keeping the load factor low, not by choosing a better probe sequence after the fact.
+The load factor is the ratio of stored entries to buckets [p.1]. As it approaches 1, the table becomes crowded, collisions increase, and performance degrades [p.1]. Monitoring the load factor is what tells us *when* to intervene — either by resizing the table or by choosing a collision strategy that tolerates a fuller table.
 
 ### Collision Resolution Strategies
 
-Two keys hashing to the same bucket is inevitable (there are far more possible keys than buckets), so how we handle collisions defines each hash table variant.
-
 #### Separate Chaining
 
-Each bucket holds a **linked list**. Colliding keys simply append to that bucket's list, so the table can hold arbitrarily many entries per bucket. Lookup cost is proportional to the *length of the chain* at the hashed bucket. With a good hash function and a low load factor, chains are short (around α entries on average), so lookups remain effectively constant time. Chaining's virtue is its simplicity and robustness — it degrades gracefully as the table fills.
+Separate chaining stores a linked list at each bucket; collisions simply append to the list [p.2]. Lookup cost is proportional to the length of the chain, so it stays acceptable while the load factor is low [p.2]. This makes chaining conceptually simple: the table absorbs collisions by growing lists rather than rearranging entries.
 
 #### Open Addressing and Linear Probing
 
-**Open addressing** stores all entries directly in the table array itself — there are no auxiliary lists. On a collision, we search for another free bucket. **Linear probing** is the simplest approach: check the next bucket, then the next, until an empty slot is found.
-
-Its weakness is **primary clustering**: collisions form contiguous runs of occupied buckets. Once a run exists, a key hashing anywhere into that run must probe past the *entire* run — and every insertion extends the run, making future collisions even more likely. Runs snowball, and performance degrades faster than the load factor alone would suggest.
+Open addressing takes the opposite approach: everything is stored in the table itself, with no auxiliary lists [p.2]. On a collision, linear probing checks the next bucket, and the next, until a free one is found [p.2]. The problem is *primary clustering*: occupied runs grow, and growing runs make further collisions more likely — a feedback loop that degrades performance [p.2].
 
 #### Quadratic Probing
 
-Quadratic probing combats clustering by probing at **increasing square offsets** — index + 1², + 2², + 3², ... — instead of stepping one slot at a time. Because successive probes jump further and further across the table, entries are spread out rather than packed into contiguous runs, so primary clustering is avoided. This is the lecture's example of how a small change in probe strategy can materially improve behaviour at the same load factor.
+Quadratic probing checks buckets at increasing square offsets instead of stepping one bucket at a time [p.3]. Because entries are spread out rather than packed into contiguous runs, it avoids primary clustering [p.3].
 
-| Strategy | Where entries live | Collision handling | Main weakness |
+The three strategies compare as follows:
+
+| Strategy | Where entries live | Collision handling | Key drawback [p.2][p.3] |
 |---|---|---|---|
-| Separate chaining | Linked list per bucket | Append to the chain | Chain length grows with load factor |
-| Linear probing | In the table itself | Probe next slot, then next | Primary clustering |
-| Quadratic probing | In the table itself | Probe at 1², 2², 3², ... offsets | Avoids primary clustering; still sensitive to load factor |
+| Separate chaining | Linked list per bucket | Append to list; lookup cost = chain length [p.2] | Acceptable only while load factor is low [p.2] |
+| Open addressing (linear probing) | The table itself | Check next bucket, then next, until free [p.2] | Primary clustering [p.2] |
+| Quadratic probing | The table itself | Check buckets at increasing square offsets [p.3] | Avoids primary clustering [p.3] |
 
 ### Resizing and Rehashing
 
-When the load factor crosses a chosen threshold, the table is **resized** — typically doubled — and **every key is rehashed** into the new table (keys must be rehashed because their indices depend on the table size). This rebuild is an O(n) operation, which sounds alarming for a structure built on O(1) promises.
-
-The resolution is **amortised analysis**: rehashing happens only after many insertions have occurred (since the table doubled, it takes roughly as many insertions again to trigger the next resize). Spreading the O(n) rebuild cost across those insertions, the *amortised cost per insertion stays constant*. The lesson generalises: occasional expensive operations can be acceptable if they are rare enough relative to the cheap operations between them.
+When the load factor crosses a threshold the table is resized, usually doubled, and every key is rehashed into the new table [p.3]. A single rehash costs O(n), which sounds expensive — but amortised across the insertions that caused it, the cost per insertion stays constant [p.3]. This amortised analysis is why hash tables can guarantee O(1) insertion on average even though occasional operations are slow: the expensive event happens rarely relative to the number of cheap ones.
 
 ## Definitions
 
 | Term | Definition |
 |---|---|
-| Hash table | A data structure mapping keys to array indices via a hash function, giving O(1) average-case lookup. |
-| Hash function | A function that maps a key to a bucket index in the table. |
-| Load factor | Ratio of stored entries to buckets; performance degrades as it approaches 1. |
-| Collision | The event of two keys hashing to the same bucket. |
-| Separate chaining | Collision resolution storing a linked list at each bucket; lookups cost the chain length. |
-| Open addressing | Collision resolution storing all entries in the table itself and probing for free slots. |
-| Linear probing | Open addressing variant that checks successive buckets one at a time. |
-| Primary clustering | Tendency of linear probing to form growing runs of occupied buckets that increase collision likelihood. |
-| Quadratic probing | Probing at increasing square offsets (1², 2², ...), spreading entries and avoiding primary clustering. |
-| Rehashing | Recomputing every key's index after resizing, usually doubling, the table. |
-| Amortised cost | The average per-operation cost when an occasional expensive operation is spread across many cheap ones. |
+| Hash table | Maps a key to an index using a hash function, giving average case O(1) lookup [p.1] |
+| Worst case O(n) | With a bad hash function every key lands in the same bucket and the table degrades to a linear scan [p.1] |
+| Load factor | The ratio of stored entries to buckets; performance degrades as it approaches 1 [p.1] |
+| Separate chaining | Stores a linked list at each bucket; collisions append to the list [p.2] |
+| Open addressing | Stores everything in the table itself, resolving collisions by probing [p.2] |
+| Linear probing | On a collision, checks the next bucket, and the next, until a free one is found [p.2] |
+| Primary clustering | Occupied runs grow and make further collisions more likely [p.2] |
+| Quadratic probing | Checks buckets at increasing square offsets, spreading entries out and avoiding primary clustering [p.3] |
+| Rehashing | When the load factor crosses a threshold, the table is resized (usually doubled) and every key is rehashed into the new table [p.3] |
 
 ## Diagrams & Visual Descriptions
 
-**Separate chaining** — each bucket points to a linked list of colliding entries:
+Linear probing's primary clustering, where a growing run of occupied slots keeps attracting new keys [p.2]:
 
 ```
-Index      Bucket (linked list)
- 0    →   (empty)
- 1    →   [K7] → [K12] → null      ← collision chain
- 2    →   [K3] → null
- 3    →   (empty)
+Buckets:   [A][B][C][D][ ][ ][ ]
+            ^--^--^--^
+            occupied run — a new key hashing
+            to A, B, C or D all probe past the
+            same run, making collisions more likely [p.2]
 ```
 
-**Linear probing vs. quadratic probing** — how collisions walk through the table:
+Quadratic probing instead jumps at increasing square offsets (0, 1, 4, 9, ...), scattering entries so runs never form [p.3]:
 
 ```
-Linear probing (step of 1):           Quadratic probing (offsets 1², 2², ...):
-
-slot:  4   5   6   7   8              slot:  4   5   6   7   8
-      [X][X][X][X][ ]                     [X][ ][ ][ ][X]
-        ← cluster forms; any key          hash→4, try +1²=5, +2²=8
-        hitting 4–7 probes all of it      (jumps over cluster)
+Probe i:    0    1    2    3
+Offset:     0    1    4    9     (increasing squares) [p.3]
+Table:      [K][ ][ ][X][ ][ ][ ][ ][ ][K] ... [p.3]
 ```
 
-**Rehashing / resize flow:**
+Rehashing on threshold crossing [p.3]:
 
 ```
-insert → load factor ≥ threshold? ──no──→ place in bucket
-                │yes
-                ▼
-        allocate table (double size)
-                ▼
-        rehash every key into new table
+Load factor crosses threshold
+        |
+        v
+Resize table (usually doubled)
+        |
+        v
+Rehash every key into new table  -- O(n) total,
+amortised to O(1) per insertion [p.3]
 ```
 
 ## Code Examples
@@ -108,33 +95,49 @@ No code examples in this lecture.
 
 ## Formulas & Algorithms
 
-**Load factor:**
+Complexities and bounds:
 
-$$\alpha = \frac{\text{number of stored entries}}{\text{number of buckets}}$$
+```
+Hash table lookup: average case O(1) [p.1]
+Hash table lookup: worst case O(n) (all keys in one bucket -> linear scan) [p.1]
+Separate chaining lookup: proportional to chain length [p.2]
+Rehashing: O(n), amortised to constant cost per insertion [p.3]
+```
 
-**Complexity summary:**
+Load factor:
 
-- Average-case lookup: $O(1)$ (depends on hash function quality)
-- Worst-case lookup: $O(n)$ (bad hash function → all keys in one bucket)
-- Rehashing: $O(n)$ per resize, but amortised $O(1)$ per insertion
+```
+load factor = stored entries / buckets
+performance degrades as load factor -> 1 [p.1]
+```
 
-**Quadratic probing sequence:** probe offsets $1^2, 2^2, 3^2, \dots$ from the home slot.
+Resize policy:
+
+```
+if load factor crosses threshold:
+    resize table (usually doubled)
+    rehash every key into the new table [p.3]
+```
+
+Quadratic probing offsets:
+
+```
+probe sequence: increasing square offsets (0, 1, 4, 9, ...)
+avoids primary clustering [p.3]
+```
 
 ## Key Takeaways
 
-- O(1) hash table lookup is an *average-case* claim about the hash function, not a guarantee — a bad hash function collapses the table to O(n).
-- The load factor is the performance dial: as it approaches 1, collisions dominate and lookups slow.
-- Separate chaining is simple and robust but pays chain-walking costs; open addressing keeps everything in one array.
-- Linear probing's primary clustering is a feedback loop: runs grow, which causes more collisions, which grows runs further.
-- Quadratic probing's square offsets break up clusters by spreading entries across the table.
-- Resizing (doubling) plus rehashing costs O(n) once, but amortised across the insertions that triggered it, insertion stays O(1).
+- Hash tables deliver O(1) average lookup only because of the hash function — the average case is a claim about the hash function, not about the data structure itself [p.1].
+- A bad hash function collapses the table to a linear scan with O(n) worst-case behaviour, so hash quality is not optional [p.1].
+- Watch the load factor: as it approaches 1, performance degrades regardless of collision strategy [p.1].
+- Separate chaining and open addressing embody two philosophies — grow lists vs. probe within the table — each with its own failure mode (chain length vs. primary clustering) [p.2].
+- Linear probing's primary clustering is self-reinforcing; quadratic probing breaks the runs by using square offsets [p.2][p.3].
+- Rehashing looks expensive at O(n), but amortised across the insertions that triggered it, each insertion costs a constant amount — the key insight behind practical hash table design [p.3].
 
 ## Connections
 
-Within this lecture, the analysis of hash tables leans on two ideas that recur across data-structures study: probabilistic performance (the O(1) bound depends on an assumption about hash behaviour, echoing how average-case analysis rests on distributional assumptions) and amortised analysis (justifying dynamic resizing by spreading the O(n) rebuild across insertions). Both are techniques you will reuse whenever evaluating adaptive data structures.
-
-The lecture notes that hash tables provide average O(1) lookup, positioning them as the go-to structure whenever fast key-based access is needed — a claim worth testing against alternatives like tree-based maps, which offer worst-case guarantees instead.
+This week's emphasis on comparing data-structure strategies by their average and worst-case costs, and on amortised analysis for resizing, gives a framework that recurs throughout data-structure study in this course: a structure is only as good as the assumptions (here, hash quality) behind its performance claims [p.1][p.3]. The lecture also leaves open what makes a hash function "good" — the guarantee rests entirely on keys spreading evenly across buckets, a condition the lecture identifies but does not itself design for [p.1].
 
 ---
-
-*Sources: CSIT302 Week 5 lecture notes (Hash Tables). Version: 1.*
+*Sources: CSIT302 Week 5 lecture slides (pp. 1–3). Version: 1.*

@@ -12,6 +12,8 @@ Outage policy, when the store is unreachable:
 * everything else **fails open** (logged): a cache outage should not take the
   whole product down. Cost-bearing routes keep their separate AI-call ceilings.
 
+Counting uses a moving window (see ``RATE_LIMIT_STRATEGY``), not a fixed one.
+
 Redis calls are synchronous (``limits``) with short socket timeouts, so an outage
 costs at most ``redis_socket_timeout`` per request rather than a hang.
 """
@@ -26,6 +28,16 @@ from app.config import settings
 from app.core.exceptions import RateLimiterUnavailableError
 
 logger = structlog.get_logger()
+
+#: Counting strategy for every limit. A fixed window opens at the first hit and
+#: forgets everything when it closes, so an attacker can spend the budget at the
+#: end of one window and again at the start of the next (up to 2x the limit in a
+#: moment) and a slow client can straddle the reset by accident. A moving window
+#: counts the hits of the last N seconds, so "5/minute" is true at every instant.
+#: Supported by both the ``memory://`` and Redis stores. Applied to all limits,
+#: not just auth: the cost is one stored timestamp per allowed hit, which is
+#: negligible at these budgets, and one rule is easier to hold than two.
+RATE_LIMIT_STRATEGY = "moving-window"
 
 #: Paths whose limits protect credentials and therefore fail closed.
 FAIL_CLOSED_PREFIXES = ("/api/auth/",)
@@ -65,6 +77,7 @@ def build_limiter(storage_uri: str, timeout: float | None = None) -> Limiter:
         storage_uri=storage_uri,
         storage_options=options,
         key_prefix="studyaio-rl",
+        strategy=RATE_LIMIT_STRATEGY,
     )
 
 

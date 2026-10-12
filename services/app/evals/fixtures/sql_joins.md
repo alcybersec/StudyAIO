@@ -2,24 +2,21 @@
 
 ## Overview
 
-Relational databases split data across multiple tables to avoid redundancy — students live in one table, enrolments in another. But real questions almost always span tables: "Which courses is each student taking?" or "Which students haven't enrolled in anything?" SQL joins are the mechanism that stitches related rows from different tables back together, and mastering them is a foundational skill for almost every query you will write beyond the simplest single-table SELECT.
+When data lives in more than one table — here, `students(id, name)` and `enrolments(student_id, course)` — a single query usually needs to bring rows from both together. Joins are the SQL mechanism for that: they combine rows of two tables based on a matching condition [p.1]. This week introduces the two fundamental join types, INNER JOIN and LEFT JOIN, and shows how the choice between them changes *which rows* your result contains — a student with no enrolment appears in some results but vanishes from others [p.1][p.2].
 
-This week covers the two most important join types — INNER JOIN and LEFT JOIN — and then shows how joins combine naturally with aggregation. A subtle but crucial point emerges: the choice of join type changes your aggregate results, because a join determines which rows exist *before* you count or sum them. Understanding joins and GROUP BY together is essential for writing correct reports.
+The lecture then connects joins to aggregation: once rows are combined, GROUP BY collapses them into groups so aggregates like COUNT can be computed per group, and the lecture distinguishes WHERE (filtering rows before grouping) from HAVING (filtering groups after) [p.3].
 
 ## Key Concepts
 
-### Setup: The Running Example
+### The Running Example: Two Related Tables
 
-The lecture uses two small tables:
+The lecture works throughout with `students(id, name)` and `enrolments(student_id, course)`. Each enrolment refers to a student via `student_id`, which matches `students.id`. This id-based linkage is exactly what the `ON` condition of a join tests [p.1].
 
-- `students(id, name)` — one row per student, with a unique `id`.
-- `enrolments(student_id, course)` — one row per enrolment, where `student_id` references a student.
+### INNER JOIN: Keeping Only Matches
 
-This is a classic one-to-many relationship: a student can have zero, one, or many enrolments. That asymmetry is exactly what makes the difference between join types matter.
+An INNER JOIN keeps only rows that match on the `ON` condition. The key behavioural consequence: a student with no enrolment does not appear in the result at all, because their row has no matching partner in `enrolments` [p.1].
 
-### INNER JOIN: Keep Only Matches
-
-An INNER JOIN produces rows where the ON condition is satisfied in **both** tables:
+The query has this shape [p.1]:
 
 ```sql
 SELECT s.name, e.course
@@ -27,11 +24,13 @@ FROM students s
 INNER JOIN enrolments e ON e.student_id = s.id;
 ```
 
-The key behaviour: **a student with no enrolment does not appear at all.** The join finds no matching row in `enrolments`, so the student is dropped from the result. This is fine when you only care about existing relationships ("list all actual enrolments with student names"), but it silently loses information if you want a complete picture of all students — a common source of bugs in reporting queries.
+Read it as: walk through `students`, and for each row find enrolment rows whose `student_id` equals that student's `id`; output the name/course pair for each match [p.1].
 
-### LEFT JOIN: Keep Every Left-Hand Row
+### LEFT JOIN: Keeping Every Left-Hand Row
 
-A LEFT JOIN keeps **every row of the left table** (here, `students`), regardless of whether a match exists:
+A LEFT JOIN keeps every row of the left table (here `students`). Where there is no match, the right-hand columns are filled with NULL — so a student with no enrolment still appears, with `e.course` as NULL [p.2].
+
+The query shape [p.2]:
 
 ```sql
 SELECT s.name, e.course
@@ -39,129 +38,127 @@ FROM students s
 LEFT JOIN enrolments e ON e.student_id = s.id;
 ```
 
-Where there is no match, the right-hand columns are filled with NULL. So a student with no enrolments still appears once, with `e.course = NULL`.
+#### Finding Non-Matches with LEFT JOIN + IS NULL
 
-This gives you a powerful pattern: to **find students with no enrolment**, use a LEFT JOIN and filter for the unmatched rows:
+Because unmatched left rows carry NULL in the right-hand columns, LEFT JOIN gives a clean way to find students with no enrolment: add `WHERE e.course IS NULL` to the query [p.2]. This is a pattern worth remembering — the join itself doesn't filter; the WHERE clause on the NULL columns isolates exactly the rows that found no partner [p.2].
 
-```sql
-... WHERE e.course IS NULL
-```
+### Combining Joins with GROUP BY and Aggregates
 
-Only students who failed to match any enrolment survive this filter — an "anti-join" style query that is impossible to express with an INNER JOIN.
-
-### Joins + Aggregation: GROUP BY, WHERE vs HAVING
-
-Once rows are joined, you often want per-entity summaries. GROUP BY collapses rows into groups so an aggregate such as COUNT can be computed per group:
+GROUP BY collapses rows into groups so an aggregate such as COUNT can be computed per group. The lecture's example counts each student's enrolments [p.3]:
 
 ```sql
 SELECT s.name, COUNT(e.course)
-FROM students s
-LEFT JOIN enrolments e ON e.student_id = s.id
+FROM students s LEFT JOIN enrolments e ON e.student_id = s.id
 GROUP BY s.name;
 ```
 
-Notice the deliberate use of LEFT JOIN here: because unmatched students still appear (with NULL course), they get counted — as zero. With an INNER JOIN they would vanish entirely and the report would under-report.
+Using a LEFT JOIN here matters: every student forms a group, and students with no enrolment get a count of 0 rather than disappearing from the report [p.3].
 
-Two filtering stages exist around grouping, and confusing them is a classic exam trap:
+#### WHERE vs HAVING
 
-| Clause | When it filters | Applies to |
+The two filter clauses act at different stages [p.3]:
+
+- WHERE filters rows **before** grouping [p.3].
+- HAVING filters groups **after** grouping [p.3].
+
+### Comparing the Join Types
+
+| Join type | Rows kept | Unmatched behaviour [p.1][p.2] |
 |---|---|---|
-| `WHERE` | Before grouping | Individual rows |
-| `HAVING` | After grouping | Whole groups (e.g. `HAVING COUNT(e.course) > 2`) |
-
-So use WHERE to discard rows you don't want counted at all, and HAVING to keep only groups whose aggregates meet a condition.
+| INNER JOIN | Only rows matching on the ON condition; a student with no enrolment does not appear [p.1] | Non-matching rows dropped [p.1] |
+| LEFT JOIN | Every row of the left table [p.2] | Right-hand columns become NULL [p.2] |
 
 ## Definitions
 
 | Term | Definition |
 |---|---|
-| INNER JOIN | A join that keeps only rows where the ON condition matches in both tables. |
-| LEFT JOIN | A join that keeps every row of the left table; unmatched right-hand columns become NULL. |
-| ON condition | The predicate specifying how rows of the two tables correspond (e.g. `e.student_id = s.id`). |
-| NULL | The placeholder value appearing in right-hand columns when a LEFT JOIN finds no match. |
-| GROUP BY | A clause that collapses rows into groups so aggregates can be computed per group. |
-| Aggregate | A function such as COUNT computed over a group of rows. |
-| WHERE | Filters individual rows before grouping occurs. |
-| HAVING | Filters whole groups after aggregation. |
+| INNER JOIN | A join keeping only rows that match on the ON condition [p.1] |
+| LEFT JOIN | A join keeping every row of the left table, with NULLs where there is no match [p.2] |
+| ON condition | The matching condition (e.g. `e.student_id = s.id`) that determines which rows join [p.1] |
+| NULL | The value appearing in right-hand columns when a LEFT JOIN finds no match [p.2] |
+| GROUP BY | Collapses rows into groups so an aggregate such as COUNT can be computed per group [p.3] |
+| WHERE | Filters rows before grouping [p.3] |
+| HAVING | Filters groups after grouping [p.3] |
 
 ## Diagrams & Visual Descriptions
 
 ```
-students                    enrolments
-+----+-------+              +------------+---------+
-| id | name  |              | student_id | course  |
-+----+-------+              +------------+---------+
-|  1 | Ada   |<--- match ---|     1      | DB      |
-|  2 | Ben   |<--- match ---|     2      | Networks|
-|  3 | Clio  |  NO match    |            |         |
-+----+-------+              +------------+---------+
+INNER JOIN: only the overlap survives
+ students                 enrolments
+  id | name                student_id | course
+   1 | Ada                  1 | DB
+   2 | Ben   (no match → dropped)
+                              3 | Web  (no student 3 → dropped)
+ result: Ada–DB rows only [p.1]
 
-INNER JOIN result:          LEFT JOIN result:
-+------+---------+          +------+---------+
-| name | course  |          | name | course  |
-+------+---------+          +------+---------+
-| Ada  | DB      |          | Ada  | DB      |
-| Ben  | Networks|          | Ben  | Networks|
-+------+---------+          | Clio | NULL    |  <- kept, NULL-filled
-                            +------+---------+
+LEFT JOIN: every left row survives
+   1 | Ada  → matches enrolment 1 → Ada, DB
+   2 | Ben  → no match           → Ben, NULL [p.2]
 ```
 
-Adding `WHERE e.course IS NULL` to the LEFT JOIN result leaves only Clio — the students with no enrolment.
+No extracted images in this lecture.
 
 ## Code Examples
 
-**1. INNER JOIN — matched rows only**
+INNER JOIN — list each student's courses, omitting students with no enrolment; relevant when you only care about actual enrolments [p.1]:
 
 ```sql
 SELECT s.name, e.course
 FROM students s
-INNER JOIN enrolments e ON e.student_id = s.id;  -- only pairs where ids match
+INNER JOIN enrolments e ON e.student_id = s.id;
 ```
-Relevant when you only want existing relationships.
 
-**2. LEFT JOIN — all students, matched or not**
+LEFT JOIN — keep all students, with NULL course for the unenrolled; add the WHERE clause to find students with no enrolment; relevant for completeness checks and gap-finding [p.2]:
 
 ```sql
 SELECT s.name, e.course
 FROM students s
-LEFT JOIN enrolments e ON e.student_id = s.id;   -- unmatched students get NULL course
+LEFT JOIN enrolments e ON e.student_id = s.id;
+-- WHERE e.course IS NULL  finds students with no enrolment
 ```
 
-**3. LEFT JOIN anti-join — students with no enrolment**
+GROUP BY over a LEFT JOIN — count enrolments per student, keeping students with zero; relevant for per-group aggregate reporting [p.3]:
 
 ```sql
-SELECT s.name
-FROM students s
-LEFT JOIN enrolments e ON e.student_id = s.id
-WHERE e.course IS NULL;                          -- keeps only unmatched students
+SELECT s.name, COUNT(e.course)
+FROM students s LEFT JOIN enrolments e ON e.student_id = s.id
+GROUP BY s.name;
 ```
-
-**4. LEFT JOIN + GROUP BY — enrolment count per student**
-
-```sql
-SELECT s.name, COUNT(e.course)                   -- NULL courses count as 0
-FROM students s
-LEFT JOIN enrolments e ON e.student_id = s.id
-GROUP BY s.name;                                 -- one output row per student name
-```
-Note WHERE would filter rows *before* grouping; HAVING would filter groups *after*.
 
 ## Formulas & Algorithms
 
-No formulas in this lecture. (Conceptual rule worth remembering: WHERE applies before grouping, HAVING after — see the table above.)
+Join condition for the lecture's tables [p.1]:
+
+```
+e.student_id = s.id
+```
+
+INNER JOIN semantics: keeps only rows that match on the ON condition; a student with no enrolment does not appear [p.1].
+
+LEFT JOIN semantics: keeps every row of the left table; where there is no match the right-hand columns are NULL; `WHERE e.course IS NULL` finds students with no enrolment [p.2].
+
+Aggregation query pattern [p.3]:
+
+```
+SELECT s.name, COUNT(e.course)
+FROM students s LEFT JOIN enrolments e ON e.student_id = s.id
+GROUP BY s.name;
+```
+
+Filtering rule: WHERE filters rows before grouping; HAVING filters groups after [p.3].
 
 ## Key Takeaways
 
-- INNER JOIN drops non-matching rows entirely; if your data has optional relationships, that's silent data loss.
-- LEFT JOIN preserves the whole left table, filling unmatched right columns with NULL.
-- `WHERE <right-column> IS NULL` after a LEFT JOIN finds entities with *no* related rows — a pattern INNER JOIN cannot express.
-- Join type changes aggregate results: COUNT with LEFT JOIN counts non-enrolled students as 0 instead of omitting them.
-- WHERE filters rows before GROUP BY; HAVING filters groups after — pick the one matching the stage you mean.
+- Choose your join by asking "should unmatched rows survive?": INNER JOIN drops them, LEFT JOIN keeps them with NULLs [p.1][p.2].
+- LEFT JOIN plus `WHERE e.course IS NULL` is the lecture's pattern for finding rows on one side with no match on the other [p.2].
+- Counting per-group with COUNT pairs naturally with LEFT JOIN so zero-count students still appear [p.3].
+- WHERE and HAVING act at different pipeline stages — rows first, groups after — so which one you need depends on whether your condition is about individual rows or whole groups [p.3].
 
 ## Connections
 
-The lecture builds join queries on a foreign-key style link (`enrolments.student_id` referencing `students.id`), the standard mechanism relational tables use to relate to one another. It also leaves an obvious next question open: aggregate results could be further filtered with HAVING (e.g. students with more than N enrolments), which the lecture introduces conceptually but does not explore with examples.
+This lecture builds its queries around multi-table data (`students` and `enrolments` linked by `student_id = s.id`), and its aggregation layer (GROUP BY, COUNT, WHERE vs HAVING) operates on the rows that joins produce [p.1][p.3]. Within the lecture itself, the join choice (INNER vs LEFT) directly controls the input to the grouping step, so the two halves of this week's material — joins and aggregation — are one pipeline rather than separate topics [p.2][p.3].
+
+This lecture does not name any other weeks or outside material.
 
 ---
-
-*Sources: CSIT302 Week 4 lecture content (SQL Joins, 3 page excerpts). Version: 1.*
+*Sources: CSIT302 Week 4 lecture slides (pp.1–3). Version: 1.*

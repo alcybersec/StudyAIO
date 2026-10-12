@@ -145,3 +145,29 @@ New surfaces and their judgement. Detail is in `docs/gates/M32/floors.md`.
    handlers (`344ce7e`). Both pins are plain floor-tier tests now, plus a runtime test that fires the signal.
    Limit unchanged: the filter covers only handlers that carry it, so a handler attached after
    `configure_logging` (or one a library attaches to its own logger) must add the filter itself.
+
+### 2026-10-12, M33 S1 (M33-S1-SAFETY-050)
+
+1. **Rate limits count with a moving window (SEC-10, `b1e20d9`).** A fixed window forgets every hit when it
+   closes, so a caller could spend the login budget at the end of one window and again just after it: ten
+   guesses in 0.2 s against a 5/minute limit. CI hit the accidental version of this (a sixth login allowed).
+   Every limit is now moving-window, through the one factory (`build_limiter`), on both the `memory://` and the
+   Redis store. No limit was loosened and the outage policy is unchanged: `/api/auth/*` fails closed (503),
+   everything else fails open. All three are pinned in the floor tier (`services/app/tests/safety/FLOORS.md`,
+   "SEC-10") with a controlled limiter clock, and mutation-checked. Cost: one stored timestamp per allowed hit,
+   negligible at these budgets.
+2. **The per-account login throttle was off in the whole unit tier.** The unit Redis fake had no `incr`, so
+   `record_failure` raised, logged `login_throttle_unavailable` and returned 0 in every unit test, and nothing
+   failed. Production was not affected (real Redis has `incr`), but no unit test exercised the throttle while
+   the gap existed. The fake now implements `incr`/`expire`/`ttl`, and the floor tier fails if the throttle calls
+   a Redis method the fake lacks, or if the throttle does not count and engage under the fake.
+3. **Asymmetric outage policy: accepted, no owner decision needed.** On a Redis outage the per-address auth
+   limiter fails closed and the per-account login throttle fails open (documented in `login_throttle.py`). With
+   the default configuration both use the same Redis, so when the throttle is down the limiter is too, and login
+   is already a 503 before the throttle runs (M32 delta 3). The throttle fails open while login still works only
+   on a partial outage, or when `RATE_LIMIT_STORAGE_URI` points the limiter at a different store. The
+   per-address 5/minute limit then still holds; only the per-account brake against guesses spread over many
+   addresses is lost. Failing the throttle closed would add a second way for a cache fault to lock every user
+   out of login, for a short-lived gain. Residual, for `backend`: `login_throttle_unavailable` is a log line
+   only, with no counter, so a sustained fail-open is visible only to someone reading logs. A counter is
+   recommended, not required. B1 is unchanged.

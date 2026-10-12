@@ -2,105 +2,108 @@
 
 ## Overview
 
-Sorting is one of the foundational problems in computer science: given a collection of items, arrange them in order according to some key. It matters both because sorted data is easier to search and process, and because sorting is a showcase for algorithm analysis — different sorting algorithms can solve the same problem with wildly different performance characteristics.
+Sorting — rearranging a sequence of elements into order — is one of the foundational problems of computer science, and this lecture surveys three classic algorithms: insertion sort, merge sort, and quicksort [p.1][p.2][p.3][p.4]. Each takes a different strategy: one grows a sorted region one element at a time, one divides the problem in half and combines solutions, and one partitions around a chosen pivot [p.2][p.3][p.4]. The lecture also introduces a subtle property called stability, which determines whether equal elements preserve their original order — crucial when you sort records by one field and then by another [p.1].
 
-This lecture compares three classic comparison-based sorts — insertion sort, merge sort, and quicksort — through the lens of time complexity, space usage, and stability. It closes with a fundamental result: no comparison-based sort can beat $O(n \log n)$ in the worst case, which tells us merge sort is asymptotically optimal.
+Beyond how each algorithm works, the lecture develops a comparative analysis: running times (best, average, and worst case), extra memory needs, and whether the sort is stable or in place [p.2][p.3][p.4]. It closes with a powerful theoretical result: any comparison-based sort requires on the order of n log n comparisons in the worst case, which makes merge sort asymptotically optimal among comparison sorts [p.5].
 
 ## Key Concepts
 
-### Stability: Why Equal Keys Matter
+### Stability: Why Order Among Equals Matters
 
-A sort is **stable** if elements with equal keys keep their original relative order after sorting. This may sound minor, but consider a real workflow: you sort a list of employees by name, then sort again by department. If the second sort is stable, employees within each department remain alphabetically sorted by name. If it is not stable, that earlier ordering is scrambled. Stability is what makes **multi-pass sorting** — sorting by one field after another — work correctly.
+A sort is **stable** if equal keys keep their original relative order [p.1]. This may sound like a minor detail, but the lecture explains why it matters: stability matters when sorting by one field after another [p.1]. Imagine sorting a list of students first by name, then by grade. If the sort is stable, students with the same grade still appear alphabetically within each grade group; an unstable sort would scramble that earlier ordering [p.1]. Throughout the lecture, each algorithm's stability (or lack of it) is treated as a first-class property, on par with its running time [p.2][p.3][p.4].
 
-### Insertion Sort
+### Insertion Sort: Growing a Sorted Prefix
 
-Insertion sort builds a **sorted prefix** one element at a time. It takes the next unsorted element and shifts all larger elements in the sorted portion one position to the right, then inserts the new element in its correct spot — much like sorting playing cards in your hand.
+#### How It Works
 
-Its performance depends heavily on the input:
-- **Worst case: O(n²)** — a reverse-sorted input forces every element to be shifted past the entire sorted prefix.
-- **Best case: O(n)** — an already-sorted input requires only one comparison per element, with no shifts.
-- **Space: O(1)** — it sorts in place with only constant extra memory.
-- **Stable: yes** — equal elements are never jumped over, only larger ones are shifted.
+Insertion sort grows a sorted prefix: it takes the next element and shifts larger ones right to insert it [p.2]. Conceptually, the array is divided into a sorted portion at the front and an unsorted remainder; each step, the next unsorted element is "inserted" into its correct place in the prefix by shifting bigger elements one slot to the right [p.2]. This mirrors how many people sort a hand of playing cards [p.2].
 
-Because of its low overhead, insertion sort is fast on **small or nearly sorted inputs**, even though it loses badly to divide-and-conquer sorts on large, random data.
+#### Performance and Properties
 
-### Merge Sort
+The running time depends heavily on the input:
 
-Merge sort is a **divide-and-conquer** algorithm: split the array in half, recursively sort each half, then **merge** the two sorted halves by repeatedly taking the smaller front element from each.
+- Worst case is O(n^2), which occurs on reverse-sorted input — every new element must be shifted past the entire sorted prefix [p.2].
+- Best case is O(n), on already sorted input — each element needs only a single check before staying put [p.2].
+- It uses O(1) extra space, sorting in place with no auxiliary array [p.2].
+- It is stable, so equal keys keep their original order [p.2].
 
-Its great strength is predictability: it runs in **O(n log n) in all cases** — best, average, and worst. The trade-off is that merging requires **O(n) extra space** for the temporary output array. It is **stable**, since during a merge ties can be broken in favor of the left half, preserving original order.
+The practical lesson from the lecture is that insertion sort is fast on small or nearly sorted inputs [p.2]. Even though its worst case looks bad, real data is often close to sorted, and in those situations its best-case linear behavior shines [p.2].
 
-### Quicksort
+### Merge Sort: Divide, Sort, Combine
 
-Quicksort also divides the problem, but differently: it picks a **pivot**, **partitions** the array into elements smaller than and larger than the pivot, then recursively sorts each side. Unlike merge sort, all the real work happens during partitioning, and merging is trivial (the halves are already in place).
+#### How It Works
 
-Its performance profile is the mirror image of merge sort's:
-- **Average case: O(n log n)** — typically faster in practice due to in-place partitioning.
-- **Worst case: O(n²)** — occurs when the pivot is repeatedly the smallest or largest element. A classic trigger: a **sorted array combined with a first-element pivot**, so each partition is maximally unbalanced.
-- **Space: in place** — no auxiliary array needed.
-- **Stable: no** — partitioning swaps elements across long distances, destroying relative order.
+Merge sort splits the array in half, sorts each half recursively, and merges the two sorted halves [p.3]. The merge step is the clever part: given two already-sorted halves, they can be combined into one fully sorted array efficiently [p.3]. Recursion keeps halving the problem until the pieces are trivial, and merging at each level stitches the results back together [p.3].
 
-The practical fix for the worst case is **random pivot selection**, which makes a consistently bad pivot choice extremely unlikely.
+#### Performance and Properties
 
-### Comparison Sorts: The Lower Bound
+Merge sort's guarantees are remarkably strong: it is always O(n log n), regardless of the input's initial arrangement [p.3]. Unlike insertion sort, whose cost swings between O(n) and O(n^2), merge sort gives consistent, predictable performance [p.2][p.3]. The trade-off is memory: it needs O(n) extra space for the merge [p.3]. It is also stable [p.3].
 
-Any sort that decides order **only by comparing elements** needs on the order of **$n \log n$ comparisons in the worst case**. This is a lower bound, not an upper one — no cleverer comparison sort can do asymptotically better. The consequence: **merge sort is asymptotically optimal among comparison sorts**. (Note the wording "comparison sorts" — the bound says nothing about sorts that exploit structure of keys, which is beyond this lecture's scope.)
+### Quicksort: Partitioning Around a Pivot
 
-### Side-by-Side Comparison
+#### How It Works
 
-| Property | Insertion Sort | Merge Sort | Quicksort |
-|---|---|---|---|
-| Best case | O(n) | O(n log n) | O(n log n) |
-| Average case | O(n²) | O(n log n) | O(n log n) |
-| Worst case | O(n²) | O(n log n) | O(n²) |
-| Extra space | O(1) | O(n) | In place |
-| Stable | Yes | Yes | No |
+Quicksort picks a pivot, partitions the array into elements smaller and larger than the pivot, and recurses on both sides [p.4]. Rather than merging results afterward (as merge sort does), quicksort's work happens in the partitioning step, which places the pivot in its final position [p.4].
+
+#### Performance, Pitfalls, and Pivot Choice
+
+Quicksort's average case is O(n log n) — excellent in practice [p.4]. But its worst case is O(n^2), which happens when the pivot is repeatedly the smallest or largest element [p.4]. The lecture gives a concrete example: a sorted array with a first-element pivot triggers this worst case, because every partition is maximally lopsided [p.4]. Quicksort is in place (no O(n) auxiliary array) but not stable [p.4]. The remedy the lecture offers: choosing a random pivot makes the worst case unlikely [p.4].
+
+### The Comparison-Sorting Lower Bound
+
+The lecture closes with a fundamental limit: any sort that works only by comparing elements needs at least on the order of n log n comparisons in the worst case [p.5]. No clever comparison-based algorithm can beat this barrier [p.5]. The consequence is significant: since merge sort always achieves O(n log n), it is asymptotically optimal among comparison sorts [p.3][p.5].
+
+### Comparing the Three Algorithms
+
+| Algorithm | Best | Average | Worst | Extra space | Stable? |
+|---|---|---|---|---|---|
+| Insertion sort | O(n) (already sorted) | — | O(n^2) (reverse-sorted input) | O(1) | Yes [p.2] |
+| Merge sort | — | — | Always O(n log n) | O(n) | Yes [p.3] |
+| Quicksort | — | O(n log n) | O(n^2) (pivot repeatedly smallest/largest, e.g. sorted array + first-element pivot) | In place | No [p.4] |
 
 ## Definitions
 
 | Term | Definition |
 |---|---|
-| Sort | Rearranging a collection of items into order according to a key |
-| Stable sort | A sort in which equal keys keep their original relative order |
-| Sorted prefix | The portion of the array, growing from the left, that insertion sort keeps ordered |
-| Pivot | The element quicksort uses to partition the array into smaller and larger groups |
-| Partition | The step of splitting the array relative to the pivot |
-| Merge | The step of combining two sorted halves into one sorted array |
-| In place | Uses only constant extra memory beyond the input |
-| Comparison sort | A sort that determines order only by comparing pairs of elements |
-| Worst case | The input producing the maximum running time (e.g., reverse-sorted for insertion sort) |
+| Stable sort | A sort in which equal keys keep their original relative order [p.1] |
+| Insertion sort | Sort that grows a sorted prefix: take the next element and shift larger ones right to insert it [p.2] |
+| Merge sort | Sort that splits the array in half, sorts each half recursively, and merges the two sorted halves [p.3] |
+| Quicksort | Sort that picks a pivot, partitions into smaller and larger elements, and recurses on both sides [p.4] |
+| Pivot | The element quicksort picks; partitions the array into smaller and larger elements [p.4] |
+| In place | Uses no significant extra memory beyond the input array (quicksort has this property; merge sort does not, needing O(n) extra space) [p.3][p.4] |
+| Comparison sort | A sort that works only by comparing elements; needs at least on the order of n log n comparisons in the worst case [p.5] |
+| Asymptotically optimal | Achieving the best possible growth rate for the problem class; merge sort is this among comparison sorts [p.5] |
 
 ## Diagrams & Visual Descriptions
 
-**Insertion sort — growing a sorted prefix:**
+Conceptual structure of merge sort (split, recurse, merge) [p.3]:
 
 ```
-[ 4 | 2 8 1 ]        [ 2 4 | 8 1 ]        [ 2 4 8 | 1 ]        [ 1 2 4 8 ]
-  sorted ↑                sorted ↑              sorted ↑             fully sorted
-```
-Each step: take the first element after the `|`, shift larger sorted elements right, insert it.
-
-**Merge sort — divide and merge:**
-
-```
-        [4 2 8 1]
-        /        \
-    [4 2]        [8 1]        split
-    /   \        /   \
-  [4]   [2]    [8]   [1]
-    \   /        \   /
-    [2 4]        [1 8]        merge pairs
-        \        /
-        [1 2 4 8]              final merge
+        [ 8 3 5 1 ]
+        /         \
+   [8 3]           [5 1]        split in half [p.3]
+   /   \           /   \
+ [8]   [3]       [5]   [1]      recurse [p.3]
+   \   /           \   /
+   [3 8]           [1 5]        sort each half [p.3]
+        \         /
+        [ 1 3 5 8 ]              merge the two sorted halves [p.3]
 ```
 
-**Quicksort — partition around a pivot:**
+Quicksort partitioning around a pivot: elements smaller go left, larger go right, then recursion continues on both sides [p.4].
 
 ```
-[5 3 8 1 9 2]  pivot = 5
-      ↓ partition
-[3 1 2]  5  [8 9]      → recurse on both sides
- smaller  pivot  larger
+array -> [ < pivot ] [ pivot ] [ > pivot ]
+              |                    |
+          recurse              recurse          [p.4]
+```
+
+Insertion sort grows a sorted prefix left to right, shifting larger elements right to insert each new element [p.2]:
+
+```
+[ sorted prefix | unsorted ... ]
+        ^--- next element is inserted here,
+             larger prefix elements shift right [p.2]
 ```
 
 ## Code Examples
@@ -109,24 +112,55 @@ No code examples in this lecture.
 
 ## Formulas & Algorithms
 
-- Insertion sort: worst case $O(n^2)$, best case $O(n)$, space $O(1)$.
-- Merge sort: $O(n \log n)$ always, space $O(n)$.
-- Quicksort: average $O(n \log n)$, worst $O(n^2)$; in place.
-- Comparison lower bound: any comparison sort needs $\Omega(n \log n)$ comparisons in the worst case.
+Complexities and properties of insertion sort [p.2]:
+
+```
+Worst case: O(n^2)  (reverse-sorted input)
+Best case:  O(n)    (already sorted)
+Extra space: O(1)
+Stable: yes
+```
+
+Complexities and properties of merge sort [p.3]:
+
+```
+Time: always O(n log n)
+Extra space: O(n) (for the merge)
+Stable: yes
+```
+
+Complexities and properties of quicksort [p.4]:
+
+```
+Average case: O(n log n)
+Worst case:   O(n^2)  (pivot repeatedly the smallest or largest,
+                       e.g. sorted array with a first-element pivot)
+In place: yes
+Stable: no
+Fix: choosing a random pivot makes the worst case unlikely
+```
+
+Comparison-sorting lower bound [p.5]:
+
+```
+Any comparison-based sort needs at least order of n log n
+comparisons in the worst case
+=> merge sort is asymptotically optimal among comparison sorts
+```
 
 ## Key Takeaways
 
-- Stability isn't academic pedantry — it's what enables correct multi-pass sorting by different fields.
-- No single algorithm wins everywhere: merge sort is predictable, quicksort is usually fastest in place, insertion sort shines on small or nearly sorted inputs.
-- Quicksort's worst case is input-dependent (e.g., sorted array + first-element pivot); random pivots make it unlikely.
-- $O(n \log n)$ is a hard floor for comparison sorts, so merge sort is asymptotically optimal.
-- Space matters too: merge sort's speed costs O(n) extra memory; quicksort and insertion sort sort in place.
+- Stability — equal keys keeping their original relative order — matters when sorting by one field after another, so it should factor into algorithm choice alongside speed [p.1].
+- Insertion sort's simplicity hides a useful strength: despite an O(n^2) worst case, it is the fastest choice on small or nearly sorted inputs, running in O(n) best case with O(1) extra space [p.2].
+- Merge sort trades O(n) extra memory for a guaranteed O(n log n) every time, making it the predictable, stable option [p.3].
+- Quicksort averages O(n log n) in place, but a poor pivot strategy (like first-element pivot on sorted input) degrades it to O(n^2); randomizing the pivot makes the worst case unlikely [p.4].
+- The order of n log n lower bound for comparison sorts means no comparison-based algorithm can do better asymptotically — merge sort already meets that bound [p.5].
 
 ## Connections
 
-The lecture's stability discussion connects directly to multi-field sorting scenarios it describes — sorting by one field after another — a pattern you'll encounter whenever sorted data supports further processing. The lower-bound argument, showing merge sort is optimal among comparison sorts, implicitly points beyond comparison-based techniques, which the lecture does not name.
+This lecture's analysis connects naturally to the broader theme of algorithm analysis: running times (O(n^2), O(n log n), O(n)) and space usage (O(1) vs O(n)) are the same cost measures used to evaluate any algorithm, here applied to sorting [p.2][p.3][p.4]. The lower-bound result also shows how theory informs practice — it explains why merge sort's O(n log n) is not just good but optimal among comparison sorts [p.5].
 
-Within this lecture, the three algorithms form a natural comparative framework (time, space, stability) that the rest of an algorithms course typically builds on for analyzing other algorithms the same way.
+Within the lecture itself, the algorithms illuminate each other: insertion sort's best case on nearly sorted data contrasts with its O(n^2) worst case, while quicksort's random pivot strategy is a design lesson about avoiding predictable worst-case inputs, the very inputs that hurt it [p.2][p.4]. Stability separates the field: insertion sort and merge sort preserve the order of equal keys, while quicksort does not, which matters for multi-field sorting [p.1][p.2][p.3][p.4].
 
 ---
-*Sources: CSIT101 Week 5 lecture notes (Sorting). Version: 1.*
+*Sources: CSIT101 Week 5 lecture slides (pages 1–5). Version: 1.*

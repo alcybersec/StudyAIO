@@ -2,147 +2,149 @@
 
 ## Overview
 
-When we compare algorithms, we can't simply time them with a stopwatch — running times depend on the machine, the programming language, and other programs competing for resources. Instead, computer scientists **count steps, not seconds**: we measure how the number of basic operations an algorithm performs grows as the input size *n* grows. This is the essence of asymptotic analysis.
+When we compare algorithms, we should not measure how long a program takes in seconds — that depends on the machine, the compiler and the workload. Instead, we count steps: the number of basic operations an algorithm performs as the input size n grows. Asymptotic analysis is the technique of describing that step count as a growth rate, so two algorithms can be compared fairly no matter what hardware they run on [p.1].
 
-Asymptotic analysis gives us a machine-independent way to answer the question every programmer eventually faces: "Will this program still be fast enough when the input is a million items instead of a hundred?" It also gives us a shared vocabulary — Big-O notation and the standard growth rates — that lets us classify and compare algorithms at a glance. This week's material is foundational: nearly every algorithm you study later in this course will be described by its asymptotic complexity.
+The central tool is Big-O notation, which gives an upper bound on growth. In Big-O we ignore constant factors and lower-order terms, because as n gets large only the fastest-growing term matters. This is why a function like 3n^2 + 5n + 2 is O(n^2) — the constants 3, 5 and 2, and the smaller terms, do not change the shape of the growth curve [p.1]. This week builds the vocabulary of growth rates you will use to classify every algorithm you meet.
 
 ## Key Concepts
 
 ### Counting Steps, Not Seconds
 
-Measuring runtime in real seconds is unreliable because it entangles the algorithm with the hardware and environment it runs on. The alternative is to count the number of elementary steps an algorithm executes as a function of input size *n*. Two algorithms may take different absolute times on the same machine, but their *step counts* reveal which one scales better as inputs grow. This shift in perspective — from wall-clock time to growth rate — is what makes algorithm comparison meaningful and reproducible.
+The first principle of the week is that we count steps, not seconds. Timing an algorithm with a stopwatch tells you about a particular machine as much as about the algorithm itself; a step count is machine-independent and grows in a predictable way with input size [p.1]. Focusing on how the step count grows as n grows is exactly what lets us say one approach scales better than another.
 
 ### Big-O Notation
 
-#### What It Means
+#### What Big-O Means
 
-Big-O describes the **upper bound** on an algorithm's growth rate. Saying an algorithm is O(f(n)) means that, for large enough inputs, its step count grows no faster than some constant multiple of f(n). It characterizes the worst-case scaling behavior, so we know what to expect as inputs get large.
+Big-O gives an upper bound on an algorithm's growth rate. Saying an algorithm is O(f(n)) means its step count grows no faster than f(n), up to constants [p.1].
 
 #### Ignoring Constants and Lower-Order Terms
 
-Big-O deliberately discards details that matter less and less as n grows. Constants and lower-order terms become insignificant compared to the dominant term:
-
-- $3n^2 + 5n + 2$ is **O(n²)**. As n grows, the n² term dwarfs 5n, and both dwarf 2. For n = 1000, 3n² = 3,000,000 while 5n = 5,000 — the lower-order terms are negligible.
-
-Why drop the constant 3? Because a constant factor could be absorbed by a faster machine or a better implementation; what matters fundamentally is the *shape* of the growth curve, not its scaling factor.
+The rule of Big-O is to ignore constants and lower-order terms. Consider the function 3n^2 + 5n + 2: the n^2 term dominates as n grows, so 3n^2 + 5n + 2 is O(n^2) [p.1]. This is the standard worked example of the week: constants in front (the 3) and smaller terms (5n and 2) are dropped, leaving the dominant growth rate.
 
 ### The Common Growth Rates
 
-Growth rates are conventionally listed from **slowest growing to fastest growing**. Slower growth means better scalability:
+The lecture orders the common growth rates from slowest growing to fastest [p.2]:
 
-| Growth rate | Intuition | Feasibility |
-|---|---|---|
-| O(1) | Constant — doesn't grow with input | Excellent |
-| O(log n) | Grows very slowly (e.g., halving) | Excellent |
-| O(n) | Linear — proportional to input | Good |
-| O(n log n) | Slightly worse than linear | Good for large inputs |
-| O(n²) | Quadratic — input squared | Acceptable for moderate n |
-| O(2^n) | Exponential — doubles per unit of n | **Infeasible beyond small n** |
+- O(1)
+- O(log n)
+- O(n)
+- O(n log n)
+- O(n^2)
+- O(2^n) [p.2]
 
-The exponential case deserves special attention: an O(2ⁿ) algorithm may be perfectly usable at n = 10 or n = 20, but each increment of n doubles the work. By n = 100, the step count is astronomically large — no speed of hardware can rescue it. This is why the lecture flags O(2ⁿ) as infeasible beyond small inputs: exponential growth overwhelms any constant-factor improvements.
+Placed in a table, slowest first:
 
-### Recognizing Complexity from Code Structure
+| Growth rate | Position in the ordering |
+|---|---|
+| O(1) | slowest growing [p.2] |
+| O(log n) | second [p.2] |
+| O(n) | third [p.2] |
+| O(n log n) | fourth [p.2] |
+| O(n^2) | fifth [p.2] |
+| O(2^n) | fastest growing [p.2] |
 
-Asymptotic analysis connects directly to how code is written. Two patterns from the lecture:
+#### Why Exponential Growth Is Infeasible
 
-- **Nested loops**: a loop over n items containing another loop over n items performs n × n = n² steps, giving **O(n²)**. Each additional level of nesting adds another factor of n.
-- **Halving loops**: a single loop that halves n on each pass (e.g., repeatedly dividing the search space by 2) takes only **O(log n)** iterations, because you can halve n only logarithmically many times before reaching 1. This is why logarithmic algorithms are so efficient — doubling the input adds just one more iteration.
+At the top of the ordering sits O(2^n), and the lecture's warning is direct: O(2^n) is infeasible beyond small n [p.2]. Because the step count doubles with each extra unit of input, an exponential algorithm quickly becomes unusable as n grows, even though it might work fine for a handful of items. This is the practical payoff of the growth-rate ordering: an algorithm's place in that list tells you whether it can scale.
+
+### Recognizing Growth Rates from Code Structure
+
+#### Nested Loops Give Quadratic Time
+
+The first structural pattern: nested loops over n items = n * n = O(n^2) [p.3]. If an outer loop runs n times and an inner loop also runs n times, the body executes n * n times, and n * n = O(n^2) [p.3]. Spotting nested loops in code is therefore a quick way to predict a quadratic running time.
+
+#### Halving Loops Give Logarithmic Time
+
+The second pattern: one loop that halves n each pass = O(log n) [p.3]. Instead of shrinking the problem by one each iteration, the loop cuts the remaining input in half, so the number of passes is only logarithmic in n — dramatically fewer steps than a linear scan [p.3].
 
 ## Definitions
 
 | Term | Definition |
 |---|---|
-| Asymptotic analysis | Studying algorithm efficiency by counting steps as a function of input size, rather than measuring seconds |
-| Big-O notation | A way to express the upper bound on an algorithm's growth rate, ignoring constants and lower-order terms |
-| n | The size of the algorithm's input |
-| O(1) | Constant time — the step count does not grow with input size |
-| O(log n) | Logarithmic time — step count grows very slowly; arises from loops that halve the problem each pass |
-| O(n) | Linear time — step count grows in direct proportion to input size |
-| O(n log n) | "n log n" time — a common efficient sorting-scale growth rate |
-| O(n²) | Quadratic time — step count grows with the square of the input; e.g., nested loops |
-| O(2ⁿ) | Exponential time — step count doubles with each unit of input; infeasible beyond small n |
-| Growth rate | How quickly an algorithm's step count increases as input size increases |
+| Asymptotic analysis | Comparing algorithms by counting steps, not seconds [p.1] |
+| Big-O | Upper bound on growth rate, ignoring constants and lower-order terms [p.1] |
+| O(1) | Slowest-growing common rate in the ordering [p.2] |
+| O(log n) | Growth of a loop that halves n each pass [p.3][p.2] |
+| O(n) | Linear growth [p.2] |
+| O(n log n) | Growth rate between linear and quadratic [p.2] |
+| O(n^2) | Growth of nested loops over n items [p.3][p.2] |
+| O(2^n) | Fastest common growth rate; infeasible beyond small n [p.2] |
 
 ## Diagrams & Visual Descriptions
 
-Growth-rate hierarchy, slowest to fastest (a smaller slope means better scalability):
+The growth-rate ladder, slowest at the top, fastest at the bottom — the further down an algorithm sits, the harder it scales [p.2]:
 
 ```
-steps
-  ^
-  |                                        /  O(2^n)   (infeasible beyond small n)
-  |                                      /
-  |                              _______/    O(n^2)
-  |                         ____/
-  |                    ____/                O(n log n)
-  |               ____/
-  |          ____/                          O(n)
-  |      ___/
-  |   __/                                   O(log n)
-  |__/___________________________________>  O(1)  (flat line)
-  +--------------------------------------> n
+        slowest  →  fastest
+        O(1)
+          ↓
+       O(log n)
+          ↓
+         O(n)
+          ↓
+      O(n log n)
+          ↓
+        O(n^2)
+          ↓
+       O(2^n)      ← infeasible beyond small n
 ```
-
-Halving loop → logarithmic behavior:
-
-```
-n = 16
-  \---> 8          each pass halves n
-        \---> 4    (1 extra iteration even if
-              \--> 2    n doubles)
-                   \--> 1     total passes ≈ log2(n)
-```
-
-No diagrams in this lecture beyond these illustrations of the growth rates described.
 
 ## Code Examples
 
-Nested loops — quadratic time:
+Structural patterns of the lecture, expressed as loop skeletons [p.3]:
 
-```python
-for i in range(n):  # outer loop runs n times
-    for j in range(n):  # inner loop runs n times per outer pass
-        do_work()  # total: n * n = n^2 steps  ->  O(n^2)
+```
+# Pattern 1: nested loops over n items = n * n = O(n^2)
+for i in range(n):
+    for j in range(n):   # runs n times per outer pass → n * n total
+
+# Pattern 2: one loop that halves n each pass = O(log n)
+while n > 1:
+    n = n / 2            # problem halves each pass → logarithmic passes
 ```
 
-*Relevant when:* you need to spot that nesting a loop inside a loop squares the cost — a common source of slow code on large inputs.
-
-Halving loop — logarithmic time:
-
-```python
-while n > 1:  # loop continues while the problem is non-trivial
-    n = n // 2  # halve n each pass; only log2(n) passes possible
-```
-
-*Relevant when:* you want to see why divide-and-halve processes are O(log n) — doubling the input adds just one extra pass.
+These examples matter because they let you read ordinary loop code and predict its growth rate without running anything [p.3].
 
 ## Formulas & Algorithms
 
-Dominant-term reduction:
+```
+Big-O rule: ignore constants and lower-order terms
+3n^2 + 5n + 2 is O(n^2)
+```
+[p.1]
 
-$$3n^2 + 5n + 2 \implies O(n^2)$$
+Common growth rates, slowest growing first [p.2]:
 
-Rule: drop constant coefficients and lower-order terms; keep the fastest-growing term.
+```
+O(1)
+O(log n)
+O(n)
+O(n log n)
+O(n^2)
+O(2^n)
+```
 
-Nested loop step count:
+Feasibility bound: O(2^n) is infeasible beyond small n [p.2].
 
-$$n \times n = n^2 \;\Rightarrow\; O(n^2)$$
+Worked structural examples [p.3]:
 
-Halving loop iteration count:
-
-$$n \to n/2 \to n/4 \to \dots \to 1 \;\Rightarrow\; \log_2 n \text{ passes} \;\Rightarrow\; O(\log n)$$
+```
+nested loops over n items = n * n = O(n^2)
+one loop that halves n each pass = O(log n)
+```
 
 ## Key Takeaways
 
-- Measure algorithms by counting steps, not seconds — hardware-independent analysis reveals true scalability.
-- Big-O gives an upper bound on growth; it deliberately ignores constants and lower-order terms because they fade in significance as n grows.
-- The growth-rate ladder O(1) < O(log n) < O(n) < O(n log n) < O(n²) < O(2ⁿ) is the vocabulary for comparing algorithms.
-- Exponential O(2ⁿ) algorithms are effectively unusable beyond small inputs — no hardware can compensate for exponential growth.
-- You can often read complexity straight off the code: nested loops over n give O(n²); a loop that halves n each pass gives O(log n).
+- Measuring algorithms in seconds confuses the machine with the method; counting steps isolates the algorithm's own cost [p.1].
+- Big-O is an upper bound, and its simplification rule — drop constants and lower-order terms — is what makes 3n^2 + 5n + 2 simply O(n^2) [p.1].
+- The six common rates form a strict ordering from O(1) up to O(2^n); knowing an algorithm's place in that order tells you how it scales [p.2].
+- Exponential time is a practical dead end: O(2^n) is infeasible beyond small n [p.2].
+- You can often read the growth rate straight off the code: nested loops over n items = n * n = O(n^2), while one loop that halves n each pass = O(log n) [p.3].
 
 ## Connections
 
-The lecture focuses on establishing the analysis toolkit itself — counting steps, Big-O bounds, and the growth-rate hierarchy — and applies it to loop patterns (nested loops as O(n²), halving loops as O(log n)). These analysis techniques are the lens through which any algorithm in the rest of the course will be evaluated: whenever an algorithm is presented later, its cost will be expressible as one of these growth rates. No other weeks were named in this lecture, so no specific forward links can be given.
+This lecture does not link to other material, and no other weeks were available to compare against.
 
 ---
-*Sources: CSIT101 Week 2 lecture slides — Asymptotic Analysis. Version: 1.*
+*Sources: CSIT101 Week 2 lecture slides, pages 1–3. Version: 1.*

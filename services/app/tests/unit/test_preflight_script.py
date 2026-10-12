@@ -674,6 +674,23 @@ class TestMultiLineValues:
             result.stdout
         )
 
+    def test_an_early_match_in_a_large_value_is_not_lost_to_sigpipe(self, tmp_path):
+        """Deterministic reproduction of the flake the test above showed.
+
+        `echo "$CORS" | grep -q` under `set -o pipefail`: grep exits at its
+        first match, echo is killed by SIGPIPE, the pipeline "fails" and the
+        localhost warning vanishes. With a tiny value that race is rarely lost;
+        a value larger than the pipe buffer (64K) with the match up front loses
+        it every time.
+        """
+        padding = "\n".join(f"https://pad{i}.example.com" for i in range(6000))
+        text = _quoted_env_text(CORS_ORIGINS=None)
+        text += f"CORS_ORIGINS='http://localhost:3001\n{padding}'\n"
+        result = _run(_write_raw_env(tmp_path, text))
+        assert any("[WARN]" in ln and "localhost" in ln for ln in result.stdout.splitlines()), (
+            result.stdout[-500:]
+        )
+
     def test_keys_after_a_multi_line_value_are_still_read(self, tmp_path):
         """Guards the new reader rather than the old bug.
 

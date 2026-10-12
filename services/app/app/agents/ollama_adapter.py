@@ -16,6 +16,7 @@ from app.agents.base import (
     FlashcardData,
     QuizQuestionData,
     SummaryResult,
+    summary_temperature,
 )
 from app.core.ai_settings import get_effective_setting
 from app.core.exceptions import AgentError
@@ -46,12 +47,18 @@ class OllamaAdapter(AgentAdapter):
         self._base_url = base_url or get_effective_setting("ollama_base_url")
         self._model = model or get_effective_setting("ollama_model")
 
-    async def _call_api(self, prompt: str, num_predict: int = _DEFAULT_NUM_PREDICT) -> str:
+    async def _call_api(
+        self,
+        prompt: str,
+        num_predict: int = _DEFAULT_NUM_PREDICT,
+        temperature: float | None = None,
+    ) -> str:
         """Send a prompt to Ollama and return the text response.
 
         Args:
             prompt: The full prompt text.
             num_predict: Maximum tokens in response.
+            temperature: Sampling temperature. None leaves the model default.
 
         Returns:
             Response text content.
@@ -73,11 +80,15 @@ class OllamaAdapter(AgentAdapter):
             num_predict=num_predict,
         )
 
+        options: dict[str, float | int] = {"num_predict": num_predict}
+        if temperature is not None:
+            options["temperature"] = temperature
+
         try:
             response = await client.chat(
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
-                options={"num_predict": num_predict},
+                options=options,
             )
         except Exception as e:
             raise self._agent_error(f"Ollama API call failed: {e}", e) from None
@@ -205,7 +216,9 @@ After the summary, emit:
 """
 
         prompt = self.with_language(prompt)
-        result_text = await self._call_api(prompt, num_predict=_SUMMARY_NUM_PREDICT)
+        result_text = await self._call_api(
+            prompt, num_predict=_SUMMARY_NUM_PREDICT, temperature=summary_temperature(self)
+        )
         markdown, embedded_images = parsing.parse_summary_response(result_text)
 
         return SummaryResult(content_md=markdown, embedded_images=embedded_images)

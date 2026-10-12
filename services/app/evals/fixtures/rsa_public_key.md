@@ -2,147 +2,139 @@
 
 ## Overview
 
-For most of the history of cryptography, encryption was *symmetric*: the same secret key was used to both encrypt and decrypt a message. This works well once two parties share a key, but it creates a fundamental bootstrap problem — how do you securely get that shared secret to your counterpart in the first place, especially over a network where eavesdroppers may be listening? Public-key cryptography, introduced this week, solves this elegantly by splitting the single key into a pair: a **public key**, which anyone may use to encrypt messages to you, and a **private key**, which only you possess and which is needed to decrypt them.
+This week introduces public-key cryptography, a fundamentally different way of designing encryption from the symmetric schemes seen earlier in the course. Symmetric encryption relies on one shared secret key that both parties must possess. Public-key encryption instead uses a key pair: a public key that anyone can use to encrypt a message to you, and a private key that only you hold and use to decrypt. The result is a powerful property — anyone can encrypt to you; only you can decrypt [p.1].
 
-The flagship algorithm studied here is **RSA**, whose security rests on a beautiful asymmetry in mathematics: multiplying two large prime numbers together is fast, but factoring the result back into its primes is computationally infeasible when the primes are large enough. This week covers how an RSA key pair is generated, how encryption and decryption are performed, and works through a small "toy" example to make the arithmetic concrete — while stressing that toy-sized parameters are far too small for real security.
+The flagship algorithm covered is RSA, whose security rests on the difficulty of factoring a large number `n = p * q` into its primes [p.1]. In other words, the very act that makes the public key easy to construct — multiplying two large primes — is what makes recovering the private key computationally infeasible. This week walks through the full RSA lifecycle: key generation, encryption, decryption, and a worked toy example that makes the mechanics concrete [p.2][p.3].
 
 ## Key Concepts
 
 ### Symmetric vs. Public-Key Encryption
 
-Symmetric encryption relies on **one shared secret key**: both sender and receiver must hold the same key. This is efficient, but key distribution is its Achilles' heel — any channel used to share the key is also a channel an attacker might intercept.
+Symmetric encryption uses one shared secret key [p.1]. This means both sender and receiver must somehow agree on and protect the same key. Public-key encryption breaks this constraint by using a pair of keys: a public key to encrypt and a private key to decrypt [p.1]. The practical consequence is elegant: anyone can encrypt to you; only you can decrypt [p.1]. Your public key can be shared freely, while the private key never leaves your possession.
 
-Public-key encryption breaks this dependency by using a **key pair**:
+### RSA and Its Security Foundation
 
-- The **public key** is distributed openly; anyone can use it to encrypt a message to the key's owner.
-- The **private key** is kept secret; only the owner can decrypt messages encrypted with the matching public key.
-
-The consequence is powerful: anyone can encrypt *to* you, but only *you* can decrypt. There is no shared secret to exchange beforehand, which is exactly what makes public-key cryptography the foundation of secure communication between parties who have never met.
-
-### RSA: The Core Idea
-
-RSA's security rests on the **difficulty of factoring a large number** $n = p \times q$ into its prime factors. Multiplying primes is easy; reversing the multiplication is believed to be computationally infeasible for sufficiently large $p$ and $q$. Every piece of the RSA machinery below is built on top of this hardness assumption — an attacker who could factor $n$ could recover the private key from the public key.
+RSA's security does not come from hiding the algorithm — it comes from a hard mathematical problem. RSA security rests on the difficulty of factoring a large number `n = p * q` into its primes [p.1]. An attacker who sees the public modulus `n` would need to recover the primes `p` and `q` to derive the private key. Multiplying is easy; factoring is not — and this asymmetry is the entire foundation of the scheme [p.1].
 
 ### RSA Key Generation
 
-Generating a key pair follows a precise procedure:
+Generating an RSA key pair follows a defined procedure [p.2]:
 
-1. Pick two primes $p$ and $q$.
-2. Compute $n = p \times q$.
-3. Compute $\varphi = (p-1)(q-1)$ (Euler's totient of $n$).
-4. Pick $e$ coprime to $\varphi$ (so that no factor is shared, guaranteeing a modular inverse exists).
-5. Compute $d$ such that $e \cdot d \equiv 1 \pmod{\varphi}$ — i.e., $d$ is the modular multiplicative inverse of $e$ mod $\varphi$.
+1. Pick primes `p` and `q` [p.2].
+2. Compute `n = p * q` and `phi = (p-1)(q-1)` [p.2].
+3. Pick `e` coprime to `phi` [p.2].
+4. Compute `d` with `e * d ≡ 1 (mod phi)` — that is, `d` is the multiplicative inverse of `e` modulo `phi` [p.2].
+5. Publish the public key `(n, e)`; keep the private key `(n, d)` secret [p.2].
 
-The **public key** is the pair $(n, e)$ and is published. The **private key** is the pair $(n, d)$ and is kept secret. Note that $q$ and $\varphi$ themselves must remain secret — knowing $\varphi$ would let anyone derive $d$ from the public $e$.
+The structure matters: `e` and `d` are inverses mod `phi`, so applying one after the other undoes the effect — but only someone who knows `phi` (and hence `p` and `q`) can compute `d`. This is where the factoring difficulty from [p.1] protects the scheme.
 
 ### Encryption and Decryption
 
-With a public key $(n, e)$, a sender encrypts a message $m$ as:
+Once keys exist, the operations are simple modular exponentiations [p.2]:
 
-$$c = m^e \bmod n$$
+- Encrypt a message `m` as `c = m^e mod n` [p.2].
+- Decrypt the ciphertext as `m = c^d mod n` [p.2].
 
-The receiver, holding $(n, d)$, recovers the message:
+The sender uses the recipient's public exponent `e`; the recipient uses their own private exponent `d`. Because `e * d ≡ 1 (mod phi)`, the exponentiations cancel in modular arithmetic and the original message is recovered.
 
-$$m = c^d \bmod n$$
+### Worked Toy Example
 
-The reason this round-trips correctly is the modular inverse relationship between $e$ and $d$: raising to $e$ and then to $d$ effectively applies an exponent of $e \cdot d \equiv 1 \pmod{\varphi}$, which "undoes" the exponentiation modulo $n$. Security comes from the fact that an eavesdropper who sees $c$, $n$, and $e$ cannot compute $d$ without factoring $n$.
+The lecture demonstrates a complete RSA round trip with deliberately tiny numbers — a toy example, far too small to be secure, but perfect for seeing every step [p.3]:
 
-### A Toy Example
+1. Primes: `p = 3`, `q = 11`, giving `n = 33` and `phi = 20` [p.3].
+2. Choose `e = 3`, then `d = 7`, since `3 * 7 = 21 ≡ 1 (mod 20)` [p.3].
+3. Public key is `(33, 3)`; private key is `(33, 7)` [p.3].
+4. Encrypt `m = 4`: `c = 4^3 mod 33 = 31` [p.3].
+5. Decrypt: `31^7 mod 33 = 4`, recovering the original message [p.3].
 
-The lecture works a fully worked example, explicitly flagged as *far too small to be secure* — its purpose is to make the arithmetic checkable by hand.
-
-- Primes: $p = 3$, $q = 11$
-- Modulus: $n = 3 \times 11 = 33$
-- Totient: $\varphi = (3-1)(11-1) = 20$
-- Public exponent: $e = 3$ (coprime to 20)
-- Private exponent: $d = 7$, since $3 \times 7 = 21 \equiv 1 \pmod{20}$
-
-Public key: $(33, 3)$; private key: $(33, 7)$.
-
-**Encrypt** $m = 4$:
-
-$$c = 4^3 \bmod 33 = 64 \bmod 33 = 31$$
-
-**Decrypt** $c = 31$:
-
-$$m = 31^7 \bmod 33 = 4$$
-
-The message comes back intact, demonstrating the full cycle. In practice, $p$ and $q$ must be hundreds of digits long so that factoring $n$ is beyond any feasible computation — with $n = 33$, an attacker factors it instantly and recovers everything.
+Tracing this example by hand — especially verifying that `31^7 mod 33 = 4` — is the best way to internalise why the inverse-exponent property makes decryption work.
 
 ## Definitions
 
 | Term | Definition |
 |---|---|
-| Symmetric encryption | Encryption using a single shared secret key for both encryption and decryption. |
-| Public-key encryption | Encryption using a key pair: a public key to encrypt, a private key to decrypt. |
-| Public key | The openly distributed half of the pair, $(n, e)$ in RSA; anyone may use it to encrypt to the owner. |
-| Private key | The secret half of the pair, $(n, d)$ in RSA; only the owner can decrypt with it. |
-| RSA | A public-key cryptosystem whose security rests on the difficulty of factoring $n = p \times q$ into its primes. |
-| $n$ (modulus) | The product of the two secret primes $p$ and $q$; part of both public and private keys. |
-| $\varphi$ (totient) | $(p-1)(q-1)$; used to derive the private exponent and must be kept secret. |
-| $e$ (public exponent) | An integer coprime to $\varphi$, used for encryption. |
-| $d$ (private exponent) | The modular inverse of $e$ modulo $\varphi$; used for decryption. |
-| Coprime | Sharing no common factors (other than 1); required of $e$ relative to $\varphi$ so the inverse $d$ exists. |
+| Symmetric encryption | Encryption using one shared secret key [p.1] |
+| Public-key encryption | Encryption using a pair: a public key to encrypt, a private key to decrypt [p.1] |
+| Public key | The key `(n, e)` shared with everyone so anyone can encrypt to you [p.1][p.2] |
+| Private key | The key `(n, d)` kept secret so only you can decrypt [p.1][p.2] |
+| RSA | A public-key scheme whose security rests on the difficulty of factoring `n = p * q` into its primes [p.1] |
+| `n` | The modulus, computed as `n = p * q` [p.2] |
+| `phi` | `(p-1)(q-1)`, used to select `e` and compute `d` [p.2] |
+| `e` | The public exponent, chosen coprime to `phi` [p.2] |
+| `d` | The private exponent satisfying `e * d ≡ 1 (mod phi)` [p.2] |
 
 ## Diagrams & Visual Descriptions
 
-**Public-key message flow:**
+The RSA key exchange and message flow can be visualised as follows:
 
 ```
-        Alice (sender)                          Bob (receiver)
-        --------------                          -------------
-   message m                       public key (n,e) available to anyone
-        |                                      ^
-        |  fetches Bob's public key (n,e)      |
-        +------------------------------------->|
+        Key Generation                         Message Flow
+ -------------------------          ---------------------------------
+ p, q primes                      Sender (encrypts):  c = m^e mod n
+        |                                 |            [p.2]
+ n = p*q,  phi = (p-1)(q-1)   [p.2]           v  (public key n,e)
+        |                             Recipient (decrypts): m = c^d mod n
+ e coprime to phi; d: e*d ≡ 1 (mod phi) [p.2]   [p.2]
         |
-        |  encrypt: c = m^e mod n
-        |
-        |            ciphertext c
-        +--------------------------------------------> c arrives
-                                                       |
-                                                       | decrypt: m = c^d mod n
-                                                       v
-                                                   message m
-                                          (private key (n,d) never leaves Bob)
+ Public (n,e)   Private (n,d)   [p.2]
 ```
 
-The key insight the diagram shows: the public key travels openly and the ciphertext travels over an insecure channel, yet only Bob's private key — which never needs to be transmitted — can undo the encryption.
+Anyone may hold the public key `(n, e)` and produce ciphertext, but only the holder of `(n, d)` can invert it — capturing the lecture's point that anyone can encrypt to you; only you can decrypt [p.1].
 
 ## Code Examples
 
-No code examples in this lecture. (The toy example above is arithmetic rather than code, but it maps directly to an implementation: modular exponentiation for encrypt/decrypt and a modular-inverse computation for finding $d$.)
+No code examples in this lecture.
 
 ## Formulas & Algorithms
 
-**Key generation algorithm:**
+RSA key generation procedure [p.2]:
 
-1. Choose primes $p$, $q$
-2. $n = p \cdot q$
-3. $\varphi = (p-1)(q-1)$
-4. Choose $e$ coprime to $\varphi$
-5. Find $d$ with $e \cdot d \equiv 1 \pmod{\varphi}$
-6. Public key: $(n, e)$ — Private key: $(n, d)$
+```
+pick primes p and q
+n = p * q
+phi = (p-1)(q-1)
+pick e coprime to phi
+compute d with e * d ≡ 1 (mod phi)
+public key (n, e), private key (n, d)
+```
 
-**Encryption / Decryption:**
+Encryption and decryption [p.2]:
 
-$$c = m^e \bmod n \qquad\qquad m = c^d \bmod n$$
+```
+c = m^e mod n
+m = c^d mod n
+```
 
-**Worked example values:** $p=3$, $q=11$, $n=33$, $\varphi=20$, $e=3$, $d=7$ (since $3 \cdot 7 = 21 \equiv 1 \bmod 20$); $m=4 \rightarrow c = 4^3 \bmod 33 = 31 \rightarrow 31^7 \bmod 33 = 4$.
+Worked toy example, far too small to be secure [p.3]:
+
+```
+p = 3, q = 11
+n = 33
+phi = 20
+e = 3, d = 7  since 3 * 7 = 21 ≡ 1 (mod 20)
+Encrypt m = 4: c = 4^3 mod 33 = 31
+Decrypt: 31^7 mod 33 = 4
+```
+
+Security foundation [p.1]:
+
+```
+factoring a large number n = p * q into its primes
+```
 
 ## Key Takeaways
 
-- Public-key cryptography eliminates the key-distribution problem of symmetric encryption: anyone can encrypt to you with your public key, but only your private key can decrypt.
-- RSA's security is founded on a one-way computational asymmetry — multiplying primes is easy, factoring their product is not.
-- Key generation has strict requirements: $e$ must be coprime to $\varphi$, and $d$ is its modular inverse mod $\varphi$; leaking $\varphi$ (or the primes) destroys security.
-- Encryption and decryption are the same operation with different exponents: raise to $e$ with the public key, to $d$ with the private key, both mod $n$.
-- Toy parameters (like $n = 33$) illustrate the mechanics but offer zero security — real security demands primes so large that factoring $n$ is infeasible.
+- The move from one shared key (symmetric) to a key pair (public/private) removes the need to secretly share a key first: anyone can encrypt to you; only you can decrypt [p.1].
+- RSA's security is not obscurity — it rests on the difficulty of factoring `n = p * q` into its primes [p.1].
+- The private exponent `d` is defined purely by the modular inverse condition `e * d ≡ 1 (mod phi)`, computable only if you know `phi` and hence the primes [p.2].
+- Encryption and decryption are the same kind of operation — a modular exponentiation — differing only in which exponent is used [p.2].
+- The toy example (`n = 33`) lets you verify every step by hand, but real security requires keys whose factoring is infeasible [p.3].
 
 ## Connections
 
-Within this lecture itself, public-key encryption is presented directly against symmetric encryption and its shared-secret problem, framing the two as complementary approaches to the same goal of confidential communication. The lecture also points beyond pure encryption: the key-generation step requires choosing large primes and computing modular inverses, grounding the scheme in number-theoretic machinery that the course treats as a prerequisite for understanding *why* factoring resistance matters.
+The lecture explicitly contrasts public-key encryption with symmetric encryption and its single shared secret key [p.1], situating this week against the symmetric schemes the course has covered. The contrast the lecture draws — one shared key versus a key pair — is the anchor point for linking this material to that earlier material.
 
-No other weeks were named in this lecture, so no cross-week references can be made beyond the symmetric-vs-public-key contrast it explicitly draws.
+The lecture also leaves implicit the practical scale question: it stresses that its toy example is "far too small to be secure" [p.3], pointing at the factoring hardness of large `n` [p.1] as what separates a teaching example from a real system.
 
 ---
-*Sources: CSIT314 Week 9 lecture slides (Public-Key Cryptography). Version: 1.*
+*Sources: CSIT314 Week 9 lecture slides (pp. 1–3). Version: 1.*

@@ -18,6 +18,7 @@ from app.agents.base import (
     FlashcardData,
     QuizQuestionData,
     SummaryResult,
+    summary_temperature,
 )
 from app.core.ai_settings import get_effective_setting
 from app.core.exceptions import AgentError
@@ -49,6 +50,7 @@ class AnthropicAPIAdapter(AgentAdapter):
         prompt: str,
         max_tokens: int = _DEFAULT_MAX_TOKENS,
         system: str | None = UNTRUSTED_INPUT_SYSTEM_PROMPT,
+        temperature: float | None = None,
     ) -> str:
         """Send a prompt to the Anthropic API and return the text response.
 
@@ -59,6 +61,7 @@ class AnthropicAPIAdapter(AgentAdapter):
                 API takes `system` as a top-level parameter (not a message), so
                 it is passed as one here. Defaults to
                 `UNTRUSTED_INPUT_SYSTEM_PROMPT`; pass `None` to omit it.
+            temperature: Sampling temperature. None leaves the provider default.
 
         Returns:
             Response text content.
@@ -86,6 +89,8 @@ class AnthropicAPIAdapter(AgentAdapter):
         }
         if system:
             create_kwargs["system"] = system
+        if temperature is not None:
+            create_kwargs["temperature"] = temperature
 
         try:
             message = await client.messages.create(**create_kwargs)
@@ -224,7 +229,9 @@ After the summary, emit:
 """
 
         prompt = self.with_language(prompt)
-        result_text = await self._call_api(prompt, max_tokens=_SUMMARY_MAX_TOKENS)
+        result_text = await self._call_api(
+            prompt, max_tokens=_SUMMARY_MAX_TOKENS, temperature=summary_temperature(self)
+        )
         markdown, embedded_images = parsing.parse_summary_response(result_text)
 
         return SummaryResult(content_md=markdown, embedded_images=embedded_images)

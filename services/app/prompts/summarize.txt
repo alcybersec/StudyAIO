@@ -20,8 +20,13 @@
    Kept from v2.4: plain-text formulas, Must-Keep checklist, line-level
    citations. The `---` + Sources footer is also repaired deterministically in
    app/agents/parsing.py (the model glued them on one line twice), but the
-   prompt still asks for it. Measured effect: evals/BASELINE.md once the live
-   run is recorded.
+   prompt still asks for it.
+   Measured effect (live, glm-5.3-flash, temperature 0.2, 2 runs, 2026-10-12,
+   v2.2 baseline -> v2.5): faithfulness 0.878 -> 0.983 mean (0.967 / 1.000 per
+   run; 0.943 for v2.2 under the same fixed scorer), Key Concepts citation
+   coverage 91% (v2.3: 81%), 0 broken footers. Known exception: dp_knapsack
+   run 1 still mentions "greedy" in its Overview (0.50; run 2 is 1.00), kept
+   visible in evals/BASELINE.md; GL#34 closed with it.
 
    v2.4 (2026-10-12, GL#34 iteration 2): nothing the lecture states may be
    dropped, formulas and worked examples above all, and citations reach every

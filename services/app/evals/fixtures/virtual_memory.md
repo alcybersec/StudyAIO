@@ -2,138 +2,110 @@
 
 ## Overview
 
-Virtual memory is one of the foundational abstractions of modern operating systems. It gives every running process the illusion that it has its own large, private, contiguous address space — even though all processes are actually sharing one physical memory. The hardware and OS cooperate to translate each *virtual* address a program uses into a *physical* address in RAM, and they do this using fixed-size blocks called **pages** (in virtual space) and **frames** (in physical space).
+Virtual memory is the mechanism that gives each process the illusion of having its own large, private memory, even though all processes share one physical memory. The lecture explains that each process sees its own *virtual address space*, which the hardware and operating system together translate into actual physical locations [p.1]. This translation is what allows programs to be written as if they own all of memory, while the system quietly manages where things really live.
 
-Why does this matter? Because decoupling the program's view of memory from the physical hardware allows programs to be larger than physical RAM, allows processes to be isolated and protected from each other, and lets the OS manage memory flexibly. This week we look at how that translation works, what happens when a page isn't in memory (the **page fault**), and how the OS decides which page to evict when RAM is full (**page replacement policies** like FIFO and LRU). Understanding virtual memory also explains why a "bad" memory access pattern can bring an entire system to a crawl through **thrashing**.
+The topic matters because it underpins how modern systems run many processes at once. To make translation efficient, memory is divided into fixed-size units — *pages* on the virtual side and *frames* on the physical side — and a *page table* maps one to the other [p.1][p.2]. But virtual memory is not only about translation: when a needed page is missing from memory, the system must fetch it from disk, and that operation is enormously expensive, which is why fault handling and page replacement policies like FIFO and LRU are central to system performance [p.3].
 
 ## Key Concepts
 
-### Virtual Address Spaces
+### Virtual and Physical Memory Layout
 
-Each process sees its own **virtual address space**. When a program computes an address, it isn't referring to a physical RAM location at all — it's an address in that process's private virtual world. The OS and hardware handle the mapping behind the scenes. This abstraction is what makes it safe for many processes to run simultaneously: two processes can each use the "same" virtual address without interfering, because they translate to different physical locations.
+#### Pages and Frames
 
-### Pages and Frames
+The foundational idea of this week is that both virtual and physical memory are chopped into identically sized pieces. Virtual memory is divided into fixed-size *pages*, and physical memory into matching fixed-size *frames* [p.1]. Because the sizes match, any page can be placed into any frame — the mapping is what the hardware maintains, not the placement.
 
-Memory is divided into **fixed-size pages** (virtual) and **frames** (physical). Pages and frames are the same size, so a page always maps neatly into a frame of equal size.
-
-With a common page size of **4 KB**, address translation has an elegant property:
-
-- The **low 12 bits** of a virtual address (since 2¹² = 4096 = 4 KB) are the **offset** within the page.
-- The remaining **high bits** are the **page number**.
-
-This means the offset never needs translation — it stays the same going from virtual to physical. Only the page number part gets rewritten.
+With 4 KB pages, the address split becomes natural: the low 12 bits of an address are the offset within the page, and the remaining high bits are the page number [p.1]. Why 12 bits? Because 2^12 = 4096 bytes = 4 KB, so exactly 12 bits are needed to select any byte within one page. So every virtual address has the layout [p.1]:
 
 ```
 virtual address = | page number | offset (12 bits) |
 ```
 
-### Address Translation via the Page Table
+This split is the key to how translation works: the page number tells you *which* page, the offset tells you *where within* that page. The offset never changes during translation — only the page number is rewritten.
 
-The **page table** maps each page number to a frame number. Translation proceeds as follows:
+### Address Translation
 
-1. Split the virtual address into page number and offset.
-2. Look up the page number in the page table to get the frame number.
-3. Concatenate the frame number with the (unchanged) offset to form the physical address.
+#### The Page Table
+
+A page table maps each page number to a frame number [p.2]. Conceptually it is a lookup array indexed by page number, where each entry holds the frame where that page currently resides.
+
+The translation itself is beautifully simple, because of the offset invariance noted above [p.2]:
 
 ```
 page number --> [page table] --> frame number | offset
 ```
 
-#### The Valid Bit
+In words: look up the page number in the page table, take the resulting frame number, and append the unchanged offset [p.2]. For example, if page 5 maps to frame 9, then virtual address (page 5, offset 100) becomes physical address (frame 9, offset 100) — only the page-number part is replaced.
 
-Each **page table entry (PTE)** contains a **valid bit**. If the valid bit is 1, the page is in memory and the address lookup succeeds normally. If the valid bit is 0, the page is *not* in memory, and the access raises a **page fault** — a trap to the operating system.
+#### The Valid Bit and Page Faults
 
-### Page Faults
+Each page table entry also holds a *valid bit* [p.2]. This bit answers the question "is this page actually in physical memory right now?" If the valid bit is 0, the page is not in memory, and the access raises a *page fault* [p.2].
 
-A **page fault** occurs when a process touches a page whose valid bit is 0. The OS responds by:
+A page fault is not an error in the usual sense — it is a normal, recoverable event. But it is a signal that the fast hardware translation path has hit a wall and the operating system must step in.
 
-1. Loading the page from disk into a free frame.
-2. Updating the page table to point to that frame (setting the valid bit).
-3. **Restarting the instruction** that faulted, which now completes normally.
+### Page Fault Handling and Performance
 
-#### The Cost of a Page Fault
+#### The Fault Handling Sequence
 
-A page fault costs **millions of cycles** — enormously slower than a normal memory access, which takes only a few. This asymmetry is the central performance fact of virtual memory: the system runs beautifully as long as fault rates stay low, but as the fault rate climbs, the CPU spends ever more time waiting on disk.
+On a page fault, the operating system performs three steps [p.3]:
 
-#### Thrashing
+1. Loads the page from disk [p.3].
+2. Updates the page table to reflect the new location (setting the entry valid) [p.3].
+3. Restarts the instruction that faulted, so it can now complete normally [p.3].
 
-When the fault rate becomes so high that the system spends most of its time servicing page faults rather than doing useful work, the system is **thrashing**. A thrashing system effectively "crawls" — user-visible responsiveness collapses even though the CPU might technically be busy. Avoiding thrashing is why replacement policy and memory sizing matter so much.
+#### The Cost of Faulting: Thrashing
 
-### Page Replacement Policies
+The reason page faults dominate performance discussions is their sheer cost: a page fault costs millions of cycles, compared with a single memory access [p.3]. That is a difference of many orders of magnitude — one fault can wipe out the benefit of millions of ordinary accesses. Consequently, a high fault rate — a condition called *thrashing* — makes the entire system crawl [p.3]. A thrashing system spends nearly all its time moving pages between disk and memory rather than doing useful work.
 
-When a page fault occurs and **no frame is free**, the OS must choose a **victim** page to evict. Two classic policies:
+### Page Replacement
 
-| Policy | Rule | Idea |
-|---|---|---|
-| **FIFO** | Evicts the **oldest** page (first one loaded, regardless of use) | Simple bookkeeping; a page that arrived long ago is evicted even if heavily used |
-| **LRU** | Evicts the **least recently used** page | Exploits locality: a page untouched recently is likely to go untouched again soon |
+#### Choosing a Victim
 
-The trade-off is simplicity vs. quality: FIFO is cheap to implement but blind to usage patterns; LRU approximates optimal behavior by betting on recent usage predicting future usage.
+When a page fault occurs and no frame is free, something must be evicted. A page replacement policy chooses a victim page [p.3]. The lecture presents two policies:
+
+| Policy | Eviction rule |
+|---|---|
+| FIFO | Evicts the oldest page (the one that has been in memory longest) [p.3] |
+| LRU | Evicts the least recently used page (the one not accessed for the longest time) [p.3] |
+
+The difference is philosophical: FIFO depends only on arrival time, while LRU tries to exploit locality of reference — if a page hasn't been used recently, it's a good bet it won't be needed soon. Choosing a bad victim means the evicted page is likely to fault again soon, feeding the thrashing cycle described above [p.3].
 
 ## Definitions
 
 | Term | Definition |
 |---|---|
-| Virtual address space | The private address space each process sees, independent of physical memory layout |
-| Page | A fixed-size block of a process's virtual address space (e.g., 4 KB) |
-| Frame | A fixed-size block of physical memory, same size as a page |
-| Offset | The low 12 bits of an address; position within a page or frame |
-| Page number | The high bits of a virtual address; identifies which page |
-| Page table | Structure mapping each page number to a frame number |
-| Page table entry (PTE) | A row of the page table; contains frame number and valid bit |
-| Valid bit | PTE flag: 1 = page in memory, 0 = page fault on access |
-| Page fault | Trap raised when accessing a page not in memory; OS loads it from disk |
-| Page replacement policy | Rule for choosing a victim page when no frame is free (FIFO, LRU) |
-| FIFO | Replacement policy that evicts the oldest loaded page |
-| LRU | Replacement policy that evicts the least recently used page |
-| Thrashing | State where a very high page-fault rate makes the system crawl |
+| Virtual address space | The private memory view that each process sees [p.1] |
+| Page | A fixed-size unit of virtual memory [p.1] |
+| Frame | A fixed-size unit of physical memory [p.1] |
+| Offset | The low 12 bits of an address; the position within a page with 4 KB pages [p.1] |
+| Page number | The high bits of an address; identifies which page [p.1] |
+| Page table | Structure that maps each page number to a frame number [p.2] |
+| Valid bit | Page table entry bit; 0 means the page is not in memory and a page fault is raised [p.2] |
+| Page fault | Exception raised when an access touches a page not in memory [p.2] |
+| Thrashing | A high page-fault rate that makes the system crawl [p.3] |
+| Page replacement policy | The rule that chooses a victim page when no frame is free [p.3] |
+| FIFO | Replacement policy that evicts the oldest page [p.3] |
+| LRU | Replacement policy that evicts the least recently used page [p.3] |
 
 ## Diagrams & Visual Descriptions
 
-**Virtual address layout (4 KB pages):**
+Virtual address structure and translation pipeline:
 
 ```
-virtual address:
-+------------------------+--------------------+
-|      page number       |   offset (12 bits) |
-+------------------------+--------------------+
-                            2^12 = 4096 = 4 KB
-```
-
-**Address translation flow:**
-
-```
- virtual address
-      |
-  +---+--------+
-  |            |
-page #      offset
-  |            | (unchanged)
-  v            |
-[page table]   |
-  |            |
-frame #        |
-  |            |
-  +-----+------+
+Virtual address:
++--------------+------------------+
+| page number  | offset (12 bits) |
++--------------+------------------+
+        |                  |
+        v                  |  (offset passes through unchanged)
+   [page table]
+        |
         v
- physical address = frame # | offset
++--------------+------------------+
+| frame number | offset (12 bits) |   Physical address
++--------------+------------------+
 ```
 
-**Page fault handling:**
-
-```
-CPU access page --> valid bit = 1? --> yes --> use frame
-                       |
-                       no
-                       v
-                   page fault
-                       |
-         OS loads page from disk into frame
-                       |
-              update page table
-                       |
-             restart the instruction
-```
+The diagram captures the whole week in one picture: the page number is translated through the page table, while the offset is copied through unchanged [p.1][p.2].
 
 ## Code Examples
 
@@ -141,35 +113,50 @@ No code examples in this lecture.
 
 ## Formulas & Algorithms
 
-**Address decomposition (4 KB pages):**
+Virtual address layout with 4 KB pages — the low 12 bits are the offset, the high bits the page number [p.1]:
 
 ```
-virtual address = page number (high bits) | offset (low 12 bits)
-physical address = frame number | offset (offset carried over unchanged)
+virtual address = | page number | offset (12 bits) |
 ```
 
-**Translation algorithm:**
+Address translation through the page table — look up the page number, take the frame number, append the unchanged offset [p.2]:
 
-1. Extract page number and offset from the virtual address.
-2. Check the page table entry: if valid bit = 0, take a page fault.
-3. Otherwise read the frame number and concatenate with the offset.
+```
+page number --> [page table] --> frame number | offset
+```
 
-**Page fault cost relationship:** page fault ≈ millions of cycles vs. normal memory access (a few cycles) — hence high fault rates dominate system performance.
+Page fault handling sequence [p.3]:
+
+```
+1. Load the page from disk
+2. Update the page table
+3. Restart the instruction
+```
+
+Page replacement policies [p.3]:
+
+```
+FIFO: evicts the oldest page
+LRU:  evicts the least recently used page
+```
+
+Named quantitative facts: a page fault costs millions of cycles versus a single memory access [p.3]; a high fault rate is called thrashing and makes the system crawl [p.3].
 
 ## Key Takeaways
 
-- Virtual memory gives each process its own address space while pages/frames map virtual onto physical memory — the core abstraction enabling sharing, protection, and programs larger than RAM.
-- With 4 KB pages, translation is beautifully simple: only the high bits (page number) change; the 12-bit offset passes through untouched.
-- The page table is the translation workhorse, and its valid bit is the trigger that decides between a fast in-memory access and a page fault.
-- A page fault costs millions of cycles; the OS loads the page, updates the table, and restarts the faulting instruction.
-- Thrashing — a high fault rate — makes the whole system crawl, so replacement policy choices have system-wide consequences.
-- FIFO is simple but ignores usage; LRU bets that the least recently used page is the best eviction candidate.
+- Virtual memory decouples the address a program uses from where data physically lives — every process gets its own virtual address space [p.1].
+- The 4 KB page size fixes the address split: 12 offset bits, the rest page number — remembering this split makes translation trivial to reason about [p.1].
+- Translation replaces only the page number; the offset rides through untouched, so the same offset bits appear in the physical address [p.2].
+- The valid bit is how hardware tells the OS "fetch this page for me" — a valid bit of 0 triggers a page fault [p.2].
+- A fault is recoverable (load, update table, restart the instruction), but at millions of cycles it must stay rare [p.3].
+- Thrashing is the failure mode where faults dominate execution; keeping the fault rate low is the real performance goal [p.3].
+- When memory is full, FIFO and LRU are the two victim-selection strategies: oldest-arrived vs. least-recently-used [p.3].
 
 ## Connections
 
-This lecture builds directly on the mechanism it names as its subject — paging — and its page table. The valid bit mechanism it describes (a trap to the OS on invalid access) is an example of how the OS intercepts hardware events, a pattern that recurs throughout operating systems material.
+This lecture presupposes an understanding of processes and memory hierarchy from earlier course material, since it defines the virtual address space as something "each process sees" [p.1]. The page fault mechanism — load from disk, update the table, restart — sits at the boundary between hardware and the operating system, showing how OS software services exceptions raised by the memory system [p.2][p.3].
 
-The lecture also leaves the replacement question open in an interesting way: it presents FIFO and LRU as policies for choosing a victim but does not evaluate their performance, which invites comparison in later coverage of memory management policies.
+The lecture itself does not name any future topics or other weeks, so no further links can be drawn from the source material.
 
 ---
-*Sources: CSIT203 Week 5 lecture notes (Virtual Memory), pages 0. Version: 1.*
+*Sources: CSIT203 Week 5 lecture slides, pages 1–3. Version: 1.*
