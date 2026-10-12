@@ -320,6 +320,167 @@ cohort whose first possible signup day has not yet reached day N reports `null` 
 side events are emitted where the action happens: flashcard review, quiz answer, study session,
 chat send, upload accepted, AI feedback. Account deletion removes the rows (`user_id` column).
 
+**Pending additive change (M33-S2, [ADR 0007](adr/0007-weak-spot-engine.md) Decisions 7 and 9),
+recorded before implementation:** `USAGE_EVENTS` gains the server events `study_plan_built`
+(properties `count`, `duration_seconds`) and `targeted_generation_requested` (`count`, `week`);
+`CLIENT_EVENTS` is unchanged. `GET /api/admin/usage/retention` gains `plan_split: [{week_start,
+with_plan: {users, d7, d30}, without_plan: {users, d7, d30}}]`, where *with plan* means a
+`study_plans` row dated within days 0–6 after signup, and `d7`/`d30` keep the definitions above.
+Still v1: both are additions.
+
+### services.weakspot v1
+
+Per-(user, course, week) weakness scores, the daily "study tonight" plan, the cold-start diagnostic
+and the request side of targeted generation (M33-S2, GL#39). Provider: `backend` —
+`services/app/app/services/weakspot_service.py`. Consumers: `backend` (`app/api/weakspots.py`),
+`ai` (`app/pipeline/targeted_task.py` calls `is_duplicate`), `qa`. Decided in
+[ADR 0007](adr/0007-weak-spot-engine.md), whose single `python` block **is** the contract: the
+scoring, cold-start, plan and generation constants, the `QuizEvidence` / `CardEvidence` /
+`WeekScore` / `WeekWeakSpot` dataclasses, the pure `score_week` and `is_duplicate`, and six async
+functions, each taking `user_id` as a required keyword. Not duplicated here, so there is one copy
+to keep in step. The ADR's worked-examples table pins the formula's numbers.
+`services/app/tests/contracts/test_weakspot_service_contract.py` compares the block and the table
+with the source. The module may have more public names than the block (helpers, metrics); it may
+not lack or change one. A changed constant or signature is an amendment of ADR 0007 and a version
+bump here first.
+
+### api.weak-spots v1
+
+HTTP surface of the weak-spot engine (M33-S2, GL#39). Provider: `backend` —
+`services/app/app/api/weakspots.py` (one router, both prefixes). Consumers: `frontend`, `qa`.
+Every route requires a caller (`get_current_user_or_default`), passes `user_id=user.id` to the
+service lookup, and answers a foreign or absent id with `404`. `tz` comes from `get_user_tz`
+(ADR 0006).
+
+| Method | Path | Body / query | Result |
+|---|---|---|---|
+| `GET` | `/api/weak-spots` | `course_id?` | `200` `{local_date, courses: [{course_id, course_code, weeks: [{week, status, weakness, confidence, urgency, priority, evidence: {quiz_attempts, quiz_accuracy, cards_reviewed, avg_ease, lapsed_cards, overdue_cards}, next_exam: {exam_id, days_to_exam} \| null}]}]}`; weeks in the ADR 0007 order; `weakness` and `quiz_accuracy` are `null` when absent |
+| `GET` | `/api/weak-spots/diagnostic` | `course_id`, `week` | `200` `{course_id, week, question_ids: [str], needs_generation: bool}` |
+| `POST` | `/api/weak-spots/targeted` | `{course_id, week, kind}`, `kind` in `quiz`, `flashcards` | `202` new, or `200` the in-flight one: `TargetedGenerationResponse`; `403 ai_consent_required`; `404`; `429` code `targeted_daily_cap`; the existing quota/ceiling errors |
+| `GET` | `/api/weak-spots/targeted/{generation_id}` | none | `200` `TargetedGenerationResponse`; `404` |
+| `GET` | `/api/study-plan/tonight` | `minutes?` (10–90; used only when today's plan is built) | `200` `StudyPlanResponse` |
+| `POST` | `/api/study-plan/tonight/refresh` | `{minutes?}` | `200` `StudyPlanResponse` (rebuilt, `version` + 1) |
+
+`TargetedGenerationResponse` = `{id, course_id, week, kind, status, requested_count, created_count,
+dropped_duplicate_count, dropped_uncited_count, item_ids: [str], created_at, completed_at}`;
+`item_ids` is empty until `completed`. No `error` text, only `error_code`.
+
+`StudyPlanResponse` = `{plan_date, minutes, version, algorithm_version, built_at, total_minutes,
+done_count, items: [{item_type, item_id, course_id, course_code, week, reason, minutes, done}],
+focus: [{course_id, course_code, week, status, weakness, priority, days_to_exam}], diagnostic:
+{course_id, course_code, week} | null}`. `item_type` in `card`, `quiz`; `reason` in `diagnostic`,
+`missed`, `review`, `new`, `targeted`. Items are ids; the client runs them through the existing
+study flows.
+
+`POST /api/weak-spots/targeted` declares `dependencies=[Depends(require_ai_consent)]`
+(`api.ai-consent v1`) and is the only route here that spends AI; it enqueues and never obtains an
+adapter. `services/app/tests/contracts/test_weakspot_api_contract.py` checks the route table
+against the app and the consent dependency on that route.
+
+### pipeline.targeted_generation v1
+
+Targeted quiz/card generation for one weak unit, run in the worker (M33-S2, GL#39). Provider:
+`ai` — `services/app/app/pipeline/targeted_task.py` (the task), `app/agents/base.py`
+(`GenerationFocus`, the `focus` keyword), `prompts/generate_targeted_quiz.txt` and
+`prompts/generate_targeted_flashcards.txt`. Consumer: `backend` (enqueues from
+`app/api/weakspots.py`, after `weakspot_service.request_targeted_generation` committed the row).
+Decided in [ADR 0007](adr/0007-weak-spot-engine.md) Decision 5. No new request-time `get_agent`
+site: ADR 0003 is unchanged.
+
+```python
+TARGETED_TASK_NAME = "app.pipeline.targeted_task.generate_targeted_items"
+
+
+@dataclass
+class GenerationFocus:
+    topics: list[str]
+    missed_questions: list[str] = field(default_factory=list)
+    avoid: list[str] = field(default_factory=list)
+    page_refs: list[int] = field(default_factory=list)
+
+
+class AgentAdapter(ABC):
+    @abstractmethod
+    async def generate_flashcards(
+        self,
+        summary: str,
+        extraction: ExtractionData,
+        count: int,
+        focus: GenerationFocus | None = None,
+    ) -> list[FlashcardData]: ...
+
+    @abstractmethod
+    async def generate_quiz(
+        self,
+        summary: str,
+        extraction: ExtractionData,
+        count: int,
+        focus: GenerationFocus | None = None,
+    ) -> list[QuizQuestionData]: ...
+
+
+def generate_targeted_items(self, generation_id: str) -> dict: ...
+```
+
+- The task is registered under `TARGETED_TASK_NAME`, `bind=True`, takes the
+  `targeted_generations.id` only, and reads the owner from that row. It returns
+  `{generation_id, user_id, status, created_count}`.
+- `focus=None` is today's behaviour, byte for byte: same template, same output. A non-`None` focus
+  selects the targeted template. Every backend implements the keyword; the ABC change bumps
+  **`agents.AgentAdapter` to v2** (additive) in the same change as the implementation, together
+  with the new `GenerationFocus` data type and `pipeline/targeted_task.py` in its consumer table.
+- Items whose `source_page_ref` is not a page of the target extraction are dropped; duplicates by
+  `weakspot_service.is_duplicate` are dropped; kept items are inserted with `origin='targeted'`,
+  never replacing or archiving an existing item (floor 4).
+- Usage is metered with `billing_service.record_agent_usage`; a failure stores an `error_code`,
+  never provider text (floor 2).
+
+`services/app/tests/contracts/test_targeted_generation_contract.py` checks the block against
+`app/agents/base.py`, every backend's overrides and the registered Celery task, and that ADR 0003's
+allowlist still has exactly its five entries.
+
+### models.weakspot v1
+
+Storage for the weak-spot engine (M33-S2, GL#39). Provider: `data` — `app/models/study_plan.py`,
+`app/models/targeted_generation.py`, `app/models/quiz.py`, `app/models/flashcard.py`, one Alembic
+revision. Consumers: `backend`, `ai`. Decided in [ADR 0007](adr/0007-weak-spot-engine.md)
+Decision 6. Scores are derived on read; there is no mastery table.
+
+| Table | Column | Type | Null | Notes |
+|---|---|---|---|---|
+| `study_plans` | `user_id` | `String(36)` FK `users.id` | no | unique with `plan_date` |
+| `study_plans` | `plan_date` | `Date` | no | user-local date (ADR 0006) |
+| `study_plans` | `minutes` | `Integer` | no | |
+| `study_plans` | `items` | `JSONB` | no | ADR 0007 Decision 4 item list |
+| `study_plans` | `focus` | `JSONB` | no | focus and diagnostic units at build time |
+| `study_plans` | `algorithm_version` | `Integer` | no | |
+| `study_plans` | `version` | `Integer` | no | 1, then + 1 per refresh |
+| `study_plans` | `built_at` | `DateTime(timezone=True)` | no | `done` is "acted on at or after this" |
+| `targeted_generations` | `user_id` | `String(36)` FK `users.id` | no | index `(user_id, created_at)` |
+| `targeted_generations` | `course_id` | `String(36)` FK `courses.id` | no | |
+| `targeted_generations` | `week` | `Integer` | no | |
+| `targeted_generations` | `kind` | `String(20)` | no | `quiz` \| `flashcards` |
+| `targeted_generations` | `status` | `String(20)` | no | `queued` \| `running` \| `completed` \| `failed`; partial unique `(user_id, course_id, week, kind)` while `queued`/`running` |
+| `targeted_generations` | `requested_count` | `Integer` | no | |
+| `targeted_generations` | `created_count` | `Integer` | no | default 0 |
+| `targeted_generations` | `dropped_duplicate_count` | `Integer` | no | default 0 |
+| `targeted_generations` | `dropped_uncited_count` | `Integer` | no | default 0 |
+| `targeted_generations` | `topics` | `JSONB` | no | labels only |
+| `targeted_generations` | `error_code` | `String(50)` | yes | never provider text |
+| `targeted_generations` | `completed_at` | `DateTime(timezone=True)` | yes | |
+| `quiz_questions` | `origin` | `String(20)` | no | server default `'pipeline'`; `pipeline` \| `targeted` |
+| `quiz_questions` | `targeted_generation_id` | `String(36)` FK `targeted_generations.id` | yes | |
+| `quiz_questions` | `focus_topic` | `String(200)` | yes | |
+| `flashcards` | `origin` | `String(20)` | no | as on `quiz_questions` |
+| `flashcards` | `targeted_generation_id` | `String(36)` FK `targeted_generations.id` | yes | |
+| `flashcards` | `focus_topic` | `String(200)` | yes | |
+
+Both new tables also have `id` (`String(36)`, `generate_id`), `created_at` and `updated_at`.
+Index `ix_quiz_attempts_question_created` on `quiz_attempts (quiz_question_id, created_at)`.
+Account deletion removes both new tables' rows (`backend`, `account_service`).
+`services/app/tests/contracts/test_weakspot_storage_contract.py` checks this table against the ORM
+metadata.
+
 ## Change log
 
 The `Contract` column holds the name from that contract's `###` heading in Current.
@@ -333,3 +494,8 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-11 | api.ai-consent | v1 | Additive: `ai_consent_version` (current required version) on `UserProfileResponse`. | M33-S1-BACKEND-036 |
 | 2026-10-11 | api.ai_feedback | v1 | New contract, recorded before implementation: vote upsert/delete/list, admin aggregate at `/admin/ai-feedback`. | M33-S1-BACKEND-015 |
 | 2026-10-11 | services.usage | v1 | New contract, recorded before implementation: allowlisted never-raising `record`, view-event endpoint, admin retention readout. | M33-S1-BACKEND-016 |
+| 2026-10-12 | services.usage | v1 | Pending additive: `study_plan_built` and `targeted_generation_requested` server events; `plan_split` in the admin retention readout. | M33-S2-ARCH-018 |
+| 2026-10-12 | services.weakspot | v1 | New contract, recorded before implementation (ADR 0007, Proposed): scoring formula and constants, plan, diagnostic, targeted-generation request. Contract test written red. | M33-S2-ARCH-018 |
+| 2026-10-12 | api.weak-spots | v1 | New contract, recorded before implementation: heatmap, diagnostic, targeted request/status, tonight's plan and refresh. Contract test written red. | M33-S2-ARCH-018 |
+| 2026-10-12 | pipeline.targeted_generation | v1 | New contract, recorded before implementation: worker task, `GenerationFocus`, additive `focus` keyword (bumps `agents.AgentAdapter` to v2 on implementation). Contract test written red. | M33-S2-ARCH-018 |
+| 2026-10-12 | models.weakspot | v1 | New contract, recorded before implementation: `study_plans`, `targeted_generations`, provenance columns, attempts index. Contract test written red. | M33-S2-ARCH-018 |
