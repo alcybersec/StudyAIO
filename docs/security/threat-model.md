@@ -15,6 +15,9 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | Instance AI credentials (`ZAI_API_KEY` and others, Claude service login) | env from the secret manager; `/run/claude-host` read-only mount | Floor 2 and cost. Prod runs metered `zai` |
 | `SETTINGS_ENCRYPTION_KEY`, `JWT_SECRET_KEY`, DB password | env from the secret manager → the deploy directory's `.env` | Losing the key means losing every stored credential. Leaking the JWT key means session forgery (floor 1) |
 | OAuth and calendar tokens | `oauth_accounts`, `calendar_syncs`, **plaintext** | R-017 residual. They are not AI credentials, so outside floor 2's literal text |
+| AI-processing consent record (SEC-08, GL#38) | `users.ai_processing_consent_at` / `_version` | Evidence that the user agreed to the disclosure in force before their content left the instance. Only `ai_consent_required` is exposed by the API; the raw record is not |
+| AI feedback votes and comments (GL#36) | `ai_feedback` | Owned by the voter. The comment is free text and may hold personal data; it is shown to admins in the aggregate, never logged and never copied into usage events |
+| Usage events (GL#37) | `usage_events` | Owned by the actor. Event name from a fixed list, scalar properties under an allowlist, no content; read cross-user only as admin aggregates with no user id |
 | Database dumps | the deploy directory's `backups/` (predeploy + nightly), readable only by the deploy user and the DB container | They hold everything above except the env secrets. AI credentials in them are ciphertext |
 
 ## 2. Actors
@@ -97,3 +100,48 @@ New surfaces and their judgement. Detail is in `docs/gates/M32/floors.md`.
    B4), but `0700` would be enough because the worker runs as root (devops). Both `/metrics` endpoints are
    unauthenticated and the api's is reachable on the private network at `:8000`. That exposes route-level traffic volume and
    latency, which identify no one.
+
+### 2026-10-11, M33 S1 (M33-S1-SAFETY-033)
+
+1. **AI-processing consent (SEC-08, GL#38).** A 403 `ai_consent_required` now precedes every AI spend and every
+   enqueue of AI pipeline work. The gated route set is derived from code, not listed: any route whose handler
+   reaches `check_ai_quota`, `get_agent`, `run_pipeline`, `resume_pipeline`, `.apply_async` or `.delay` must
+   depend on `require_ai_consent` (13 routes). The dependency runs before the handler, so nothing is spent or
+   queued for an unconsented caller. Single-user mode is the only bypass; role, tier and `SELF_HOSTED` are not.
+   A consent to older wording counts as none. Extends B3 and B8.
+2. **Email addresses out of logs.** Call sites log `user_id`, not addresses (floor-tier AST sweep, wider than
+   the unit one). The structlog `redact_emails` processor and the stdlib `EmailRedactingFilter` are a backstop
+   with two holes, recorded as strict `xfail`s: (F1) `log.exception(...)` makes stdlib append a second,
+   unredacted traceback; (F2) the Celery worker never calls `configure_logging`, so worker logs (notifications,
+   email delivery, pipeline) are not redacted at all. Neither is a floor breach: the call-site rule holds, and an
+   address only reaches a log through exception text. Both are closed (see M33-S1-SAFETY-040 below). Still
+   unfiltered: handlers that loggers such as `uvicorn.access` attach for themselves, and any handler added after
+   `configure_logging`.
+3. **AI feedback and usage events (GL#36, GL#37).** New user-owned tables, both deleted with the account. Votes
+   land only on the caller's own targets; a foreign and a missing target return the same 404. Usage events are
+   always keyed on the caller, and a client may report only two view events, for its own course. The two admin
+   aggregates are cross-user by design and return no user id. Residual: `recent_negative` hands admins
+   free-text comments with the target's `course_id`, which an admin can trace to an owner. That is acceptable
+   for triage, but the response is an untyped `list[dict]`, so only the floor test stops a user id being added.
+4. **Retrieval floor and follow-ups (GL#35).** Search is always keyed on the caller. A follow-up query folds in
+   only the caller's previous message from the caller's own session. A below-floor turn returns a fixed reply,
+   builds no agent and is not metered. The quota check still runs before it, so a fixed reply cannot be used to
+   skip quota on a real call. No new AI or embedding call site.
+5. **Disclosure accuracy (frontend `ConsentDialog`, reviewed against the prompts).** The code backs "only your
+   own content": every prompt input is read from the caller's own rows. Three claims need tighter wording.
+   (a) The account email and username are never put into a prompt, but anything inside an uploaded file or a
+   file name is sent verbatim. (b) "What is sent" leaves out file names, course codes and week numbers, the
+   recent chat history sent with each chat turn, course documents (outlines, syllabi) sent for deadline
+   extraction, and AI-generated summaries sent back to generate flashcards and quizzes. (c) With a remote
+   embedding backend, lecture text and questions also go to the embedding provider, which can differ from the
+   chat provider.
+
+### 2026-10-12, M33 S1 (M33-S1-SAFETY-040)
+
+1. **F1 and F2 closed (SEC-08, GL#38).** `EmailRedactingFilter` now renders `exc_text` before the stdlib
+   Formatter does and scrubs it and `stack_info`, so `log.exception(...)` emits no address (`06c4fcb`). The
+   worker connects `configure_logging` to Celery's `setup_logging` signal, which also stops Celery from
+   replacing the root logger; worker and beat both fire it, and prefork children inherit the configured
+   handlers (`344ce7e`). Both pins are plain floor-tier tests now, plus a runtime test that fires the signal.
+   Limit unchanged: the filter covers only handlers that carry it, so a handler attached after
+   `configure_logging` (or one a library attaches to its own logger) must add the filter itself.

@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dimensions: int = 384
     search_top_k: int = 10
+    # Minimum cosine similarity (1 - pgvector cosine distance) for a retrieved
+    # chunk to be used by chat and Q&A. all-MiniLM-L6-v2 scores unrelated
+    # text around 0.0-0.15, loosely topical text 0.2-0.3 and a passage that
+    # actually answers the question typically >= 0.35. 0.25 sits at the top of
+    # the noise band: weak topical neighbours are dropped, genuine matches
+    # stay. Re-tune if EMBEDDING_MODEL changes; 0 disables the floor.
+    retrieval_min_similarity: float = 0.25
 
     # Security
     cookie_secure: bool = False
@@ -109,6 +116,7 @@ class Settings(BaseSettings):
     #: Generous enough that a tester reporting three things in a row is
     #: never blocked, tight enough that the endpoint is not a spam vector.
     rate_limit_feedback: str = "10/minute"
+    rate_limit_usage_events: str = "60/minute"
 
     # OpenAPI
     openapi_enabled: bool = True
@@ -142,6 +150,10 @@ class Settings(BaseSettings):
     #: default admin. Implies `self_hosted`. Startup refuses it unless the API
     #: is bound to loopback (`bind_host`) or `i_understand_no_auth` is set.
     single_user_mode: bool = False
+    #: Wording version of the AI-processing disclosure (SEC-08, GL#38). Bump it
+    #: when the disclosure text changes materially; every user whose recorded
+    #: version is lower is asked again before the next AI action.
+    ai_consent_version: int = 1
     i_understand_no_auth: bool = False
     #: Mirror of uvicorn's `--host`. The app cannot see its own bind address, so
     #: the operator declares it; the default is the conservative "exposed".

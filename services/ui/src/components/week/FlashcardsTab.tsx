@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useFlashcards, useStudyStats } from '../../hooks/useApi'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
+import { AiFeedbackControl } from '../ui/AiFeedbackControl'
 import { Badge, EmptyState, ErrorState, Kbd, Skeleton } from '../ui'
 
 interface FlashcardsTabProps {
@@ -33,6 +34,7 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
 
   const cards = shuffledCards ?? flashcards ?? []
   const card = cards[currentIndex]
+  const flashcardIds = useMemo(() => (flashcards ?? []).map((c) => c.id), [flashcards])
 
   const goNext = useCallback(() => {
     if (currentIndex < cards.length - 1) {
@@ -171,6 +173,13 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
         ))}
         <span className="text-xs font-mono text-text-faint">p.{card.source_page_ref}</span>
       </div>
+
+      <AiFeedbackControl
+        key={card.id}
+        targetType="flashcard"
+        targetId={card.id}
+        batchIds={flashcardIds}
+      />
 
       {/* Navigation */}
       <div className="flex items-center gap-3">

@@ -15,7 +15,7 @@ from app.models.artifact import LectureArtifact
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.course import Course
-from app.services import course_service, search_service, settings_service
+from app.services import course_service, retrieval, search_service, settings_service
 from app.services.chat_scope import build_sources, detect_quiz_intent, parse_scope
 
 logger = structlog.get_logger()
@@ -164,6 +164,59 @@ async def _plan_message(
         else:
             plan.reply = f"None of your courses have Week {parsed.week} material indexed yet."
     return plan
+
+
+def _previous_user_message(content: str, recent_user: list[str]) -> str | None:
+    """Newest earlier user message (``recent_user`` is newest first).
+
+    The history query may already contain the message being sent; a leading
+    copy of ``content`` is skipped so a follow-up never uses itself as context.
+    """
+    earlier = recent_user[1:] if recent_user and recent_user[0] == content else recent_user
+    return earlier[0] if earlier else None
+
+
+def _retrieval_query(content: str, plan: _Plan, recent_user: list[str]) -> str:
+    """Query text to embed: bare message first turn, scope-carrying on follow-ups."""
+    return retrieval.build_retrieval_query(
+        content,
+        code=plan.code,
+        week=plan.week,
+        previous_user_message=_previous_user_message(content, recent_user),
+    )
+
+
+async def _search(
+    session: AsyncSession, user_id: str, plan: _Plan, query_embedding: list[float]
+) -> list[dict]:
+    """Similarity search over the caller's own chunks within the plan's scope."""
+    return await search_service.search_chunks(
+        session=session,
+        query_embedding=query_embedding,
+        top_k=MAX_RAG_CHUNKS,
+        course_id=plan.course_id,
+        week=plan.week,
+        user_id=user_id,
+    )
+
+
+def _apply_floor(plan: _Plan, raw: list[dict], search_ok: bool) -> list[dict]:
+    """Drop chunks below the relevance floor; set a fixed reply if none remain.
+
+    When the search succeeded but nothing clears the floor, ``plan.reply`` is
+    set so the agent is never called. A failed search leaves the plan alone
+    and the turn falls through to a general answer, as before.
+    """
+    chunks = retrieval.filter_by_floor(raw)
+    if search_ok and not chunks:
+        if raw:
+            plan.reply = retrieval.not_found_reply(plan.code, plan.week)
+            retrieval.record_below_floor(
+                "chat", searched=len(raw), scope_code=plan.code, week=plan.week
+            )
+        elif plan.from_message:
+            plan.reply = _no_material_reply(plan)
+    return chunks
 
 
 async def create_session(
@@ -343,29 +396,23 @@ async def send_message(
     answer_text = ""
     answer_citations: list[dict] = []
     if plan.reply is None:
+        raw: list[dict] = []
         search_ok = False
         try:
             provider = get_embedding_provider()
-            query_embeddings = provider.embed_texts([content])
+            query_embeddings = provider.embed_texts([_retrieval_query(content, plan, recent_user)])
             if query_embeddings:
-                chunks = await search_service.search_chunks(
-                    session=session,
-                    query_embedding=query_embeddings[0],
-                    top_k=MAX_RAG_CHUNKS,
-                    course_id=plan.course_id,
-                    week=plan.week,
-                    user_id=user_id,
-                )
+                raw = await _search(session, user_id, plan, query_embeddings[0])
                 search_ok = True
         except Exception as e:
             logger.warning(
                 "chat_rag_search_failed",
                 error=await settings_service.redacted_error(session, user_id, e),
             )
-            # Continue without RAG context — still useful for general conversation
-        if search_ok and plan.from_message and not chunks:
-            plan.reply = _no_material_reply(plan)
+            # Continue without RAG context: still useful for general conversation
+        chunks = _apply_floor(plan, raw, search_ok)
 
+    ai_called = plan.reply is None
     if plan.reply is not None:
         answer_text = plan.reply
     else:
@@ -402,6 +449,8 @@ async def send_message(
         created_at=utc_now(),
     )
     assistant_msg.action_json = plan.action
+    # Transient (not a column): lets the API skip metering when no AI call was made.
+    assistant_msg.ai_called = ai_called
     session.add(assistant_msg)
 
     # 6. Update session metadata
@@ -494,27 +543,21 @@ async def stream_message(
     )
     chunks: list[dict] = []
     if plan.reply is None:
+        raw: list[dict] = []
         search_ok = False
         try:
             provider = get_embedding_provider()
-            query_embeddings = provider.embed_texts([content])
+            query_embeddings = provider.embed_texts([_retrieval_query(content, plan, recent_user)])
             if query_embeddings:
-                chunks = await search_service.search_chunks(
-                    session=session,
-                    query_embedding=query_embeddings[0],
-                    top_k=MAX_RAG_CHUNKS,
-                    course_id=plan.course_id,
-                    week=plan.week,
-                    user_id=user_id,
-                )
+                raw = await _search(session, user_id, plan, query_embeddings[0])
                 search_ok = True
         except Exception as e:
             logger.warning(
                 "chat_stream_rag_failed",
                 error=await settings_service.redacted_error(session, user_id, e),
             )
-        if search_ok and plan.from_message and not chunks:
-            plan.reply = _no_material_reply(plan)
+            # Continue without RAG context: still useful for general conversation
+        chunks = _apply_floor(plan, raw, search_ok)
 
     # Yield user message ID
     yield {
@@ -522,6 +565,7 @@ async def stream_message(
         "data": {"id": user_msg.id},
     }
 
+    ai_called = plan.reply is None
     full_text = ""
     if plan.reply is not None:
         full_text = plan.reply
@@ -573,6 +617,8 @@ async def stream_message(
         created_at=utc_now(),
     )
     assistant_msg.action_json = plan.action
+    # Transient (not a column): lets the API skip metering when no AI call was made.
+    assistant_msg.ai_called = ai_called
     session.add(assistant_msg)
 
     # Update session metadata
@@ -592,6 +638,8 @@ async def stream_message(
             "citations_json": citations if citations else None,
             "action": plan.action,
         },
+        # Internal flag read by the API layer; never serialised to the client.
+        "ai_called": ai_called,
     }
 
     logger.info(

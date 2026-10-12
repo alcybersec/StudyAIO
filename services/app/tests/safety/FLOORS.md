@@ -9,7 +9,9 @@ test listed for it passes. A floor question that only the user can decide is hel
 in a `*_PENDING_RULING` dict, and a test per floor is red while that dict is not
 empty. The 2026-10-04 rulings emptied every one of them. The tier holds no `xfail`:
 the SAFETY-027 veto marker on the JWT default-secret check (floor 2) XPASSed on
-`8356b15` and was removed in SAFETY-028. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate.
+`8356b15` and was removed in SAFETY-028. SAFETY-033 added two **strict** `xfail`s on the
+email-redaction *backstop* (SEC-08), findings F1 and F2; both fixes landed (`06c4fcb`, `344ce7e`) and
+SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate.
 
 Run:
 
@@ -75,6 +77,40 @@ Mutation-checked in SAFETY-026, all caught: carried code looked up unscoped; wee
 | `…::test_floor2_email_unsubscribe_link_is_static_and_carries_no_token_or_pii[<sender>]` | Any `email_service.send_*` email lacks the footer unsubscribe link, or the link is anything but the static `<app_base_url>/settings/notifications` (no token, address or id; a signed one-click link would be a credential in every inbox and mail log). |
 
 Mutation-checked in SAFETY-026 (scratch copy, `scratchpad/mutate.py`), all caught: `studied` uncorrelated; opt-in correlation OR-widened; `User.email` selected; a route importing `find_nudge_candidates`; seeding for another owner; inbox row to another user; unsubscribe URL carrying the recipient.
+
+### AI feedback votes and usage events (GL#36, GL#37; backend `61694a6`)
+
+Pinned in M33-S1-SAFETY-033 over MiniDB (`_minidb.py`), so a dropped predicate changes
+the answer instead of hiding behind a mock that returns `None`. The two cross-user
+aggregates are classified in `UNSCOPED_FUNCTION_ALLOWED` (`ai_feedback_service.admin_summary`,
+`usage_service.retention_readout`) on the conditions pinned here.
+
+| Test | Fails when |
+|---|---|
+| `test_floor1_ai_feedback_usage.py::test_floor1_vote_on_foreign_target_is_a_404_identical_to_missing[<type>]` | For any target type, `PUT /api/feedback` on another user's summary, answer, chat message, flashcard or quiz question is not a 404 with the same body as a missing id (no cross-type existence oracle), or writes a vote or a usage event. |
+| `…::test_floor1_vote_on_own_target_is_stored_for_the_caller[<type>]` | The stored vote, its `course_id` or the `feedback_given` usage event is not the caller's. |
+| `…::test_floor1_every_feedback_target_type_is_seeded` | `TARGET_TYPES` gains a type the two tests above do not seed. |
+| `…::test_floor1_list_mine_returns_only_the_callers_votes`, `…::test_floor1_delete_never_removes_another_users_vote` | `GET /feedback/mine` returns another user's vote (even on the caller's own target id), or `DELETE` removes one. |
+| `…::test_floor1_usage_event_rejects_a_foreign_course`, `…::test_floor1_usage_event_is_recorded_for_the_caller[…]` | `POST /usage-events` accepts another user's `course_id`, or stores a row for anyone but the caller. |
+| `…::test_floor1_every_usage_record_uses_the_callers_id`, `…::test_floor1_usage_record_detector_is_red_on_another_users_id` | A `usage_service.record` call outside `app/api/`, or one whose user argument is not `<caller>.id` of the handler's `Depends(get_current_user[_or_default])` parameter. |
+| `…::test_floor1_admin_aggregates_are_called_only_from_their_admin_route[…]`, `…::test_floor1_admin_aggregate_routes_require_the_admin_role[…]`, `…::test_floor1_admin_gate_detector_is_red_without_the_role` | `admin_summary`/`retention_readout` are referenced anywhere but `ai_feedback.admin_ai_feedback`/`usage.retention`, or those routes lose `require_role("admin")` (a role list wider than admin also fails). |
+| `…::test_floor1_admin_feedback_summary_carries_no_user_identifier`, `…::test_floor1_retention_readout_projects_no_user_identifier`, `…::test_floor1_projection_detector_is_red_on_a_user_id` | The feedback aggregate returns a user id, target id or identifying key, or the retention queries project a bare `user_id`/`id`/`email`/`username` column (aggregates over them are fine). |
+
+Mutation-checked in SAFETY-033, all red: chat-target owner predicate dropped; `AIFeedback.user_id`
+predicates dropped; usage record with another user's id; the foreign-course check removed;
+`require_role("admin")` swapped for a plain caller on the retention route; `admin_summary` called from
+`GET /feedback/mine`.
+
+### Retrieval relevance floor and follow-ups (GL#35; `a290904`..`3f5e506`)
+
+| Test | Fails when |
+|---|---|
+| `test_floor1_retrieval_followup.py::test_floor1_every_chunk_search_carries_the_callers_id`, `…::test_floor1_search_scope_detector_*` | A `search_chunks` (or chat's `_search`) call passes a user that is not the enclosing function's `user_id` parameter or `<caller>.id`. |
+| `…::test_floor1_followup_query_uses_only_the_callers_own_history[…]` | Send and stream, over MiniDB: the follow-up retrieval query folds in anything but the caller's own previous message from the caller's own session (another user's newer message is seeded as bait), or the search is not keyed on the caller. |
+| `…::test_floor1_foreign_session_is_refused_before_any_embedding[…]` | A foreign chat session reaches embedding, search or the agent, or writes a message. |
+
+Mutation-checked in SAFETY-033, all red: `_search` keyed on another user; the history query's
+`session_id` filter replaced by `role == "user"`.
 
 The deeper layers live in other tiers: `tests/integration/test_idor_row_level.py`
 runs against a real database, and `tests/unit/api/test_endpoint_scoping_guard.py`
@@ -200,6 +236,31 @@ multiprocess tmpfs. The policy is the one in `app/pipeline/metrics.py`.
 Mutation-checked in SAFETY-005, all red: a `user_id` label on `STAGE_FAILURES`; `error_class` carrying
 `f"{type(exc).__name__}: {exc}"`; `STUCK_FAILED.labels(stage=artifact.id)`; `Instrumentator(should_group_untemplated=False)`.
 
+### No email address in logs (SEC-08, GL#38; backend `40474fb`)
+
+Addresses are personal data, not credentials, so this rides floor 2's "never logged" discipline
+rather than its text. The call-site rule is the floor-grade layer; the redaction processor and
+filter are a backstop.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_no_email_in_logs.py::test_floor2_no_log_call_in_app_passes_an_email` | A log call in `app/**` (`debug`…`critical`, `fatal`, `msg`, `log`, `bind`, `new`, or `bind_contextvars`) passes an identifier ending in `email`/`emails`/`email_address`, a recipient name, a `["email"]` subscript or `.get("email")`, as a keyword, positional or inside an f-string. Wider than the backend's unit sweep, which matched four exact names. |
+| `…::test_floor2_email_log_detector_is_red_on[…]`, `…::test_floor2_email_log_detector_accepts[…]` | The detector misses one of 13 violation shapes (incl. `email=user.email`) or flags `email_verified`/`email_sent`. |
+| `…::test_floor2_redaction_runs_after_exc_formatting_and_right_before_the_renderer` | After `configure_logging`, `redact_emails` is missing, runs before `format_exc_info`, or anything but the renderer follows it. |
+| `…::test_floor2_every_root_handler_has_the_email_filter` | A root handler present after `configure_logging` lacks `EmailRedactingFilter`. |
+| `…::test_floor2_structlog_line_reaches_the_handler_without_an_address` | An address in a field, the event, a nested value, an `exc_info=True` traceback or a stdlib record reaches the handler stream. |
+| `…::test_floor2_logger_exception_traceback_is_redacted` | Finding F1 (fixed `06c4fcb`, promoted SAFETY-040). `log.exception(...)` reaches stdlib `Logger.exception`, whose formatter appends a traceback after the message; it fails when `EmailRedactingFilter` stops rendering and scrubbing `exc_text` (and `stack_info`). Covers only handlers carrying the filter: a handler attached after `configure_logging` must add it itself. |
+| `…::test_floor2_worker_configures_redacting_logging` | Finding F2 (fixed `344ce7e`, promoted SAFETY-040). `app/worker.py` no longer calls `configure_logging`. |
+| `…::test_floor2_worker_setup_logging_signal_installs_the_filter` | Firing Celery's `setup_logging` signal (as worker and beat do at start) finds no receiver from `app.worker`, or leaves `redact_emails` out of structlog or a root handler without `EmailRedactingFilter`. Prefork children inherit the parent's configured root logger. |
+| `…::test_floor2_profile_payload_hides_the_raw_consent_record` | The profile payload or its serialization schema exposes `ai_processing_consent_at`/`_version` (only `ai_consent_required` is public). |
+| `…::test_floor2_usage_properties_cannot_carry_free_text`, `…::test_floor2_feedback_comment_never_reaches_a_log_or_usage_event`, `…::test_floor2_comment_leak_detector_is_red`, `…::test_floor2_feedback_comment_absent_from_events_and_logs` | Usage-event properties admit a free-text key or value, or an AI-feedback comment is passed to a log call or `usage_service.record` (statically, and through `PUT /api/feedback`). |
+
+Mutation-checked in SAFETY-033, all red: `logger.info(..., email=user.email)` in `consent_service`;
+`exclude=True` removed from the consent timestamp; the comment added to the usage properties.
+Mutation-checked in SAFETY-040, all red: `app/core/logging.py` reverted to before `06c4fcb` (the F1 test);
+`app/worker.py` reverted to before `344ce7e` (both worker tests); only the `@setup_logging.connect` decorator
+removed (the signal test, which the AST check alone misses).
+
 ## 3. AI only via the adapter (amended by ADR 0003 and ADR 0005)
 
 > every AI call goes through a sanctioned gateway, either AgentAdapter obtained via
@@ -258,6 +319,39 @@ the check for the default admin's id (3); both `record_ai_call`s removed (3); re
 `if not metered` (4); chat send without its check (1); `concept_service` recording on `course_id` (1);
 qa's check inside `try/except: pass` (1); the factory falling back to the instance on an own config with
 no key (1).
+
+### AI-processing consent precedes every AI spend (SEC-08, GL#38; backend `40474fb`, `275bc9f`)
+
+A floor-adjacent guard under floor 3: lecture content leaves the instance when a provider is
+called. The route set is **derived**: every live route whose handler reaches a call to
+`check_ai_quota`, `get_agent`, `resume_pipeline`, `run_pipeline`, `.apply_async` or `.delay`,
+directly or through a function in `app/api`, `app/services` or `app/core` (import aliases and
+same-module helpers followed). 13 routes today, equal to the backend's hand list.
+
+| Test | Fails when |
+|---|---|
+| `test_floor3_ai_consent_gate.py::test_floor3_every_ai_route_requires_consent` | A derived route lacks `require_ai_consent` in its dependency tree. `CONSENT_EXEMPT` (empty) is the only way out, with a reason. |
+| `…::test_floor3_consent_route_derivation_is_not_vacuous`, `…::test_floor3_consent_resolver_follows_imports_and_helpers`, `…::test_floor3_consent_exemptions_are_live` | The resolver stops reaching any of the 13 known AI routes, misses a direct, helper, imported-name or module-alias path on synthetic source, or an exemption is stale. |
+| `…::test_floor3_unconsented_caller_is_refused_before_any_sink` | Any derived route answers an unconsented caller with anything but `403 ai_consent_required`, or a sink (every `get_agent`/`run_pipeline`/`resume_pipeline`/`check_ai_quota` bound in an `app.*` module, and Celery `Task.apply_async`/`delay`) is reached. |
+| `…::test_floor3_outdated_consent_version_is_refused` | A consent recorded to older disclosure wording passes. |
+| `…::test_floor3_consent_has_no_role_tier_or_self_hosted_bypass[…]`, `…::test_floor3_single_user_mode_is_the_only_consent_bypass` | Outside single-user mode a role (admin, demo), tier or `self_hosted` exempts an unconsented user, `consent_required` gains a second early branch, or `require_ai_consent` gains a branch. |
+| `…::test_floor3_consent_error_is_not_swallowed_in_app` | Code in `app/` catches `AiConsentRequiredError` or `AuthorizationError` without re-raising (the login throttle re-raises). |
+
+Mutation-checked in SAFETY-033: removing `dependencies=[Depends(require_ai_consent)]` from
+`POST /api/qa/ask` turns four tests red.
+
+### Fixed replies are not metered, and only they (GL#35)
+
+| Test | Fails when |
+|---|---|
+| `test_floor1_retrieval_followup.py::test_floor3_ai_called_matches_whether_the_agent_was_built[…]` | Send and stream, below and above the relevance floor: `ai_called` disagrees with whether `get_agent` was called. |
+| `…::test_floor3_ai_called_flag_is_tied_to_the_agent_branch[…]`, `…::test_floor3_ai_flag_detector_is_red_on[…]` | In `chat_service`, `ai_called` is not exactly `plan.reply is None`, is assigned twice, `plan.reply` is written after it, or `get_agent` is reachable outside the `plan.reply is None` branch. |
+| `…::test_floor3_chat_api_skips_metering_only_on_an_explicit_false` | `api/chat.py` skips `record_ai_call` on anything but an explicit `ai_called is False` (send) or a stream event carrying `ai_called: False`. |
+
+Mutation-checked in SAFETY-033: `ai_called = False` in `send_message` turns two tests red. GL#35 adds
+no `get_agent` or embedding call site: the ADR 0003 and ADR 0005 allowlist tests stay exact. Its new
+counter `studyaio_retrieval_below_floor_total` declares only the `stage` label, which the metrics-label
+pin accepts.
 
 ## 4. User data is never lost (amended by ADR 0004)
 

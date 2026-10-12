@@ -1046,6 +1046,16 @@ UNSCOPED_FUNCTION_ALLOWED = {
         "rows and a status, never a delete, and only app/worker.py names it. Pinned by "
         "test_floor1_worker_jobs.py (SAFETY-027)"
     ),
+    ("app/services/ai_feedback_service.py", "admin_summary"): (
+        "admin aggregate (GL#36): only api/ai_feedback.py::admin_ai_feedback calls it, behind "
+        "require_role('admin'); returns counts and recent thumbs-down comments with no user id, "
+        "email or username. Pinned by test_floor1_ai_feedback_usage.py (SAFETY-033)"
+    ),
+    ("app/services/usage_service.py", "retention_readout"): (
+        "admin aggregate (GL#37): only api/usage.py::retention calls it, behind "
+        "require_role('admin'); projects counts per cohort week / feature, never a user id. "
+        "Pinned by test_floor1_ai_feedback_usage.py (SAFETY-033)"
+    ),
     ("app/services/asset_service.py", "save_flashcards"): (
         "pipeline write path (pipeline/assets.py) with ids the worker resolved from its artifact"
     ),

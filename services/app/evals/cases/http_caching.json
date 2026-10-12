@@ -1,0 +1,88 @@
+{
+  "id": "http_caching",
+  "title": "HTTP Caching",
+  "course": "CSIT314",
+  "week": 5,
+  "shape": "two_files",
+  "notes": "One week made of two uploaded files: slides on cache headers and a separate lab sheet on conditional requests. The summary must integrate both; coverage of only one file fails. Traps: CDNs and service workers, neither mentioned in either file.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 5 — HTTP Caching (slides).\n\nA cache stores a response so a repeat request need not reach the origin server. Cache-Control: max-age=N says the response is fresh for N seconds; within that time the cache serves it without contacting the origin. no-store forbids caching altogether.",
+      "file": "slides.pdf"
+    },
+    {
+      "page": 2,
+      "text": "A stale response is not necessarily wrong. The cache can revalidate it, asking the origin whether it changed.",
+      "file": "slides.pdf"
+    },
+    {
+      "page": 1,
+      "file": "lab.pdf",
+      "text": "Lab 5 — Conditional requests.\n\nThe origin sends an ETag, an identifier for the version of the response. On revalidation the client sends If-None-Match with that ETag. If the resource is unchanged the origin replies 304 Not Modified with no body, saving bandwidth; otherwise it replies 200 with the new body.\n\nTask: use curl to fetch a resource twice and observe the 304."
+    }
+  ],
+  "must_mention": [
+    "Cache-Control",
+    "max-age",
+    "no-store",
+    "stale",
+    "revalidate",
+    "ETag",
+    "If-None-Match",
+    "304 Not Modified"
+  ],
+  "must_not_mention": [
+    "CDN",
+    "service worker",
+    "Vary",
+    "stale-while-revalidate",
+    "Last-Modified"
+  ],
+  "required_facts": [
+    {
+      "fact": "max-age=N means fresh for N seconds, served without contacting the origin",
+      "all": [
+        "max-age",
+        "fresh",
+        "origin"
+      ]
+    },
+    {
+      "fact": "no-store forbids caching",
+      "all": [
+        "no-store",
+        "forbids"
+      ]
+    },
+    {
+      "fact": "a stale response is not necessarily wrong and can be revalidated",
+      "all": [
+        "stale",
+        "not necessarily wrong",
+        "revalidate"
+      ]
+    },
+    {
+      "fact": "If-None-Match with the ETag yields 304 Not Modified with no body if unchanged",
+      "all": [
+        "ETag",
+        "If-None-Match",
+        "304 Not Modified",
+        "no body"
+      ]
+    },
+    {
+      "fact": "the lab uses curl",
+      "all": [
+        "curl"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "claims a stale response must be discarded",
+      "pattern": "stale[^.]*(must|should) be (discarded|deleted)"
+    }
+  ]
+}

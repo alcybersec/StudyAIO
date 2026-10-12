@@ -168,9 +168,9 @@ async def create_email_invite(
     invite.email = email
     invite.token_hash = hash_magic_link_token(raw_token)
     await session.flush()
-    # The address is logged, the token never is. An invite link in a log line is
-    # a working credential for anyone who can read logs.
-    logger.info("invite_email_created", invite_id=invite.id, email=email)
+    # Neither the address nor the token is logged (SEC-08). An invite link in a
+    # log line is a working credential for anyone who can read logs.
+    logger.info("invite_email_created", invite_id=invite.id)
     return MintedInvite(invite=invite, raw_token=raw_token)
 
 
@@ -240,7 +240,7 @@ async def resend_email_invite(
     if expires_in_days is not None:
         invite.expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
     await session.flush()
-    logger.info("invite_email_resent", invite_id=invite.id, email=invite.email)
+    logger.info("invite_email_resent", invite_id=invite.id)
     return MintedInvite(invite=invite, raw_token=raw_token)
 
 

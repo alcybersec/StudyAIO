@@ -28,6 +28,7 @@ from app.services import (
     streak_service,
     study_service,
     timed_session_service,
+    usage_service,
     xp_service,
 )
 
@@ -71,11 +72,19 @@ async def post_review(
 ) -> ReviewResponse:
     """Record a flashcard review."""
     # Verify the flashcard exists AND belongs to the caller (foreign == not found)
-    if not await srs_service.get_owned_flashcard(session, body.flashcard_id, user_id=user.id):
+    card = await srs_service.get_owned_flashcard(session, body.flashcard_id, user_id=user.id)
+    if not card:
         raise HTTPException(status_code=404, detail="Flashcard not found")
 
     review = await srs_service.record_review(
         session, body.flashcard_id, body.quality, user_id=user.id
+    )
+    await usage_service.record(
+        session,
+        user.id,
+        "flashcard_reviewed",
+        course_id=card.course_id,
+        properties={"quality": body.quality},
     )
     await session.commit()
 
@@ -128,9 +137,10 @@ async def post_quiz_attempt(
 ) -> QuizAttemptResponse:
     """Record a quiz attempt."""
     # Verify the question (and optional exam) exist AND belong to the caller
-    if not await exam_service.get_owned_quiz_question(
+    question = await exam_service.get_owned_quiz_question(
         session, body.quiz_question_id, user_id=user.id
-    ):
+    )
+    if not question:
         raise HTTPException(status_code=404, detail="Quiz question not found")
     if body.exam_id and not await exam_service.get_exam(session, body.exam_id, user_id=user.id):
         raise HTTPException(status_code=404, detail="Exam not found")
@@ -142,6 +152,13 @@ async def post_quiz_attempt(
         is_correct=body.is_correct,
         exam_id=body.exam_id,
         time_spent_ms=body.time_spent_ms,
+    )
+    await usage_service.record(
+        session,
+        user.id,
+        "quiz_answered",
+        course_id=question.course_id,
+        properties={"is_correct": bool(body.is_correct)},
     )
     await session.commit()
 

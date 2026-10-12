@@ -13,6 +13,7 @@ e2e-tests job already exports it.
 
     python3 e2e/seed_e2e.py course CODE [--concepts N]
     python3 e2e/seed_e2e.py admin EMAIL PASSWORD
+    python3 e2e/seed_e2e.py user EMAIL PASSWORD
 
 Both are idempotent. `course` seeds for the owner a self-hosted API resolves
 requests to (the default admin, created here if no API request has made it yet).
@@ -21,6 +22,7 @@ requests to (the default admin, created here if no API request has made it yet).
 import argparse
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parents[2] / "app"
@@ -46,7 +48,9 @@ def _owner(session: Session) -> User:
     """The user a self-hosted API attributes unauthenticated requests to."""
     user = session.get(User, DEFAULT_ADMIN_ID)
     if user is None:
-        user = session.execute(select(User).where(User.role == "admin").limit(1)).scalar_one_or_none()
+        user = session.execute(
+            select(User).where(User.role == "admin").limit(1)
+        ).scalar_one_or_none()
     if user is None:
         user = User(
             id=DEFAULT_ADMIN_ID,
@@ -56,6 +60,8 @@ def _owner(session: Session) -> User:
             tier="pro",
             is_active=True,
             email_verified=True,
+            ai_processing_consent_at=datetime.now(UTC),
+            ai_processing_consent_version=1,
         )
         session.add(user)
         session.flush()
@@ -74,7 +80,9 @@ def seed_course(session: Session, code: str, concepts: int) -> None:
     have = {
         n
         for (n,) in session.execute(
-            select(Concept.name).where(Concept.course_id == course.id, Concept.user_id == owner.id)
+            select(Concept.name).where(
+                Concept.course_id == course.id, Concept.user_id == owner.id
+            )
         )
     }
     for i in range(1, concepts + 1):
@@ -104,6 +112,27 @@ def seed_admin(session: Session, email: str, password: str) -> None:
     user.tier = "pro"
     user.is_active = True
     user.email_verified = True
+    # AI-spending routes answer 403 until consent is recorded (GL#38).
+    user.ai_processing_consent_at = datetime.now(UTC)
+    user.ai_processing_consent_version = 1
+
+
+def seed_user(session: Session, email: str, password: str) -> None:
+    """Create (or reset) an ordinary, consented user who can log in.
+
+    Specs use this instead of POST /api/auth/register: registration is limited
+    to 3/minute per client, a budget the auth spec needs for itself.
+    """
+    user = session.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if user is None:
+        user = User(email=email, username=email.split("@")[0])
+        session.add(user)
+    user.hashed_password = hash_password(password)
+    user.role = "user"
+    user.is_active = True
+    user.email_verified = True
+    user.ai_processing_consent_at = datetime.now(UTC)
+    user.ai_processing_consent_version = 1
 
 
 def main() -> None:
@@ -115,6 +144,9 @@ def main() -> None:
     a = sub.add_parser("admin")
     a.add_argument("email")
     a.add_argument("password")
+    u = sub.add_parser("user")
+    u.add_argument("email")
+    u.add_argument("password")
     args = parser.parse_args()
 
     url = os.environ.get("DATABASE_URL_SYNC") or settings.database_url_sync
@@ -122,6 +154,8 @@ def main() -> None:
     with Session(engine) as session:
         if args.cmd == "course":
             seed_course(session, args.code, args.concepts)
+        elif args.cmd == "user":
+            seed_user(session, args.email, args.password)
         else:
             seed_admin(session, args.email, args.password)
         session.commit()

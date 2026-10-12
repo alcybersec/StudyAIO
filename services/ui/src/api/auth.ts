@@ -4,6 +4,7 @@ import type {
   AccountDeleteRequest,
   AuthConfig,
   AuthUser,
+  ConsentResponse,
   ChangePasswordRequest,
   ForgotPasswordRequest,
   LoginRequest,
@@ -23,6 +24,10 @@ export const authApi = {
   config: () => api.get<AuthConfig>('/auth/config'),
 
   me: () => api.get<AuthUser>('/auth/me'),
+
+  /** Record AI-processing consent; `version` is the wording the user was shown (409 if stale). */
+  consent: (version?: number | null) =>
+    api.post<ConsentResponse>('/auth/consent', version != null ? { version } : undefined),
 
   login: (data: LoginRequest) => api.post<AuthUser>('/auth/login', data),
 

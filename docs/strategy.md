@@ -92,8 +92,8 @@ note without a pasted run is not evidence and the Orchestrator re-runs the tests
 | ID | Name | Status |
 |---|---|---|
 | M31 | Maintenance | closed 2026-10-08 (CONDITIONAL; C1–C6 → M32) |
-| M32 | Safe to grow (audit S1 + security/money/integrity S2) | open |
-| M33 | Trust and retention (audit AI quality, usage, onboarding, strategic bet) | not started |
+| M32 | Safe to grow (audit S1 + security/money/integrity S2) | closed 2026-10-11 (CONDITIONAL accepted; G4 → M33) |
+| M33 | Trust and retention + weak-spot engine | open |
 
 ## 11. Task graph
 
@@ -202,30 +202,59 @@ audit: every S1 (SEC-01, AGENT-01) closed with a floor pin shown red on the hole
 on every AI-spending route with non-zero ceilings in prod; no open audit S2 in security, money or data
 integrity (SEC-03, SEC-05, SEC-06, BILL-01, TECH-04, TECH-05, TECH-06); `safety` APPROVE.
 
-### M33 — Trust and retention (outline; tasks cut at the M32 gate)
+### M33 — Trust and retention
 
-Source: `docs/audits/2026-10-10-product-audit.md`. Theme: make the AI measurably trustworthy and learn
-whether people come back, before building more.
+Source: `docs/audits/2026-10-10-product-audit.md`. Theme: make the AI measurably trustworthy and learn whether
+people come back. **Strategic bet (user, 2026-10-11): the weak-spot engine** (audit §5, MKT-03) — practice
+generated from each student's own mistakes, review state and exam dates, which a generic chat tool doesn't have.
 
-- **AI trust:** AI-07 (summary faithfulness, slide citations, no outside material), AI-10 (eval set beyond
-  3 cases, evals in CI, user feedback on AI output), AI-06 (relevance floor; follow-up retrieval),
-  AI-01 (per-backend model choice, no full-week re-summarise per upload, prompt caching), AI-12 (prompt/model
-  version on rows; drop drifted inline prompts), AI-09 (structured output, retry on malformed replies).
-- **Usage and retention:** PROD-10 (per-feature usage events, D7/D30), PROD-06 (onboarding; no empty
-  dashboard), UX-01 (pipeline progress survives navigation), PROD-05 (edit/delete/add AI flashcards and quiz
-  items), PROD-07 (course/week picker on upload).
-- **Compliance:** SEC-08 (AI-processing disclosure/consent; no emails in logs).
-- **Debt:** TECH-07 (async embedding; no DB connection across LLM calls), TECH-09 (separate queues),
-  TECH-11 (type checker; easier integration tier; slimmer images), UX-02, UX-03, UX-04, UX-07, PROD-09
-  (OCR, URL import), PROD-11 (README).
-- **One strategic bet, chosen by the user at the M32 gate** (audit §5): trust as the wedge, weak-spot
-  engine, shared course spaces (PROD-04), self-host/BYO-model, Arabic/RTL, or certification prep.
-- **Validation track (audit §6), user-owned:** D7/D30 on the current users, fake-door Pro, shared-course
-  seed, instructor interviews.
+**Entry conditions**
 
-**Gate additions (draft):** summary faithfulness measured on ≥ 20 cases in CI with a baseline and a
-non-regression threshold; Q&A and summary citations grounded and pinned; per-feature usage events live in
-prod with a D7/D30 readout for the current users.
+- [x] M32 gate accepted by the user (2026-10-11, CONDITIONAL; G4 carried).
+- [x] Strategic bet chosen (weak-spot engine).
+
+**Tasks** — S1 is the trust and measurement baseline the bet is judged by; S2 is the weak-spot engine
+(contract-first); S3 is retention UX and debt. Owners split by path per §2.
+
+*S1 — carried condition, trust baseline, measurement*
+
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M33-S1-OPS-004 | Orchestrator, `devops` | M32 G4: first scheduled `daily-backup` | A scheduled run succeeds on prod and `studyaio_backup_last_success_timestamp_seconds` advances |
+| M33-S1-AI-012 | `ai` | AI-10: eval set has 3 cases, not in CI | ≥ 20 summary cases (synthetic lecture texts), faithfulness + structure scored, run in CI with a stored baseline and a non-regression threshold |
+| M33-S1-AI-013 | `ai`, `frontend` | AI-07: summaries uncited, prompt invites outside material | Every Key Concepts claim carries a slide/page citation from the extraction; outside material flagged; faithfulness on the eval set ≥ baseline + agreed margin |
+| M33-S1-AI-014 | `ai`, `backend` | AI-06: no relevance floor; follow-ups retrieve on the bare message | Retrieval below a relevance floor answers "not in your materials"; follow-ups retrieve on the carried scope + rewritten query; pinned by tests |
+| M33-S1-BACKEND-015 | `backend`, `frontend`, `data` | AI-10: no user feedback on AI output | Thumbs up/down + reason on summaries, answers, cards and quiz items, stored per user (floor 1), visible in admin |
+| M33-S1-BACKEND-016 | `backend`, `data`, `frontend` | PROD-10: no per-feature usage visibility | Per-feature usage events (no content, no PII), admin D7/D30 readout per cohort |
+| M33-S1-BACKEND-017 | `backend`, `frontend`, `safety` | SEC-08: no AI-processing disclosure/consent; emails in logs | Consent shown and recorded before first AI processing; no email address in any log line (floor-2 pin) |
+
+*S2 — weak-spot engine (contract-first)*
+
+| ID | Owner | Outputs | Acceptance |
+|---|---|---|---|
+| M33-S2-ARCH-018 | `architect` | ADR 0007 weak-spot model: inputs (quiz attempts, flashcard reviews/SM-2, exam dates, concept/week tags), score formula, cold-start rule, where generation runs (ADR 0003 call sites, quota); `docs/CONTRACTS.md` entries for the service and API | ADR Accepted by the user; contract tests red until implemented |
+| M33-S2-DATA-019 | `data` | Topic/concept mastery storage keyed by user (or a derived view), indexes for the scoring query; migration | Single head; upgrade/downgrade on pg16; every row carries `user_id` |
+| M33-S2-BACKEND-020 | `backend` | `weakspot_service`: per-user, per-course/week weak-topic scores weighted by exam proximity; "study tonight" plan; API endpoints | Owner-scoped (wiring asserted); deterministic scoring unit tests; contract tests green |
+| M33-S2-AI-021 | `ai` | Targeted quiz/card generation for weak topics via the adapter, citing the source slide; prompt + eval cases | Generated items cite slides; eval: items target the requested topic ≥ threshold; quota and metering on the call path |
+| M33-S2-FRONTEND-022 | `frontend` | "Study tonight" on the dashboard, mastery heatmap per course/week, diagnostic quiz for cold start | Works at 375px; empty/loading/error states; i18n en+ru |
+| M33-S2-QA-023 | `qa` | Integration + e2e for the weak-spot flow | Attempts → scores → plan → targeted quiz, end to end, on real Postgres and Playwright |
+| M33-S2-SAFETY-024 | `safety` | Floor review of S2 | Floor 1 on new tables/endpoints, floor 3 (adapter + ADR 0003 site list), quota on generation; APPROVE |
+
+*S3 — retention UX and debt*
+
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M33-S3-FRONTEND-025 | `frontend`, `backend` | PROD-06: no onboarding; empty widgets | First-run flow (upload → first summary → diagnostic quiz); no empty widget without a call to action |
+| M33-S3-FRONTEND-026 | `frontend` | UX-01: pipeline progress lost when leaving Upload | Progress persists across navigation; week badge refreshes |
+| M33-S3-BACKEND-027 | `backend`, `frontend` | PROD-05: AI cards/quiz items can't be edited/deleted/added | CRUD on cards and quiz items, owner-scoped, versioned (floor 4: no silent loss) |
+| M33-S3-FRONTEND-028 | `frontend`, `backend` | PROD-07: no course/week picker on upload | Optional picker overrides AI routing; review item only when not chosen |
+| M33-S3-AI-029 | `ai` | TECH-07: sync embedding blocks the loop; DB connection held across LLM calls | Embedding off the event loop; no session held across a provider call (pinned) |
+| M33-S3-DEVOPS-030 | `devops`, `ai` | TECH-09: one Celery queue for pipeline and beat jobs | Separate queues; beat jobs can't starve the pipeline |
+
+**Gate additions:** G4 closed; summary faithfulness measured on ≥ 20 cases in CI with a baseline and a
+non-regression threshold; summary and Q&A citations grounded and pinned; per-feature usage events live in prod
+with a D7/D30 readout; weak-spot engine live: plans generated for active users, targeted items cite slides, D7/D30
+of users with a plan reported against those without; `safety` APPROVE.
 
 ### Later milestones (outline only, not yet scoped)
 

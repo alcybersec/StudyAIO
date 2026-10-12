@@ -1,0 +1,76 @@
+{
+  "id": "binary_search_trees",
+  "title": "Binary Search Trees",
+  "course": "CSIT101",
+  "week": 4,
+  "shape": "code_heavy",
+  "notes": "Code-heavy lecture. The source shows insertion and search as Python and states that an ordered insert sequence produces a degenerate tree with O(n) height. The traps are self-balancing variants (AVL, red-black) that every data structures course teaches next but this lecture never names.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 4 — Binary Search Trees.\n\nA binary search tree (BST) keeps the invariant: every key in the left subtree is smaller than the node, every key in the right subtree is larger. Search and insert follow one path from the root, so their cost is the height of the tree."
+    },
+    {
+      "page": 2,
+      "text": "def insert(node, key):\n    if node is None:\n        return Node(key)\n    if key < node.key:\n        node.left = insert(node.left, key)\n    else:\n        node.right = insert(node.right, key)\n    return node\n\ndef search(node, key):\n    while node and node.key != key:\n        node = node.left if key < node.key else node.right\n    return node"
+    },
+    {
+      "page": 3,
+      "text": "A balanced tree has height about log n, so search is O(log n). But inserting keys in sorted order builds a degenerate tree, effectively a linked list, with height n and O(n) search.\n\nIn-order traversal visits left subtree, node, right subtree and yields the keys in sorted order."
+    }
+  ],
+  "must_mention": [
+    "binary search tree",
+    "invariant",
+    "left subtree",
+    "right subtree",
+    "height",
+    "in-order traversal",
+    "degenerate"
+  ],
+  "must_not_mention": [
+    "AVL",
+    "red-black",
+    "B-tree",
+    "splay tree",
+    "treap"
+  ],
+  "required_facts": [
+    {
+      "fact": "search and insert cost is the tree height",
+      "all": [
+        "height",
+        "search",
+        "insert"
+      ]
+    },
+    {
+      "fact": "balanced height is about log n giving O(log n)",
+      "all": [
+        "O(log n)",
+        "balanced"
+      ]
+    },
+    {
+      "fact": "sorted-order insertion degenerates to O(n)",
+      "all": [
+        "sorted order",
+        "degenerate",
+        "O(n)"
+      ]
+    },
+    {
+      "fact": "in-order traversal yields sorted keys",
+      "all": [
+        "in-order traversal",
+        "sorted"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "claims the tree rebalances itself",
+      "pattern": "(re-?balanc\\w+ itself|self-balanc)"
+    }
+  ]
+}

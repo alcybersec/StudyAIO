@@ -1,0 +1,83 @@
+{
+  "id": "process_scheduling",
+  "title": "CPU Scheduling",
+  "course": "CSIT203",
+  "week": 3,
+  "shape": "standard",
+  "notes": "Comparison lecture (policies as a table in the source). Traps: modern production schedulers and real-time policies the lecture never mentions; a summary importing those has left the course.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 3 — CPU Scheduling.\n\nThe scheduler picks which ready process runs next. Metrics: turnaround time (completion minus arrival), waiting time (time spent ready but not running) and response time (arrival to first run).\n\nFirst-come first-served (FCFS) runs processes in arrival order, without preemption. A long job at the front makes everything behind it wait: the convoy effect."
+    },
+    {
+      "page": 2,
+      "text": "Shortest job first (SJF) runs the process with the shortest next CPU burst. It minimises average waiting time but needs the burst length in advance, which the system does not know, and long jobs can starve.\n\nRound robin (RR) gives each process a fixed time quantum, then preempts it and moves it to the back of the queue. Response time is good. If the quantum is too large RR behaves like FCFS; too small and context-switch overhead dominates."
+    },
+    {
+      "page": 3,
+      "text": "Example: bursts 24, 3, 3 arriving together. FCFS order P1, P2, P3 gives waiting times 0, 24, 27: average 17. SJF order P2, P3, P1 gives 0, 3, 6: average 3."
+    }
+  ],
+  "must_mention": [
+    "scheduler",
+    "turnaround time",
+    "waiting time",
+    "convoy effect",
+    "shortest job first",
+    "round robin",
+    "time quantum",
+    "starve"
+  ],
+  "must_not_mention": [
+    "multilevel feedback queue",
+    "completely fair scheduler",
+    "earliest deadline first",
+    "lottery scheduling",
+    "priority inversion"
+  ],
+  "required_facts": [
+    {
+      "fact": "FCFS suffers the convoy effect",
+      "all": [
+        "FCFS",
+        "convoy effect"
+      ]
+    },
+    {
+      "fact": "SJF minimises average waiting time but needs burst length in advance",
+      "all": [
+        "shortest job first",
+        "minimises average waiting time",
+        "in advance"
+      ]
+    },
+    {
+      "fact": "SJF can starve long jobs",
+      "all": [
+        "starve"
+      ]
+    },
+    {
+      "fact": "RR too large a quantum behaves like FCFS, too small wastes time switching",
+      "all": [
+        "quantum",
+        "FCFS",
+        "context-switch"
+      ]
+    },
+    {
+      "fact": "example average waiting 17 under FCFS and 3 under SJF",
+      "all": [
+        "17",
+        "3"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "says Linux uses a specific scheduler",
+      "pattern": "\\bLinux\\b"
+    }
+  ]
+}

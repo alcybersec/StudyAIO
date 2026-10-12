@@ -43,6 +43,7 @@ immediately with an explanation instead of 35 opaque `TimeoutError`s.
 """
 
 import os
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
@@ -194,8 +195,9 @@ def _run_migrations(_verify_app_wiring, _require_env):
     with engine2.connect() as conn:
         conn.execute(
             sqlalchemy.text(
-                "INSERT INTO users (id, email, username, role, tier, is_active, email_verified, mfa_enabled) "
-                "VALUES (:id, :email, :username, 'admin', 'free', true, false, false) "
+                "INSERT INTO users (id, email, username, role, tier, is_active, email_verified, mfa_enabled, "
+                "ai_processing_consent_at, ai_processing_consent_version) "
+                "VALUES (:id, :email, :username, 'admin', 'free', true, false, false, now(), 1) "
                 "ON CONFLICT (id) DO NOTHING"
             ),
             {
@@ -316,6 +318,8 @@ async def integration_client(db_session, test_user_id):
         is_active=True,
         email_verified=False,
         mfa_enabled=False,
+        ai_processing_consent_at=datetime.now(UTC),
+        ai_processing_consent_version=1,
     )
 
     async def override_user(
@@ -362,6 +366,8 @@ async def make_user(db_session):
         tier: str = "free",
         email_verified: bool = True,
         is_active: bool = True,
+        consented: bool = True,
+        created_at: datetime | None = None,
     ) -> User:
         uid = generate_id()
         user = User(
@@ -374,7 +380,13 @@ async def make_user(db_session):
             is_active=is_active,
             email_verified=email_verified,
             mfa_enabled=False,
+            # AI-spending routes are 403 without consent (GL#38); pass
+            # consented=False to exercise the gate.
+            ai_processing_consent_at=datetime.now(UTC) if consented else None,
+            ai_processing_consent_version=1 if consented else None,
         )
+        if created_at is not None:
+            user.created_at = created_at
         db_session.add(user)
         await db_session.flush()
         return user
@@ -500,6 +512,8 @@ async def committed_user():
                 is_active=True,
                 email_verified=True,
                 mfa_enabled=False,
+                ai_processing_consent_at=datetime.now(UTC),
+                ai_processing_consent_version=1,
             )
             session.add(user)
             await session.commit()

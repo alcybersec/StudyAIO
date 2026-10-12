@@ -1,0 +1,79 @@
+{
+  "id": "sql_joins",
+  "title": "SQL Queries and Joins",
+  "course": "CSIT302",
+  "week": 4,
+  "shape": "code_heavy",
+  "notes": "Code-heavy SQL lecture. Checks that the summary keeps INNER vs LEFT semantics (NULLs for unmatched rows) rather than blurring them. Traps: window functions, CTEs and indexes, the usual next lecture.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 4 — SQL Joins.\n\nTables: students(id, name) and enrolments(student_id, course).\n\nSELECT s.name, e.course\nFROM students s\nINNER JOIN enrolments e ON e.student_id = s.id;\n\nAn INNER JOIN keeps only rows that match on the ON condition. A student with no enrolment does not appear."
+    },
+    {
+      "page": 2,
+      "text": "SELECT s.name, e.course\nFROM students s\nLEFT JOIN enrolments e ON e.student_id = s.id;\n\nA LEFT JOIN keeps every row of the left table. Where there is no match the right-hand columns are NULL. To find students with no enrolment add WHERE e.course IS NULL."
+    },
+    {
+      "page": 3,
+      "text": "GROUP BY collapses rows into groups so an aggregate such as COUNT can be computed per group:\n\nSELECT s.name, COUNT(e.course)\nFROM students s LEFT JOIN enrolments e ON e.student_id = s.id\nGROUP BY s.name;\n\nWHERE filters rows before grouping; HAVING filters groups after."
+    }
+  ],
+  "must_mention": [
+    "INNER JOIN",
+    "LEFT JOIN",
+    "NULL",
+    "ON condition",
+    "GROUP BY",
+    "COUNT",
+    "HAVING",
+    "WHERE"
+  ],
+  "must_not_mention": [
+    "window function",
+    "common table expression",
+    "FULL OUTER JOIN",
+    "index",
+    "subquery"
+  ],
+  "required_facts": [
+    {
+      "fact": "INNER JOIN keeps only matching rows",
+      "all": [
+        "INNER JOIN",
+        "only",
+        "match"
+      ]
+    },
+    {
+      "fact": "LEFT JOIN keeps all left rows with NULL for unmatched right columns",
+      "all": [
+        "LEFT JOIN",
+        "every row of the left table",
+        "NULL"
+      ]
+    },
+    {
+      "fact": "IS NULL finds students with no enrolment",
+      "all": [
+        "IS NULL",
+        "no enrolment"
+      ]
+    },
+    {
+      "fact": "WHERE filters before grouping, HAVING after",
+      "all": [
+        "WHERE",
+        "before grouping",
+        "HAVING",
+        "after"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "says INNER JOIN keeps unmatched rows",
+      "pattern": "INNER JOIN[^.]*keeps (all|every) row"
+    }
+  ]
+}

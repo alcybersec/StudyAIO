@@ -1,6 +1,16 @@
-{# Summarize update prompt template — v2.1
+{# Summarize update prompt template — v2.2
    Purpose: Update an existing summary with new lecture content.
    Variables: course_code, week, extraction_text, image_references, existing_summary
+
+   v2.2 (2026-10-11, GL#34): same citation and no-outside-material rules as
+   summarize.txt v2.3. New Key Concepts claims end with the page marker from
+   the new content's headers (`[p.3]`, `[D2 p.3]` when files were merged);
+   existing claims keep their markers. Page numbers restart per file, so a
+   marker from the previous summary is never rewritten to point at the new
+   content. Worked examples stay in Formulas & Algorithms / Code Examples.
+   Footer made explicit as required. Section list and order unchanged.
+#}
+{# (v2.1 note follows)
 
    v2.1 (2026-10-10, GL#9): `## Connections` follows the same grounding rule as
    summarize.txt v2.2. The old line asked for "previous/future weeks, related
@@ -22,6 +32,9 @@ Week: {{ week }}
 ---
 {{ extraction_text }}
 ---
+
+## Source Locations
+Each block of the new lecture content starts with a header such as `--- Page 3 [p.3] ---` (a slide counts as a page). The bracketed marker is that block's citation: copy it exactly, including any `D` part. Markers already in the existing summary stay as they are.
 
 {% if image_references %}
 ## Referenced Images
@@ -46,6 +59,7 @@ Produce an UPDATED markdown summary that merges the existing summary with the ne
    - Weave in real-world examples and case studies from the new content
    - Use tables where comparison or structured data is natural
    - Place new concepts in logical order relative to existing ones
+   - CITE EVERY CLAIM: each bullet, table row and paragraph ends with the source marker(s) it comes from, e.g. `[p.3]`. Cite only markers that appear in the content above or already in the existing summary; never invent a page. A claim you cannot cite does not belong.
    - Convert any flat bullet-point lists from the existing summary into proper subsection explanations
    Do NOT produce a flat bullet-point dump. Think like a tutor explaining the material.
 
@@ -55,13 +69,13 @@ Produce an UPDATED markdown summary that merges the existing summary with the ne
 
 6. `## Code Examples` — Merge code examples. Ensure all code has inline comments explaining significant lines. If none, write "No code examples in this lecture."
 
-7. `## Formulas & Algorithms` — Merge any mathematical formulas, calculations, or quantitative relationships. If none, write "No formulas in this lecture."
+7. `## Formulas & Algorithms` — Merge any mathematical formulas, calculations, or quantitative relationships. Keep every worked example with its actual numbers and result, with its source marker. If none, write "No formulas in this lecture."
 
 8. `## Key Takeaways` — Merge and update the distilled insights. Write as "so what?" statements, not just restated facts. If the existing summary has "Potential Exam Topics" instead, convert it to Key Takeaways style.
 
 9. `## Connections` — Update the links to other lectures using ONLY what the lecture content and the existing summary contain. Keep connections the lecture itself states; add new ones the new content states, attributed to the lecture. Name another week only if the lecture names it, by title or topic, and NEVER state or imply what another week taught. Remove any industry, market, career or real-world-adoption paragraph the lecture did not discuss, and any named technology, standard or sector it did not mention. If nothing remains, write one plain sentence: "This lecture does not link to other material, and no other weeks were available to compare against."
 
-10. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: <increment>.*`
+10. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: <increment>.*` — required, never omitted: the last thing in the summary, before the metadata block.
 
 ## Rules
 - Merge, do not replace — preserve information from the existing summary
@@ -70,6 +84,7 @@ Produce an UPDATED markdown summary that merges the existing summary with the ne
 - If the existing summary uses the old format (flat bullet Key Concepts, Potential Exam Topics, Summary section), restructure it into the new format during the merge
 - Increment the version number in the footer
 - Preserve technical accuracy
+- If the lecture doesn't say it, don't write it: add no fact, caveat, variant or improvement that neither the new content nor the existing summary contains, even when it is true. Do not drop a fact the lecture states.
 - Write as a tutor teaching the material, not listing facts
 - Prefer paragraph-form explanations over flat bullet lists for conceptual material
 

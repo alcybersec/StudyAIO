@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, require_ai_consent
 from app.api.schemas import ResolveReviewRequest, ReviewItemResponse
 from app.core.database import get_session
 from app.models.artifact import LectureArtifact
@@ -65,6 +65,7 @@ async def get_review_item(
 
 @router.post(
     "/review-items/{review_id}/resolve",
+    dependencies=[Depends(require_ai_consent)],
     response_model=ReviewItemResponse,
     summary="Resolve a review item",
     description="Applies the resolution to the referenced entity, marks the review as resolved, and resumes the pipeline from the extract stage.",

@@ -1,6 +1,8 @@
 import { api } from './client'
 import type {
+  AIFeedbackSummary,
   AdminMfaCleared,
+  RetentionReadout,
   AdminUserUpdated,
   BetaFunnel,
   AdminUserCreated,
@@ -48,6 +50,14 @@ export const adminApi = {
   getFunnel(includeAdmins = false): Promise<BetaFunnel> {
     const qs = includeAdmins ? '?include_admins=true' : ''
     return api.get<BetaFunnel>(`/admin/funnel${qs}`)
+  },
+
+  getAiFeedback(days = 30): Promise<AIFeedbackSummary> {
+    return api.get<AIFeedbackSummary>(`/admin/ai-feedback?days=${days}`)
+  },
+
+  getRetention(weeks = 8): Promise<RetentionReadout> {
+    return api.get<RetentionReadout>(`/admin/usage/retention?weeks=${weeks}`)
   },
 
   getUserDetails(userId: string): Promise<AdminUserDetail> {

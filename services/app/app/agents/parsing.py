@@ -231,18 +231,41 @@ def parse_summary_response(text: str) -> tuple[str, list[str]]:
 def build_extraction_text(extraction: ExtractionData) -> str:
     """Format extraction pages into a text block for prompts.
 
+    Each page header carries a citation marker the summary copies verbatim:
+    ``[p.3]`` for a single document, ``[D2 p.3]`` when several files were
+    merged (page numbers restart per file, so a bare ``p.3`` would be
+    ambiguous). A new document starts when a page dict's ``source`` changes or,
+    without one, when the page number stops increasing. PPTX slides are pages.
+
     Args:
         extraction: Extraction data with pages.
 
     Returns:
         Formatted text string.
     """
-    parts: list[str] = []
+    entries: list[tuple[int, int | str, str]] = []
+    doc = 1
+    prev_num: int | None = None
+    prev_source: object = None
     for page in extraction.pages:
         text = page.get("text", "") if isinstance(page, dict) else page.text
         page_num = page.get("page_number", 0) if isinstance(page, dict) else page.page_number
+        source = page.get("source") if isinstance(page, dict) else None
+        if prev_num is not None:
+            if source is not None or prev_source is not None:
+                if source != prev_source:
+                    doc += 1
+            elif isinstance(page_num, int) and isinstance(prev_num, int) and page_num <= prev_num:
+                doc += 1
+        prev_num, prev_source = page_num, source
         if text.strip():
-            parts.append(f"--- Page {page_num} ---\n{text}")
+            entries.append((doc, page_num, text))
+
+    multi = doc > 1
+    parts = []
+    for d, num, text in entries:
+        marker = f"[D{d} p.{num}]" if multi else f"[p.{num}]"
+        parts.append(f"--- Page {num} {marker} ---\n{text}")
     return "\n\n".join(parts)
 
 

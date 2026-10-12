@@ -18,6 +18,7 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 from app.agents.embeddings import get_embedding_provider
 from app.api import (
     admin_router,
+    ai_feedback_router,
     analytics_router,
     artifacts_router,
     assets_router,
@@ -43,12 +44,14 @@ from app.api import (
     study_router,
     summaries_router,
     uploads_router,
+    usage_router,
 )
 from app.config import settings
 from app.core import secret_box
 from app.core.demo_middleware import DemoAccountMiddleware
 from app.core.exceptions import (
     AgentError,
+    AiConsentRequiredError,
     AuthenticationError,
     AuthorizationError,
     DemoRestrictionError,
@@ -409,6 +412,8 @@ app.add_middleware(
 # Register API routers
 app.include_router(dashboard_router, prefix="/api", tags=["dashboard"])
 app.include_router(feedback_router, prefix="/api", tags=["feedback"])
+app.include_router(ai_feedback_router, prefix="/api", tags=["feedback"])
+app.include_router(usage_router, prefix="/api", tags=["usage"])
 app.include_router(courses_router, prefix="/api", tags=["courses"])
 app.include_router(uploads_router, prefix="/api", tags=["uploads"])
 app.include_router(artifacts_router, prefix="/api", tags=["uploads"])
@@ -444,6 +449,21 @@ if _instrumentator is not None:
 async def authentication_error_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
     """Handle authentication errors with 401."""
     return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+
+@app.exception_handler(AiConsentRequiredError)
+async def ai_consent_required_handler(
+    request: Request, exc: AiConsentRequiredError
+) -> JSONResponse:
+    """Handle a missing AI-processing consent with 403 and a stable machine code."""
+    return JSONResponse(
+        status_code=403,
+        content={
+            "detail": str(exc),
+            "code": "ai_consent_required",
+            "consent_version": settings.ai_consent_version,
+        },
+    )
 
 
 @app.exception_handler(AuthorizationError)

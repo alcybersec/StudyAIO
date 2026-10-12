@@ -17,7 +17,10 @@ It asks four questions that have stable answers:
 The first three are deterministic and free. Only faithfulness needs a model, and
 it is optional for exactly that reason.
 
-Deliberately **not** part of CI: it costs money, it is not deterministic, and a
-non-deterministic gate is worse than no gate. Run it by hand when a prompt
-changes, and compare against the previous run.
+The **live** run (generating through the adapter) is deliberately not part of
+CI: it costs money, it is not deterministic, and a non-deterministic gate is
+worse than no gate. Run it by hand when a prompt changes. What CI runs is the
+**offline** mode, `python -m evals --offline --check`: it scores stored summary
+fixtures (`evals/fixtures/`) against `evals/baseline.json` with deterministic
+checks only -- see `evals/offline.py`.
 """

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.embeddings import get_embedding_provider
 from app.agents.factory import get_agent
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, require_ai_consent
 from app.api.schemas import Citation, QARequest, QAResponse
 from app.config import settings
 from app.core.database import get_session
@@ -20,6 +20,7 @@ from app.services import (
     settings_service,
 )
 from app.services.chat_scope import build_sources
+from app.services.retrieval import filter_by_floor, not_found_reply, record_below_floor
 
 logger = structlog.get_logger()
 
@@ -28,6 +29,7 @@ router = APIRouter()
 
 @router.post(
     "/qa/ask",
+    dependencies=[Depends(require_ai_consent)],
     response_model=QAResponse,
     summary="Ask a question",
     description="Ask a question about lecture content. Returns an AI-generated answer with citations to source chunks.",
@@ -79,10 +81,14 @@ async def ask_question(
         user_id=user.id,
     )
 
+    searched = len(chunks)
+    chunks = filter_by_floor(chunks)
     if not chunks:
+        if searched:
+            record_below_floor("qa", searched=searched, scope_code=body.course_code, week=body.week)
+        # Nothing relevant: answer deterministically, no AI call, no usage.
         return QAResponse(
-            answer="I couldn't find any relevant content in the indexed lecture materials for your question. "
-            "Make sure the relevant lectures have been uploaded and processed.",
+            answer=not_found_reply(body.course_code, body.week),
             citations=[],
             chunks_searched=0,
         )

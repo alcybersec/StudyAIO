@@ -1,0 +1,87 @@
+{
+  "id": "acid_transactions",
+  "title": "Transactions and ACID",
+  "course": "CSIT302",
+  "week": 8,
+  "shape": "standard",
+  "notes": "Qualified-claim trap in the source: durability is stated as 'once committed, survives a crash because the log is flushed before commit returns', with isolation described as a spectrum. A summary that says isolation is simply 'transactions do not interfere' drops the qualification. Traps: two-phase commit and MVCC, which the lecture does not cover.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 8 — Transactions.\n\nA transaction groups statements into one logical unit. The ACID properties: Atomicity (all or nothing, a failure rolls back every statement), Consistency (a transaction takes the database from one valid state to another, respecting constraints), Isolation and Durability."
+    },
+    {
+      "page": 2,
+      "text": "Isolation is a spectrum, not a switch. Without it a dirty read happens when one transaction reads another's uncommitted change, and a non-repeatable read when the same query returns different rows within one transaction. Stronger isolation levels prevent more anomalies but allow less concurrency.\n\nSERIALIZABLE gives the result of some serial order of the transactions."
+    },
+    {
+      "page": 3,
+      "text": "Durability: once COMMIT returns, the change survives a crash. This is achieved with a write-ahead log: the log record is flushed to disk before commit returns, and after a crash the log is replayed to redo committed work.\n\nExample: transfer 100 from account A to B is two updates; atomicity ensures that the debit never happens without the credit."
+    }
+  ],
+  "must_mention": [
+    "transaction",
+    "atomicity",
+    "consistency",
+    "isolation",
+    "durability",
+    "dirty read",
+    "write-ahead log",
+    "SERIALIZABLE"
+  ],
+  "must_not_mention": [
+    "two-phase commit",
+    "MVCC",
+    "snapshot isolation",
+    "phantom read",
+    "distributed transaction"
+  ],
+  "required_facts": [
+    {
+      "fact": "atomicity is all or nothing with rollback on failure",
+      "all": [
+        "atomicity",
+        "all or nothing",
+        "rolls back"
+      ]
+    },
+    {
+      "fact": "isolation is a spectrum: stronger levels prevent more anomalies but allow less concurrency",
+      "all": [
+        "spectrum",
+        "stronger",
+        "less concurrency"
+      ]
+    },
+    {
+      "fact": "dirty read reads another transaction's uncommitted change",
+      "all": [
+        "dirty read",
+        "uncommitted"
+      ]
+    },
+    {
+      "fact": "log flushed to disk before commit returns, replayed after a crash",
+      "all": [
+        "write-ahead log",
+        "flushed",
+        "before commit returns",
+        "replayed"
+      ]
+    },
+    {
+      "fact": "transfer example: debit never happens without the credit",
+      "all": [
+        "transfer",
+        "debit",
+        "credit"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "claims isolation means no interference at all levels",
+      "pattern": "(never|do not|don't) interfere"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, require_ai_consent
 from app.api.schemas import SettingsResponse, SettingsUpdateRequest, TestAIResponse
 from app.core.cache import cache_delete, dashboard_cache_key
 from app.core.database import get_session
@@ -77,6 +77,7 @@ async def update_settings(
 
 @router.post(
     "/settings/test-ai",
+    dependencies=[Depends(require_ai_consent)],
     response_model=TestAIResponse,
     summary="Test AI connection",
     description="Tests the AI connection using the current user's saved settings. Sends a minimal prompt to verify credentials work.",

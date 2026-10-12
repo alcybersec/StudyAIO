@@ -1,8 +1,10 @@
+import { useEffect } from 'react'
 import { CalendarDays, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStudyPlan } from '../../hooks/useApi'
 import { useUserTimeZone } from '../../hooks/useUserTimeZone'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
+import { recordUsageEvent } from '../../api/usage'
 import { Button, Card, EmptyState, ErrorState, Skeleton } from '../ui'
 import {
   formatPlanDayLabel,
@@ -47,6 +49,13 @@ export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
 
   const { data, isLoading, error, refetch } = useStudyPlan()
   const online = useOnlineStatus()
+
+  // One view event each time the plan is shown with data. Fire-and-forget.
+  // TODO(M33-S2): the "Study tonight" entry point should record the same event.
+  const planLoaded = !!data
+  useEffect(() => {
+    if (planLoaded) recordUsageEvent('study_plan_viewed')
+  }, [planLoaded])
 
   if (error) {
     return online ? (

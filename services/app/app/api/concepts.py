@@ -14,7 +14,7 @@ from app.api.concept_schemas import (
     ConceptRelationItem,
     SimilarConceptItem,
 )
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, require_ai_consent
 from app.core.database import get_session
 from app.core.exceptions import AgentError
 from app.core.rate_limit import limiter
@@ -159,6 +159,7 @@ async def find_related_concepts(
 
 @router.post(
     "/concepts/extract/{artifact_id}",
+    dependencies=[Depends(require_ai_consent)],
     response_model=ConceptExtractionResponse,
     status_code=201,
     summary="Extract concepts from artifact",

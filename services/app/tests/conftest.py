@@ -2,6 +2,7 @@
 
 import contextlib
 import tempfile
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -229,6 +230,11 @@ def make_user():
         # None = no token cutoff; pass tokens_valid_from=... to simulate a
         # password reset/change having revoked earlier tokens.
         user.tokens_valid_from = None
+        # Consented to the current AI-processing disclosure by default so the
+        # consent gate (GL#38) does not fire in unrelated tests; pass
+        # ai_processing_consent_at=None to exercise the gate.
+        user.ai_processing_consent_at = datetime.now(UTC)
+        user.ai_processing_consent_version = 1
         user.created_at = MagicMock()
         user.updated_at = MagicMock()
         for k, v in kwargs.items():

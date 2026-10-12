@@ -93,6 +93,17 @@ class AuthorizationError(StudyAIOError):
     pass
 
 
+class AiConsentRequiredError(AuthorizationError):
+    """Raised when a caller has not (re)consented to AI processing of their content.
+
+    Mapped to 403 with ``code: ai_consent_required`` so the client can show the
+    disclosure and retry (SEC-08, GL#38).
+    """
+
+    def __init__(self, message: str = "AI processing consent is required"):
+        super().__init__(message)
+
+
 class OAuthEmailUnverifiedError(AuthenticationError):
     """Raised when an OAuth provider will not vouch for the identity's email.
 

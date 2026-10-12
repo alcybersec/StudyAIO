@@ -2,12 +2,27 @@
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import setup_logging
 
 from app.config import settings
+from app.core.logging import configure_logging
 from app.core.observability import init_sentry
 
 # Error monitoring for the worker process (no-op unless SENTRY_DSN is set).
 init_sentry("worker")
+
+
+@setup_logging.connect
+def configure_worker_logging(**_kwargs: object) -> None:
+    """Install the redacting log config for the worker and beat processes.
+
+    Connecting to ``setup_logging`` stops Celery from hijacking the root logger,
+    so structlog's ``redact_emails`` and the stdlib ``EmailRedactingFilter``
+    apply to task logs too. Prefork children are forked after this runs in the
+    parent and inherit the configured root logger and handlers.
+    """
+    configure_logging(settings.log_level)
+
 
 celery_app = Celery(
     "studyaio",

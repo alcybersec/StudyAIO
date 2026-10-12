@@ -26,6 +26,7 @@ from app.services import (
     readiness_service,
     schedule_service,
     streak_service,
+    usage_service,
     xp_service,
 )
 
@@ -230,6 +231,18 @@ async def record_session(
         user_id=user.id,
         tz=tz,
     )
+    if body.quiz_questions_answered > 0:
+        await usage_service.record(
+            session,
+            user.id,
+            "quiz_completed",
+            course_id=exam.course_id,
+            properties={
+                "count": body.quiz_questions_answered,
+                "correct": body.quiz_correct,
+                "duration_seconds": body.duration_seconds,
+            },
+        )
     await session.commit()
 
     # Award XP for study session (best-effort)

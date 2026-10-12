@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, require_ai_consent
 from app.api.schemas import (
     ArtifactResponse,
     CourseDetailResponse,
@@ -238,6 +238,7 @@ async def delete_course(
 
 @router.post(
     "/courses/{course_code}/merge",
+    dependencies=[Depends(require_ai_consent)],
     response_model=CourseMergeResponse,
     summary="Merge a course into another",
     description="Moves all content into the target course and archives the "

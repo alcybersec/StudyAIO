@@ -236,6 +236,42 @@ class TestBuildExtractionText:
         assert "Page 2" not in result
 
 
+class TestExtractionCitationMarkers:
+    """Page headers carry a citation marker the summary can copy (GL#34)."""
+
+    def test_single_document_marker(self):
+        extraction = ExtractionData(
+            pages=[{"page_number": 3, "text": "Body", "images": []}], metadata={}
+        )
+        assert "--- Page 3 [p.3] ---" in build_extraction_text(extraction)
+
+    def test_multiple_documents_get_distinct_markers(self):
+        """Page numbers restart per file after a merge, so markers must not collide."""
+        extraction = ExtractionData(
+            pages=[
+                {"page_number": 1, "text": "a", "images": []},
+                {"page_number": 2, "text": "b", "images": []},
+                {"page_number": 1, "text": "c", "images": []},
+            ],
+            metadata={},
+        )
+        result = build_extraction_text(extraction)
+        assert "[D1 p.2]" in result
+        assert "[D2 p.1]" in result
+        assert "[p.1]" not in result
+
+    def test_source_key_groups_documents(self):
+        extraction = ExtractionData(
+            pages=[
+                {"page_number": 1, "text": "a", "source": "x"},
+                {"page_number": 1, "text": "b", "source": "y"},
+            ],
+            metadata={},
+        )
+        result = build_extraction_text(extraction)
+        assert "[D1 p.1]" in result and "[D2 p.1]" in result
+
+
 class TestCollectImageReferences:
     """Tests for collect_image_references()."""
 

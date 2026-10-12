@@ -18,13 +18,13 @@ from app.api.chat_schemas import (
     SendMessageRequest,
     SendMessageResponse,
 )
-from app.api.deps import get_current_user_or_default
+from app.api.deps import get_current_user_or_default, require_ai_consent
 from app.config import settings
 from app.core.database import get_session
 from app.core.rate_limit import limiter
 from app.models.course import Course
 from app.models.user import User
-from app.services import billing_service, chat_service, quota_service
+from app.services import billing_service, chat_service, quota_service, usage_service
 
 logger = structlog.get_logger()
 
@@ -160,6 +160,7 @@ async def get_messages(
 
 @router.post(
     "/chat/sessions/{session_id}/messages",
+    dependencies=[Depends(require_ai_consent)],
     response_model=SendMessageResponse,
     summary="Send a message",
     description="Send a message in a chat session and receive an AI response.",
@@ -193,14 +194,24 @@ async def send_message(
         logger.error("chat_send_error", error=str(e), session_id=session_id)
         raise HTTPException(status_code=500, detail="Failed to process message") from e
 
-    # Record AI usage (best-effort). The adapter is not visible from here, so
-    # tokens are an estimate from the text exchanged (billing_service.record_ai_call).
-    await billing_service.record_ai_call(
+    await usage_service.record(
         session,
         user.id,
-        prompt_text=body.content,
-        output_text=str(getattr(assistant_msg, "content", "") or ""),
+        "chat_message_sent",
+        course_id=scope_course_id,
+        properties={"stream": False},
     )
+
+    # Record AI usage (best-effort). The adapter is not visible from here, so
+    # tokens are an estimate from the text exchanged (billing_service.record_ai_call).
+    # A fixed reply (e.g. nothing above the relevance floor) made no AI call.
+    if getattr(assistant_msg, "ai_called", True) is not False:
+        await billing_service.record_ai_call(
+            session,
+            user.id,
+            prompt_text=body.content,
+            output_text=str(getattr(assistant_msg, "content", "") or ""),
+        )
 
     await session.commit()
 
@@ -212,6 +223,7 @@ async def send_message(
 
 @router.post(
     "/chat/sessions/{session_id}/messages/stream",
+    dependencies=[Depends(require_ai_consent)],
     summary="Send a message (streaming)",
     description="Send a message and receive the AI response as an SSE stream.",
 )
@@ -231,6 +243,7 @@ async def stream_message(
 
     async def event_generator():
         streamed: list[str] = []
+        ai_called = True
         try:
             async for event in chat_service.stream_message(
                 session=session,
@@ -242,6 +255,8 @@ async def stream_message(
             ):
                 event_type = event["event"]
                 data = event["data"]
+                if event.get("ai_called") is False:
+                    ai_called = False
                 if event_type == "token" and isinstance(data, str):
                     streamed.append(data)
                 if isinstance(data, dict):
@@ -254,10 +269,20 @@ async def stream_message(
             logger.error("chat_stream_error", error=str(e), session_id=session_id)
             yield {"event": "error", "data": "Failed to process message"}
 
+        if streamed:
+            await usage_service.record(
+                session,
+                user.id,
+                "chat_message_sent",
+                course_id=scope_course_id,
+                properties={"stream": True},
+            )
+
         # Record AI usage (best-effort); tokens estimated from the text streamed.
-        await billing_service.record_ai_call(
-            session, user.id, prompt_text=body.content, output_text="".join(streamed)
-        )
+        if ai_called:
+            await billing_service.record_ai_call(
+                session, user.id, prompt_text=body.content, output_text="".join(streamed)
+            )
 
         await session.commit()
 

@@ -1,0 +1,80 @@
+{
+  "id": "dijkstra_shortest_paths",
+  "title": "Shortest Paths",
+  "course": "CSIT201",
+  "week": 7,
+  "shape": "standard",
+  "notes": "Algorithm lecture with an explicit precondition: non-negative edge weights. Dropping that qualification is a faithfulness failure even when every term is present. Traps: Bellman-Ford and Floyd-Warshall, the usual alternatives for negative weights, which the lecture only alludes to as 'not covered'.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 7 — Shortest Paths.\n\nDijkstra's algorithm finds the shortest path from one source to every other vertex in a weighted graph. It requires non-negative edge weights: with a negative edge the greedy choice below can be wrong, and the algorithm is not correct."
+    },
+    {
+      "page": 2,
+      "text": "Keep a distance estimate for each vertex, initially infinity except the source at 0, and a priority queue ordered by estimate. Repeatedly remove the vertex with the smallest estimate, then relax each outgoing edge: if dist[u] + w(u, v) < dist[v], update dist[v].\n\nOnce a vertex is removed its distance is final. This is the greedy step."
+    },
+    {
+      "page": 3,
+      "text": "With a binary heap the running time is O((V + E) log V). To recover the path itself, store a predecessor for each vertex when relaxing and walk back from the target."
+    }
+  ],
+  "must_mention": [
+    "Dijkstra",
+    "non-negative",
+    "priority queue",
+    "relax",
+    "greedy",
+    "predecessor",
+    "distance estimate"
+  ],
+  "must_not_mention": [
+    "Bellman-Ford",
+    "Floyd-Warshall",
+    "A*",
+    "Fibonacci heap",
+    "negative cycle"
+  ],
+  "required_facts": [
+    {
+      "fact": "requires non-negative edge weights",
+      "all": [
+        "non-negative",
+        "edge weights"
+      ]
+    },
+    {
+      "fact": "relaxation updates dist[v] when dist[u] + w(u, v) is smaller",
+      "all": [
+        "relax",
+        "dist[u] + w(u, v)"
+      ]
+    },
+    {
+      "fact": "a removed vertex's distance is final: the greedy step",
+      "all": [
+        "final",
+        "greedy"
+      ]
+    },
+    {
+      "fact": "binary heap running time O((V + E) log V)",
+      "all": [
+        "O((V + E) log V)",
+        "binary heap"
+      ]
+    },
+    {
+      "fact": "predecessors recover the path",
+      "all": [
+        "predecessor"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "says Dijkstra handles negative weights",
+      "pattern": "(handles|works with|supports) negative"
+    }
+  ]
+}

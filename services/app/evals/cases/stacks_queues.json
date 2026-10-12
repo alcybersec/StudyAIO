@@ -1,0 +1,77 @@
+{
+  "id": "stacks_queues",
+  "title": "Stacks and Queues",
+  "course": "CSIT101",
+  "week": 3,
+  "shape": "short",
+  "notes": "Short two-page lecture on two ADTs. Low content means a summary is tempted to pad with applications and implementations not given (deque, priority queue, call stack internals). Those are the traps.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 3 — Stacks and Queues.\n\nA stack is last-in first-out (LIFO): push adds to the top, pop removes from the top, peek reads the top without removing it. Use: matching brackets in an expression. Push each opening bracket; on a closing bracket pop and compare."
+    },
+    {
+      "page": 2,
+      "text": "A queue is first-in first-out (FIFO): enqueue adds at the back, dequeue removes from the front. Use: processing requests in arrival order.\n\nBoth can be built on a linked list with O(1) operations. A queue on a plain array needs a circular buffer so dequeue does not shift every element."
+    }
+  ],
+  "must_mention": [
+    "stack",
+    "queue",
+    "LIFO",
+    "FIFO",
+    "push",
+    "pop",
+    "enqueue",
+    "dequeue",
+    "circular buffer"
+  ],
+  "must_not_mention": [
+    "deque",
+    "priority queue",
+    "call stack",
+    "heap",
+    "monotonic"
+  ],
+  "required_facts": [
+    {
+      "fact": "a stack is LIFO with push, pop and peek",
+      "all": [
+        "LIFO",
+        "push",
+        "pop",
+        "peek"
+      ]
+    },
+    {
+      "fact": "bracket matching pushes openers and pops on a closer",
+      "all": [
+        "bracket",
+        "push",
+        "pop"
+      ]
+    },
+    {
+      "fact": "a queue is FIFO with enqueue at the back and dequeue at the front",
+      "all": [
+        "FIFO",
+        "enqueue",
+        "back",
+        "dequeue",
+        "front"
+      ]
+    },
+    {
+      "fact": "array queue needs a circular buffer",
+      "all": [
+        "circular buffer"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "describes a priority-ordered queue",
+      "pattern": "priority"
+    }
+  ]
+}

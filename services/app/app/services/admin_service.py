@@ -205,7 +205,6 @@ async def update_user(
     role_changed = role is not None and role != user.role
     reactivated = is_active is True and not user.is_active
 
-    old_email = user.email
     # Compared normalized, on the same reasoning as `role_changed` above: a
     # form that submits every field echoes the address back, and an admin
     # retyping it as `Alex@Example.com` is not requesting a change. Before this
@@ -262,8 +261,7 @@ async def update_user(
         role=role,
         tier=tier,
         is_active=is_active,
-        old_email=old_email if email_repointed else None,
-        new_email=user.email if email_repointed else None,
+        email_changed=email_repointed,
         sessions_revoked=reactivated or role_changed or email_repointed,
         by=acting_admin_id,
     )
@@ -985,7 +983,7 @@ async def grant_beta_pro(
         granted.append(user.email)
         if not dry_run:
             user.tier = "pro"
-            logger.info("beta_pro_granted", user_id=user.id, email=user.email)
+            logger.info("beta_pro_granted", user_id=user.id)
     found = {u.email for u in users}
     missing = [e for e in wanted if e not in found]
     logger.info(

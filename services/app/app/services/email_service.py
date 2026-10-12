@@ -51,7 +51,7 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
         True if sent successfully, False otherwise.
     """
     if not _smtp_configured():
-        logger.debug("email_skipped_no_smtp", to=to_email)
+        logger.debug("email_skipped_no_smtp")
         return False
 
     try:
@@ -89,7 +89,7 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
             start_tls=start_tls,
         )
 
-        logger.info("email_sent", to=to_email, subject=subject)
+        logger.info("email_sent", subject=subject)
         return True
 
     except Exception as exc:
@@ -104,7 +104,6 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
             )
         logger.warning(
             "email_send_failed",
-            to=to_email,
             subject=subject,
             hint=hint,
             exc_info=True,

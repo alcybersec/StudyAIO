@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, SmallInteger, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -34,6 +34,14 @@ class User(Base):
     tokens_valid_from: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # When the user consented to their lecture content being processed by an AI
+    # provider, and which wording (version) they agreed to. NULL = not consented.
+    # On `users` rather than `user_settings`: the settings row is optional and
+    # created lazily, and consent must exist as a record independent of it.
+    ai_processing_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ai_processing_consent_version: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     # Which invite this account registered with, when REGISTRATION_MODE=invite.
     # SET NULL on delete so purging an invite does not delete its users.
     invite_code_id: Mapped[str | None] = mapped_column(

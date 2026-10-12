@@ -1,0 +1,94 @@
+{
+  "id": "sorting_algorithms",
+  "title": "Sorting Algorithms",
+  "course": "CSIT101",
+  "week": 5,
+  "shape": "long",
+  "notes": "Long lecture (five pages, four algorithms plus a lower bound). Tests that a long source does not lose the later algorithms and keeps stability claims per algorithm. Traps: radix/counting sort, timsort and heap sort, which are not in this lecture.",
+  "pages": [
+    {
+      "page": 1,
+      "text": "Week 5 — Sorting.\n\nA sort is stable if equal keys keep their original relative order. Stability matters when sorting by one field after another."
+    },
+    {
+      "page": 2,
+      "text": "Insertion sort grows a sorted prefix: take the next element and shift larger ones right to insert it. Worst case O(n^2) (reverse-sorted input), best case O(n) (already sorted), O(1) extra space, stable. It is fast on small or nearly sorted inputs."
+    },
+    {
+      "page": 3,
+      "text": "Merge sort splits the array in half, sorts each half recursively and merges the two sorted halves. Always O(n log n). It needs O(n) extra space for the merge. Stable."
+    },
+    {
+      "page": 4,
+      "text": "Quicksort picks a pivot, partitions into smaller and larger elements, and recurses on both sides. Average O(n log n), but worst case O(n^2) when the pivot is repeatedly the smallest or largest, as with a sorted array and a first-element pivot. In place, not stable. Choosing a random pivot makes the worst case unlikely."
+    },
+    {
+      "page": 5,
+      "text": "Any sort that works only by comparing elements needs at least on the order of n log n comparisons in the worst case. So merge sort is asymptotically optimal among comparison sorts."
+    }
+  ],
+  "must_mention": [
+    "stable",
+    "insertion sort",
+    "merge sort",
+    "quicksort",
+    "pivot",
+    "partition",
+    "comparison",
+    "O(n log n)"
+  ],
+  "must_not_mention": [
+    "heap sort",
+    "radix sort",
+    "counting sort",
+    "timsort",
+    "bubble sort"
+  ],
+  "required_facts": [
+    {
+      "fact": "insertion sort: O(n^2) worst, O(n) best, stable",
+      "all": [
+        "insertion sort",
+        "O(n^2)",
+        "O(n)",
+        "stable"
+      ]
+    },
+    {
+      "fact": "merge sort: always O(n log n), O(n) extra space, stable",
+      "all": [
+        "merge sort",
+        "always O(n log n)",
+        "O(n) extra space"
+      ]
+    },
+    {
+      "fact": "quicksort: average O(n log n), worst O(n^2), not stable",
+      "all": [
+        "quicksort",
+        "worst case O(n^2)",
+        "not stable"
+      ]
+    },
+    {
+      "fact": "random pivot makes the worst case unlikely",
+      "all": [
+        "random pivot",
+        "unlikely"
+      ]
+    },
+    {
+      "fact": "comparison sorts need about n log n comparisons so merge sort is optimal",
+      "all": [
+        "comparison",
+        "optimal"
+      ]
+    }
+  ],
+  "forbidden_claims": [
+    {
+      "claim": "says quicksort is stable",
+      "pattern": "quicksort[^.]*\\bis stable"
+    }
+  ]
+}
