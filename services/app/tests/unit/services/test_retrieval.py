@@ -17,7 +17,7 @@ from tests.unit.services.test_chat_carried_scope import (
 from tests.unit.services.test_chat_service import _make_chat_message, _rag_patches
 
 USER = "user-001"
-NOT_FOUND = "I couldn't find this in your materials for CSCI369 Week 3."
+NOT_FOUND = "I couldn't find this in your materials for CSCI369."
 
 
 def _chunk(sim: float) -> dict:
@@ -86,7 +86,7 @@ class TestChatFloor:
             _patch_lookup(_owned(_course("CSCI369", "c369"))),
             patch("app.services.billing_service.record_ai_call", AsyncMock()) as usage,
         ):
-            _, assistant = await send_message(session, "session-001", USER, "lecture 3 trivia?")
+            _, assistant = await send_message(session, "session-001", USER, "any trivia?")
         assert assistant.content == NOT_FOUND
         assert assistant.citations_json is None
         assert assistant.ai_called is False
@@ -102,7 +102,7 @@ class TestChatFloor:
         search = AsyncMock(return_value=[_chunk(0.8), _chunk(0.01)])
         p1, p2, p3, p4 = _rag_patches(agent, search)
         with p1, p2, p3, p4, _patch_lookup(_owned(_course("CSCI369", "c369"))):
-            _, assistant = await send_message(session, "session-001", USER, "lecture 3?")
+            _, assistant = await send_message(session, "session-001", USER, "any trivia?")
         assert assistant.content == "ASLR [1]"
         assert assistant.ai_called is True
         sent = agent.answer_question.await_args.args[1]
@@ -126,7 +126,7 @@ class TestChatFloor:
         search = AsyncMock(return_value=[_chunk(0.05)])
         p1, p2, p3, p4 = _rag_patches(agent, search)
         with p1, p2, p3, p4, _patch_lookup(_owned(_course("CSCI369", "c369"))):
-            events = [e async for e in stream_message(session, "session-001", USER, "lecture 3?")]
+            events = [e async for e in stream_message(session, "session-001", USER, "any trivia?")]
         tokens = [e["data"] for e in events if e["event"] == "token"]
         assert tokens == [NOT_FOUND]
         agent.stream_answer.assert_not_called()

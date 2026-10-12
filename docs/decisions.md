@@ -13,6 +13,7 @@ is the index plus the small rulings that do not warrant one.
 | [0004](adr/0004-floor4-user-initiated-item-deletes.md) | Floor 4 admits explicit user-initiated deletes of the user's own items | Accepted |
 | [0005](adr/0005-floor3-embedding-gateway.md) | Floor 3 covers embeddings through a second gateway, `get_embedding_provider` (amends 0003) | Accepted |
 | [0006](adr/0006-clock-policy.md) | Clock policy: user-local "today" for the study surface, UTC for quota and money | Accepted |
+| [0007](adr/0007-weak-spot-engine.md) | Weak-spot engine: per-week weakness score, daily "study tonight" plan, targeted generation in the worker | Proposed |
 
 ## Rulings
 

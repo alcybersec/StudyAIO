@@ -15,8 +15,19 @@ from app.models.artifact import LectureArtifact
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.course import Course
-from app.services import course_service, retrieval, search_service, settings_service
-from app.services.chat_scope import build_sources, detect_quiz_intent, parse_scope
+from app.services import (
+    course_service,
+    retrieval,
+    search_service,
+    settings_service,
+    summary_service,
+)
+from app.services.chat_scope import (
+    build_sources,
+    detect_overview_intent,
+    detect_quiz_intent,
+    parse_scope,
+)
 
 logger = structlog.get_logger()
 
@@ -201,22 +212,62 @@ async def _search(
 
 
 def _apply_floor(plan: _Plan, raw: list[dict], search_ok: bool) -> list[dict]:
-    """Drop chunks below the relevance floor; set a fixed reply if none remain.
+    """Apply the relevance policy; set a fixed reply if nothing is usable.
 
-    When the search succeeded but nothing clears the floor, ``plan.reply`` is
-    set so the agent is never called. A failed search leaves the plan alone
-    and the turn falls through to a general answer, as before.
+    A turn scoped to a course and week bypasses the floor (its chunks are
+    relevant by construction); see ``retrieval.apply_floor``. When the search
+    succeeded but nothing is usable, ``plan.reply`` is set so the agent is
+    never called. A failed search leaves the plan alone and the turn falls
+    through to a general answer, as before.
     """
-    chunks = retrieval.filter_by_floor(raw)
+    chunks, _ = retrieval.apply_floor(
+        raw,
+        stage="chat",
+        course_scoped=plan.course_id is not None,
+        week_scoped=plan.week is not None,
+        scope_code=plan.code,
+        week=plan.week,
+    )
     if search_ok and not chunks:
         if raw:
             plan.reply = retrieval.not_found_reply(plan.code, plan.week)
-            retrieval.record_below_floor(
-                "chat", searched=len(raw), scope_code=plan.code, week=plan.week
-            )
         elif plan.from_message:
             plan.reply = _no_material_reply(plan)
     return chunks
+
+
+async def _with_week_summary(
+    session: AsyncSession,
+    user_id: str,
+    plan: _Plan,
+    content: str,
+    question: str,
+    chunks: list[dict],
+) -> str:
+    """Add the caller's own week summary for "what was it about?" questions.
+
+    Only for a course+week scoped turn with usable chunks and an overview
+    intent. The lookup is owner-scoped; a miss or failure leaves the question
+    unchanged.
+    """
+    if not chunks or plan.course_id is None or plan.week is None:
+        return question
+    if not detect_overview_intent(content):
+        return question
+    try:
+        summary = await summary_service.get_owned_summary(
+            session, plan.course_id, plan.week, user_id=user_id
+        )
+    except Exception as e:
+        logger.warning(
+            "chat_week_summary_failed",
+            error=await settings_service.redacted_error(session, user_id, e),
+        )
+        return question
+    label = f"{plan.code} Week {plan.week}" if plan.code else f"Week {plan.week}"
+    return retrieval.with_week_summary(
+        question, summary.content_md if summary is not None else None, label=label
+    )
 
 
 async def create_session(
@@ -423,6 +474,9 @@ async def send_message(
         agent = get_agent(user_settings=user_agent_config, output_language=output_language)
         try:
             context_question = _build_contextual_question(content, history[:-1], chunks)
+            context_question = await _with_week_summary(
+                session, user_id, plan, content, context_question, chunks
+            )
             answer_result = await agent.answer_question(context_question, chunks)
             answer_text = answer_result.answer
             # Sources are derived from the chunk order the [n] markers refer to,
@@ -578,6 +632,9 @@ async def stream_message(
         agent = get_agent(user_settings=user_agent_config, output_language=output_language)
         try:
             context_question = _build_contextual_question(content, history[:-1], chunks)
+            context_question = await _with_week_summary(
+                session, user_id, plan, content, context_question, chunks
+            )
             async for token in agent.stream_answer(context_question, chunks):
                 full_text += token
                 yield {"event": "token", "data": token}

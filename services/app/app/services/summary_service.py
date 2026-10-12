@@ -96,6 +96,34 @@ async def get_existing_summary(session: AsyncSession, course_id: str, week: int)
     return result.scalar_one_or_none()
 
 
+async def get_owned_summary(
+    session: AsyncSession, course_id: str, week: int, *, user_id: str
+) -> Summary | None:
+    """Get the caller's summary for a course id + week.
+
+    Args:
+        session: Database session.
+        course_id: Course UUID.
+        week: Week number.
+        user_id: The caller; the course must belong to them.
+
+    Returns:
+        Summary if the caller owns the course and it has one, else None.
+    """
+    from app.models.course import Course as CourseModel
+
+    result = await session.execute(
+        select(Summary)
+        .join(CourseModel, Summary.course_id == CourseModel.id)
+        .where(
+            Summary.course_id == course_id,
+            Summary.week == week,
+            CourseModel.user_id == user_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def snapshot_summary(
     session: AsyncSession, summary: Summary, storage: StorageBackend | None = None
 ) -> SummaryVersion:
