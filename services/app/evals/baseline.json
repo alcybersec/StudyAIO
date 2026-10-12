@@ -1,8 +1,8 @@
 {
   "aggregate": {
     "cases": 21,
-    "coverage": 0.9932,
-    "faithfulness": 0.8778,
+    "coverage": 1.0,
+    "faithfulness": 0.9429,
     "structure": 0.9048
   },
   "cases": {
@@ -36,8 +36,8 @@
     },
     "dijkstra_shortest_paths": {
       "coverage": 1.0,
-      "fact_recall": 0.8,
-      "faithfulness": 0.8,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
       "forbidden_hits": 0,
       "structure_ok": true
     },
@@ -50,15 +50,15 @@
     },
     "dp_knapsack": {
       "coverage": 1.0,
-      "fact_recall": 0.8,
-      "faithfulness": 0.4,
+      "fact_recall": 1.0,
+      "faithfulness": 0.5,
       "forbidden_hits": 1,
       "structure_ok": true
     },
     "finite_automata": {
       "coverage": 1.0,
-      "fact_recall": 0.8,
-      "faithfulness": 0.8,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
       "forbidden_hits": 0,
       "structure_ok": true
     },
@@ -92,8 +92,8 @@
     },
     "memory_hierarchy": {
       "coverage": 1.0,
-      "fact_recall": 0.8333,
-      "faithfulness": 0.8333,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
       "forbidden_hits": 0,
       "structure_ok": false
     },
@@ -112,16 +112,16 @@
       "structure_ok": true
     },
     "rsa_public_key": {
-      "coverage": 0.8571,
-      "fact_recall": 0.5,
-      "faithfulness": 0.5,
+      "coverage": 1.0,
+      "fact_recall": 1.0,
+      "faithfulness": 1.0,
       "forbidden_hits": 0,
       "structure_ok": true
     },
     "sorting_algorithms": {
       "coverage": 1.0,
-      "fact_recall": 0.6,
-      "faithfulness": 0.6,
+      "fact_recall": 0.8,
+      "faithfulness": 0.8,
       "forbidden_hits": 0,
       "structure_ok": true
     },

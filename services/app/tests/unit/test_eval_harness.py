@@ -34,6 +34,84 @@ class TestMentions:
         assert not scoring._mentions("covers 1NF and 2NF", "3NF")
 
 
+class TestMathNormalisation:
+    """A formula is present however it is typeset (GL#34 iteration 2).
+
+    The live v2.3 summaries stated the recurrence, `c = m^e mod n` and the AMAT
+    formula in LaTeX; the literal-text fact check scored them as dropped. These
+    pin that the same formula in LaTeX or emphasis markup counts, and that the
+    normalisation does not conjure a term that is not there.
+    """
+
+    def test_latex_modular_arithmetic_matches_plain_text(self):
+        assert scoring._mentions(r"$$c = m^e \bmod n, \qquad m = c^d \bmod n$$", "c = m^e mod n")
+        assert scoring._mentions(r"$m = c^d \bmod n$", "m = c^d mod n")
+
+    def test_latex_text_and_max_unwrap(self):
+        tex = r"$$\max\big(\text{best}[i-1][c],\ \text{best}[i-1][c - w_i] + v_i\big)$$"
+        assert scoring._mentions(tex, "max(best[i-1][c], best[i-1][c - w_i] + v_i)")
+        assert scoring._mentions(r"$\text{best}[0][c] = 0$", "best[0][c] = 0")
+
+    def test_latex_symbols_map_to_plain_names(self):
+        assert scoring._mentions(r"$\varphi=20$, $e=3$", "phi = 20")
+        tex = r"$\text{hit time} + \text{miss rate} \times \text{miss penalty}$"
+        assert scoring._mentions(tex, "hit time + miss rate * miss penalty")
+        assert scoring._mentions(r"worst case $O(n^2)$", "worst case O(n^2)")
+        assert scoring._mentions(r"$O(n \log n)$", "O(n log n)")
+
+    def test_emphasis_markup_is_ignored(self):
+        assert scoring._mentions("quicksort is **not** stable", "not stable")
+        assert scoring._mentions("total value **7**", "value 7")
+
+    def test_normalisation_does_not_invent_a_term(self):
+        assert not scoring._mentions(r"$a \times b$", "c")
+        assert not scoring._mentions(r"$\text{best}[1][c] = 0$", "best[0][c] = 0")
+        assert not scoring._mentions(r"$c = m^d \bmod n$", "c = m^e mod n")
+
+
+class TestPromptV24:
+    """The v2.4 prompts carry the rules iteration 2 depends on (GL#34)."""
+
+    @pytest.fixture(params=["summarize.txt", "summarize_update.txt"])
+    def prompt(self, request) -> str:
+        return (scoring.PROMPTS_DIR / request.param).read_text()
+
+    def test_renders_with_and_without_must_keep(self, prompt):
+        from jinja2 import Template
+
+        base = {
+            "course_code": "C1",
+            "week": 1,
+            "extraction_text": "--- Page 1 [p.1] ---\nx = 1",
+            "image_references": [],
+            "existing_summary": "# old",
+        }
+        plain = Template(prompt).render(**base)
+        with_items = Template(prompt).render(**base, must_keep=["[p.1] x = 1"])
+        assert "## Must-Keep Items" not in plain
+        assert "## Must-Keep Items" in with_items
+        assert "- [p.1] x = 1" in with_items
+
+    def test_formulas_are_plain_text_not_latex(self, prompt):
+        assert "Do NOT use LaTeX" in prompt
+        assert "or LaTeX notation" not in prompt
+
+    def test_every_line_shape_is_named_for_citation(self, prompt):
+        for shape in ("lead-in", "numbered step", "table row", "formula line", "code line"):
+            assert shape in prompt
+
+    def test_checklist_covers_the_dropped_content(self, prompt):
+        low = prompt.lower()
+        for item in ("recurrence", "base case", "worked example", "complexity"):
+            assert item in low
+        assert "Completeness checklist" in prompt
+
+    def test_footer_is_its_own_two_lines(self, prompt):
+        assert "a line containing only `---`" in prompt
+        assert "*Sources:" in prompt
+        assert "rejected" in prompt
+
+
 class TestDeterministicScoring:
     def test_full_coverage_and_clean_structure_passes(self):
         case = {"id": "c", "must_mention": ["1NF", "3NF"], "must_not_mention": ["BCNF"]}

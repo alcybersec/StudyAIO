@@ -10,6 +10,7 @@ import json
 import re
 
 import structlog
+from prometheus_client import Counter
 
 from app.agents.base import (
     ConceptData,
@@ -23,6 +24,16 @@ from app.agents.base import (
 from app.core.exceptions import AgentError
 
 logger = structlog.get_logger()
+
+#: Outcome enum only (floor 1/2 label policy): ``ok`` already well-formed,
+#: ``normalised`` repaired, ``no_sources`` no Sources line found (left as is).
+SUMMARY_FOOTER = Counter(
+    "studyaio_summary_footer_total",
+    "Summaries by footer state after post-processing.",
+    ["outcome"],
+)
+
+_SOURCES_LINE = re.compile(r"^\s*(?:-{3,}\s*)?(\*Sources:.*)$")
 
 
 def _clean_json_text(text: str) -> str:
@@ -201,6 +212,42 @@ def parse_json_array_response(text: str) -> list[dict]:
     raise AgentError(f"Failed to parse JSON array from AI response: {text[:200]}...")
 
 
+def normalise_summary_footer(markdown: str) -> str:
+    """Make the summary end with ``---`` and the ``*Sources: ... Version: N.*`` line.
+
+    Models sometimes glue the separator to the Sources line (``---*Sources: ...``),
+    drop the ``---``, or leave it jammed under the last paragraph (which markdown
+    reads as a setext heading). The result has a blank line, a line containing
+    only ``---``, then the Sources line on the very next line. Sources text is
+    never invented: with no ``*Sources:`` line the text is returned unchanged and
+    ``studyaio_summary_footer_total{outcome="no_sources"}`` is incremented.
+    Idempotent.
+
+    Args:
+        markdown: Summary markdown, JSON_META block already removed.
+
+    Returns:
+        The markdown with a well-formed footer.
+    """
+    lines = markdown.rstrip().splitlines()
+    idx = next((i for i in range(len(lines) - 1, -1, -1) if _SOURCES_LINE.match(lines[i])), None)
+    if idx is None:
+        SUMMARY_FOOTER.labels(outcome="no_sources").inc()
+        logger.warning("summary_footer_no_sources")
+        return markdown
+    sources = _SOURCES_LINE.match(lines[idx]).group(1).rstrip()  # type: ignore[union-attr]
+    head = lines[:idx]
+    while head and (not head[-1].strip() or re.fullmatch(r"\s*-{3,}\s*", head[-1])):
+        head.pop()
+    fixed = "\n".join([*head, "", "---", sources, *lines[idx + 1 :]])
+    if fixed == markdown.rstrip():
+        SUMMARY_FOOTER.labels(outcome="ok").inc()
+        return markdown
+    SUMMARY_FOOTER.labels(outcome="normalised").inc()
+    logger.info("summary_footer_normalised")
+    return fixed
+
+
 def parse_summary_response(text: str) -> tuple[str, list[str]]:
     """Split summary markdown from ---JSON_META--- block.
 
@@ -208,7 +255,9 @@ def parse_summary_response(text: str) -> tuple[str, list[str]]:
         text: Raw response from the AI.
 
     Returns:
-        Tuple of (markdown_content, embedded_images list).
+        Tuple of (markdown_content, embedded_images list). The footer is
+        normalised here, so every adapter, the worker and the live evals see
+        the same ending.
     """
     embedded_images: list[str] = []
 
@@ -225,7 +274,7 @@ def parse_summary_response(text: str) -> tuple[str, list[str]]:
     else:
         markdown = text.strip()
 
-    return markdown, embedded_images
+    return normalise_summary_footer(markdown), embedded_images
 
 
 def build_extraction_text(extraction: ExtractionData) -> str:
@@ -243,6 +292,14 @@ def build_extraction_text(extraction: ExtractionData) -> str:
     Returns:
         Formatted text string.
     """
+    parts = [
+        f"--- Page {num} {marker} ---\n{text}" for marker, num, text in _marked_pages(extraction)
+    ]
+    return "\n\n".join(parts)
+
+
+def _marked_pages(extraction: ExtractionData) -> list[tuple[str, int | str, str]]:
+    """(citation marker, page number, text) for every non-empty page, in order."""
     entries: list[tuple[int, int | str, str]] = []
     doc = 1
     prev_num: int | None = None
@@ -262,11 +319,51 @@ def build_extraction_text(extraction: ExtractionData) -> str:
             entries.append((doc, page_num, text))
 
     multi = doc > 1
-    parts = []
-    for d, num, text in entries:
-        marker = f"[D{d} p.{num}]" if multi else f"[p.{num}]"
-        parts.append(f"--- Page {num} {marker} ---\n{text}")
-    return "\n\n".join(parts)
+    return [(f"[D{d} p.{num}]" if multi else f"[p.{num}]", num, text) for d, num, text in entries]
+
+
+#: Lines that carry a formula, recurrence, base case, complexity or worked example.
+_MUST_KEEP_LINE = re.compile(
+    r"[=≡≤≥]|->|→|\bO\([^)]*\)|\b(?:worked example|example|recurrence|base case|formula)\b",
+    re.IGNORECASE,
+)
+_MUST_KEEP_MAX_ITEMS = 40
+_MUST_KEEP_MAX_CHARS = 240
+
+
+def find_must_keep_items(extraction: ExtractionData) -> list[str]:
+    """Lecture lines a summary must not drop: formulas, recurrences, examples.
+
+    Models summarising a formula-heavy lecture keep the prose and quietly drop
+    the recurrence, the base case or the worked example's numbers (GL#34). The
+    detector is a plain line filter, deliberately over-inclusive: the prompt
+    lists these as a checklist, so a false positive costs a line of prompt and
+    a false negative costs nothing the prompt did not already ask for.
+
+    Args:
+        extraction: Extraction data with pages.
+
+    Returns:
+        ``"[p.2] best[0][c] = 0"``-style strings (the page's citation marker
+        first), in lecture order, de-duplicated, capped at 40 items of 240
+        characters.
+    """
+    items: list[str] = []
+    seen: set[str] = set()
+    for marker, _num, text in _marked_pages(extraction):
+        for raw in text.splitlines():
+            line = " ".join(raw.split())
+            if len(line) < 3 or not _MUST_KEEP_LINE.search(line):
+                continue
+            if len(line) > _MUST_KEEP_MAX_CHARS:
+                line = line[: _MUST_KEEP_MAX_CHARS - 1].rstrip() + "…"
+            item = f"{marker} {line}"
+            if item not in seen:
+                seen.add(item)
+                items.append(item)
+                if len(items) >= _MUST_KEEP_MAX_ITEMS:
+                    return items
+    return items
 
 
 def collect_image_references(extraction: ExtractionData) -> list[str]:

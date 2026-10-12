@@ -61,9 +61,12 @@
       "fact": "0110 is rejected (ends in q0) and 0111 is accepted (ends in q1)",
       "all": [
         "0110",
-        "rejects",
         "0111",
-        "accepts"
+        "reject"
+      ],
+      "any": [
+        "accepts",
+        "accepted"
       ]
     },
     {

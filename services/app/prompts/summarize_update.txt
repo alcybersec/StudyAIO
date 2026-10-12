@@ -1,6 +1,24 @@
-{# Summarize update prompt template — v2.2
+{# Summarize update prompt template — v2.4
    Purpose: Update an existing summary with new lecture content.
-   Variables: course_code, week, extraction_text, image_references, existing_summary
+   Variables: course_code, week, extraction_text, image_references, existing_summary,
+              must_keep (optional: formula / worked-example lines, each with its marker)
+
+   v2.4 (2026-10-12, GL#34 iteration 3): same rules as summarize.txt v2.5.
+   Overview and Connections may name only topics in the new content, the
+   existing summary or the provided course context, and the "points toward /
+   leads to / unlike / compared with X" bridge to anything else is banned (the
+   v2.4 live run bridged to greedy and self-balancing trees, neither in its
+   lecture). One citation example per line shape added, because bullets, table
+   rows, steps, formula lines and code lead-ins were what stayed uncited.
+
+   v2.3 (2026-10-12, GL#34 iteration 2): same completeness and citation rules as
+   summarize.txt v2.4. Formulas stay plain text (no LaTeX, which does not render
+   and re-spells the lecture's symbols); a Must-Keep Items list and a
+   completeness checklist keep every formula, recurrence case, base case,
+   complexity and worked example (with its numbers) from the new content AND the
+   existing summary; citations reach lead-ins, steps, table rows, formula and
+   code lines; the `---` + Sources footer is restated as its own two lines.
+   A merge that drops a formula the existing summary had is a regression.
 
    v2.2 (2026-10-11, GL#34): same citation and no-outside-material rules as
    summarize.txt v2.3. New Key Concepts claims end with the page marker from
@@ -36,6 +54,14 @@ Week: {{ week }}
 ## Source Locations
 Each block of the new lecture content starts with a header such as `--- Page 3 [p.3] ---` (a slide counts as a page). The bracketed marker is that block's citation: copy it exactly, including any `D` part. Markers already in the existing summary stay as they are.
 
+{% if must_keep %}
+## Must-Keep Items
+These lines of the new lecture content carry formulas, recurrences, base cases, complexities or worked examples. Each MUST appear in the updated summary with its exact symbols and numbers, as must every such item already in the existing summary. Each starts with the marker of the block it comes from.
+{% for item in must_keep %}
+- {{ item }}
+{% endfor %}
+{% endif %}
+
 {% if image_references %}
 ## Referenced Images
 The following images were extracted from the lecture:
@@ -59,7 +85,13 @@ Produce an UPDATED markdown summary that merges the existing summary with the ne
    - Weave in real-world examples and case studies from the new content
    - Use tables where comparison or structured data is natural
    - Place new concepts in logical order relative to existing ones
-   - CITE EVERY CLAIM: each bullet, table row and paragraph ends with the source marker(s) it comes from, e.g. `[p.3]`. Cite only markers that appear in the content above or already in the existing summary; never invent a page. A claim you cannot cite does not belong.
+   - CITE EVERY LINE: every paragraph, lead-in sentence, bullet, numbered step, table row, formula line and code line ends with the source marker(s) it comes from, e.g. `[p.3]`. In a table the marker goes inside the last cell of each row; for a fenced formula or code block, the line introducing it ends with the marker. Cite only markers that appear in the content above or already in the existing summary; never invent a page. A claim you cannot cite does not belong, and a line without a marker is a defect. One example per line shape (page numbers illustrative):
+     - bullet: `- Search visits at most one node per level [p.3].`
+     - table row: `| Stable sort | Equal keys keep their order [p.4] |`
+     - numbered step: `2. Compare the key with the root; go left if smaller [p.2].`
+     - formula line: the sentence before the fence ends `The recurrence is [p.5]:`, and the fence holds `T(n) = 2T(n/2) + n`
+     - line that introduces code: `The loop below walks the list once [p.6]:` followed by the fence
+   - Write every formula in plain text exactly as the lecture writes it, in inline code or a code block. Do NOT use LaTeX (`$...$`, `\text{}`, `\bmod`): it does not render for the student and it re-spells the lecture's symbols.
    - Convert any flat bullet-point lists from the existing summary into proper subsection explanations
    Do NOT produce a flat bullet-point dump. Think like a tutor explaining the material.
 
@@ -69,13 +101,13 @@ Produce an UPDATED markdown summary that merges the existing summary with the ne
 
 6. `## Code Examples` — Merge code examples. Ensure all code has inline comments explaining significant lines. If none, write "No code examples in this lecture."
 
-7. `## Formulas & Algorithms` — Merge any mathematical formulas, calculations, or quantitative relationships. Keep every worked example with its actual numbers and result, with its source marker. If none, write "No formulas in this lecture."
+7. `## Formulas & Algorithms` — Merge the exact, complete quantitative content, in plain text inside code blocks, each item followed by its source marker: every formula with all its cases and conditions, every base case, every complexity and named property, and every worked example with its given inputs, intermediate values and final result (the lecture's actual numbers, never a generic description). Keep what the existing summary had; add what the new content has. Write "No formulas in this lecture." only if neither contains any.
 
 8. `## Key Takeaways` — Merge and update the distilled insights. Write as "so what?" statements, not just restated facts. If the existing summary has "Potential Exam Topics" instead, convert it to Key Takeaways style.
 
 9. `## Connections` — Update the links to other lectures using ONLY what the lecture content and the existing summary contain. Keep connections the lecture itself states; add new ones the new content states, attributed to the lecture. Name another week only if the lecture names it, by title or topic, and NEVER state or imply what another week taught. Remove any industry, market, career or real-world-adoption paragraph the lecture did not discuss, and any named technology, standard or sector it did not mention. If nothing remains, write one plain sentence: "This lecture does not link to other material, and no other weeks were available to compare against."
 
-10. Footer line: `---` followed by `*Sources: <list source artifacts>. Version: <increment>.*` — required, never omitted: the last thing in the summary, before the metadata block.
+10. Footer — REQUIRED, never omitted. The last thing in the summary, after the final line of `## Connections`, is a line containing only `---`, then, on the very next line, `*Sources: <list source artifacts>. Version: <increment>.*`. It is not part of the Connections text: a summary that ends at `## Connections`, or whose Sources line has no `---` line above it, is rejected. Emit the metadata block after it.
 
 ## Rules
 - Merge, do not replace — preserve information from the existing summary
@@ -84,7 +116,9 @@ Produce an UPDATED markdown summary that merges the existing summary with the ne
 - If the existing summary uses the old format (flat bullet Key Concepts, Potential Exam Topics, Summary section), restructure it into the new format during the merge
 - Increment the version number in the footer
 - Preserve technical accuracy
+- Completeness checklist, mandatory. Before you write, list every formula, recurrence (each case), base case, condition, complexity, property, worked example (with numbers and result) in BOTH the existing summary and the new content. After you write, tick each off against the updated summary; anything unticked goes in before you finish.
 - If the lecture doesn't say it, don't write it: add no fact, caveat, variant or improvement that neither the new content nor the existing summary contains, even when it is true. Do not drop a fact the lecture states.
+- No outside topics, in Overview and Connections above all: name only topics, techniques, structures or algorithms that appear in the new content or the existing summary. Do not write bridges to anything else: "points toward X", "leads to X", "motivates X", "unlike X", "compared with X", "a natural follow-on is X", where X is not in the source. If the lecture does not name the next topic, say nothing about one.
 - Write as a tutor teaching the material, not listing facts
 - Prefer paragraph-form explanations over flat bullet lists for conceptual material
 
