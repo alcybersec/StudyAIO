@@ -15,12 +15,7 @@ Orchestrator updates here.
 
 ## Next task
 
-**M33-S1** (strategic bet: weak-spot engine, user 2026-10-11). Unblocked now: M33-S1-OPS-004 (G4, after the next
-02:00 UTC backup), M33-S1-AI-012 (eval set in CI), M33-S1-AI-014 (relevance floor), M33-S1-BACKEND-015/016/017
-(feedback, usage events, consent). M33-S1-AI-013 after AI-012 (needs the baseline). M33-S2 starts with
-M33-S2-ARCH-018 (ADR 0007), which needs the user's acceptance before S2 implementation.
-
-**M33 GitLab issues (2026-10-11):** GL#32–#51 = M33-S1-OPS-004 … M33-S3-DEVOPS-030 in §11 order (label `M33`).
+**M33 S1 complete and deployed (2026-10-12):** GL#33–#38 closed (MR !38, !39, !40; `main` @ `0869544`). M32 gate conditions G1–G4 all closed. Next: **M33 S2 — weak-spot engine**, starting with M33-S2-ARCH-018 (ADR 0007), which needs the user's acceptance before S2 implementation.
 
 ## Active
 
@@ -42,6 +37,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| GL#34 close-out + hardening: summarize v2.5 (MR !39) and summary temperature 0.2, eval baseline refreshed + citation gate, moving-window rate limits (SAFETY-050 pins), flaky-test fixes, deploy keeps 2 app releases (MR !40) | `ai`, `backend`, `devops`, `safety` | → `main` `85fb049`, `0869544` | Live eval, 2 runs/case: mean faithfulness 0.983, citation 91%, 0 broken footers; dp_knapsack exception recorded. Pipelines #642 (backend-tests flake, retried) and #646: all 8 jobs success; `main` #647 success. Prod: `0869544`, temperature 0.2, moving-window, 2 app releases on disk (16 GB free). First deploy refused by the disk guard (7 GB < 8 GB) → old images removed, retention fixed | 2026-10-12 |
 | M33 S1 (GL#33–#38): AI-013 cited/faithful summaries (prompt v2.3, page markers, citation metrics — live acceptance pending), BACKEND-014 relevance floor + follow-up retrieval, BACKEND-015/016 AI feedback + usage events + retention readout, BACKEND-017/036 consent gate + profile version + email-free logs, BACKEND-038 / AI-039 redaction holes F1/F2, FRONTEND-035/037 consent dialog (accurate disclosure), feedback, citation chips, admin panels, QA-034/041/042 integration + e2e, SAFETY-033/040 | `ai`, `backend`, `frontend`, `qa`, `safety` | → `kit/retrofit` `24df70b`, MR !38 | **Orchestrator full run on `60fea1c`:** ruff clean; unit 89.35% `3552 passed`; floor 97.62% `534 passed, 1 skipped`, 0 xfail; integration 83.55% `590 passed`; evals `RESULT: PASS`; frontend `697 passed`; leak grep 0 (tree + messages). Pipeline #625: e2e-tests failed (register rate limit exhausted by the new spec) → QA-042. **Pipeline #626 on `24df70b`: all 8 jobs success by name.** Safety APPROVE, no veto | 2026-10-12 |
 | M33-S1-DATA-031 (schema `ai_feedback`, `usage_events`, `users.ai_processing_consent_*`; migration `e5b7d2c94a08`) + M33-S1-AI-012/012b + DEVOPS-032 (GL#33: 21 synthetic cases, offline `--check` CI gate `summary-eval`, regression semantics; **measured baseline on the production model: faithfulness 0.878, coverage 0.993, structure 90%**) | `data`, `ai`, `devops` | → `kit/retrofit` (see log) | Migration up/down/up on pg16, single head; Orchestrator: `python -m evals --offline --check` → `RESULT: PASS` (2 known structure WARNs); `glab ci lint` valid; leak grep 0 on files + messages. Live run: 22 provider calls (1 aborted + 21) | 2026-10-11 |
 
@@ -54,4 +50,4 @@ at its gate, leaving one pointer line here._
 
 | Gate | Verdict | Summary | Date |
 |---|---|---|---|
-| M32 | **CONDITIONAL — accepted by the user 2026-10-11**; G1–G3 closed, G4 → M33-S1-OPS-004 | [`summary.md`](../gates/M32/summary.md) · floors: [`floors.md`](../gates/M32/floors.md) | 2026-10-11 |
+| M32 | **CONDITIONAL — accepted by the user 2026-10-11**; G1–G4 all closed (G4: scheduled backup verified 2026-10-12) | [`summary.md`](../gates/M32/summary.md) · floors: [`floors.md`](../gates/M32/floors.md) | 2026-10-12 |
