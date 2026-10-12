@@ -193,12 +193,13 @@ exits 66 with the reclaim commands, rather than dying part-way through
 extraction with a containerd error naming a blob digest — which is what a full
 disk actually looks like, and it reads like a registry fault.
 
-Post-deploy cleanup uses `docker image prune -af --filter "until=168h"`. The
-`-a` matters: a bare `docker image prune -f` removes only *dangling* images, so
-every deploy leaves its predecessor's tagged image on disk forever, and the disk
-eventually fills. The `until` filter
-keeps about a week of tags as local rollback targets; older ones are re-pullable
-from GHCR, and images used by a running container are never pruned.
+Post-deploy cleanup keeps the app images (`studyaio-api`, `studyaio-ui`) of the
+running release and the previous one (`KEEP_RELEASES`, default 2) and removes
+older app tags regardless of age; each api image is several GB, so an age-based
+window filled the disk. Images used by any container and non-app images are never
+touched; dangling layers are pruned afterwards. Older releases stay re-pullable
+from GHCR. Raise `KEEP_RELEASES` in the deploy environment for more local
+rollback targets.
    - Holds `resource_group: studyaio-prod`, so two deploys never interleave, and
      is `interruptible: false` so a newer push cannot cancel one midway.
    - Re-checks the ref as a **shell assertion**, not only via `rules:`. A
