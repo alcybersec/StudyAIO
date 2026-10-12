@@ -64,6 +64,24 @@ def parse_scope(text: str) -> ParsedScope:
     return ParsedScope(code=code, week=week)
 
 
+_OVERVIEW_RE = re.compile(
+    r"\b(?:summar\w*|overview|recap|outline|key\s+(?:points?|takeaways?)"
+    r"|main\s+(?:points?|ideas?|topics?)|cover(?:s|ed)?)\b"
+    r"|\bwhat\b[^?.!]*\babout\b"
+    r"|\b(?:explain|go\s+over|walk\s+me\s+through)\s+(?:the\s+)?(?:week|lecture|lec|wk)\b",
+    re.IGNORECASE,
+)
+
+
+def detect_overview_intent(text: str) -> bool:
+    """Return True when the message asks what a lecture/week was about.
+
+    Deliberately conservative: specific questions ("how does ASLR work?")
+    do not match. Used only to add the caller's week summary as context.
+    """
+    return bool(_OVERVIEW_RE.search(text))
+
+
 def detect_quiz_intent(text: str) -> bool:
     """Return True when the message asks to create a test, quiz or exam.
 

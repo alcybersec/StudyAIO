@@ -18,9 +18,10 @@ from app.services import (
     quota_service,
     search_service,
     settings_service,
+    summary_service,
 )
-from app.services.chat_scope import build_sources
-from app.services.retrieval import filter_by_floor, not_found_reply, record_below_floor
+from app.services.chat_scope import build_sources, detect_overview_intent
+from app.services.retrieval import apply_floor, not_found_reply, with_week_summary
 
 logger = structlog.get_logger()
 
@@ -81,11 +82,15 @@ async def ask_question(
         user_id=user.id,
     )
 
-    searched = len(chunks)
-    chunks = filter_by_floor(chunks)
+    chunks, _ = apply_floor(
+        chunks,
+        stage="qa",
+        course_scoped=course_id is not None,
+        week_scoped=body.week is not None,
+        scope_code=body.course_code,
+        week=body.week,
+    )
     if not chunks:
-        if searched:
-            record_below_floor("qa", searched=searched, scope_code=body.course_code, week=body.week)
         # Nothing relevant: answer deterministically, no AI call, no usage.
         return QAResponse(
             answer=not_found_reply(body.course_code, body.week),
@@ -98,8 +103,18 @@ async def ask_question(
 
     user_agent_config, output_language = await get_user_ai_context(session, user.id)
     agent = get_agent(user_settings=user_agent_config, output_language=output_language)
+    question = body.question
+    if course_id is not None and body.week is not None and detect_overview_intent(question):
+        summary = await summary_service.get_owned_summary(
+            session, course_id, body.week, user_id=user.id
+        )
+        question = with_week_summary(
+            question,
+            summary.content_md if summary is not None else None,
+            label=f"{body.course_code} Week {body.week}",
+        )
     try:
-        answer_result = await agent.answer_question(body.question, chunks)
+        answer_result = await agent.answer_question(question, chunks)
     except NotImplementedError:
         raise HTTPException(
             status_code=501,

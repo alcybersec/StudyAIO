@@ -97,6 +97,12 @@ class Settings(BaseSettings):
     # the noise band: weak topical neighbours are dropped, genuine matches
     # stay. Re-tune if EMBEDDING_MODEL changes; 0 disables the floor.
     retrieval_min_similarity: float = 0.25
+    # Floor for a question scoped to a course but no week. A week-scoped turn
+    # bypasses the floor entirely (its chunks are relevant by construction);
+    # a whole course is a wider net, so a lower floor than the unscoped one
+    # still drops noise (unrelated text scores 0.0-0.15) while letting broad
+    # "what is this course about" questions through.
+    retrieval_course_scope_min_similarity: float = 0.15
 
     # Security
     cookie_secure: bool = False
