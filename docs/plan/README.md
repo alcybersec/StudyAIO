@@ -21,7 +21,7 @@ Orchestrator updates here.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| _none — M33 S1 awaiting merge of MR !38_ | | | |
+| M33-S2-ARCH-018 (GL#39: ADR 0007 weak-spot engine, contracts, red contract tests) | `architect` | 2026-10-12 | isolated |
 
 **GL#31 (2026-10-10):** chat follow-ups lose course/week scope (prod repro; a course's week 3 has 8 indexed chunks) — pulled into M32 wave 1 as M32-S4-BACKEND-023 (audit AI-06 overlap).
 
