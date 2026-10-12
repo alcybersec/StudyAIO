@@ -717,3 +717,34 @@ class TestMentionsInflections:
         """The distinction the suffix list exists to make."""
         assert not scoring._mentions("grows the window quickly", "QUIC")
         assert not scoring._mentions("a quicksort refresher", "QUIC")
+
+
+@pytest.mark.asyncio
+class TestTemperatureOverride:
+    async def _run(self, **kwargs):
+        from app.agents.base import summary_temperature
+
+        agent = _StubAgent("# x\n", None)
+        with patch("app.agents.factory.get_agent", return_value=agent):
+            await runner.run(only="normalisation", judge=False, **kwargs)
+        return summary_temperature(agent)
+
+    async def test_override_is_applied_to_the_agent(self):
+        assert await self._run(n=2, temperature=0.0) == 0.0
+
+    async def test_no_override_leaves_the_adapter_setting_alone(self):
+        assert await self._run() == 0.2
+
+
+class TestTemperatureFlag:
+    def test_flag_reaches_the_runner(self):
+        from evals import __main__ as cli
+
+        args = cli.build_parser().parse_args(["--live", "--temperature", "0.4"])
+        assert args.temperature == 0.4
+
+    def test_offline_rejects_it(self):
+        from evals import __main__ as cli
+
+        with pytest.raises(SystemExit):
+            cli.main(["--offline", "--temperature", "0.4"])

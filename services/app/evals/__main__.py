@@ -86,7 +86,13 @@ async def _live(args: argparse.Namespace) -> int:
     from evals.runner import run
 
     save_to = Path(args.fixtures) if args.save_fixtures else None
-    report = await run(only=args.case, judge=not args.no_judge, n=args.n, save_summaries_to=save_to)
+    report = await run(
+        only=args.case,
+        judge=not args.no_judge,
+        n=args.n,
+        save_summaries_to=save_to,
+        temperature=args.temperature,
+    )
     print(format_report(report))
     if save_to:
         print(f"\nSummaries written to {save_to}")
@@ -116,6 +122,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Offline: score <id>.run<k>.md files, report per-run and mean, judge the bar",
     )
     parser.add_argument("-n", "--runs", dest="n", type=int, default=1, help="Live: runs per case")
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Live: override the summarization temperature (default: the setting)",
+    )
     parser.add_argument("--out", default=None, help="Write the JSON report here")
     return parser
 
@@ -126,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.live and (args.check or args.write_baseline or args.per_run):
         parser.error("--check, --write-baseline and --per-run are offline-only")
+    if args.offline and args.temperature is not None:
+        parser.error("--temperature is live-only")
     if args.per_run and (args.check or args.write_baseline):
         parser.error("--per-run cannot be combined with --check or --write-baseline")
     if args.offline:

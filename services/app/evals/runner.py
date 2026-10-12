@@ -244,6 +244,7 @@ async def run(
     judge: bool = True,
     n: int = 1,
     save_summaries_to: Path | None = None,
+    temperature: float | None = None,
 ) -> RunReport:
     """Summarise every case `n` times and score each result.
 
@@ -262,9 +263,14 @@ async def run(
             ``app.agents.parsing`` -- the text a user receives, not the raw
             model output.
 
+        temperature: Override the summarization temperature for this run
+            (experiments). None uses the adapter's setting, i.e. what
+            production uses.
+
     Returns:
         The report.
     """
+    from app.agents.base import set_summary_temperature
     from app.agents.factory import get_agent
     from app.config import settings
 
@@ -277,6 +283,8 @@ async def run(
         for attempt in range(n):
             agent = get_agent()
             agent.reset_usage()
+            if temperature is not None:
+                set_summary_temperature(agent, temperature)
 
             extraction = ExtractionData(
                 # Cases key pages as "page"; the prompt builder reads

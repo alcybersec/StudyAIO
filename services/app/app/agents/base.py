@@ -219,6 +219,44 @@ class TokenUsage:
         self.output_tokens += output_tokens
 
 
+#: Per-instance override attribute; see `set_summary_temperature`.
+_SUMMARY_TEMPERATURE_ATTR = "_summary_temperature_override"
+
+
+def set_summary_temperature(adapter: "AgentAdapter", temperature: float | None) -> None:
+    """Override the summarization temperature on one adapter instance.
+
+    A module function, not an ``AgentAdapter`` method, so the adapter contract
+    (docs/CONTRACTS.md) is unchanged. Used by the eval harness for experiments.
+
+    Args:
+        adapter: The adapter to configure.
+        temperature: Sampling temperature, or None to use the setting.
+    """
+    setattr(adapter, _SUMMARY_TEMPERATURE_ATTR, temperature)
+
+
+def summary_temperature(adapter: "AgentAdapter") -> float:
+    """Sampling temperature for ``generate_summary`` (new summary and update).
+
+    Summaries are the one operation where a faithful, repeatable answer beats a
+    varied one (GL#34), so they get their own, lower temperature. Classify,
+    chat, flashcards and quizzes deliberately do not use it.
+
+    Returns:
+        The instance override if set, else ``settings.summary_temperature``,
+        else ``DEFAULT_SUMMARY_TEMPERATURE``.
+    """
+    override = getattr(adapter, _SUMMARY_TEMPERATURE_ATTR, None)
+    if override is not None:
+        return float(override)
+    return float(getattr(settings, "summary_temperature", DEFAULT_SUMMARY_TEMPERATURE))
+
+
+#: Used until the `summary_temperature` setting exists / when it is unset.
+DEFAULT_SUMMARY_TEMPERATURE = 0.2
+
+
 class AgentAdapter(ABC):
     """Abstract interface for AI operations.
 
