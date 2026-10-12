@@ -243,6 +243,14 @@ def build_extraction_text(extraction: ExtractionData) -> str:
     Returns:
         Formatted text string.
     """
+    parts = [
+        f"--- Page {num} {marker} ---\n{text}" for marker, num, text in _marked_pages(extraction)
+    ]
+    return "\n\n".join(parts)
+
+
+def _marked_pages(extraction: ExtractionData) -> list[tuple[str, int | str, str]]:
+    """(citation marker, page number, text) for every non-empty page, in order."""
     entries: list[tuple[int, int | str, str]] = []
     doc = 1
     prev_num: int | None = None
@@ -262,11 +270,51 @@ def build_extraction_text(extraction: ExtractionData) -> str:
             entries.append((doc, page_num, text))
 
     multi = doc > 1
-    parts = []
-    for d, num, text in entries:
-        marker = f"[D{d} p.{num}]" if multi else f"[p.{num}]"
-        parts.append(f"--- Page {num} {marker} ---\n{text}")
-    return "\n\n".join(parts)
+    return [(f"[D{d} p.{num}]" if multi else f"[p.{num}]", num, text) for d, num, text in entries]
+
+
+#: Lines that carry a formula, recurrence, base case, complexity or worked example.
+_MUST_KEEP_LINE = re.compile(
+    r"[=≡≤≥]|->|→|\bO\([^)]*\)|\b(?:worked example|example|recurrence|base case|formula)\b",
+    re.IGNORECASE,
+)
+_MUST_KEEP_MAX_ITEMS = 40
+_MUST_KEEP_MAX_CHARS = 240
+
+
+def find_must_keep_items(extraction: ExtractionData) -> list[str]:
+    """Lecture lines a summary must not drop: formulas, recurrences, examples.
+
+    Models summarising a formula-heavy lecture keep the prose and quietly drop
+    the recurrence, the base case or the worked example's numbers (GL#34). The
+    detector is a plain line filter, deliberately over-inclusive: the prompt
+    lists these as a checklist, so a false positive costs a line of prompt and
+    a false negative costs nothing the prompt did not already ask for.
+
+    Args:
+        extraction: Extraction data with pages.
+
+    Returns:
+        ``"[p.2] best[0][c] = 0"``-style strings (the page's citation marker
+        first), in lecture order, de-duplicated, capped at 40 items of 240
+        characters.
+    """
+    items: list[str] = []
+    seen: set[str] = set()
+    for marker, _num, text in _marked_pages(extraction):
+        for raw in text.splitlines():
+            line = " ".join(raw.split())
+            if len(line) < 3 or not _MUST_KEEP_LINE.search(line):
+                continue
+            if len(line) > _MUST_KEEP_MAX_CHARS:
+                line = line[: _MUST_KEEP_MAX_CHARS - 1].rstrip() + "…"
+            item = f"{marker} {line}"
+            if item not in seen:
+                seen.add(item)
+                items.append(item)
+                if len(items) >= _MUST_KEEP_MAX_ITEMS:
+                    return items
+    return items
 
 
 def collect_image_references(extraction: ExtractionData) -> list[str]:

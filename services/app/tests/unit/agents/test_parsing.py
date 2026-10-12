@@ -7,6 +7,7 @@ from app.agents.parsing import (
     _clean_json_text,
     build_extraction_text,
     collect_image_references,
+    find_must_keep_items,
     parse_json_array_response,
     parse_json_response,
     parse_summary_response,
@@ -328,3 +329,45 @@ class TestCollectImageReferences:
         result = collect_image_references(extraction)
 
         assert result == ["real.png (page 1: Content)"]
+
+
+class TestFindMustKeepItems:
+    """Formula / recurrence / worked-example lines the summary must not drop (GL#34)."""
+
+    def _extraction(self, *texts: str) -> ExtractionData:
+        pages = [{"page_number": i, "text": t, "images": []} for i, t in enumerate(texts, 1)]
+        return ExtractionData(pages=pages, metadata={})
+
+    def test_formula_and_example_lines_carry_their_page_marker(self):
+        ex = self._extraction(
+            "Intro prose with no maths in it at all.",
+            "Recurrence:\nbest[i][c] = best[i-1][c] if w_i > c\nBase case: best[0][c] = 0 for all c.",
+            "Worked example: W = 5, items (w=2, v=3). Best value 7.\nTime is O(nW).",
+        )
+        items = find_must_keep_items(ex)
+        assert "[p.2] best[i][c] = best[i-1][c] if w_i > c" in items
+        assert "[p.2] Base case: best[0][c] = 0 for all c." in items
+        assert any(i.startswith("[p.3] Worked example: W = 5") for i in items)
+        assert "[p.3] Time is O(nW)." in items
+        assert not any("Intro prose" in i for i in items)
+
+    def test_markers_follow_merged_documents(self):
+        ex = ExtractionData(
+            pages=[
+                {"page_number": 1, "text": "x = 1 + 2", "source": "a.pdf", "images": []},
+                {"page_number": 1, "text": "y = 3 + 4", "source": "b.pdf", "images": []},
+            ],
+            metadata={},
+        )
+        assert find_must_keep_items(ex) == ["[D1 p.1] x = 1 + 2", "[D2 p.1] y = 3 + 4"]
+
+    def test_capped_deduplicated_and_truncated(self):
+        long_line = "a = " + "b" * 400
+        ex = self._extraction("\n".join([f"v{i} = {i}" for i in range(80)] + [long_line, "v1 = 1"]))
+        items = find_must_keep_items(ex)
+        assert len(items) <= 40
+        assert all(len(i) <= 260 for i in items)
+        assert len(items) == len(set(items))
+
+    def test_no_formulas_gives_empty_list(self):
+        assert find_must_keep_items(self._extraction("Just words here.")) == []

@@ -232,8 +232,15 @@ class TestCommittedSuite:
         assert case["required_facts"], "no required facts"
         assert case["forbidden_claims"] or case["must_not_mention"]
         for fact in case["required_facts"]:
-            for term in fact.get("all", []) + fact.get("any", []):
+            for term in fact.get("all", []):
                 assert scoring._mentions(source, term), f"{fact['fact']}: {term!r} not in source"
+            # `any` lists are phrasings of one fact ("accepts" / "accepted"): the
+            # lecture need only contain one of them, the others are for the summary.
+            alternatives = fact.get("any", [])
+            if alternatives:
+                assert any(scoring._mentions(source, t) for t in alternatives), (
+                    f"{fact['fact']}: none of {alternatives!r} in source"
+                )
         for claim in case["forbidden_claims"]:
             import re
 

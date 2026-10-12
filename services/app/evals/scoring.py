@@ -30,6 +30,56 @@ def required_sections() -> list[str]:
     return PROMPT_SECTION_PATTERN.findall((PROMPTS_DIR / "summarize.txt").read_text())
 
 
+#: LaTeX commands that are typesetting, not content: dropped.
+_TEX_NOISE = re.compile(
+    r"\\(?:big|Big|bigg|Bigg|left|right|displaystyle|quad|qquad|,|;|!)(?![A-Za-z])"
+)
+#: `\text{x}`, `\mathrm{x}`, `\mathbf{x}` -> `x`.
+_TEX_WRAPPER = re.compile(r"\\(?:text|textbf|mathrm|mathbf|operatorname)\{([^{}]*)\}")
+#: LaTeX command -> the plain-text spelling a lecture slide would use.
+_TEX_WORDS = {
+    "bmod": " mod ",
+    "pmod": " mod ",
+    "mod": " mod ",
+    "times": " * ",
+    "cdot": " * ",
+    "varphi": "phi",
+    "phi": "phi",
+    "max": "max",
+    "min": "min",
+    "log": "log",
+    "le": "<=",
+    "leq": "<=",
+    "ge": ">=",
+    "geq": ">=",
+    "equiv": "=",
+    "to": "->",
+    "rightarrow": "->",
+}
+_TEX_COMMAND = re.compile(r"\\([A-Za-z]+)")
+_TEX_SUBSUP = re.compile(r"([_^])\{([^{}]*)\}")
+
+
+def _normalise_math(text: str) -> str:
+    """Rewrite LaTeX and emphasis markup to the plain notation a slide uses.
+
+    A summary that states ``c = m^e mod n`` as ``$c = m^e \\bmod n$`` has stated
+    it; the literal check used to score that as a dropped fact, which taught the
+    eval that formulas were being lost when they were only being typeset.
+    Conservative on purpose: it removes markup and maps a short list of
+    symbols, it never adds or reorders content, so a formula that is wrong stays
+    wrong (``m^d`` does not become ``m^e``).
+    """
+    text = text.replace("$", "")
+    text = _TEX_NOISE.sub("", text)
+    text = text.replace("\\ ", " ")
+    for _ in range(3):  # nested wrappers such as \text{\textbf{x}}
+        text = _TEX_WRAPPER.sub(r"\1", text)
+    text = _TEX_SUBSUP.sub(r"\1\2", text)
+    text = _TEX_COMMAND.sub(lambda m: _TEX_WORDS.get(m.group(1), m.group(1)), text)
+    return text.replace("**", "")
+
+
 def _mentions(haystack: str, needle: str) -> bool:
     """Whether a concept is named, allowing for ordinary prose variation.
 
@@ -51,6 +101,7 @@ def _mentions(haystack: str, needle: str) -> bool:
     the summary never earned, which is the more dangerous direction because it
     flatters silently.
     """
+    haystack = _normalise_math(haystack)
     parts = [re.escape(part) for part in re.split(r"[\s\-_]+", needle.strip()) if part]
     if not parts:
         return False

@@ -40,8 +40,13 @@
     {
       "fact": "breaking any one condition prevents deadlock",
       "all": [
+        "deadlock"
+      ],
+      "any": [
         "any one",
-        "cannot occur"
+        "any single",
+        "even one",
+        "breaking one"
       ]
     },
     {

@@ -595,6 +595,7 @@ After the summary, emit:
                 "week": week,
                 "extraction_text": extraction_text,
                 "image_references": image_references,
+                "must_keep": parsing.find_must_keep_items(extraction),
             }
             if existing_summary:
                 render_vars["existing_summary"] = existing_summary
