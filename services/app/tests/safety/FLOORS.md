@@ -451,6 +451,23 @@ user-supplied and unverified, so each floor is checked against it.
 Floor 4 needs nothing new: the R-023 diff (`28fe02e..bc63f39`) adds no delete, unlink or
 overwrite of user data, and a zone change is not retroactive (ADR 0006 Decision 4).
 
+## SEC-10: credential-surface throttles, beside the floors
+
+`test_sec10_auth_rate_limit.py`, M33-S1-SAFETY-050. Not one of the four floors, but held in this tier because a
+silent weakening is invisible to every other test: the per-address limiter on `/api/auth/*` and the per-account
+login throttle. The limiter's `memory://` clock is replaced (`limits.storage.memory.time`), so runner latency
+cannot move a request across a window.
+
+| Test | Fails when |
+|---|---|
+| `test_sec10_every_limiter_counts_with_a_moving_window` | `RATE_LIMIT_STRATEGY` is not `moving-window`, or the module limiter, or `build_limiter` on `memory://` or `redis://`, is not a `MovingWindowRateLimiter`. Mutation-checked: the constant set to `fixed-window`, and the factory's `strategy=` kwarg forced to `fixed-window`, both fail here. |
+| `…::test_sec10_no_limiter_is_built_outside_the_factory` | Any `Limiter(...)`/`_OutagePolicyLimiter(...)` call in `app/**` other than the one in `build_limiter`; a second limiter could pick its own strategy and outage policy. |
+| `…::test_sec10_window_boundary_does_not_refill_the_login_budget` | One login at t0, four at t0+59.9, then five at t0+60.1: anything but `401` for the first six and `429` for the last four, or any 60 s span letting more than five through. A fixed window answers ten `401`s inside 0.2 s. Mutation-checked with both fixed-window mutations above. |
+| `…::test_sec10_auth_limiter_store_down_fails_closed` | With the limiter's Redis unreachable, `POST /api/auth/login` answers anything but 503, or the password check runs. Mutation-checked: `FAIL_CLOSED_PREFIXES` not matching `/api/auth/` fails here. |
+| `…::test_sec10_no_auth_limit_is_loosened_or_dropped` | A credential route in `app/api/auth.py` loses its `@limiter.limit`, carries a non-literal limit, or a limit looser than its M32 ceiling (`AUTH_LIMIT_CEILINGS`: login and OAuth MFA 5/min, demo login 10/min, the rest 3/min). Mutation-checked: login at `10/minute` fails here. `…::test_sec10_ceiling_check_reads_lambda_and_literal_limits` is its control. |
+| `…::test_sec10_unit_fake_implements_every_call_the_throttle_makes` | `login_throttle` calls a `redis_client` method that the unit suite's `FakeRedis` (`tests/unit/conftest.py`) does not implement. Without it the throttle raises, logs `login_throttle_unavailable` and fails open in every unit test, as it did before `b1e20d9`. |
+| `…::test_sec10_login_throttle_counts_and_engages_under_the_unit_fake`, `…::test_sec10_failed_logins_over_http_engage_the_throttle` | Under that same fake, `record_failure` does not count 1, 2, … , `login_throttle_unavailable` is logged, `login_throttle_engaged` is not, or (over HTTP, spaced past the per-address limit) the login after the free allowance is not delayed. Mutation-checked: removing `FakeRedis.incr` fails all three throttle tests. |
+
 ## Coverage
 
 The floor tier is mostly static: it reads all of `app/**` but executes very little
