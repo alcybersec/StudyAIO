@@ -190,7 +190,11 @@ fi
 
 CORS=$(get_val "CORS_ORIGINS")
 
-if echo "$CORS" | grep -qE "localhost|127\.0\.0\.1"; then
+# Here-string, not `echo | grep -q`: grep -q exits on its first match, echo can
+# then die of SIGPIPE, and under `set -o pipefail` the pipeline reports failure
+# -- so a value that DOES contain localhost sometimes read as "does not". It
+# showed up as a flaky test under parallel load.
+if grep -qE "localhost|127\.0\.0\.1" <<< "$CORS"; then
     if [[ "$SELF_HOSTED" == "false" ]]; then
         warn "CORS_ORIGINS contains localhost — update for production domain."
     else
@@ -379,7 +383,8 @@ DB_CONTAINER="${PREFLIGHT_DB_CONTAINER:-studyaio-db-1}"
 
 if ! command -v docker >/dev/null 2>&1; then
     ok "Per-user provider overrides not checked (docker not available here)"
-elif ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER"; then
+elif ! RUNNING_CONTAINERS="$(docker ps --format '{{.Names}}' 2>/dev/null)" \
+        || ! grep -qx "$DB_CONTAINER" <<< "$RUNNING_CONTAINERS"; then  # no pipe: see CORS check
     ok "Per-user provider overrides not checked ($DB_CONTAINER is not running)"
 else
     OVERRIDES=$(docker exec "$DB_CONTAINER" psql -U "${POSTGRES_USER:-studyaio}" -d "${POSTGRES_DB:-studyaio}" -tAc \
