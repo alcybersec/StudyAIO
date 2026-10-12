@@ -2,105 +2,62 @@
 
 ## Overview
 
-Graphs are one of the most fundamental data structures in computer science: a set of **vertices** (nodes) connected by **edges** (links). Almost any relational data can be modeled this way — road networks, social networks, web pages and hyperlinks, course prerequisites. But representing a graph is only half the story; the real power comes from *traversing* it, i.e., systematically visiting its vertices to answer questions like "is X reachable from Y?" or "what is the shortest path from A to B?"
+A graph is a structure made of vertices and edges, and this week's lecture introduces both how to store a graph and how to explore it systematically [p.1]. Graph traversal — visiting every vertex in a controlled order — is a foundational technique in computing: it underlies searching, pathfinding, and reachability analysis [p.1][p.2].
 
-This week introduces the two canonical traversal strategies: **breadth-first search (BFS)** and **depth-first search (DFS)**. They explore the exact same graph, visit the exact same vertices, and even run in the same time complexity — yet they differ in one crucial design choice (a queue vs. a stack), and that single difference changes the *order* of exploration and makes each suitable for different problems. Understanding *why* that one structural choice changes everything is the key insight of this lecture.
+The lecture presents two traversal strategies that differ only in the data structure they use: breadth-first search (BFS), which uses a queue, and depth-first search (DFS), which uses a stack or recursion [p.2]. Despite producing different visit orders, both share crucial safeguards and the same efficiency guarantees, which the lecture establishes explicitly [p.3].
 
 ## Key Concepts
 
 ### Representing Graphs: The Adjacency List
 
-Before we can traverse a graph, we must store it. The lecture uses an **adjacency list**: for each vertex, we keep a list of its neighbours. For the small square graph used throughout the lecture:
+Before any traversal can begin, we need a way to store the graph in memory. The lecture's chosen representation is the **adjacency list**: for each vertex, we keep the list of its neighbours [p.1]. So for a graph like the one below, vertex A's list would contain B and C, and so on.
 
-- A's neighbours: B, C
-- B's neighbours: A, D
-- C's neighbours: A, D
-- D's neighbours: B, C
-
-The lecture emphasizes that **memory use is proportional to vertices plus edges** — i.e., $O(V + E)$. This is a key practical property: we only store edges that actually exist, unlike an adjacency *matrix* which would reserve space for every possible pair. For large, sparse graphs (where $E \ll V^2$), this makes adjacency lists the natural choice, and it also directly enables the traversal algorithms below to run in $O(V + E)$ time.
+This representation matters because it determines traversal cost. The lecture states that memory use is proportional to vertices plus edges — that is, proportional to the actual size of the graph rather than to some larger fixed structure [p.1]. This property is exactly what makes the O(V + E) running time of the traversal algorithms possible later in the lecture [p.3].
 
 ### Breadth-First Search (BFS)
 
-#### The Mechanism: A Queue
+BFS uses a **queue** to decide which vertex to visit next [p.2]. A queue is first-in, first-out: the earliest vertex discovered is the earliest one explored. This gives BFS its defining characteristic — it explores the graph outward from the start in "rings".
 
-BFS uses a **queue** (first-in, first-out). We start at a source vertex, mark it visited, and enqueue it. Then we repeatedly dequeue a vertex and enqueue all of its unvisited neighbours.
+The lecture traces BFS on a four-vertex example. Starting at A, the queue holds [A]. We visit A and enqueue its neighbours B and C; then we visit B and enqueue D. The resulting visit order is **A B C D** [p.2].
 
-Tracing the lecture's example on the square graph, starting at A:
-
-1. Queue: `[A]` — visit A, enqueue its neighbours B and C → `[B, C]`
-2. Visit B, enqueue its unvisited neighbour D → `[C, D]`
-3. Visit C (no new neighbours to enqueue)
-4. Visit D
-5. **Visit order: A B C D**
-
-#### Why BFS Matters: Shortest Paths
-
-The lecture's central claim about BFS is that it **visits vertices in order of distance from the start** — first everything at distance 1, then distance 2, and so on. This is a direct consequence of the queue: vertices discovered earlier are processed earlier, so the "frontier" expands outward layer by layer.
-
-The payoff: **in an unweighted graph, BFS finds the fewest-edge path** between the start vertex and every other vertex. If the square graph represented a road map where every road costs the same, BFS from A would immediately give the minimum number of roads to reach every destination. This is why BFS is the go-to algorithm whenever "fewest hops" is the goal.
+The payoff of this queue discipline is significant: BFS visits vertices in order of distance from the start, so in an unweighted graph it finds the fewest-edge path [p.2]. Intuitively, imagine navigating a road network where every road costs the same — BFS is guaranteed to reach your destination by the minimum number of roads.
 
 ### Depth-First Search (DFS)
 
-#### The Mechanism: A Stack (or Recursion)
+DFS uses a **stack**, or equivalently, recursion, to decide the next vertex to explore [p.2]. A stack is last-in, first-out: the most recently discovered vertex is explored next. This means DFS commits to a direction and goes as deep as possible before backing up [p.2].
 
-DFS uses a **stack** (last-in, first-out), which can be implemented explicitly or implicitly through **recursion** — each recursive call is effectively a stack frame. Instead of exploring layer by layer, DFS commits to one path and follows it **as deep as possible before backing up** (backtracking).
+Tracing the same graph starting at A: DFS goes to B, then D, then C, giving the order **A B D C** — different from BFS's order on the same graph [p.2]. Where BFS swept outward level by level, DFS plunged along one route to its end and only then retreated to explore alternatives.
 
-Tracing the lecture's example from A:
+### Shared Properties: Visited Marking and Complexity
 
-1. From A, go to B
-2. From B, go to D
-3. From D, go to C
-4. **Visit order: A B D C**
+Both algorithms must guard against a subtle hazard: graphs can contain cycles, and a naive traversal could loop around a cycle forever. The solution is that both mark vertices as visited so a cycle cannot cause an infinite loop [p.3]. Before processing a vertex, you check its mark; if it is already visited, you skip it.
 
-Notice this differs from BFS's `A B C D` on the *same graph* — the algorithm, not the graph, determines the order.
+Efficiency is also shared. With the adjacency-list representation from earlier, both BFS and DFS run in O(V + E) [p.3]. This means each vertex and each edge is effectively touched a constant number of times, and the adjacency list is what makes that accounting clean [p.1][p.3].
 
-#### Intuition: Exploring a Maze
-
-A helpful mental model is maze exploration: DFS is the strategy of "keep walking forward until you hit a dead end, then retrace your steps to the last junction and try another route." The backtracking behaviour falls naturally out of the stack: the most recently discovered vertex is always the next one explored.
-
-### Shared Properties: Visited Marks and Complexity
-
-Both algorithms share two essential properties highlighted in the lecture.
-
-#### Marking Visited Vertices
-
-Both BFS and DFS **mark vertices as visited** so a **cycle cannot cause an infinite loop**. This is critical: our example graph contains a cycle (A–B–D–C–A). Without visited marks, both algorithms would revisit A from C (or D) forever. The visited set is what guarantees termination and ensures each vertex is processed exactly once.
-
-#### Time Complexity
-
-Both run in **O(V + E)** with an adjacency list. The reasoning: every vertex is enqueued/pushed (and dequeued/popped) at most once, and every edge is examined at most twice (once from each endpoint). Since we touch each vertex and each edge a bounded number of times, the total work is linear in the graph's size — the same bound as the adjacency list's memory footprint.
-
-### BFS vs. DFS at a Glance
+### Comparing the Two
 
 | Aspect | BFS | DFS |
 |---|---|---|
-| Data structure | Queue (FIFO) | Stack (LIFO) or recursion |
-| Exploration pattern | Layer by layer, by distance from start | As deep as possible, then backtrack |
-| Example order from A | A B C D | A B D C |
-| Path property | Fewest-edge path in unweighted graphs | Not guaranteed shortest |
-| Time complexity | $O(V + E)$ | $O(V + E)$ |
-| Visited marks | Required (cycles) | Required (cycles) |
+| Data structure | Queue [p.2] | Stack, or recursion [p.2] |
+| Visit order from A (example graph) | A B C D [p.2] | A B D C [p.2] |
+| Exploration style | In order of distance from the start [p.2] | As deep as possible before backing up [p.2] |
+| Cycle handling | Marks vertices as visited [p.3] | Marks vertices as visited [p.3] |
+| Time complexity | O(V + E) with adjacency list [p.3] | O(V + E) with adjacency list [p.3] |
 
 ## Definitions
 
 | Term | Definition |
 |---|---|
-| Graph | A structure of vertices connected by edges. |
-| Vertex | A node of the graph; the entities being related. |
-| Edge | A connection between two vertices. |
-| Adjacency list | Storage where each vertex holds the list of its neighbours; memory proportional to vertices plus edges. |
-| Traversal | Systematically visiting the vertices of a graph. |
-| BFS | Breadth-first search; queue-based traversal visiting vertices in order of distance from the start; finds fewest-edge paths in unweighted graphs. |
-| DFS | Depth-first search; stack/recursion-based traversal that goes as deep as possible before backing up. |
-| Queue | FIFO data structure driving BFS. |
-| Stack | LIFO data structure driving DFS; recursion provides it implicitly. |
-| Visited mark | A flag ensuring each vertex is processed once, preventing infinite loops on cycles. |
-| Cycle | A path that returns to its starting vertex; the reason visited marks are needed. |
-| O(V + E) | Time complexity of both traversals using an adjacency list. |
+| Graph | A structure with vertices and edges [p.1] |
+| Adjacency list | A graph storage scheme where, for each vertex, we keep the list of its neighbours [p.1] |
+| BFS | Breadth-first search; uses a queue and visits vertices in order of distance from the start [p.2] |
+| DFS | Depth-first search; uses a stack or recursion and goes as deep as possible before backing up [p.2] |
+| Visited marking | Marking vertices as visited so a cycle cannot cause an infinite loop [p.3] |
+| Unweighted graph | A graph where BFS finds the fewest-edge path [p.2] |
 
 ## Diagrams & Visual Descriptions
 
-The lecture's example graph — a square with four vertices and four edges, containing a cycle:
+The lecture's example graph, used to trace both BFS and DFS:
 
 ```
     A --- B
@@ -108,18 +65,7 @@ The lecture's example graph — a square with four vertices and four edges, cont
     C --- D
 ```
 
-Traversal orders from A on this same graph:
-
-```
-BFS (queue):            DFS (stack):
-level 0:  A             A
-level 1:  B, C            -> B
-level 2:  D                 -> D
-                              -> C
-order: A B C D         order: A B D C
-```
-
-The cycle A→B→D→C→A is exactly why both algorithms must mark vertices as visited.
+From A, BFS's queue produces the order A B C D, while DFS's stack-driven exploration produces A B D C — the same graph, two different traversal disciplines [p.2].
 
 ## Code Examples
 
@@ -127,46 +73,44 @@ No code examples in this lecture.
 
 ## Formulas & Algorithms
 
-**Memory (adjacency list):**
-
-$$\text{memory} \propto V + E$$
-
-**Time complexity (both BFS and DFS):**
-
-$$O(V + E)$$
-
-**BFS algorithm sketch:**
-
-```text
-put start in queue; mark start visited
-while queue not empty:
-    v = dequeue
-    for each neighbour of v:
-        if not visited: mark visited, enqueue
+Graph storage [p.1]:
+```
+Adjacency list: for each vertex, the list of its neighbours.
+Memory use is proportional to vertices plus edges.
 ```
 
-**DFS algorithm sketch:**
+BFS trace starting at A [p.2]:
+```
+queue [A]
+Visit A, enqueue B and C.
+Visit B, enqueue D.
+Order: A B C D
+```
 
-```text
-visit(v):
-    mark v visited
-    for each neighbour of v:
-        if not visited: visit(neighbour)   # recursion = implicit stack
+DFS trace starting at A [p.2]:
+```
+go to B, then D, then C.
+Order: A B D C
+```
+
+Shared properties of BFS and DFS [p.3]:
+```
+Both mark vertices as visited so a cycle cannot cause an infinite loop.
+Both run in O(V + E) with an adjacency list.
 ```
 
 ## Key Takeaways
 
-- An adjacency list stores a graph in space proportional to $V + E$ — efficient for sparse graphs, and the reason traversals can be linear-time.
-- BFS and DFS differ only in the container used (queue vs. stack), yet that one choice completely changes the exploration order.
-- BFS visits vertices in increasing distance from the start, so in an unweighted graph it yields the fewest-edge path.
-- DFS dives as deep as possible before backtracking — natural to express recursively.
-- Visited marks are mandatory in both: without them, a cycle causes an infinite loop.
-- Both traversals run in $O(V + E)$ — optimal, since you must at least look at every vertex and edge.
+- The adjacency list stores a graph using memory proportional to vertices plus edges, which sets up efficient traversal [p.1].
+- BFS and DFS differ fundamentally in their data structure — queue versus stack or recursion — and this alone changes the visit order [p.2].
+- BFS's distance-ordered exploration means it finds the fewest-edge path in an unweighted graph — a genuinely useful guarantee, not just a curiosity [p.2].
+- DFS's depth-first commitment produces a different order (A B D C vs A B C D on the lecture's example) but explores the same graph [p.2].
+- Visited marking is not optional: without it, a cycle causes an infinite loop in either algorithm [p.3].
+- Both traversals achieve O(V + E) with an adjacency list — linear in the graph's actual size [p.3].
 
 ## Connections
 
-The lecture notes that BFS finds the fewest-edge path in unweighted graphs — pointing toward shortest-path problems, where weighted graphs would require going beyond this week's simple traversal. The adjacency-list representation and the $O(V + E)$ bound are presented as the enabling foundation for both algorithms, and the lecture's emphasis on cycles motivating visited marks highlights graph structure as central to algorithm correctness.
+The lecture builds on the graph definition and adjacency-list storage introduced at its start, using that representation to achieve the O(V + E) bound for both traversals [p.1][p.3]. Within the lecture itself, BFS's property of finding fewest-edge paths in unweighted graphs is presented as the practical payoff of queue-based traversal [p.2]. The lecture does not point to other weeks of the course.
 
 ---
-
-*Sources: CSIT201 Week 6 lecture slides (Graph Traversal). Version: 1.*
+*Sources: CSIT201 Week 6 lecture slides (pages 1–3). Version: 1.*

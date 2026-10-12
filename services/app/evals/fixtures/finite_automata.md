@@ -2,90 +2,93 @@
 
 ## Overview
 
-A Deterministic Finite Automaton (DFA) is one of the simplest models of computation: an abstract machine with a finite number of states that reads an input string one symbol at a time and ends in either an accepting or a rejecting state. Despite its simplicity, the DFA is the foundational object of automata theory — it gives a precise, mechanical definition of what it means to "recognize" a language, and it leads directly to the class of *regular languages*.
+A Deterministic Finite Automaton (DFA) is a simple abstract machine that reads an input string one symbol at a time and, at the end, either accepts or rejects it. Its power comes from a small set of ingredients: a finite collection of states, rules for moving between states as each symbol is read, a designated starting point, and a set of states that count as "success" [p.1]. Because the machine only ever needs to remember which single state it is in, it is an elegant model of computation that consumes a fixed, finite amount of memory no matter how long the input is.
 
-Why does this matter? Many practical problems — validating input, scanning text, checking simple properties of strings — boil down to deciding whether a string belongs to some set. DFAs provide a rigorous framework for exactly this kind of decision problem, and their "determinism" (one and only one move at each step) makes them easy to implement and reason about. This week establishes the formal definition, works through a complete example, and defines what it means for a language to be regular.
+The DFA is the foundation for the idea of a *regular language*: a language is regular exactly when some DFA accepts it [p.3]. This gives us a precise, mechanical way to define what strings belong to a language — instead of describing patterns in prose, we build a machine that recognizes them, and the language of the machine is simply the set of strings it accepts [p.3].
 
 ## Key Concepts
 
-### The Formal Definition: A 5-Tuple
+### The Formal Definition of a DFA
 
-A DFA is formally defined as a 5-tuple $(Q, \Sigma, \delta, q_0, F)$. Each component plays a distinct and essential role:
+#### The 5-tuple
 
-- **$Q$** — a finite set of *states*. Think of these as the machine's "memory": since $Q$ is finite, a DFA can only remember a bounded amount of information about the input seen so far.
-- **$\Sigma$** — the *input alphabet*, a finite set of symbols the machine can read (e.g., $\{0, 1\}$).
-- **$\delta$** — the *transition function*, $\delta: Q \times \Sigma \to Q$. Given a current state and the next input symbol, it returns exactly one next state.
-- **$q_0$** — the *start state*, where the machine begins before reading any input.
-- **$F$** — the set of *accepting states* (also called final states). If the machine finishes reading the input in a state in $F$, the string is accepted.
+A DFA is formally defined as a 5-tuple (Q, Σ, δ, q0, F). Each component plays a distinct role [p.1]:
 
-The critical property is **determinism**: from each state there is *exactly one* transition per symbol. There is never a choice, and there is never a missing transition. This is what makes the machine's behavior on any given input completely predictable — which is why we call it "deterministic."
+- `Q` — a finite set of states: the only "memory" the machine has [p.1].
+- `Σ` — the input alphabet: the set of symbols the machine can read [p.1].
+- `δ` — the transition function δ: Q × Σ → Q, mapping each (state, symbol) pair to a next state [p.1].
+- `q0` — the start state, where processing begins [p.1].
+- `F` — a set of accepting states; ending in one of these means the string is accepted [p.1].
 
-#### Why the formalism matters
+#### Determinism: exactly one transition per symbol
 
-The 5-tuple isn't bureaucratic detail — each piece is needed to make "machine" mathematically precise. Without $F$ we couldn't say which computations succeed; without a total transition function $\delta$ we couldn't guarantee the machine always has a well-defined next move. When proving things about DFAs later in the course, you'll manipulate exactly these components.
+The "deterministic" in DFA means that from each state there is exactly one transition per symbol [p.1]. There is never a choice to make and never a missing move: given the current state and the next input symbol, the next state is completely fixed. This is what makes the machine's behaviour on any input fully predictable — a property that contrasts with nondeterministic machines (not covered in this lecture) and is the key structural fact captured by δ being a total function Q × Σ → Q [p.1].
 
-### A Worked Example: Detecting Odd Numbers of 1s
+### A Worked Example: Detecting an Odd Number of 1s
 
-The lecture's example is a two-state DFA over $\Sigma = \{0, 1\}$ with states $Q = \{q_0, q_1\}$, start state $q_0$, and accepting states $F = \{q_1\}$. The transitions are:
+#### The machine
 
-| State | On 0 | On 1 |
-|-------|------|------|
-| $q_0$ | $q_0$ | $q_1$ |
-| $q_1$ | $q_1$ | $q_0$ |
+The lecture builds a DFA over the alphabet Σ = {0, 1}. It has just two states, q0 and q1; the start state is q0 and the only accepting state is q1 [p.2]. The transitions are [p.2]:
 
-The intuition: **each state remembers the parity of the number of 1s seen so far**. State $q_0$ means "even number of 1s so far," and $q_1$ means "odd number of 1s so far." Reading a `0` doesn't change the parity, so it loops in place; reading a `1` flips the parity, so it swaps states. Since the start state is $q_0$ (zero 1s — an even count) and the accepting state is $q_1$ (odd), the machine accepts exactly those strings containing an odd number of 1s.
+```
+q0 --1--> q1
+q0 --0--> q0
+q1 --0--> q1
+q1 --1--> q0
+```
 
-#### Tracing inputs
+Reading these rules, 0 never changes the state — the machine simply stays where it is — while every 1 flips it between q0 and q1 [p.2].
 
-How the machine processes input illustrates the mechanics:
+#### What the machine computes
 
-- **Input `0110`**: start at $q_0$; `0` keeps us at $q_0$; `1` moves to $q_1$; `1` moves back to $q_0$; `0` stays at $q_0$. The input has two 1s (even), so we end in $q_0$ — **rejected**.
-- **Input `0111`**: `0` → $q_0$; `1` → $q_1$; `1` → $q_0$; `1` → $q_1$. Three 1s (odd), end in $q_1$ — **accepted**.
+Because each 1 toggles the state and 0 does nothing, the machine is really counting 1s modulo 2: q0 means "even number of 1s seen so far" and q1 means "odd number of 1s seen so far". Since q1 is the only accepting state, the machine accepts strings with an odd number of 1s [p.2].
 
-Notice that `0`s are entirely irrelevant to the machine's decision — the DFA structure makes that abstraction visible and automatic.
+#### Tracing two inputs
+
+The lecture traces two concrete inputs to show how acceptance is decided:
+
+- Input `0110`: the machine ends in q0 (two 1s), so it rejects [p.2].
+- Input `0111`: the machine ends in q1, so it accepts [p.2].
+
+This trace illustrates the general operating principle: run the input through δ symbol by symbol from q0, and the final state alone decides accept/reject.
 
 ### Languages and Regularity
 
-The **language** of a DFA is simply the set of all strings it accepts. This turns a machine into a set-definition device: instead of describing a language by rules, we can define it by a process that decides membership.
+The language of a DFA is the set of strings it accepts [p.3]. This turns a machine description into a set of strings — for the example above, the language is exactly the strings over {0, 1} containing an odd number of 1s.
 
-This leads to the week's central definition: **a language is regular if some DFA accepts it**. The word "some" is important — regularity is an existence claim. To show a language is regular, you construct one DFA that recognizes it; to understand the limits of regular languages, you would need to show that no DFA can recognize a given language. The two-state parity example demonstrates that "odd number of 1s" is a regular language.
+The crucial definition follows: a language is *regular* if some DFA accepts it [p.3]. In other words, regularity is defined by existence — to prove a language is regular, it suffices to exhibit one DFA for it, as the lecture's odd-1s machine does [p.3].
 
 ## Definitions
 
 | Term | Definition |
-|------|------------|
-| DFA | A 5-tuple $(Q, \Sigma, \delta, q_0, F)$ — a finite automaton with exactly one transition per state per symbol. |
-| States ($Q$) | The finite set of internal configurations of the machine. |
-| Alphabet ($\Sigma$) | The finite set of input symbols the machine reads. |
-| Transition function ($\delta$) | Function $\delta: Q \times \Sigma \to Q$ mapping each (state, symbol) pair to exactly one next state. |
-| Start state ($q_0$) | The state the machine begins in before reading input. |
-| Accepting states ($F$) | The subset of states $F \subseteq Q$; ending in one of these means the input is accepted. |
-| Determinism | The property that from every state there is exactly one transition per input symbol. |
-| Language of a DFA | The set of all strings the DFA accepts. |
-| Regular language | A language for which there exists some DFA that accepts it. |
+|---|---|
+| DFA | A 5-tuple (Q, Σ, δ, q0, F): a finite set of states Q, an input alphabet Σ, a transition function δ: Q × Σ → Q, a start state q0 and a set of accepting states F [p.1] |
+| Q | A finite set of states [p.1] |
+| Σ | The input alphabet [p.1] |
+| δ | The transition function δ: Q × Σ → Q; from each state there is exactly one transition per symbol [p.1] |
+| q0 | The start state [p.1] |
+| F | The set of accepting states [p.1] |
+| Language of a DFA | The set of strings it accepts [p.3] |
+| Regular language | A language such that some DFA accepts it [p.3] |
 
 ## Diagrams & Visual Descriptions
 
-The two-state DFA as a state diagram:
+State diagram of the odd-1s DFA (arrows labelled with input symbols):
 
 ```
-        0                    0
-       ┌─┐                  ┌─┐
-       │ ▼                  │ ▼
-      ┌────┐      1        ┌────┐
- ---> │ q0 │ ────────────> │ q1 │  (( accepting ))
-      └────┘ <──────────── └────┘
-                1
+        0                 1
+       ┌─┐               ┌─┐
+       │ ▼               │ ▼
+      ┌────────┐   1    ┌────────┐
+─►    │   q0   │───────►│  ((q1))│      ((q1)) = accepting
+      └────────┘◄───────└────────┘
+          ▲       1          │
+          └────── 0 ─────────┘   (0 loops on q0 and on q1)
 ```
 
-State $q_0$ (even number of 1s) loops on `0` and moves to $q_1$ on `1`. State $q_1$ (odd number of 1s) loops on `0` and returns to $q_0$ on `1`. $q_1$ is accepting, drawn with a double circle in standard notation.
-
-Trace of the rejected input `0110`:
-
-```
-Input: 0  1  1  0
-State: q0→q0→q1→q0→q0   → ends in q0 (not in F): REJECT
-```
+- Reading a `1` in q0 moves to q1; reading a `1` in q1 moves back to q0 [p.2].
+- Reading a `0` leaves the state unchanged, in either q0 or q1 [p.2].
+- The double circle marks q1, the only accepting state; the entry arrow marks q0 as the start state [p.2].
 
 ## Code Examples
 
@@ -93,25 +96,52 @@ No code examples in this lecture.
 
 ## Formulas & Algorithms
 
-Formal DFA definition: $M = (Q, \Sigma, \delta, q_0, F)$ with transition function
+The DFA definition [p.1]:
 
-$$\delta: Q \times \Sigma \to Q$$
+```
+DFA = (Q, Σ, δ, q0, F)
+δ : Q × Σ → Q
+```
 
-Acceptance: an input $w = a_1 a_2 \dots a_n$ is accepted if, starting from $q_0$ and following $\delta$ through $a_1, \dots, a_n$, the machine ends in a state in $F$. The language of $M$ is $L(M) = \{ w : \delta^*(q_0, w) \in F \}$.
+Determinism condition [p.1]:
 
-Parity invariant (from the example): state tracks parity of the count of 1s — reading `0` preserves parity; reading `1` flips it.
+```
+From each state there is exactly one transition per symbol.
+```
+
+Transition table of the example over Σ = {0, 1}; states q0 and q1, start q0, accepting {q1} [p.2]:
+
+```
+q0 --1--> q1
+q0 --0--> q0
+q1 --0--> q1
+q1 --1--> q0
+```
+
+Worked traces [p.2]:
+
+```
+Input 0110: ends in q0 (two 1s) → reject
+Input 0111: ends in q1          → accept
+```
+
+Language recognized by the example machine [p.2]:
+
+```
+Strings over {0, 1} with an odd number of 1s
+```
 
 ## Key Takeaways
 
-- A DFA is fully specified by five components: states, alphabet, transitions, start state, and accepting states — every piece is required.
-- Determinism (exactly one transition per symbol from each state) makes DFA behavior on any input completely predictable.
-- DFA states are its only memory; clever state design (like parity tracking) is how DFAs "remember" properties of the input.
-- Always trace a DFA on concrete inputs to verify what language it accepts — the lecture's `0110` vs `0111` traces show how quickly the outcome flips.
-- A language is regular precisely when at least one DFA accepts it; constructing a DFA is how you prove regularity.
+- A DFA is fully specified by five components — states, alphabet, transition function, start state, accepting states — and nothing else is needed to describe its behaviour [p.1].
+- Determinism means no ambiguity: every (state, symbol) pair has exactly one outgoing transition, so a run is completely determined by the input [p.1].
+- States can encode simple counts — the two-state example tracks parity of the number of 1s, accepting exactly the odd-1s strings [p.2].
+- Acceptance is decided solely by the final state after reading the whole input, as the 0110 (reject) vs 0111 (accept) traces show [p.2].
+- "Regular" is defined by machines: a language is regular if some DFA accepts it, giving a mechanical criterion for membership in this class of languages [p.3].
 
 ## Connections
 
-This lecture does not link to other material, and no other weeks were available to compare against.
+This lecture establishes the core object of the course's study of languages and automata: the DFA as a recognizer, and the definition of regular languages as exactly those accepted by some DFA [p.3]. The lecture itself does not name any later topics or other weeks, so no further pointers can be drawn from its content.
 
 ---
-*Sources: CSIT205 Week 2 lecture slides (Deterministic Finite Automata). Version: 1.*
+*Sources: CSIT205 Week 2 lecture slides (pages 1–3). Version: 1.*

@@ -2,118 +2,78 @@
 
 ## Overview
 
-When a modern computer runs, there are typically far more processes ready to execute than there are CPUs to run them. Something must decide which ready process gets the CPU next — that decision-maker is the **scheduler**. CPU scheduling is one of the central responsibilities of an operating system because the choice has a direct, measurable effect on how fast programs finish and how responsive the system feels to users. A bad scheduling decision doesn't just slow one program; it can delay every process waiting behind it.
+When several processes are ready to run but only one CPU is available, the operating system must decide which process runs next. That decision is made by the scheduler, and the policies it can follow — and their trade-offs — are the subject of this week [p.1]. Scheduling matters because the choice of policy directly shapes how fast programs finish, how long users wait, and whether any process is unfairly ignored.
 
-This week introduces the core vocabulary for evaluating schedules — turnaround time, waiting time, and response time — and then examines three classic scheduling policies: First-Come First-Served (FCFS), Shortest Job First (SJF), and Round Robin (RR). Each policy makes a different trade-off between fairness, efficiency, and responsiveness, and each has well-known failure modes: the convoy effect under FCFS, starvation and impractical knowledge requirements under SJF, and the quantum-size dilemma under Round Robin.
+To compare policies objectively, we use three metrics: turnaround time (completion minus arrival), waiting time (time spent ready but not running), and response time (arrival to first run) [p.1]. This week introduces three classic policies — first-come first-served, shortest job first, and round robin — and shows with a worked example how dramatically they differ in practice [p.1][p.2].
 
 ## Key Concepts
 
-### Why We Measure: Scheduling Metrics
+### Scheduling Metrics
 
-Before comparing schedulers, we need objective ways to say one is "better." The lecture defines three metrics:
+Before evaluating any policy, we need a yardstick. Three metrics are defined [p.1]:
 
-- **Turnaround time** — the total time from a process's arrival to its completion. This captures how long a user waits for their job to finish overall.
-- **Waiting time** — the time a process spends in the ready queue, ready to run but not actually running. This isolates the cost imposed purely by scheduling, since time spent waiting isn't doing useful work for that process.
-- **Response time** — the time from arrival until the process first runs. This matters most for interactive systems: a user cares that the system *starts responding* quickly, even if the whole task takes a while.
+- **Turnaround time**: how long a process takes from arrival to completion — completion minus arrival [p.1].
+- **Waiting time**: the total time a process spends ready but not actually running [p.1].
+- **Response time**: how long from arrival until the process first gets to run [p.1].
 
-Notice these metrics can pull in different directions. A policy might keep average waiting time low while letting some individual process sit waiting a very long time — which is exactly what happens with SJF.
+These metrics can pull in different directions: a policy that improves average waiting time may hurt response time, which is why no single algorithm dominates [p.1][p.2].
 
 ### First-Come First-Served (FCFS)
 
-FCFS is the simplest possible policy: processes run in the order they arrive, and once a process gets the CPU it keeps it until it finishes (there is **no preemption**). It's fair in an intuitive queue-at-the-bakery sense, and it's trivially easy to implement.
-
-Its weakness is the **convoy effect**: a single long job at the front of the queue forces every short job behind it to wait for the entire duration of that long job. The name comes from the image of cars stuck behind a slow truck — no matter how fast the small cars could go, they move at the truck's pace.
-
-#### Worked Example
-
-The lecture gives a concrete case. Three processes arrive together with CPU bursts of **24, 3, and 3** (P1 = 24, P2 = 3, P3 = 3). Under FCFS they run in arrival order P1, P2, P3:
-
-| Process | Burst | Waiting time |
-|---------|-------|--------------|
-| P1 | 24 | 0 |
-| P2 | 3 | 24 |
-| P3 | 3 | 27 |
-
-Average waiting time = (0 + 24 + 27) / 3 = **17**. The two tiny jobs are punished simply for arriving after one big job — a textbook convoy effect.
+FCFS is the simplest policy: processes run in arrival order, without preemption [p.1]. Its weakness is the **convoy effect**: a long job at the front of the queue makes everything behind it wait [p.1]. Think of a single slow truck on a one-lane road — every car behind it is stuck, no matter how quick their errands are.
 
 ### Shortest Job First (SJF)
 
-SJF takes the opposite approach: among all ready processes, run the one with the shortest next CPU burst. Reordering the same example as P2, P3, P1:
-
-| Process | Burst | Waiting time |
-|---------|-------|--------------|
-| P2 | 3 | 0 |
-| P3 | 3 | 3 |
-| P1 | 24 | 6 |
-
-Average waiting time = (0 + 3 + 6) / 3 = **3**, versus 17 under FCFS — a dramatic improvement. In fact, SJF **minimises average waiting time**: by getting short jobs out of the way first, it minimises the number of processes that any single job delays.
-
-However, SJF has two serious problems:
-
-1. **It requires knowledge of the future.** The scheduler must know each process's next burst length in advance, but the system genuinely does not know this — a process itself doesn't usually know how long it will run.
-2. **Starvation.** A steady stream of short jobs can keep postponing a long job indefinitely, so the long job may never run at all.
+SJF runs the process with the shortest next CPU burst, which minimises average waiting time [p.2]. However, it faces two problems. First, it needs the burst length in advance, which the system does not actually know [p.2]. Second, long jobs can **starve** — if short jobs keep arriving, a long job may never get to run [p.2].
 
 ### Round Robin (RR)
 
-Round Robin addresses FCFS's unresponsiveness by adding **preemption with a time quantum**: each process runs for at most one fixed quantum, then is preempted and moved to the back of the ready queue, and the next process runs. No process can monopolise the CPU, so every process gets the CPU quickly — which is why RR delivers **good response time**, making it well suited to interactive use.
+RR gives each process a fixed **time quantum**, then preempts it and moves it to the back of the queue [p.2]. This gives good response time [p.2]. The quantum size is a critical tuning decision:
 
-RR's behaviour hinges critically on the **quantum size**:
+| Quantum setting | Consequence [p.2] |
+|---|---|
+| Too large | RR behaves like FCFS |
+| Too small | Context-switch overhead dominates |
 
-- **Quantum too large** → each process effectively runs to completion within its quantum, and RR degenerates into behaving just like FCFS, convoy effect and all.
-- **Quantum too small** → processes are switched so frequently that **context-switch overhead dominates**; the CPU spends more time switching between processes than doing their actual work.
+### Comparing FCFS and SJF: A Worked Example
 
-Choosing the quantum is therefore a genuine engineering trade-off, balancing responsiveness against switching cost.
-
-### Comparing the Policies
-
-| Policy | Preemption | Strength | Weakness |
-|--------|-----------|----------|----------|
-| FCFS | No | Simple, fair ordering | Convoy effect; poor average waiting time |
-| SJF | — | Minimises average waiting time | Needs burst lengths in advance; long jobs can starve |
-| Round Robin | Yes, per quantum | Good response time | Quantum choice is tricky: too large ≈ FCFS, too small = context-switch overhead |
+The lecture illustrates the difference with bursts of 24, 3, and 3 arriving together [p.3]. Under FCFS the order is P1, P2, P3, giving waiting times 0, 24, 27 — an average of 17 [p.3]. Under SJF the order is P2, P3, P1, giving waiting times 0, 3, 6 — an average of just 3 [p.3]. This shows SJF's optimality for waiting time vividly, while also illustrating FCFS's convoy effect: the two short jobs are stuck behind the 24-unit job [p.1][p.3].
 
 ## Definitions
 
 | Term | Definition |
-|------|------------|
-| Scheduler | The operating system component that picks which ready process runs next on the CPU. |
-| Turnaround time | Completion time minus arrival time — total time a process takes from arrival to finishing. |
-| Waiting time | Time a process spends ready but not running (in the ready queue). |
-| Response time | Time from a process's arrival until it first runs. |
-| FCFS | First-Come First-Served: runs processes in arrival order, without preemption. |
-| Convoy effect | The delay inflicted on all short jobs queued behind one long job (as in FCFS). |
-| SJF | Shortest Job First: runs the ready process with the shortest next CPU burst; minimises average waiting time but requires burst lengths in advance and can starve long jobs. |
-| Starvation | The situation where a process is repeatedly passed over and never gets to run (e.g., long jobs under SJF). |
-| Round Robin | Scheduling with a fixed time quantum per process, after which the process is preempted and moved to the back of the queue. |
-| Time quantum | The fixed slice of CPU time given to each process in Round Robin. |
-| Preemption | Forcibly taking the CPU away from a running process (e.g., at quantum expiry). |
-| Context switch | The overhead of switching the CPU from one process to another. |
+|---|---|
+| Scheduler | Picks which ready process runs next [p.1] |
+| Turnaround time | Completion minus arrival [p.1] |
+| Waiting time | Time spent ready but not running [p.1] |
+| Response time | Arrival to first run [p.1] |
+| FCFS | Runs processes in arrival order, without preemption [p.1] |
+| Convoy effect | A long job at the front makes everything behind it wait [p.1] |
+| SJF | Runs the process with the shortest next CPU burst; minimises average waiting time [p.2] |
+| Starvation | Long jobs can be indefinitely delayed under SJF [p.2] |
+| Round robin | Fixed time quantum per process, then preempt and move to the back of the queue [p.2] |
+| Time quantum | The fixed slice of CPU time each process receives in RR [p.2] |
+| Context-switch overhead | Cost of switching processes; dominates if the quantum is too small [p.2] |
 
 ## Diagrams & Visual Descriptions
 
-**FCFS convoy effect vs SJF, for bursts 24, 3, 3 (P1, P2, P3 arriving together):**
+Timeline of the worked example (bursts 24, 3, 3) under both policies [p.3]:
 
 ```
-FCFS (P1, P2, P3):  waiting = 0, 24, 27  → avg 17
-|–––––––P1: 24–––––––|–P2–|–P3–|
-0                    24   27   30
+FCFS (P1, P2, P3):      waiting:  0   24  27
+|------P1 (24)------|--P2--|--P3--|
 
-SJF (P2, P3, P1):   waiting = 0, 3, 6   → avg 3
-|–P2–|–P3–|–––––––P1: 24–––––––|
-0    3    6                   30
+SJF  (P2, P3, P1):      waiting:  0    3    6
+|--P2--|--P3--|------P1 (24)------|
 ```
 
-The two Gantt-style timelines show the same three jobs scheduled differently: under FCFS the short jobs wait behind the long one (convoy effect), while SJF clears the short jobs first and the long job absorbs all the delay.
-
-**Round Robin (quantum = 4, illustrative):**
+Round robin's circular queue: each process runs for one quantum, then re-joins the back of the queue [p.2].
 
 ```
-Ready queue:  P1 → P2 → P3 → (back to P1 ...)
-CPU:  |P1(4)|P2(4)|P3(4)|P1(4)|...
-      quantum expires → preempt → move to back of queue
+   ┌──────────────────────────────┐
+   ▼                              │
+[ Quantum runs ] → preempt → [ back of ready queue ]
 ```
-
-No diagrams in the extracted lecture images.
 
 ## Code Examples
 
@@ -121,37 +81,40 @@ No code examples in this lecture.
 
 ## Formulas & Algorithms
 
-**Metric formulas** (as defined in the lecture):
-
-- Turnaround time $= \text{completion time} - \text{arrival time}$
-- Waiting time = time spent in ready state (not running)
-- Response time $= \text{time of first run} - \text{arrival time}$
-
-**Average waiting time** (from the worked example):
+Metrics definitions [p.1]:
 
 ```
-FCFS: (0 + 24 + 27) / 3 = 17
-SJF:  (0 + 3 + 6)  / 3 = 3
+turnaround time = completion - arrival
+waiting time    = time spent ready but not running
+response time   = arrival to first run
 ```
 
-**Algorithms:**
-- FCFS: run processes in arrival order, no preemption.
-- SJF: among ready processes, always pick the one with the shortest next CPU burst.
-- RR: run each process for one time quantum; on expiry, preempt and place it at the back of the ready queue.
+RR quantum behaviour [p.2]:
+
+```
+if quantum too large  -> RR behaves like FCFS
+if quantum too small  -> context-switch overhead dominates
+```
+
+Worked example — bursts 24, 3, 3 arriving together [p.3]:
+
+```
+FCFS: order P1, P2, P3 -> waiting times 0, 24, 27 -> average 17
+SJF:  order P2, P3, P1 -> waiting times 0, 3, 6   -> average 3
+```
 
 ## Key Takeaways
 
-- The scheduler's choices are measured by turnaround time, waiting time, and response time — different policies optimise for different metrics, so "best" depends on your goal.
-- FCFS is simple but suffers the convoy effect: one long job makes everything behind it wait, badly inflating average waiting time (17 vs 3 in the lecture's example).
-- SJF provably minimises average waiting time, but it's impractical because burst lengths aren't known in advance, and it can starve long jobs.
-- Round Robin trades some efficiency for responsiveness by preempting each process after a fixed quantum.
-- The quantum size is the whole game in RR: too large and it degenerates into FCFS; too small and context-switch overhead dominates.
+- The scheduler's policy choice directly determines turnaround, waiting, and response times — always evaluate a policy against these metrics [p.1].
+- FCFS is simple but suffers from the convoy effect: one long job delays everyone behind it [p.1].
+- SJF minimises average waiting time (average 3 vs. FCFS's 17 in the example), but it is impractical because burst lengths are unknown in advance, and it risks starving long jobs [p.2][p.3].
+- Round robin trades optimality for fairness and responsiveness via time quanta; the quantum size is the crucial tuning knob — too big and it degenerates into FCFS, too small and switching costs take over [p.2].
 
 ## Connections
 
-The lecture's framing of scheduling as choosing among ready processes presupposes the process model the operating system maintains — the ready queue and the act of context-switching between processes are the machinery this week's policies operate on. The convoy and starvation problems also hint that scheduling decisions interact with broader OS resource-management questions about fairness and preventing indefinite delay.
+The lecture frames SJF's central weakness — needing burst lengths the system does not know [p.2] — as an open problem, which motivates the practical question of how schedulers estimate or approximate such information. Within this week's material, the convoy effect under FCFS and the starvation risk under SJF show why round robin's preemptive quantum scheme exists as the responsiveness-oriented alternative [p.1][p.2].
 
-Within this lecture itself, the observation that SJF "needs the burst length in advance, which the system does not know" leaves an obvious open problem — how can a practical scheduler approximate SJF without future knowledge — which the course may address later.
+This lecture does not link to other named weeks or external material beyond these internal comparisons.
 
 ---
-*Sources: CSIT203 Week 3 lecture notes (CPU Scheduling). Version: 1.*
+*Sources: CSIT203 Week 3 lecture slides (pp. 1–3). Version: 1.*

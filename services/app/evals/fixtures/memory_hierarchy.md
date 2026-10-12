@@ -1,91 +1,86 @@
-# CSIT203 — Week 9: The Memory Hierarchy and Cache Performance
+# CSIT203 — Week 9: The Memory Hierarchy
 
 ## Overview
 
-Modern computers need enormous amounts of memory, but memory that is simultaneously large *and* fast *and* cheap does not exist — physics and economics make these three properties trade off against each other. The memory hierarchy is the solution: rather than choosing one memory technology, a system stacks several technologies in layers, from tiny, extremely fast registers at the top, through cache and main memory, down to large, slow, inexpensive disk storage at the bottom. As you move down this pyramid, capacity and storage density increase, but access speed decreases and cost per bit rises at the top.
+Modern computers need memory that is simultaneously fast and large — but these two goals pull in opposite directions. Week 9 introduces the memory hierarchy, the layered arrangement of storage technologies that resolves this tension. The fundamental trade-off is stark: faster memory is smaller and more expensive, so systems stack several levels — registers, then cache, then main memory, then disk — and rely on the fast upper levels to serve most accesses [D1 p.1].
 
-What makes this clever arrangement actually *work* — rather than being a slow, complicated compromise — is a deep regularity in how programs behave: **locality of reference**. Programs do not access memory at random. They repeatedly reuse the same data (temporal locality) and tend to touch data physically near what they just touched (spatial locality). This week we formalize these ideas, introduce the cache as the level that exploits them, and learn to quantify performance with the **Average Memory Access Time (AMAT)** — the key equation behind the problem sheet calculations.
+What makes this layering work is a predictable pattern in how programs access data, called locality. Because programs repeatedly touch the same small region of memory, a small, fast cache can act as a stand-in for the much larger and slower levels below it. This week also introduces the key performance metric for evaluating the hierarchy: average memory access time (AMAT), which combines hit time, miss rate and miss penalty into a single number you can compute and optimize [D2 p.1].
 
 ## Key Concepts
 
-### The Structure of the Hierarchy
+### The Levels of the Memory Hierarchy
 
-The hierarchy is ordered by speed-versus-cost: registers at the very top (a handful of values, accessed in less than a nanosecond), then cache (kilobytes to megabytes, a few nanoseconds), then main memory (gigabytes, tens to hundreds of nanoseconds), then disk (terabytes, milliseconds). Each level down is larger and slower but cheaper per byte. The whole point is to present the illusion of a single large, fast memory by keeping the data the program is actively using as close to the top as possible.
+The hierarchy is ordered by speed and cost. At the top sit the registers — the fastest and most expensive storage, closest to the CPU. Below them is the cache, then main memory, and finally disk at the bottom, which is the slowest but largest and cheapest per byte [D1 p.1]. The design principle to internalize is the pairing of these properties: as you move down a level, you gain capacity but lose speed.
 
-The practical consequence: most of the time, the processor finds what it needs near the top, and the slow lower levels are visited only rarely. That rarity is what makes the average cost low despite the bottom of the pyramid being orders of magnitude slower than the top.
+This matters because if programs accessed memory randomly, a fast-but-small cache would be nearly useless. The hierarchy succeeds precisely because of locality — the tendency of programs to reuse recently accessed data and to access data near what they just accessed [D1 p.1].
 
 ### Locality: Why the Hierarchy Works
 
-#### Temporal locality
-Recently used data is likely to be used again soon. Loop counters, frequently-called function variables, and hot data structures all exhibit this. Caches exploit it by *retaining* data after first use, betting it will be requested again.
+#### Temporal Locality
 
-#### Spatial locality
-Data near recently used data is likely to be used soon. Array traversal and sequential instruction fetch are classic examples. The hierarchy exploits this not by caching single bytes but by moving whole **blocks (cache lines)** between levels: fetching one word drags its neighbours along for free, so the next nearby access is likely to hit.
+Temporal locality is the principle that recently used data is likely to be used again [D1 p.1]. A concrete mental model: when a loop iterates, the loop's instructions and the variables it touches are fetched once and then reused on every iteration — keeping them in cache pays off immediately.
 
-### Cache Hits, Misses, and Hit Rate
+#### Spatial Locality
 
-When the processor requests data:
+Spatial locality is the principle that data near recently used data is likely to be used soon [D1 p.1]. Arrays illustrate this well: reading element 0 makes it very likely that element 1 will be read next, so fetching a neighbourhood of bytes at once serves future accesses for free.
 
-- **Cache hit** — the data is found in the cache; access completes at cache speed.
-- **Cache miss** — the data is not there; the request goes to the next level down (and typically the block is then brought into the cache for future reuse).
+### Hits, Misses and Blocks
 
-The **hit rate** is the fraction of all accesses that hit; the **miss rate** is its complement. Because a miss costs dramatically more than a hit, even a small miss rate can dominate total performance — as the AMAT example below shows vividly.
+When the processor requests data, the two possible outcomes are:
 
-### Quantifying Performance: AMAT
+- A cache hit — the data is found in the cache [D1 p.2].
+- A cache miss — the data is not there, and the request must go to the next level down [D1 p.2].
 
-AMAT combines the cost of the common case (a hit) with the frequency-weighted cost of the rare case (a miss):
+The hit rate is the fraction of accesses that hit [D1 p.2] — for example, a hit rate of 95% corresponds to the 5% miss rate used in this week's AMAT exercise [D2 p.1].
 
-$$AMAT = \text{hit time} + \text{miss rate} \times \text{miss penalty}$$
+A crucial design detail: a cache does not hold individual bytes. It holds blocks (also called lines) rather than single bytes, which exploits spatial locality [D1 p.2]. By transferring an entire block on a miss, the cache bets that neighbouring data will be needed soon — turning one slow trip to a lower level into service for several future accesses.
 
-**Problem Sheet Q1:** hit time = 1 ns, miss rate = 5%, miss penalty = 100 ns:
+### Measuring Performance: AMAT
 
-$$AMAT = 1 + 0.05 \times 100 = 6\ \text{ns}$$
+The single-number metric for cache performance is:
 
-Notice that although only 1 access in 20 misses, the average access time is **6×** the hit time. The rare case dominates.
+`Average memory access time (AMAT) = hit time + miss rate * miss penalty` [D2 p.1]
 
-**Problem Sheet Q2:** halving the miss rate to 2.5%:
-
-$$AMAT = 1 + 0.025 \times 100 = 3.5\ \text{ns}$$
-
-A seemingly modest miss-rate improvement nearly halves average access time. The lesson: because the miss penalty is so much larger than the hit time, reducing miss rate is a powerful lever — this is exactly why spatial locality (large blocks) and temporal locality (retention policies) are worth engineering around.
+The three ingredients each play a distinct role: the hit time is what you pay on every access, while the miss rate and miss penalty combine into the expected extra cost of taking the slow path. AMAT is the tool for evaluating design changes — as the problem sheet shows, reducing the miss rate has a direct, computable payoff [D2 p.1].
 
 ## Definitions
 
 | Term | Definition |
 |---|---|
-| Memory hierarchy | Layered arrangement of storage (registers → cache → main memory → disk) trading size and cost against speed |
-| Temporal locality | The tendency of recently used data to be used again soon |
-| Spatial locality | The tendency of data near recently used data to be used soon |
-| Cache | A small, fast level of memory holding recently/recently-near data from lower levels |
-| Cache block (line) | The unit of data transferred between cache and lower levels; multiple bytes, exploiting spatial locality |
-| Cache hit | An access where the requested data is found in the cache |
-| Cache miss | An access where the data is absent and must be fetched from the next level |
-| Hit rate | The fraction of memory accesses that result in hits |
-| Miss rate | The fraction of accesses that miss (= 1 − hit rate) |
-| Miss penalty | The extra time required to fetch data from the next level on a miss |
-| Hit time | The time to complete an access that hits in the cache |
-| AMAT | Average Memory Access Time = hit time + miss rate × miss penalty |
+| Memory hierarchy | The layered arrangement of registers, cache, main memory and disk, where faster memory is smaller and more expensive [D1 p.1] |
+| Temporal locality | Recently used data is likely to be used again [D1 p.1] |
+| Spatial locality | Data near recently used data is likely to be used soon [D1 p.1] |
+| Cache hit | An access that finds the data in the cache [D1 p.2] |
+| Cache miss | An access that does not find the data, so the request goes to the next level [D1 p.2] |
+| Hit rate | The fraction of accesses that hit [D1 p.2] |
+| Block (line) | The unit a cache holds, rather than single bytes — this exploits spatial locality [D1 p.2] |
+| AMAT | Average memory access time = hit time + miss rate * miss penalty [D2 p.1] |
 
 ## Diagrams & Visual Descriptions
 
+The hierarchy as an inverted pyramid — fast and small at the top, slow and large at the bottom:
+
 ```
-        FASTER / SMALLER / MORE EXPENSIVE PER BYTE
-                     ▲
-                     │   ┌───────────┐
-                     │   │ Registers │  ← tiny, nanosecond access
-                     │   ├───────────┤
-                     │   │   Cache   │  ← blocks (lines), hits are fast
-                     │   ├───────────┤
-                     │   │   Main    │  ← gigabytes, slower
-                     │   │  Memory   │
-                     │   ├───────────┤
-                     │   │   Disk    │  ← terabytes, milliseconds
-                     │   └───────────┘
-                     ▼
-        SLOWER / LARGER / CHEAPER PER BYTE
+        +-----------+   fastest, smallest, most expensive
+        | Registers |                [D1 p.1]
+        +-----------+
+        |   Cache   |   holds blocks/lines, not single bytes [D1 p.2]
+        +-----------+
+        |  Memory   |
+        +-----------+
+        |   Disk    |   slowest, largest, cheapest [D1 p.1]
+        +-----------+
 ```
 
-On each access the CPU checks the top of the pyramid first. A **hit** returns data quickly; a **miss** cascades down the levels until the data is found, with the block then copied upward so locality can serve future accesses.
+On a hit, the cache answers; on a miss, the request falls through to the next level [D1 p.2]:
+
+```
+CPU -> [ Cache ] --hit--> data returned fast      [D1 p.2]
+             |
+            miss
+             v
+         [ Memory ] (next level supplies the data) [D1 p.2]
+```
 
 ## Code Examples
 
@@ -93,28 +88,35 @@ No code examples in this lecture.
 
 ## Formulas & Algorithms
 
-$$AMAT = \text{hit time} + (\text{miss rate} \times \text{miss penalty})$$
+The core performance formula [D2 p.1]:
 
-Worked examples from Problem Sheet 9:
+```
+AMAT = hit time + miss rate * miss penalty
+```
 
-```text
-Q1: hit time = 1 ns, miss rate = 5%, miss penalty = 100 ns
-    AMAT = 1 + (0.05 × 100) = 6 ns
+Worked example Q1 [D2 p.1]:
 
-Q2: miss rate halved to 2.5%
-    AMAT = 1 + (0.025 × 100) = 3.5 ns
+```
+Given: hit time 1 ns, miss rate 5%, miss penalty 100 ns
+AMAT = 1 + 0.05 * 100 = 6 ns
+```
+
+Worked example Q2 — halving the miss rate to 2.5% [D2 p.1]:
+
+```
+AMAT = 1 + 0.025 * 100 = 3.5 ns
 ```
 
 ## Key Takeaways
 
-- No single memory technology is fast, large, and cheap — the hierarchy combines many technologies to approximate all three.
-- The hierarchy only works because programs exhibit temporal and spatial locality; random access patterns would defeat it.
-- Caches move whole blocks, not bytes, so one fetch serves the neighbouring accesses spatial locality predicts.
-- Misses are rare but enormously expensive; a 5% miss rate made average access 6× slower than the 1 ns hit time.
-- Because miss penalties dwarf hit times, small miss-rate reductions yield large AMAT improvements (6 ns → 3.5 ns) — the key optimization target.
+- Faster memory is always smaller and more expensive, so no single technology can be both fast and large — the hierarchy stacks levels instead [D1 p.1].
+- Locality is the entire reason the hierarchy works: without temporal and spatial locality, a small cache could not stand in for a large memory [D1 p.1].
+- Caches move whole blocks, not bytes — this design choice is what converts spatial locality into real performance gains [D1 p.2].
+- AMAT gives you a concrete way to evaluate design changes: halving the miss rate in the problem sheet cut average access time from 6 ns to 3.5 ns — nearly a 2× improvement from one parameter [D2 p.1].
 
 ## Connections
 
-This lecture's AMAT formula quantifies the cost of moving between hierarchy levels — a theme central to any later discussion of cache design and memory performance, since the problem sheet explicitly treats hit time, miss rate, and miss penalty as the tunable parameters of system performance. The block-based organization of the cache, introduced here as the mechanism exploiting spatial locality, is the structural foundation the lecture builds on.
+This week's material builds a performance model (AMAT) on top of the hierarchy it introduces — registers, cache, main memory and disk — and leaves open how the miss rate itself can be reduced, a question the problem sheet quantifies directly [D2 p.1]. Within the lecture's own scope, locality and the block-based structure of the cache are the concepts the AMAT calculations depend on [D1 p.1][D1 p.2].
 
-*Sources: Week 9 lecture slides (Memory Hierarchy); Problem Sheet 9. Version: 1.*
+---
+*Sources: Week 9 lecture slides (D1), Problem sheet 9 (D2). Version: 1.*

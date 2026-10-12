@@ -40,6 +40,20 @@ from evals.offline import (
 from evals.runner import format_report, load_cases
 
 
+def _parse_extras(pairs: list[str]) -> dict:
+    """``KEY=VALUE`` pairs for the provenance block; values parse as JSON when they can."""
+    out: dict = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep or not key:
+            raise SystemExit(f"--provenance expects KEY=VALUE, got {pair!r}")
+        try:
+            out[key] = json.loads(value)
+        except ValueError:
+            out[key] = value
+    return out
+
+
 def _offline(args: argparse.Namespace) -> int:
     cases = load_cases(args.case)
     if args.per_run:
@@ -60,6 +74,7 @@ def _offline(args: argparse.Namespace) -> int:
                 "date": args.date,
                 "judge": not args.no_judge,
             }
+            provenance.update(_parse_extras(args.provenance))
         text = json.dumps(run.to_baseline(args.threshold, provenance), indent=2, sort_keys=True)
         BASELINE_PATH.write_text(text + "\n")
         print(format_offline_report(run, None, []))
@@ -112,6 +127,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--write-baseline", action="store_true", help="Offline: rewrite baseline")
     parser.add_argument("--model", default=None, help="Write-baseline: model id of the fixtures")
     parser.add_argument("--date", default=None, help="Write-baseline: date the fixtures were made")
+    parser.add_argument(
+        "--provenance",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Write-baseline: extra provenance (prompt, temperature, runs, chosen_run), repeatable",
+    )
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--fixtures", default=str(FIXTURES_DIR), help="Fixture directory")
     parser.add_argument("--save-fixtures", action="store_true", help="Live: store as fixtures")
