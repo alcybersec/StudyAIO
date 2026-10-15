@@ -59,6 +59,7 @@ import structlog
 
 from tests.safety._source import SERVICE_ROOT
 from tests.safety.test_floor2_claude_login_mounts import (
+    CLAUDE_LOGIN_SERVICES,
     _as_non_root,
     _compose_files,
     _environment,
@@ -297,13 +298,16 @@ async def test_floor2_per_user_credentials_win_over_the_setup_token(token_file):
 TOKEN_FILE_TARGET_DIR = "/run/claude-host/"
 
 
-def test_floor2_only_the_worker_is_told_where_the_setup_token_is():
-    """``CLAUDE_HOST_OAUTH_TOKEN_FILE`` is worker-only and points into the ro login mount."""
-    base_env, _ = _environment(_load(REPO_ROOT / "docker-compose.yml")["services"]["worker"])
-    assert base_env.get("CLAUDE_HOST_OAUTH_TOKEN_FILE", "").startswith(TOKEN_FILE_TARGET_DIR), (
-        "docker-compose.yml: worker has no CLAUDE_HOST_OAUTH_TOKEN_FILE under "
-        f"{TOKEN_FILE_TARGET_DIR}; this pin would prove nothing"
-    )
+def test_floor2_only_the_ai_worker_pools_are_told_where_the_setup_token_is():
+    """``CLAUDE_HOST_OAUTH_TOKEN_FILE`` is AI-pool-only and points into the ro login mount."""
+    base = _load(REPO_ROOT / "docker-compose.yml")["services"]
+    for svc in sorted(CLAUDE_LOGIN_SERVICES):
+        base_env, _ = _environment(base[svc])
+        value = base_env.get("CLAUDE_HOST_OAUTH_TOKEN_FILE", "")
+        assert value.startswith(TOKEN_FILE_TARGET_DIR), (
+            f"docker-compose.yml: {svc} has no CLAUDE_HOST_OAUTH_TOKEN_FILE under "
+            f"{TOKEN_FILE_TARGET_DIR}; this pin would prove nothing"
+        )
     bad = []
     for path in _compose_files():
         rel = path.relative_to(REPO_ROOT).as_posix()
@@ -312,10 +316,10 @@ def test_floor2_only_the_worker_is_told_where_the_setup_token_is():
             value = env.get("CLAUDE_HOST_OAUTH_TOKEN_FILE")
             if value is None:
                 continue
-            if name != "worker":
+            if name not in CLAUDE_LOGIN_SERVICES:
                 bad.append(f"{rel}: {name} is told where the setup token is")
             elif not value.startswith(TOKEN_FILE_TARGET_DIR):
-                bad.append(f"{rel}: worker reads the setup token from {value!r}")
+                bad.append(f"{rel}: {name} reads the setup token from {value!r}")
     assert not bad, "Floor 2 (R-026):\n" + "\n".join(bad)
 
 
