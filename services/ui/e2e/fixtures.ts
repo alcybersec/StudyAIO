@@ -122,6 +122,14 @@ export function seedCourseRow(code: string, concepts = 0): void {
   seedDb('course', code, '--concepts', String(concepts))
 }
 
+/**
+ * Seed a course with a weak, a solid and an unknown week, due cards and an exam
+ * for the self-hosted default user (the weak-spot engine's inputs).
+ */
+export function seedWeakSpotCourse(code: string): void {
+  seedDb('weakspots', code)
+}
+
 /** Delete a seeded course (and its children) through the public API. */
 export async function deleteCourse(request: APIRequestContext, code: string): Promise<void> {
   const resp = await request.delete(`${API_URL}/api/courses/${code}`, {
