@@ -3,7 +3,7 @@
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import setup_logging
-from kombu import Queue
+from kombu import Exchange, Queue
 
 from app.config import settings
 from app.core.logging import configure_logging
@@ -113,7 +113,14 @@ celery_app.conf.update(
     # Queue split (TECH-09). The default is the interactive queue: an unrouted new
     # task must not land on maintenance, nor on the unconsumed legacy queue.
     task_default_queue=PIPELINE_QUEUE,
-    task_queues=tuple(Queue(name) for name in ALL_QUEUES),
+    # One exchange and routing key per queue. Bare Queue(name) inherits the default
+    # exchange/key, so all queues share one binding set (GL#51 regression, AI-067).
+    task_queues=tuple(
+        Queue(name, Exchange(name, type="direct"), routing_key=name) for name in ALL_QUEUES
+    ),
+    task_default_exchange=PIPELINE_QUEUE,
+    task_default_exchange_type="direct",
+    task_default_routing_key=PIPELINE_QUEUE,
     task_routes=TASK_ROUTES,
     # acks_late redelivers a task whose unacked message outlives the Redis
     # visibility timeout (default 1h) while it is still running. Keep it above the
