@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { Plus, Trash2 } from 'lucide-react'
 import { useDeleteChatSession } from '../../hooks/useApi'
 import { Button } from '../ui/Button'
+import { toastMutationError } from '../../lib/toast'
+import { DeleteChatModal } from './DeleteChatModal'
 import type { ChatSession } from '../../types'
 
 interface SessionRailProps {
@@ -35,17 +37,17 @@ function SessionItem({
 }) {
   const { t } = useTranslation()
 
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const deleteSession = useDeleteChatSession()
 
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!confirmDelete) {
-      setConfirmDelete(true)
-      setTimeout(() => setConfirmDelete(false), 3000)
-      return
-    }
-    deleteSession.mutate(session.id, { onSuccess: onDeleted })
+  const handleConfirm = () => {
+    deleteSession.mutate(session.id, {
+      onSuccess: () => {
+        setConfirmOpen(false)
+        onDeleted()
+      },
+      onError: (err) => toastMutationError(err, handleConfirm),
+    })
   }
 
   // The row is a plain container: selecting and deleting are two sibling
@@ -60,7 +62,7 @@ function SessionItem({
         type="button"
         onClick={onSelect}
         aria-current={isSelected ? 'true' : undefined}
-        className="flex-1 min-w-0 text-left pl-2.5 py-2 rounded-lg cursor-pointer"
+        className="flex-1 min-w-0 text-left pl-2.5 py-2 min-h-11 rounded-lg cursor-pointer"
       >
         <span className={`block text-[13px] truncate ${isSelected ? 'text-text font-medium' : 'text-text-muted'}`}>
           {session.title || t('New question')}
@@ -71,18 +73,23 @@ function SessionItem({
       </button>
       <button
         type="button"
-        onClick={handleDelete}
-        disabled={deleteSession.isPending}
-        aria-label={confirmDelete ? 'Confirm delete conversation' : 'Delete conversation'}
-        title={confirmDelete ? 'Click again to confirm' : 'Delete conversation'}
-        className={`shrink-0 mt-2 mr-1.5 p-1 rounded-md transition-opacity cursor-pointer ${
-          confirmDelete
-            ? 'text-red-fg opacity-100'
-            : 'text-text-faint hover:text-red-fg opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
-        }`}
+        onClick={(e) => {
+          e.stopPropagation()
+          setConfirmOpen(true)
+        }}
+        aria-label={t('Delete conversation')}
+        aria-haspopup="dialog"
+        className="shrink-0 flex items-center justify-center min-h-11 min-w-11 rounded-md text-text-faint hover:text-red-fg cursor-pointer transition-opacity opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100"
       >
-        <Trash2 size={13} aria-hidden />
+        <Trash2 size={14} aria-hidden />
       </button>
+      <DeleteChatModal
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        session={session}
+        onConfirm={handleConfirm}
+        pending={deleteSession.isPending}
+      />
     </div>
   )
 }

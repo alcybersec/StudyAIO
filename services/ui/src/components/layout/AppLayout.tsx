@@ -16,6 +16,8 @@ import { OnboardingTour } from '../tour/OnboardingTour'
 import { Toaster } from '../ui/Toast'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
 import { SyncChip } from '../ui/SyncChip'
+import { PipelineActivityChip } from '../ui/PipelineActivityChip'
+import { PipelineEventsProvider } from '../../contexts/PipelineEventsContext'
 import { PWAUpdateNotify } from '../pwa/PWAUpdateNotify'
 import { PageTransition } from '../ui/PageTransition'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
@@ -24,6 +26,14 @@ import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
 
 export function AppLayout() {
+  return (
+    <PipelineEventsProvider>
+      <AppShell />
+    </PipelineEventsProvider>
+  )
+}
+
+function AppShell() {
   const { t } = useTranslation()
   const { isDemo } = useAuth()
   useAutoTimeZone()
@@ -70,6 +80,7 @@ export function AppLayout() {
           {/* connectivity + sync slot */}
           <ConnectionStatus />
           <SyncChip floating />
+          <PipelineActivityChip />
 
           <main
             id="main-content"

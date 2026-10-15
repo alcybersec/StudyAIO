@@ -42,5 +42,9 @@
   "{{count}} items · about {{minutes}} min · {{done}} done_one": "{{count}} item · about {{minutes}} min · {{done}} done",
   "{{count}} items · about {{minutes}} min · {{done}} done_other": "{{count}} items · about {{minutes}} min · {{done}} done",
   "{{count}} new practice items are ready._one": "{{count}} new practice item is ready.",
-  "{{count}} new practice items are ready._other": "{{count}} new practice items are ready."
+  "{{count}} new practice items are ready._other": "{{count}} new practice items are ready.",
+  "{{count}} messages will be permanently deleted_one": "{{count}} message will be permanently deleted",
+  "{{count}} messages will be permanently deleted_other": "{{count}} messages will be permanently deleted",
+  "{{count}} processing_one": "{{count}} file processing",
+  "{{count}} processing_other": "{{count}} files processing"
 }

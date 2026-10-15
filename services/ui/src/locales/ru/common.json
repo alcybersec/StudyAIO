@@ -1410,5 +1410,16 @@
   "{{count}} new practice items are ready._one": "Готово {{count}} новое задание для практики.",
   "{{count}} new practice items are ready._few": "Готово {{count}} новых задания для практики.",
   "{{count}} new practice items are ready._many": "Готово {{count}} новых заданий для практики.",
-  "{{count}} new practice items are ready._other": "Готово {{count}} новых задания для практики."
+  "{{count}} new practice items are ready._other": "Готово {{count}} новых задания для практики.",
+  "{{count}} messages will be permanently deleted_one": "Будет безвозвратно удалено {{count}} сообщение",
+  "{{count}} messages will be permanently deleted_few": "Будет безвозвратно удалено {{count}} сообщения",
+  "{{count}} messages will be permanently deleted_many": "Будет безвозвратно удалено {{count}} сообщений",
+  "{{count}} messages will be permanently deleted_other": "Будет безвозвратно удалено {{count}} сообщения",
+  "{{count}} processing_one": "Обрабатывается {{count}} файл",
+  "{{count}} processing_few": "Обрабатывается {{count}} файла",
+  "{{count}} processing_many": "Обрабатывается {{count}} файлов",
+  "{{count}} processing_other": "Обрабатывается {{count}} файла",
+  "Delete this conversation?": "Удалить этот разговор?",
+  "This can't be undone.": "Это необратимо.",
+  "Delete conversation": "Удалить разговор"
 }

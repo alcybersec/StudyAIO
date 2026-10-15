@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { userErrorMessage } from '../lib/userError'
 import i18n from '../i18n'
 import { useTranslation } from 'react-i18next'
@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 import { Card, EmptyState, PageHeader, toast } from '../components/ui'
 import { DropZone } from '../components/upload/DropZone'
 import { PipelineFileCard, type UploadStatus } from '../components/upload/PipelineFileCard'
-import { usePipelineEvents } from '../hooks/usePipelineEvents'
+import { usePipelineProgress } from '../contexts/pipelineProgress'
 import { useRetryPipeline } from '../hooks/useApi'
 import { mapPipelineEventsToStages } from '../lib/pipelineStages'
 import { toastMutationError } from '../lib/toast'
@@ -41,7 +41,22 @@ export function UploadPage() {
     () => queue.filter((f) => f.artifactId && f.status !== 'duplicate').map((f) => f.artifactId!),
     [queue],
   )
-  const { events, connectionState } = usePipelineEvents(artifactIds.length > 0 ? artifactIds : undefined)
+  const { events, connectionState, uploads, track } = usePipelineProgress()
+
+  // Hand uploaded artifacts to the app-level provider so they stay visible
+  // after the user navigates away and back.
+  useEffect(() => {
+    for (const f of queue) {
+      if (f.artifactId && f.status !== 'duplicate') {
+        track({ key: f.id, name: f.file.name, sizeBytes: f.file.size, artifactId: f.artifactId })
+      }
+    }
+  }, [queue, track])
+
+  const restored = useMemo(
+    () => uploads.filter((u) => !queue.some((f) => f.id === u.key)),
+    [uploads, queue],
+  )
 
   const processQueue = useCallback(async (updatedQueue: QueuedFile[]) => {
     if (processingRef.current) return
@@ -202,13 +217,24 @@ export function UploadPage() {
         </div>
       )}
 
-      {queue.length === 0 ? (
+      {queue.length === 0 && restored.length === 0 ? (
         <EmptyState
           title={t('Nothing processing')}
           description={t("Drop files above — they'll appear here with live stage-by-stage progress.")}
         />
       ) : (
         <>
+          {restored.map((u) => (
+            <PipelineFileCard
+              key={u.key}
+              name={u.name}
+              sizeBytes={u.sizeBytes}
+              uploadStatus="done"
+              stages={mapPipelineEventsToStages(events.filter((e) => e.artifact_id === u.artifactId))}
+              onRetryStage={() => handleRetryStage(u.artifactId)}
+              retrying={retryPipeline.isPending && retryPipeline.variables === u.artifactId}
+            />
+          ))}
           {queue.map((f) => (
             <PipelineFileCard
               key={f.id}
