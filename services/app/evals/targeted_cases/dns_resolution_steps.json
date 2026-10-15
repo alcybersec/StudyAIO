@@ -1,0 +1,28 @@
+{
+  "id": "dns_resolution_steps",
+  "source_case": "dns_resolution",
+  "kind": "flashcards",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Resolution steps",
+      "terms": [
+        "referral",
+        "recursive resolver",
+        "root server",
+        "authoritative"
+      ]
+    },
+    {
+      "label": "Caching and TTL",
+      "terms": [
+        "ttl",
+        "cached"
+      ]
+    }
+  ],
+  "existing": [
+    "What does DNS do?",
+    "What is a CNAME record?"
+  ]
+}

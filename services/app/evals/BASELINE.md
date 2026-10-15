@@ -117,3 +117,40 @@ like-for-like: `evals/scoring.py` now normalises LaTeX and emphasis markup
 before matching (it never adds or reorders content; `m^d` still does not satisfy
 `m^e`), and two phrasing-bound facts in `deadlock` and `finite_automata` accept
 the inflections the model actually used.
+
+## Targeted generation (weak-spot engine, M33-S2-AI-021)
+
+`targeted_baseline.json` is the baseline for the offline targeted-generation gate.
+`python -m evals --offline --check` (the required CI job) runs it after the summary
+gate; `python -m evals --offline --targeted --check` runs it alone.
+
+**The fixtures are hand-written, not model output.** There has been no live run of
+the targeted prompts yet, so the 12 cases in `targeted_cases/` (a synthetic
+lecture week borrowed from `cases/`, weak topics, the stems the student already
+has) and the stored generations in `targeted_fixtures/` were authored by hand.
+Each fixture holds five items: three that should be kept, one that cites a page
+the lecture does not have, one planted near-duplicate of an existing stem. One
+case (`stacks_queues_implementation`) carries a deliberately off-topic item so the
+on-topic score is not a constant. The baseline's `provenance.source` says
+`hand-written`.
+
+What the gate therefore protects today is the **contract**: the citation and dedup
+rules the worker applies (`app/pipeline/targeted_items.py`, shared with the
+evals) and the scorer. It says nothing yet about what a model writes for the
+targeted prompts (`generate_targeted_quiz.txt`, `generate_targeted_flashcards.txt`,
+both v1.0).
+
+Bars (`evals/targeted.py`): on-topic >= 0.80 (share of kept items that mention a
+weak-topic term), citation validity = 1.00 (every kept item cites a page of the
+lecture whose text supports the term it mentions), dedup >= 0.95 (the duplicate
+rule classifies planted duplicates and fresh items as the fixture expects), and
+no aggregate more than 0.02 below the baseline. Committed: on-topic 0.972,
+citation validity 1.000, dedup 1.000, filter accuracy 1.000.
+
+Replace the hand-written fixtures with measured ones, as an operator:
+
+```
+python -m evals --live --targeted --save-fixtures        # costs AI calls; review the `expect` labels
+python -m evals --offline --targeted --write-baseline --model <model id> --date <YYYY-MM-DD> \
+    --provenance "prompt=generate_targeted v1.0"
+```

@@ -1,0 +1,50 @@
+{
+  "kind": "flashcards",
+  "items": [
+    {
+      "front": "Which growth rate is infeasible beyond small n?",
+      "back": "O(2^n).",
+      "tags": [
+        "growth rates"
+      ],
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "front": "What is the complexity of nested loops over n items?",
+      "back": "n * n = O(n^2).",
+      "tags": [
+        "counting loops"
+      ],
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "front": "What is the complexity of a loop that halves n each pass?",
+      "back": "O(log n).",
+      "tags": [
+        "counting loops"
+      ],
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "front": "What does Big-O describe",
+      "back": "An upper bound, ignoring constants and lower-order terms.",
+      "tags": [
+        "growth rates"
+      ],
+      "source_page_ref": 1,
+      "expect": "duplicate"
+    },
+    {
+      "front": "What is the complexity of matrix multiplication?",
+      "back": "O(n^3).",
+      "tags": [
+        "growth rates"
+      ],
+      "source_page_ref": 10,
+      "expect": "uncited"
+    }
+  ]
+}

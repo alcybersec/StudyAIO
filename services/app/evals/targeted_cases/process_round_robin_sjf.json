@@ -1,0 +1,28 @@
+{
+  "id": "process_round_robin_sjf",
+  "source_case": "process_scheduling",
+  "kind": "quiz",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Round robin",
+      "terms": [
+        "round robin",
+        "quantum",
+        "context-switch"
+      ]
+    },
+    {
+      "label": "Shortest job first",
+      "terms": [
+        "shortest job first",
+        "starve",
+        "burst"
+      ]
+    }
+  ],
+  "existing": [
+    "What is the convoy effect?",
+    "Define turnaround time."
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "kind": "flashcards",
+  "items": [
+    {
+      "front": "What kind of tree do keys inserted in sorted order build?",
+      "back": "A degenerate tree, effectively a linked list with height n.",
+      "tags": [
+        "degenerate trees"
+      ],
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "front": "What is the search cost in a degenerate tree?",
+      "back": "O(n), because the height is n.",
+      "tags": [
+        "degenerate trees"
+      ],
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "front": "What does an in-order traversal of a BST yield?",
+      "back": "The keys in sorted order.",
+      "tags": [
+        "in-order traversal"
+      ],
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "front": "What is the cost of search in a balanced BST",
+      "back": "O(log n).",
+      "tags": [
+        "degenerate trees"
+      ],
+      "source_page_ref": 3,
+      "expect": "duplicate"
+    },
+    {
+      "front": "How does an AVL tree rebalance?",
+      "back": "Rotations.",
+      "tags": [
+        "degenerate trees"
+      ],
+      "source_page_ref": 8,
+      "expect": "uncited"
+    }
+  ]
+}

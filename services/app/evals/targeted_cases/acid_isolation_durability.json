@@ -1,0 +1,29 @@
+{
+  "id": "acid_isolation_durability",
+  "source_case": "acid_transactions",
+  "kind": "quiz",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Isolation",
+      "terms": [
+        "dirty read",
+        "non-repeatable read",
+        "isolation",
+        "serializable"
+      ]
+    },
+    {
+      "label": "Durability",
+      "terms": [
+        "write-ahead log",
+        "durability",
+        "replayed"
+      ]
+    }
+  ],
+  "existing": [
+    "What does atomicity guarantee?",
+    "Define a dirty read."
+  ]
+}

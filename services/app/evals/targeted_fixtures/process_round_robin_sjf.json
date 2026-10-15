@@ -1,0 +1,50 @@
+{
+  "kind": "quiz",
+  "items": [
+    {
+      "question_type": "short_answer",
+      "question": "What happens if the round robin quantum is too large?",
+      "options": null,
+      "correct_answer": "Round robin behaves like FCFS.",
+      "explanation": "Stated on page 2.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "Why can shortest job first starve long jobs?",
+      "options": null,
+      "correct_answer": "Short jobs keep being chosen first, so a long job may never run.",
+      "explanation": "Stated on page 2.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "Why is the next CPU burst a problem for shortest job first?",
+      "options": null,
+      "correct_answer": "The system does not know the burst length in advance.",
+      "explanation": "Stated on page 2.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What is the convoy effect?",
+      "options": null,
+      "correct_answer": "A long job at the front makes everything behind it wait.",
+      "explanation": "Same as an existing question.",
+      "source_page_ref": 1,
+      "expect": "duplicate"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What is multilevel feedback queue scheduling?",
+      "options": null,
+      "correct_answer": "Queues with different priorities.",
+      "explanation": "Not in the lecture.",
+      "source_page_ref": 9,
+      "expect": "uncited"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "deadlock_conditions",
+  "source_case": "deadlock",
+  "kind": "flashcards",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Coffman conditions",
+      "terms": [
+        "mutual exclusion",
+        "hold and wait",
+        "no preemption",
+        "circular wait"
+      ]
+    },
+    {
+      "label": "Deadlock prevention",
+      "terms": [
+        "global order",
+        "in that order",
+        "break any one condition"
+      ]
+    }
+  ],
+  "existing": [
+    "What is deadlock?",
+    "Name the four conditions for deadlock."
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "hash_tables_open_addressing",
+  "source_case": "hash_tables",
+  "kind": "quiz",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Open addressing",
+      "terms": [
+        "open addressing",
+        "linear probing",
+        "primary clustering",
+        "quadratic probing"
+      ]
+    },
+    {
+      "label": "Load factor",
+      "terms": [
+        "load factor",
+        "resized",
+        "rehash"
+      ]
+    }
+  ],
+  "existing": [
+    "What is the load factor of a hash table?",
+    "Define separate chaining."
+  ]
+}
