@@ -411,11 +411,6 @@ async def test_index_releases_the_session_before_embedding():
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="GL#50: concept_service.extract_and_save_concepts (backend) still calls the agent "
-    "and embeds inside the caller's transaction; flips to pass when backend lands the split.",
-)
 async def test_concepts_service_releases_the_session_before_the_provider_call():
     from app.pipeline import concepts_task
 
