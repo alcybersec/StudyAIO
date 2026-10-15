@@ -5,13 +5,19 @@ version, and what changed.
 
 ## Current
 
-### agents.AgentAdapter v1
+### agents.AgentAdapter v2
 
 The single interface every AI call in StudyAIO goes through (floor 3, `docs/strategy.md` §6).
 Provider: `ai` — `services/app/app/agents/base.py` (the ABC and its data types) and
 `services/app/app/agents/factory.py` (`get_agent`, the only sanctioned way to obtain an instance).
 Recorded as-built on 2026-10-04: v1 is the interface that already shipped with M1–M30, not a new
 design. Decided in [ADR 0002](adr/0002-module-boundaries.md).
+
+v2 (2026-10-15, additive): `generate_flashcards` and `generate_quiz` gain a trailing
+`focus: GenerationFocus | None = None` keyword and the `GenerationFocus` data type is added, for
+targeted generation ([ADR 0007](adr/0007-weak-spot-engine.md) Decision 5,
+`pipeline.targeted_generation v1`). Every v1 caller is unaffected: `focus` defaults to `None`, and
+`None` selects the same template and produces the same output as v1.
 
 The block below is the contract. `services/app/tests/contracts/test_agent_adapter_contract.py`
 parses it and compares it, signature by signature and field by field, against the source — so
@@ -33,12 +39,20 @@ class AgentAdapter(ABC):
 
     @abstractmethod
     async def generate_flashcards(
-        self, summary: str, extraction: ExtractionData, count: int
+        self,
+        summary: str,
+        extraction: ExtractionData,
+        count: int,
+        focus: GenerationFocus | None = None,
     ) -> list[FlashcardData]: ...
 
     @abstractmethod
     async def generate_quiz(
-        self, summary: str, extraction: ExtractionData, count: int
+        self,
+        summary: str,
+        extraction: ExtractionData,
+        count: int,
+        focus: GenerationFocus | None = None,
     ) -> list[QuizQuestionData]: ...
 
     @abstractmethod
@@ -116,6 +130,14 @@ class QuizQuestionData:
 
 
 @dataclass
+class GenerationFocus:
+    topics: list[str]
+    missed_questions: list[str] = field(default_factory=list)
+    avoid: list[str] = field(default_factory=list)
+    page_refs: list[int] = field(default_factory=list)
+
+
+@dataclass
 class AnswerResult:
     answer: str
     citations: list[dict] = field(default_factory=list)
@@ -188,8 +210,10 @@ class TokenUsage:
   they never apply the output-language directive. The four content methods do.
 - Every override keeps the base signature exactly: same parameter names, order, annotations and
   defaults. Consumers call with keyword arguments (`text=`, `existing_concepts=`, …).
-- `refreshed_credentials` is **not** part of v1. Only `ClaudeCodeAdapter` sets it, and consumers
-  read it with `hasattr`. Promoting it to the ABC is a v2 change.
+- `focus=None` is v1 behaviour exactly. A non-`None` focus selects the targeted template
+  (`generate_targeted_quiz.txt` / `generate_targeted_flashcards.txt`); every backend honours it.
+- `refreshed_credentials` is **not** part of v2. Only `ClaudeCodeAdapter` sets it, and consumers
+  read it with `hasattr`. Promoting it to the ABC is a v3 change.
 
 **Backends** — each one a concrete subclass, selected by `agent_backend`:
 
@@ -211,6 +235,7 @@ import-based part of this list from the source and fails on any module missing f
 | `services/app/app/pipeline/summarize.py` | `ai` | `get_agent`, `generate_summary`, `usage` |
 | `services/app/app/pipeline/assets.py` | `ai` | `get_agent`, `generate_flashcards`, `generate_quiz`, `usage` |
 | `services/app/app/pipeline/courseops_task.py` | `ai` | `get_agent`, `extract_course_ops`, `usage` |
+| `services/app/app/pipeline/targeted_task.py` | `ai` | `get_agent`, `generate_flashcards`, `generate_quiz`, `GenerationFocus`, `ExtractionData`, `usage` |
 | `services/app/app/services/concept_service.py` | `backend` | `get_agent`, `extract_concepts`, `ConceptExtractionResult` |
 | `services/app/app/services/chat_service.py` | `backend` | `get_agent`, `answer_question`, `stream_answer` |
 | `services/app/app/services/asset_service.py` | `backend` | `FlashcardData`, `QuizQuestionData` |
@@ -434,9 +459,9 @@ def generate_targeted_items(self, generation_id: str) -> dict: ...
   `targeted_generations.id` only, and reads the owner from that row. It returns
   `{generation_id, user_id, status, created_count}`.
 - `focus=None` is today's behaviour, byte for byte: same template, same output. A non-`None` focus
-  selects the targeted template. Every backend implements the keyword; the ABC change bumps
-  **`agents.AgentAdapter` to v2** (additive) in the same change as the implementation, together
-  with the new `GenerationFocus` data type and `pipeline/targeted_task.py` in its consumer table.
+  selects the targeted template. Every backend implements the keyword; the ABC change bumped
+  **`agents.AgentAdapter` to v2** (additive, M33-S2-ARCH-052), together with the new
+  `GenerationFocus` data type and `pipeline/targeted_task.py` in its consumer table.
 - Items whose `source_page_ref` is not a page of the target extraction are dropped; duplicates by
   `weakspot_service.is_duplicate` are dropped; kept items are inserted with `origin='targeted'`,
   never replacing or archiving an existing item (floor 4).
@@ -507,4 +532,5 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-12 | api.weak-spots | v1 | New contract, recorded before implementation: heatmap, diagnostic, targeted request/status, tonight's plan and refresh. Contract test written red. | M33-S2-ARCH-018 |
 | 2026-10-12 | pipeline.targeted_generation | v1 | New contract, recorded before implementation: worker task, `GenerationFocus`, additive `focus` keyword (bumps `agents.AgentAdapter` to v2 on implementation). Contract test written red. | M33-S2-ARCH-018 |
 | 2026-10-12 | models.weakspot | v1 | New contract, recorded before implementation: `study_plans`, `targeted_generations`, provenance columns, attempts index. Contract test written red. | M33-S2-ARCH-018 |
+| 2026-10-15 | agents.AgentAdapter | v2 | Additive: trailing `focus: GenerationFocus \| None = None` on `generate_flashcards` and `generate_quiz`, new `GenerationFocus` data type (14 types), `pipeline/targeted_task.py` added as a consumer (13 direct). v1 callers unaffected: `focus` defaults to `None`, which is v1 behaviour. No new request-time `get_agent` site; ADR 0003 unchanged. | M33-S2-ARCH-052 |
 | 2026-10-15 | api.weak-spots | v1 | Additive as built: `error_code` on `TargetedGenerationResponse`, `items` on the diagnostic, `GET /api/study/items`, `origin`/`focus_topic` on card and quiz payloads, `plan_split` on the retention readout. | M33-S2-BACKEND-020 |

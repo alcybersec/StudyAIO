@@ -39,7 +39,7 @@ from tests.contracts._weakspot_docs import (
 )
 
 HEADING = "### pipeline.targeted_generation v1"
-ADAPTER_HEADING = "### agents.AgentAdapter v1"
+ADAPTER_HEADING = "### agents.AgentAdapter v2"
 BASE_PATH = PACKAGE_ROOT / "agents" / "base.py"
 TASK_PATH = PACKAGE_ROOT / "pipeline" / "targeted_task.py"
 TASK_MODULE = "app.pipeline.targeted_task"
