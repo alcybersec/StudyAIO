@@ -82,7 +82,7 @@ fi
 # ── Restore database ─────────────────────────────────────────────
 
 info "Stopping application services..."
-docker compose stop api worker beat 2>/dev/null || true
+docker compose stop api worker worker-ondemand worker-maintenance beat 2>/dev/null || true
 
 info "Restoring database from $DB_DUMP..."
 gunzip -c "$DB_DUMP" | docker compose exec -T db psql -U "${POSTGRES_USER:-studyaio}" -d "${POSTGRES_DB:-studyaio}" --quiet -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" 2>/dev/null || true
@@ -107,7 +107,7 @@ sleep 3
 docker compose exec api alembic upgrade head
 
 info "Starting all services..."
-docker compose start worker beat 2>/dev/null || docker compose up -d worker beat
+docker compose start worker worker-ondemand worker-maintenance beat 2>/dev/null || docker compose up -d worker worker-ondemand worker-maintenance beat
 
 echo ""
 ok "Restore complete from backup: $TIMESTAMP"

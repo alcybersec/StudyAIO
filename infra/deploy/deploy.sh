@@ -251,6 +251,26 @@ sleep 5
 $COMPOSE exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
 curl -fsS -o /dev/null "http://localhost:${UI_PORT:-3001}/"
 
+# TECH-09 (GL#51): three Celery pools, one per queue family. A pool that failed to
+# boot would leave its queue unconsumed -- uploads stuck, or beat jobs piling up --
+# with api and ui both healthy, so ping each node by name. Retried because a worker
+# needs a few seconds after `up -d` before it answers.
+for pool in pipeline:worker ondemand:worker-ondemand maintenance:worker-maintenance; do
+    node="${pool%%:*}"; svc="${pool##*:}"
+    ok=0
+    for _ in 1 2 3 4 5 6; do
+        if $COMPOSE exec -T "$svc" sh -c "celery -A app.worker:celery_app inspect ping -d ${node}@\$HOSTNAME --timeout 5" >/dev/null 2>&1; then
+            ok=1; break
+        fi
+        sleep 5
+    done
+    if [ "$ok" -ne 1 ]; then
+        echo "refusing to call this deploy healthy: Celery node ${node}@ (service ${svc}) did not answer a ping" >&2
+        exit 69
+    fi
+    echo "    celery ${node}: ok"
+done
+
 # Retention is by RELEASE, not by age. The previous rule (`prune -af --filter
 # until=168h`) kept every image younger than a week; at ~4.5G per api image on a
 # 30G disk, four or five recent tags filled it and the NEXT deploy was refused
