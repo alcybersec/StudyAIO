@@ -16,10 +16,12 @@ from app.agents.base import (
     CourseOpsResult,
     ExtractionData,
     FlashcardData,
+    GenerationFocus,
     QuizQuestionData,
     SummaryResult,
     summary_temperature,
 )
+from app.agents.targeted_prompts import render_targeted_prompt
 from app.core.ai_settings import get_effective_setting
 from app.core.exceptions import AgentError
 
@@ -237,7 +239,11 @@ After the summary, emit:
         return SummaryResult(content_md=markdown, embedded_images=embedded_images)
 
     async def generate_flashcards(
-        self, summary: str, extraction: ExtractionData, count: int
+        self,
+        summary: str,
+        extraction: ExtractionData,
+        count: int,
+        focus: GenerationFocus | None = None,
     ) -> list[FlashcardData]:
         """Generate flashcards by calling the Anthropic API."""
         from pathlib import Path
@@ -249,7 +255,17 @@ After the summary, emit:
         week = extraction.metadata.get("week", 0)
 
         template_path = Path("/app/prompts/generate_flashcards.txt")
-        if template_path.exists():
+        if focus is not None:
+            prompt = render_targeted_prompt(
+                "flashcards",
+                course_code=course_code,
+                week=week,
+                summary=summary,
+                extraction_text=extraction_text,
+                count=count,
+                focus=focus,
+            )
+        elif template_path.exists():
             template = Template(template_path.read_text())
             prompt = template.render(
                 course_code=course_code,
@@ -286,7 +302,11 @@ Respond with ONLY a JSON array:
         ]
 
     async def generate_quiz(
-        self, summary: str, extraction: ExtractionData, count: int
+        self,
+        summary: str,
+        extraction: ExtractionData,
+        count: int,
+        focus: GenerationFocus | None = None,
     ) -> list[QuizQuestionData]:
         """Generate quiz questions by calling the Anthropic API."""
         from pathlib import Path
@@ -298,7 +318,17 @@ Respond with ONLY a JSON array:
         week = extraction.metadata.get("week", 0)
 
         template_path = Path("/app/prompts/generate_quiz.txt")
-        if template_path.exists():
+        if focus is not None:
+            prompt = render_targeted_prompt(
+                "quiz",
+                course_code=course_code,
+                week=week,
+                summary=summary,
+                extraction_text=extraction_text,
+                count=count,
+                focus=focus,
+            )
+        elif template_path.exists():
             template = Template(template_path.read_text())
             prompt = template.render(
                 course_code=course_code,

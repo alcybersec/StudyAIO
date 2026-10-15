@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_or_default, get_user_tz
+from app.api.schemas import QuizQuestionResponse
 from app.api.study_schemas import (
     DueCardResponse,
     PlanDay,
@@ -14,6 +15,7 @@ from app.api.study_schemas import (
     ReviewRequest,
     ReviewResponse,
     StreakResponse,
+    StudyItemsResponse,
     StudyStatsResponse,
     TimedPlanRequest,
     TimedPlanResponse,
@@ -22,6 +24,7 @@ from app.api.study_schemas import (
 from app.core.database import get_session
 from app.models.user import User
 from app.services import (
+    asset_service,
     challenge_service,
     exam_service,
     srs_service,
@@ -219,6 +222,36 @@ async def generate_timed_plan(
         estimated_quiz_minutes=plan.estimated_quiz_minutes,
         course_code=plan.course_code,
         exam_id=plan.exam_id,
+    )
+
+
+MAX_BATCH_ITEMS = 50
+
+
+@router.get(
+    "/study/items",
+    response_model=StudyItemsResponse,
+    summary="Fetch study items by id",
+    description=(
+        "Loads the caller's own active flashcards and quiz questions by id (at most 50 in "
+        "total), whether or not they are due. Foreign, archived and missing ids are omitted."
+    ),
+)
+async def get_study_items(
+    flashcard_ids: list[str] = Query(default=[], max_length=MAX_BATCH_ITEMS),
+    quiz_question_ids: list[str] = Query(default=[], max_length=MAX_BATCH_ITEMS),
+    user: User = Depends(get_current_user_or_default),
+    session: AsyncSession = Depends(get_session),
+) -> StudyItemsResponse:
+    """Batch-load plan or targeted items for the study runner."""
+    if len(flashcard_ids) + len(quiz_question_ids) > MAX_BATCH_ITEMS:
+        raise HTTPException(status_code=422, detail=f"At most {MAX_BATCH_ITEMS} ids per request")
+    cards, questions = await asset_service.get_items_by_ids(
+        session, flashcard_ids, quiz_question_ids, user_id=user.id
+    )
+    return StudyItemsResponse(
+        flashcards=[DueCardResponse.model_validate(c) for c in cards],
+        quiz_questions=[QuizQuestionResponse.model_validate(q) for q in questions],
     )
 
 

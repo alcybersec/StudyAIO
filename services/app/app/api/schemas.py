@@ -290,6 +290,8 @@ class FlashcardResponse(BaseModel):
     source_page_ref: int
     generation_version: int
     created_at: datetime
+    origin: str = "pipeline"
+    focus_topic: str | None = None
 
 
 class QuizQuestionResponse(BaseModel):
@@ -309,6 +311,8 @@ class QuizQuestionResponse(BaseModel):
     source_page_ref: int
     generation_version: int
     created_at: datetime
+    origin: str = "pipeline"
+    focus_topic: str | None = None
 
 
 # ── Q&A ──────────────────────────────────────────────────────────

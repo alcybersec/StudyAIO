@@ -1,0 +1,50 @@
+{
+  "kind": "quiz",
+  "items": [
+    {
+      "question_type": "short_answer",
+      "question": "What do the right-hand columns contain in a LEFT JOIN row with no match?",
+      "options": null,
+      "correct_answer": "NULL.",
+      "explanation": "Stated on page 2.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "How do you find students with no enrolment using a LEFT JOIN?",
+      "options": null,
+      "correct_answer": "Add WHERE e.course IS NULL.",
+      "explanation": "Stated on page 2.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What is the difference between WHERE and HAVING?",
+      "options": null,
+      "correct_answer": "WHERE filters rows before grouping; HAVING filters groups after.",
+      "explanation": "Stated on page 3.",
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What does an INNER JOIN keep",
+      "options": null,
+      "correct_answer": "Only rows that match on the ON condition.",
+      "explanation": "Same as an existing question.",
+      "source_page_ref": 1,
+      "expect": "duplicate"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What does a FULL OUTER JOIN return?",
+      "options": null,
+      "correct_answer": "All rows of both tables.",
+      "explanation": "Not in the lecture.",
+      "source_page_ref": 6,
+      "expect": "uncited"
+    }
+  ]
+}

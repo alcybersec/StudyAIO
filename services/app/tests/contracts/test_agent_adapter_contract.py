@@ -1,4 +1,4 @@
-"""Contract test for `agents.AgentAdapter v1` in docs/CONTRACTS.md.
+"""Contract test for `agents.AgentAdapter v2` in docs/CONTRACTS.md.
 
 The entry is the source of truth for the interface between `ai` (which owns
 `app/agents/`) and its consumers in `ai` and `backend`. These tests parse the
@@ -32,7 +32,7 @@ STRATEGY_PATH = REPO_ROOT / "docs" / "strategy.md"
 BASE_PATH = APP_ROOT / "app" / "agents" / "base.py"
 FACTORY_PATH = APP_ROOT / "app" / "agents" / "factory.py"
 
-CONTRACT_HEADING = "### agents.AgentAdapter v1"
+CONTRACT_HEADING = "### agents.AgentAdapter v2"
 
 #: Names that make a `from app.agents import X` an import of this contract.
 #: `parsing` and `embeddings` are separate helpers, not part of it.
@@ -88,7 +88,7 @@ def _require(path: Path, why: str) -> str:
 
 @pytest.fixture(scope="module")
 def section() -> str:
-    """The `agents.AgentAdapter v1` section of docs/CONTRACTS.md."""
+    """The `agents.AgentAdapter v2` section of docs/CONTRACTS.md."""
     text = _require(CONTRACTS_PATH, "docs/ is not mounted in the container")
     start = text.find(CONTRACT_HEADING + "\n")
     assert start != -1, f"{CONTRACT_HEADING!r} missing from {CONTRACTS_PATH}"

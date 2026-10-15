@@ -1,0 +1,50 @@
+{
+  "kind": "flashcards",
+  "items": [
+    {
+      "front": "Which condition does hold and wait describe?",
+      "back": "A process holds one resource while waiting for another.",
+      "tags": [
+        "coffman conditions"
+      ],
+      "source_page_ref": 1,
+      "expect": "keep"
+    },
+    {
+      "front": "How does a global resource order prevent deadlock?",
+      "back": "Acquiring resources in that order breaks circular wait.",
+      "tags": [
+        "deadlock prevention"
+      ],
+      "source_page_ref": 1,
+      "expect": "keep"
+    },
+    {
+      "front": "What does no preemption mean for a resource?",
+      "back": "The resource cannot be taken away from the process holding it.",
+      "tags": [
+        "coffman conditions"
+      ],
+      "source_page_ref": 1,
+      "expect": "keep"
+    },
+    {
+      "front": "Name the four conditions for a deadlock.",
+      "back": "Mutual exclusion, hold and wait, no preemption, circular wait.",
+      "tags": [
+        "coffman conditions"
+      ],
+      "source_page_ref": 1,
+      "expect": "duplicate"
+    },
+    {
+      "front": "What is a livelock?",
+      "back": "Processes keep changing state without progress.",
+      "tags": [
+        "deadlock prevention"
+      ],
+      "source_page_ref": 0,
+      "expect": "uncited"
+    }
+  ]
+}

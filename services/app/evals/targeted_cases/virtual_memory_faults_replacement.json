@@ -1,0 +1,29 @@
+{
+  "id": "virtual_memory_faults_replacement",
+  "source_case": "virtual_memory",
+  "kind": "quiz",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Page faults",
+      "terms": [
+        "page fault",
+        "valid bit",
+        "thrashing"
+      ]
+    },
+    {
+      "label": "Page replacement",
+      "terms": [
+        "lru",
+        "fifo",
+        "victim",
+        "page replacement"
+      ]
+    }
+  ],
+  "existing": [
+    "What is a page table?",
+    "How many offset bits does a 4 KB page need?"
+  ]
+}

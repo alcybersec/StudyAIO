@@ -34,10 +34,12 @@ from app.models.push_subscription import PushSubscription
 from app.models.quiz import QuizQuestion
 from app.models.quiz_attempt import QuizAttempt
 from app.models.review_item import ReviewItem
+from app.models.study_plan import StudyPlan
 from app.models.study_session import StudySession
 from app.models.subscription import Subscription
 from app.models.summary import Summary
 from app.models.summary_version import SummaryVersion
+from app.models.targeted_generation import TargetedGeneration
 from app.models.telegram_link import TelegramLink
 from app.models.usage_event import UsageEvent
 from app.models.usage_record import UsageRecord
@@ -80,10 +82,12 @@ __all__ = [
     "QuizAttempt",
     "QuizQuestion",
     "ReviewItem",
+    "StudyPlan",
     "StudySession",
     "Subscription",
     "Summary",
     "SummaryVersion",
+    "TargetedGeneration",
     "TelegramLink",
     "UsageEvent",
     "UsageRecord",

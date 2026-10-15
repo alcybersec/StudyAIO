@@ -171,3 +171,36 @@ New surfaces and their judgement. Detail is in `docs/gates/M32/floors.md`.
    out of login, for a short-lived gain. Residual, for `backend`: `login_throttle_unavailable` is a log line
    only, with no counter, so a sustained fail-open is visible only to someone reading logs. A counter is
    recommended, not required. B1 is unchanged.
+
+### 2026-10-15, M33 S2 (M33-S2-SAFETY-024, GL#45)
+
+Weak-spot engine (ADR 0007 Decision 8): two new tables (`targeted_generations`, `study_plans`), six
+routes under `/api/weak-spots` and `/api/study-plan`, `GET /api/study/items`, and one new worker task
+with a beat recovery job. Verdict: PASS with notes, after the floor-4 defect in item 5 was
+fixed in M33-S2-AI-053. Pins in `services/app/tests/safety/FLOORS.md`, "Weak-spot engine".
+
+1. **The worker acts as the row's owner.** The task receives only the `targeted_generations` id. `_claim`
+   loads that row by id (classified, worker-only); every later read, the adapter's credentials, usage
+   metering and every insert act as `row.user_id`, and the source lookups are owner-scoped, so a row
+   naming another user's course fails `no_source` without an AI call. Recovery (`_recover_stuck`) is a
+   cross-user beat UPDATE to `failed`/`timeout`; `_persist` re-checks `status = 'running'` under a row
+   lock (refreshed since item 5), so a recovered row gets nothing inserted later.
+2. **Delimited, not escaped (accepted).** The targeted prompts mark the topic, missed-question and
+   already-have blocks as untrusted data, but the block delimiters are not escaped. A slide title or
+   stem containing `</missed_questions>` can close its block early. Every span comes from the owner's
+   own uploads and items and is spent on the owner's own credentials, so the reach is self-only.
+   Escaping is recommended to `ai`, not required.
+3. **`error_code` is returned, and that is safe.** `GET /api/weak-spots/targeted/{id}` returns
+   `error_code`, although the response model's docstring says it is "stored, not returned". Every value
+   is a literal from a fixed set (`no_source`, `empty_output`, `superseded`, `timeout`, `ai_unavailable`,
+   `ai_error`, `internal_error`, `enqueue_failed`), and provider text reaches neither the row, the logs
+   (`error_class` is a type name) nor the metrics. The docstring is worth correcting (`backend`).
+4. **Daily cap is count-then-insert (accepted).** Two concurrent requests for different units can both
+   pass a count of 5 and make 7 rows that day. The in-flight unique index stops duplicates for one unit,
+   and the tier's AI quota still bounds spend, so the excess is one generation at most per race.
+5. **Floor 4 was red: the re-check read a stale object (fixed).** Sessions do not expire on commit
+   (`expire_on_commit=False`), so `_persist`'s `SELECT … FOR UPDATE` returned the identity-map copy
+   `_claim` loaded, still `running`, and a row the recovery job failed mid-generation got items
+   inserted and was flipped back to `completed`. Found by `qa`; fixed in M33-S2-AI-053
+   (`.execution_options(populate_existing=True)` on the `_persist` and `_claim` re-selects). The floor
+   pin runs on an identity-map session; it fails with `populate_existing` removed from `_persist`.

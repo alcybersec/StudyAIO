@@ -16,6 +16,7 @@ import { DashboardCustomizer } from '../components/dashboard/DashboardCustomizer
 import { MeasuredCell } from '../components/dashboard/MeasuredCell'
 import { ROW_HEIGHT, GRID_MARGIN, rowsForHeight, alignRows } from '../components/dashboard/layoutUtils'
 import type { ResponsiveLayouts } from 'react-grid-layout'
+import { TonightCard } from '../components/weakspots/TonightCard'
 import { StreakWidget } from '../components/dashboard/widgets/StreakWidget'
 import { ExamsWidget } from '../components/dashboard/widgets/ExamsWidget'
 import { GamificationWidget } from '../components/dashboard/widgets/GamificationWidget'
@@ -59,6 +60,7 @@ export function DashboardPage() {
   // Static element map — widgets fetch their own data, so this never changes.
   const widgetContent = useMemo<Record<string, React.ReactNode>>(
     () => ({
+      tonight: <TonightCard />,
       streak: <StreakWidget />,
       exams: <ExamsWidget />,
       gamification: <GamificationWidget />,

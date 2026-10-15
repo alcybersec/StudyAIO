@@ -1,6 +1,6 @@
 # ADR 0007 — Weak-spot engine: per-week weakness score, a daily "study tonight" plan, targeted generation in the worker
 
-**Status** Proposed · **Date** 2026-10-12 · **Kit version** 1.10.3
+**Status** Accepted (user, 2026-10-15) · **Date** 2026-10-12 · **Kit version** 1.10.3
 
 **Ruling implemented:** `docs/decisions.md` § Rulings, 2026-10-11, the M33 strategic bet: "the
 weak-spot engine (audit §5, MKT-03): practice generated from each student's own mistakes, review

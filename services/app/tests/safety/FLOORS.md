@@ -11,7 +11,7 @@ empty. The 2026-10-04 rulings emptied every one of them. The tier holds no `xfai
 the SAFETY-027 veto marker on the JWT default-secret check (floor 2) XPASSed on
 `8356b15` and was removed in SAFETY-028. SAFETY-033 added two **strict** `xfail`s on the
 email-redaction *backstop* (SEC-08), findings F1 and F2; both fixes landed (`06c4fcb`, `344ce7e`) and
-SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate.
+SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free.
 
 Run:
 
@@ -33,7 +33,7 @@ cd services/app && .venv/bin/python -m pytest tests/safety -v
 | `…::test_floor1_payload_builder_plants_type_valid_foreign_values` | The request builder (`_payload.py`) stops producing a body that validates for a declared type (bounds, enums, literals, dates, UUIDs, nested models, a model-level "one of" rule), or stops planting a recognisable foreign value. The sweep is only as wide as this builder. |
 | `…::test_floor1_every_table_is_classified` | A table is neither user-owned (it has `user_id`, a FK to an owned table, or is polymorphic) nor listed in `UNOWNED_TABLES`. |
 | `…::test_floor1_no_unscoped_session_get_on_owned_model` | An `api/` or `services/` function calls `session.get(OwnedModel, <its own parameter>)` and the call is not classified. It also fails on a stale classification. SAFETY-013 removed `_get_course_owned` (its `user_id=None` branch went in BACKEND-006) and mutation-checked that restoring the branch fails here. |
-| `…::test_floor1_no_unscoped_query_function_outside_classification` | A `services/` or `pipeline/` function builds a query on a user-owned model, takes no caller parameter (`user_id`, `user`, …) that it uses, and puts no `<Model>.user_id` predicate or `filter_by(user_id=)` in it, and the function is not in `UNSCOPED_FUNCTION_ALLOWED` with a reason (worker-only, webhook, token lookup, FK traversal from a scoped parent). It also fails on a stale entry. This reaches code no route sweep can. Green since BACKEND-013 and AI-014 (R-015: `classify._get_known_courses`, `achievement_service.mark_notified`, `summary_service.get_summary_for_week`, `timed_session_service.generate_timed_plan`). SAFETY-024 classified `_owner._row_owner_async` (R-022: worker-only owner lookup for the SSE channel; returns an id, fails closed). |
+| `…::test_floor1_no_unscoped_query_function_outside_classification` | A `services/` or `pipeline/` function builds a query on a user-owned model, takes no caller parameter (`user_id`, `user`, …) that it uses, and puts no `<Model>.user_id` predicate or `filter_by(user_id=)` in it, and the function is not in `UNSCOPED_FUNCTION_ALLOWED` with a reason (worker-only, webhook, token lookup, FK traversal from a scoped parent). It also fails on a stale entry. This reaches code no route sweep can. Green since BACKEND-013 and AI-014 (R-015: `classify._get_known_courses`, `achievement_service.mark_notified`, `summary_service.get_summary_for_week`, `timed_session_service.generate_timed_plan`). SAFETY-024 classified `_owner._row_owner_async` (R-022: worker-only owner lookup for the SSE channel; returns an id, fails closed). M33-S2-SAFETY-024 classified `targeted_task._claim` and `targeted_task._recover_stuck` (ADR 0007; see the weak-spot section). |
 | `…::test_floor1_unscoped_query_detector_is_not_vacuous` | The detector stops seeing two known worker-side unscoped reads. |
 | `…::test_floor1_unscoped_query_detector_needs_a_predicate_not_a_mention` | On synthetic source, the detector counts a join on `Model.user_id` (`UserXP.user_id == User.id`) or a selected `Course.user_id` as a `user_id` predicate, or flags a real `== value`/`.in_()` predicate. Closed SAFETY-021 blind spot 2 in SAFETY-025; that surfaced `snapshot_summary`, `notify_admins` and `backfill_courseops_storage_keys`, all classified. |
 | `…::test_floor1_caller_parameter_is_never_optional` | A `services/` or `pipeline/` function uses a caller parameter (`user_id`, `user`, …) that defaults to `None`, or puts a `user_id` filter behind a `None`/truthiness check on it (`if user_id is not None: query = query.where(...)`), and is not in `OPTIONAL_CALLER_ALLOWED` with a reason. Such a function is scoped only when its caller remembers to pass the identity; the route sweep pins today's route callers, but a worker, CLI or service caller that omits it reads or writes every user's rows. R-021 (M31 re-run F-4, M32 condition C6). Green since M32-S1-BACKEND-006 (`d1276a0`: 71 functions at `d37528f` made keyword-only required with unconditional filters) and M32-S1-AI-012 (`8812e4a`: `classify._get_or_create_course` takes a required owner and raises on `""`). SAFETY-009 classified ten pipeline functions under the C6 ruling (the six artifact stages and the concepts task act for `artifact.user_id`; `_ingest` fails closed on the NOT NULL users FK; the two orchestrator dispatchers run no query). SAFETY-013 mutation-checked it red with `get_review_item` back to `user_id: str \| None = None`, with `get_course_document`'s filter behind `if user_id:`, and with `_get_or_create_course` back to `if user_id:`. It also fails on a stale entry. |
@@ -326,12 +326,12 @@ A floor-adjacent guard under floor 3: lecture content leaves the instance when a
 called. The route set is **derived**: every live route whose handler reaches a call to
 `check_ai_quota`, `get_agent`, `resume_pipeline`, `run_pipeline`, `.apply_async` or `.delay`,
 directly or through a function in `app/api`, `app/services` or `app/core` (import aliases and
-same-module helpers followed). 13 routes today, equal to the backend's hand list.
+same-module helpers followed). 14 routes today: the backend's 13 at GL#38 plus `POST /api/weak-spots/targeted` (ADR 0007, SAFETY-024 at M33-S2), which it reaches through `_enqueue_targeted` → `.delay()`.
 
 | Test | Fails when |
 |---|---|
 | `test_floor3_ai_consent_gate.py::test_floor3_every_ai_route_requires_consent` | A derived route lacks `require_ai_consent` in its dependency tree. `CONSENT_EXEMPT` (empty) is the only way out, with a reason. |
-| `…::test_floor3_consent_route_derivation_is_not_vacuous`, `…::test_floor3_consent_resolver_follows_imports_and_helpers`, `…::test_floor3_consent_exemptions_are_live` | The resolver stops reaching any of the 13 known AI routes, misses a direct, helper, imported-name or module-alias path on synthetic source, or an exemption is stale. |
+| `…::test_floor3_consent_route_derivation_is_not_vacuous`, `…::test_floor3_consent_resolver_follows_imports_and_helpers`, `…::test_floor3_consent_exemptions_are_live` | The resolver stops reaching any of the 14 known AI routes (`KNOWN_GATED`), misses a direct, helper, imported-name or module-alias path on synthetic source, or an exemption is stale. |
 | `…::test_floor3_unconsented_caller_is_refused_before_any_sink` | Any derived route answers an unconsented caller with anything but `403 ai_consent_required`, or a sink (every `get_agent`/`run_pipeline`/`resume_pipeline`/`check_ai_quota` bound in an `app.*` module, and Celery `Task.apply_async`/`delay`) is reached. |
 | `…::test_floor3_outdated_consent_version_is_refused` | A consent recorded to older disclosure wording passes. |
 | `…::test_floor3_consent_has_no_role_tier_or_self_hosted_bypass[…]`, `…::test_floor3_single_user_mode_is_the_only_consent_bypass` | Outside single-user mode a role (admin, demo), tier or `self_hosted` exempts an unconsented user, `consent_required` gains a second early branch, or `require_ai_consent` gains a branch. |
@@ -467,6 +467,37 @@ cannot move a request across a window.
 | `…::test_sec10_no_auth_limit_is_loosened_or_dropped` | A credential route in `app/api/auth.py` loses its `@limiter.limit`, carries a non-literal limit, or a limit looser than its M32 ceiling (`AUTH_LIMIT_CEILINGS`: login and OAuth MFA 5/min, demo login 10/min, the rest 3/min). Mutation-checked: login at `10/minute` fails here. `…::test_sec10_ceiling_check_reads_lambda_and_literal_limits` is its control. |
 | `…::test_sec10_unit_fake_implements_every_call_the_throttle_makes` | `login_throttle` calls a `redis_client` method that the unit suite's `FakeRedis` (`tests/unit/conftest.py`) does not implement. Without it the throttle raises, logs `login_throttle_unavailable` and fails open in every unit test, as it did before `b1e20d9`. |
 | `…::test_sec10_login_throttle_counts_and_engages_under_the_unit_fake`, `…::test_sec10_failed_logins_over_http_engage_the_throttle` | Under that same fake, `record_failure` does not count 1, 2, … , `login_throttle_unavailable` is logged, `login_throttle_engaged` is not, or (over HTTP, spaced past the per-address limit) the login after the free allowance is not delayed. Mutation-checked: removing `FakeRedis.incr` fails all three throttle tests. |
+
+## Weak-spot engine: targeted generation (ADR 0007, GL#45), floors 1, 3, 4
+
+M33-S2-SAFETY-024. `POST /api/weak-spots/targeted` writes a `targeted_generations` row and
+enqueues `app.pipeline.targeted_task.generate_targeted_items` with the row id only. Two worker
+functions read that table without a `user_id` predicate and are classified in
+`UNSCOPED_FUNCTION_ALLOWED`: `_claim` (it holds only the id; everything after acts as
+`row.user_id`) and `_recover_stuck` (cross-user beat job, one UPDATE to `failed`/`timeout`).
+The tests below pin what those entries rest on. All behavioural ones run over MiniDB with two
+users whose courses share a code and week.
+
+| Test | Fails when |
+|---|---|
+| `test_floor1_targeted_generation.py::test_floor1_targeted_task_inserts_only_into_the_row_owners_course` | For A's row: an item lands outside A's course/artifact; any of B's items changes; B's stems reach the prompt's `avoid`/`missed`/`topics` (dedup against another user); AI context or usage is resolved for anyone but A; or any statement on an owned table other than the single `FOR UPDATE` claim by id is not filtered on A. |
+| `…::test_floor1_targeted_task_never_generates_into_another_users_course` | A row owned by A that names B's course produces any item, reaches `get_agent`, or ends other than `failed`/`no_source`. |
+| `…::test_floor1_targeted_task_takes_the_row_id_only` | The task or `_run` gains a parameter (a payload owner). |
+| `…::test_floor1_targeted_unscoped_functions_are_worker_only` | `_claim`, `_recover_stuck` or `recover_stuck_generations` is imported, called or named (non-docstring string) outside `targeted_task.py` and `worker.py`. |
+| `…::test_floor4_recovered_row_gets_no_items_inserted_later` | A row recovered to `failed`/`timeout` while the model ran gets items inserted, or loses recovery's verdict. Runs on `_IdentityMapSession` (identity map, `expire_on_commit=False`, `populate_existing` honoured, dirty-only flush): recovery changes the database row while the worker holds its stale `running` copy from `_claim`. It was red at M33-S2 because `_persist`'s `FOR UPDATE` re-select returned that stale copy (found by `qa`, `tests/integration/test_targeted_worker.py`). M33-S2-AI-053 added `.execution_options(populate_existing=True)` to the `_persist` and `_claim` re-selects; this pin was a strict `xfail` until then. |
+| `…::test_floor4_stuck_generation_recovery_only_fails_rows` | Recovery runs anything but one UPDATE on `targeted_generations` setting exactly `status`, `error_code`, `completed_at`, or `_recover_stuck` calls a delete/remove primitive. |
+| `…::test_floor4_regeneration_never_archives_targeted_items` | `asset_service.save_flashcards`/`save_quiz_questions` (pipeline regeneration) archives an `origin='targeted'` item, removes any item, or stops archiving the pipeline ones (control). |
+| `…::test_floor1_daily_cap_counts_the_callers_rows_in_the_utc_day` | The cap of 6 ignores a row at exactly UTC midnight, counts another user's rows, counts rows from before UTC midnight (a rolling 24 h window), or the AI quota is checked when capped. |
+| `…::test_floor3_targeted_spend_path_order` | A foreign course is not a 404 for a capped caller, or reaches the quota; an in-flight job is not returned ahead of the cap; another user's in-flight row (even naming the caller's course) is returned to the caller; or a quota refusal leaves a row. |
+
+Mutation-checked in a scratch copy (`scratchpad/mut24/mutate.py`) on the AI-053 code, 17 mutants, all caught (the 17th removes `populate_existing` from `_persist`):
+`_course_stmt`, `_artifacts_stmt`, `_existing_stmt` (dedup) or the `_persist` lock unscoped;
+all three source lookups unscoped together (behavioural: B's course gets items); AI context
+resolved for another id; `_persist` without the `status == "running"` re-check; the
+`origin == "pipeline"` filter dropped from either regeneration archive; the cap count unscoped,
+made a rolling 24 h, or the quota moved before it; `_find_in_flight` unscoped; the route's
+`require_ai_consent` removed (two floor-3 tests); recovery writing an extra column; the
+recovery task name used in `app/api/`.
 
 ## Coverage
 

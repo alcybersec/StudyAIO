@@ -1,0 +1,50 @@
+{
+  "kind": "flashcards",
+  "items": [
+    {
+      "front": "How fast does cwnd grow during slow start?",
+      "back": "It doubles every round trip, which is exponential growth.",
+      "tags": [
+        "slow start"
+      ],
+      "source_page_ref": 1,
+      "expect": "keep"
+    },
+    {
+      "front": "When does slow start end?",
+      "back": "When cwnd reaches ssthresh or a loss occurs.",
+      "tags": [
+        "slow start"
+      ],
+      "source_page_ref": 1,
+      "expect": "keep"
+    },
+    {
+      "front": "What do three duplicate ACKs trigger in TCP Reno?",
+      "back": "Fast retransmit followed by fast recovery, halving cwnd.",
+      "tags": [
+        "fast retransmit"
+      ],
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "front": "What is the congestion window, cwnd?",
+      "back": "The congestion window limiting unacknowledged bytes in flight.",
+      "tags": [
+        "slow start"
+      ],
+      "source_page_ref": 1,
+      "expect": "duplicate"
+    },
+    {
+      "front": "How does QUIC handle loss recovery?",
+      "back": "Per-packet numbers.",
+      "tags": [
+        "fast retransmit"
+      ],
+      "source_page_ref": 5,
+      "expect": "uncited"
+    }
+  ]
+}

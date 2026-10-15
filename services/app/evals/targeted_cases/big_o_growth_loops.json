@@ -1,0 +1,29 @@
+{
+  "id": "big_o_growth_loops",
+  "source_case": "big_o_notation",
+  "kind": "flashcards",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Growth rates",
+      "terms": [
+        "o(n log n)",
+        "o(2^n)",
+        "growth rates",
+        "infeasible"
+      ]
+    },
+    {
+      "label": "Counting loops",
+      "terms": [
+        "nested loops",
+        "halves",
+        "loop"
+      ]
+    }
+  ],
+  "existing": [
+    "What does Big-O describe?",
+    "Why do we count steps, not seconds?"
+  ]
+}

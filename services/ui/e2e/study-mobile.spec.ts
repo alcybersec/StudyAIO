@@ -10,7 +10,7 @@ const VIEWPORTS = [
 ] as const
 const THEMES = ['light', 'dark'] as const
 const ROUTES = ['/study', '/study?tab=history', '/study?tab=exams'] as const
-const TAB_NAMES = [/^plan/i, /^flashcards/i, /^timed/i, /^exams/i, /^history/i]
+const TAB_NAMES = [/^plan/i, /^mastery/i, /^flashcards/i, /^timed/i, /^exams/i, /^history/i]
 
 async function openStudy(page: Page, route: string, theme: (typeof THEMES)[number]) {
   await page.addInitScript((t) => {
@@ -80,14 +80,14 @@ for (const vp of VIEWPORTS) {
         expect(m.overflowX).toBe('auto')
         // If the tabs' natural widths exceed the bar, the bar itself must scroll.
         if (m.needed > m.client) expect(m.scroll).toBeGreaterThan(m.client)
-        // 320px cannot fit five tabs; guard against the bar silently shrinking them.
+        // 320px cannot fit six tabs; guard against the bar silently shrinking them.
         if (vp.width <= 320) expect(m.scroll).toBeGreaterThan(m.client)
         await expectNoPageOverflow(page)
       })
 
-      test('all five tabs are reachable, selected, in view and >= 44px tall', async ({ page }) => {
+      test('all six tabs are reachable, selected, in view and >= 44px tall', async ({ page }) => {
         const tablist = await openStudy(page, '/study', theme)
-        await expect(tablist.getByRole('tab')).toHaveCount(5)
+        await expect(tablist.getByRole('tab')).toHaveCount(TAB_NAMES.length)
         for (const name of TAB_NAMES) {
           const tab = tablist.getByRole('tab', { name })
           await tab.click()
@@ -114,7 +114,7 @@ for (const vp of VIEWPORTS) {
         await plan.focus()
         await expect(plan).toHaveAttribute('aria-selected', 'true')
         await page.keyboard.press('ArrowRight')
-        const next = tablist.getByRole('tab', { name: /^flashcards/i })
+        const next = tablist.getByRole('tab', { name: /^mastery/i })
         await expect(next).toHaveAttribute('aria-selected', 'true')
         await expect(next).toBeFocused()
         await expectWithinTablist(next, tablist)

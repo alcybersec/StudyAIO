@@ -45,9 +45,11 @@ from app.api import (
     summaries_router,
     uploads_router,
     usage_router,
+    weakspots_router,
 )
 from app.config import settings
 from app.core import secret_box
+from app.core.clock import utc_now
 from app.core.demo_middleware import DemoAccountMiddleware
 from app.core.exceptions import (
     AgentError,
@@ -64,6 +66,7 @@ from app.core.exceptions import (
     RateLimiterUnavailableError,
     RegistrationClosedError,
     StudyAIOError,
+    TargetedDailyCapError,
     UserExistsError,
 )
 from app.core.logging import configure_logging
@@ -425,6 +428,7 @@ app.include_router(qa_router, prefix="/api", tags=["qa"])
 app.include_router(assets_router, prefix="/api", tags=["assets"])
 app.include_router(exams_router, prefix="/api", tags=["exams"])
 app.include_router(study_router, prefix="/api", tags=["study"])
+app.include_router(weakspots_router, prefix="/api", tags=["weak-spots"])
 app.include_router(settings_router, prefix="/api", tags=["settings"])
 app.include_router(exports_router, prefix="/api", tags=["exports"])
 app.include_router(courseops_router, prefix="/api", tags=["courseops"])
@@ -550,6 +554,22 @@ async def quota_exceeded_handler(request: Request, exc: QuotaExceededError) -> J
             "limit": exc.limit,
             "period": exc.period,
         },
+    )
+
+
+@app.exception_handler(TargetedDailyCapError)
+async def targeted_daily_cap_handler(request: Request, exc: TargetedDailyCapError) -> JSONResponse:
+    """Handle the per-day targeted-generation cap with 429, a stable code and the reset time."""
+    retry_after = max(1, int((exc.reset_at - utc_now()).total_seconds()))
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": str(exc),
+            "code": "targeted_daily_cap",
+            "limit": exc.limit,
+            "reset_at": exc.reset_at.isoformat(),
+        },
+        headers={"Retry-After": str(retry_after)},
     )
 
 

@@ -36,6 +36,7 @@ celery_app = Celery(
         "app.pipeline.index",
         "app.pipeline.reembed_task",
         "app.pipeline.assets",
+        "app.pipeline.targeted_task",
         "app.pipeline.courseops_task",
         "app.pipeline.notification_tasks",
         "app.pipeline.calendar_task",
@@ -61,6 +62,10 @@ celery_app.conf.update(
     beat_schedule={
         "recover-stuck-artifacts": {
             "task": "app.pipeline.recovery.recover_stuck_artifacts",
+            "schedule": crontab(minute="*/10"),
+        },
+        "recover-stuck-generations": {
+            "task": "app.pipeline.targeted_task.recover_stuck_generations",
             "schedule": crontab(minute="*/10"),
         },
         "daily-deadline-reminders": {

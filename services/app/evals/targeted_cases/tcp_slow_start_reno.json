@@ -1,0 +1,29 @@
+{
+  "id": "tcp_slow_start_reno",
+  "source_case": "tcp_congestion",
+  "kind": "flashcards",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Slow start",
+      "terms": [
+        "slow start",
+        "ssthresh",
+        "cwnd"
+      ]
+    },
+    {
+      "label": "Fast retransmit",
+      "terms": [
+        "fast retransmit",
+        "duplicate acks",
+        "fast recovery",
+        "reno"
+      ]
+    }
+  ],
+  "existing": [
+    "What is the congestion window (cwnd)?",
+    "What does TCP Tahoe do on loss?"
+  ]
+}

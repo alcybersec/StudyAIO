@@ -127,12 +127,25 @@ class TestAdminRetention:
             "cohorts": [{"week_start": "2026-09-28", "signups": 4, "d1": 3, "d7": 2, "d30": None}],
             "features": [{"week_start": "2026-10-05", "event": "quiz_answered", "active_users": 2}],
         }
-        with patch(
-            "app.api.usage.usage_service.retention_readout", AsyncMock(return_value=payload)
-        ) as m:
+        split = [
+            {
+                "week_start": "2026-09-28",
+                "with_plan": {"signups": 1, "d7": 1, "d30": None},
+                "without_plan": {"signups": 3, "d7": 1, "d30": None},
+            }
+        ]
+        with (
+            patch(
+                "app.api.usage.usage_service.retention_readout", AsyncMock(return_value=payload)
+            ) as m,
+            patch(
+                "app.api.usage.usage_service.plan_split_readout", AsyncMock(return_value=split)
+            ) as s,
+        ):
             response = await client.get("/api/admin/usage/retention?weeks=4")
         assert response.status_code == 200
-        assert response.json() == payload
+        assert response.json() == {**payload, "plan_split": split}
+        assert s.await_args.kwargs.get("weeks") == 4
         assert m.await_args.kwargs.get("weeks") == 4
 
     async def test_weeks_bounded(self, client_as):

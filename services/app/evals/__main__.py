@@ -38,6 +38,15 @@ from evals.offline import (
     run_offline_runs,
 )
 from evals.runner import format_report, load_cases
+from evals.targeted import BASELINE_PATH as TARGETED_BASELINE_PATH
+from evals.targeted import FIXTURES_DIR as TARGETED_FIXTURES_DIR
+from evals.targeted import (
+    check_targeted,
+    format_targeted_report,
+    load_targeted_baseline,
+    load_targeted_cases,
+    run_targeted_offline,
+)
 
 
 def _parse_extras(pairs: list[str]) -> dict:
@@ -54,7 +63,50 @@ def _parse_extras(pairs: list[str]) -> dict:
     return out
 
 
+def _targeted_offline(args: argparse.Namespace, *, fixtures: Path) -> int:
+    """Score the stored targeted generations; ``--check`` gates, ``--write-baseline`` records."""
+    run = run_targeted_offline(load_targeted_cases(args.case), fixtures)
+    if args.write_baseline:
+        if run.missing_fixtures:
+            print(f"cannot write a baseline: no fixture for {', '.join(run.missing_fixtures)}")
+            return 1
+        provenance = {"source": "live" if args.model else "hand-written"}
+        if args.model:
+            provenance.update({"model": args.model, "date": args.date})
+        provenance.update(_parse_extras(args.provenance))
+        text = json.dumps(run.to_baseline(args.threshold, provenance), indent=2, sort_keys=True)
+        TARGETED_BASELINE_PATH.write_text(text + "\n")
+        print(format_targeted_report(run, None, []))
+        print(f"\nBaseline written to {TARGETED_BASELINE_PATH}")
+        return 0
+    baseline = None
+    failures: list[str] = []
+    if args.check:
+        try:
+            baseline = load_targeted_baseline()
+        except FileNotFoundError as e:
+            print(f"RESULT: FAIL\n  - {e}")
+            return 1
+        failures = check_targeted(run, baseline, expect_all_cases=args.case is None)
+    print(format_targeted_report(run, baseline, failures))
+    return 1 if failures else 0
+
+
 def _offline(args: argparse.Namespace) -> int:
+    if args.targeted:
+        custom = args.fixtures != str(FIXTURES_DIR)
+        return _targeted_offline(
+            args, fixtures=Path(args.fixtures) if custom else TARGETED_FIXTURES_DIR
+        )
+    status = _offline_summaries(args)
+    if args.check and args.case is None and not args.per_run:
+        # The CI job runs this one command: the targeted gate rides along.
+        print("\n" + "=" * 72 + "\n")
+        status |= _targeted_offline(args, fixtures=TARGETED_FIXTURES_DIR)
+    return status
+
+
+def _offline_summaries(args: argparse.Namespace) -> int:
     cases = load_cases(args.case)
     if args.per_run:
         multi = run_offline_runs(cases, Path(args.fixtures))
@@ -97,7 +149,20 @@ def _offline(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+async def _live_targeted(args: argparse.Namespace) -> int:
+    from evals.runner import run_targeted
+
+    save_to = TARGETED_FIXTURES_DIR if args.save_fixtures else None
+    run = await run_targeted(only=args.case, save_to=save_to)
+    print(format_targeted_report(run, None, []))
+    if save_to:
+        print(f"\nFixtures written to {save_to}")
+    return 0
+
+
 async def _live(args: argparse.Namespace) -> int:
+    if args.targeted:
+        return await _live_targeted(args)
     from evals.runner import run
 
     save_to = Path(args.fixtures) if args.save_fixtures else None
@@ -122,6 +187,11 @@ def build_parser() -> argparse.ArgumentParser:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--offline", action="store_true", help="Score stored fixtures (CI mode)")
     mode.add_argument("--live", action="store_true", help="Generate via the agent adapter")
+    parser.add_argument(
+        "--targeted",
+        action="store_true",
+        help="Score/generate the targeted (weak-spot) cases instead of the summaries",
+    )
     parser.add_argument("--case", default=None, help="Restrict to one case id")
     parser.add_argument("--check", action="store_true", help="Offline: fail on a regression")
     parser.add_argument("--write-baseline", action="store_true", help="Offline: rewrite baseline")

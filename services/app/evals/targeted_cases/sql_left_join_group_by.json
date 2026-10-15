@@ -1,0 +1,26 @@
+{
+  "id": "sql_left_join_group_by",
+  "source_case": "sql_joins",
+  "kind": "quiz",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "LEFT JOIN",
+      "terms": [
+        "left join",
+        "null"
+      ]
+    },
+    {
+      "label": "GROUP BY and HAVING",
+      "terms": [
+        "group by",
+        "having"
+      ]
+    }
+  ],
+  "existing": [
+    "What does an INNER JOIN keep?",
+    "Write a query that counts rows per group."
+  ]
+}

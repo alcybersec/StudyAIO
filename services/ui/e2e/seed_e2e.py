@@ -14,6 +14,7 @@ e2e-tests job already exports it.
     python3 e2e/seed_e2e.py course CODE [--concepts N]
     python3 e2e/seed_e2e.py admin EMAIL PASSWORD
     python3 e2e/seed_e2e.py user EMAIL PASSWORD
+    python3 e2e/seed_e2e.py weakspots CODE
 
 Both are idempotent. `course` seeds for the owner a self-hosted API resolves
 requests to (the default admin, created here if no API request has made it yet).
@@ -22,7 +23,7 @@ requests to (the default admin, created here if no API request has made it yet).
 import argparse
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parents[2] / "app"
@@ -39,8 +40,14 @@ from app.api.deps import (  # noqa: E402
 )
 from app.config import settings
 from app.core.auth import hash_password  # noqa: E402
+from app.models.artifact import LectureArtifact  # noqa: E402
 from app.models.concept import Concept  # noqa: E402
 from app.models.course import Course  # noqa: E402
+from app.models.exam import Exam  # noqa: E402
+from app.models.flashcard import Flashcard  # noqa: E402
+from app.models.flashcard_review import FlashcardReview  # noqa: E402
+from app.models.quiz import QuizQuestion  # noqa: E402
+from app.models.quiz_attempt import QuizAttempt  # noqa: E402
 from app.models.user import User  # noqa: E402
 
 
@@ -101,6 +108,100 @@ def seed_course(session: Session, code: str, concepts: int) -> None:
             )
 
 
+# Weeks the weak-spot spec reads: (week, questions, attempts as correct/incorrect).
+# Week 1 is weak, 2 solid, 3 has questions but too few answers to judge (unknown).
+WEAKSPOT_WEEKS = ((1, 5, [False] * 5), (2, 5, [True] * 5), (3, 3, [False, False]))
+
+
+def seed_weakspots(session: Session, code: str) -> None:
+    """A course with a weak, a solid and an unknown week, due cards and an exam.
+
+    The weak-spot engine derives everything from quiz attempts, card reviews and
+    exams; none of them can be created without answering through the UI, and
+    the study-tonight plan is frozen on its first read of the day. Idempotent:
+    a course that already has questions is left as it is.
+    """
+    owner = _owner(session)
+    course = session.execute(
+        select(Course).where(Course.code == code, Course.user_id == owner.id)
+    ).scalar_one_or_none()
+    if course is None:
+        course = Course(code=code, name=f"{code} (e2e)", user_id=owner.id)
+        session.add(course)
+        session.flush()
+    if session.execute(
+        select(QuizQuestion.id).where(QuizQuestion.course_id == course.id).limit(1)
+    ).first():
+        return
+    now = datetime.now(UTC)
+    first_artifact = None
+    for week, n_questions, outcomes in WEAKSPOT_WEEKS:
+        artifact = LectureArtifact(
+            user_id=owner.id,
+            course_id=course.id,
+            week=week,
+            title=f"{code} week {week}",
+            original_filename=f"{code}-w{week}.pdf",
+            file_path=f"uploads/e2e-{code}-w{week}.pdf",
+            file_type="pdf",
+            sha256=f"{code}{week}".encode().hex().ljust(64, "0")[:64],
+            file_size_bytes=1,
+            status="processed",
+        )
+        session.add(artifact)
+        session.flush()
+        first_artifact = first_artifact or artifact
+        questions = []
+        for i in range(n_questions):
+            q = QuizQuestion(
+                course_id=course.id,
+                week=week,
+                question_type="short_answer",
+                question=f"{code} w{week} question {i}?",
+                correct_answer="an answer",
+                explanation="because",
+                source_artifact_id=artifact.id,
+                source_page_ref=1,
+            )
+            session.add(q)
+            questions.append(q)
+        session.flush()
+        for q, ok in zip(questions, outcomes):
+            session.add(QuizAttempt(quiz_question_id=q.id, selected_answer="x", is_correct=ok))
+    for i in range(3):
+        card = Flashcard(
+            course_id=course.id,
+            week=1,
+            front=f"{code} card {i}?",
+            back="an answer",
+            tags=[],
+            source_artifact_id=first_artifact.id,
+            source_page_ref=1,
+        )
+        session.add(card)
+        session.flush()
+        session.add(
+            FlashcardReview(
+                user_id=owner.id,
+                flashcard_id=card.id,
+                ease_factor=1.3,
+                interval_days=1,
+                repetition_count=0,
+                next_review_at=now - timedelta(days=2),
+                last_reviewed_at=now - timedelta(days=3),
+            )
+        )
+    session.add(
+        Exam(
+            user_id=owner.id,
+            course_id=course.id,
+            title=f"{code} midterm",
+            exam_date=now + timedelta(days=5),
+            weeks_scope=[1, 2, 3],
+        )
+    )
+
+
 def seed_admin(session: Session, email: str, password: str) -> None:
     """Create (or reset the password of) an admin who can actually log in."""
     user = session.execute(select(User).where(User.email == email)).scalar_one_or_none()
@@ -141,6 +242,8 @@ def main() -> None:
     c = sub.add_parser("course")
     c.add_argument("code")
     c.add_argument("--concepts", type=int, default=0)
+    w = sub.add_parser("weakspots")
+    w.add_argument("code")
     a = sub.add_parser("admin")
     a.add_argument("email")
     a.add_argument("password")
@@ -154,6 +257,8 @@ def main() -> None:
     with Session(engine) as session:
         if args.cmd == "course":
             seed_course(session, args.code, args.concepts)
+        elif args.cmd == "weakspots":
+            seed_weakspots(session, args.code)
         elif args.cmd == "user":
             seed_user(session, args.email, args.password)
         else:

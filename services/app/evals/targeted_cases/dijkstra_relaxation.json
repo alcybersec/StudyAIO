@@ -1,0 +1,35 @@
+{
+  "id": "dijkstra_relaxation",
+  "source_case": "dijkstra_shortest_paths",
+  "kind": "quiz",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Non-negative edge weights",
+      "terms": [
+        "non-negative",
+        "negative edge",
+        "negative weights"
+      ]
+    },
+    {
+      "label": "Relaxation",
+      "terms": [
+        "relax",
+        "dist[u]",
+        "distance estimate"
+      ]
+    },
+    {
+      "label": "Running time",
+      "terms": [
+        "O((V + E) log V)",
+        "binary heap"
+      ]
+    }
+  ],
+  "existing": [
+    "What problem does Dijkstra's algorithm solve?",
+    "State the running time of Dijkstra's algorithm with a binary heap."
+  ]
+}

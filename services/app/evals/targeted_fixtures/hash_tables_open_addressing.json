@@ -1,0 +1,50 @@
+{
+  "kind": "quiz",
+  "items": [
+    {
+      "question_type": "short_answer",
+      "question": "Why does linear probing suffer from primary clustering?",
+      "options": null,
+      "correct_answer": "Occupied runs grow, so further collisions become more likely.",
+      "explanation": "Linear probing checks the next bucket, so runs of occupied buckets get longer.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What happens to the table when the load factor crosses a threshold?",
+      "options": null,
+      "correct_answer": "It is resized, usually doubled, and every key is rehashed.",
+      "explanation": "The page describes resizing and rehashing at a load factor threshold.",
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "How does quadratic probing avoid primary clustering?",
+      "options": null,
+      "correct_answer": "It checks buckets at increasing square offsets, which spreads entries out.",
+      "explanation": "Square offsets break up the occupied runs that linear probing creates.",
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What is a load factor of a hash table",
+      "options": null,
+      "correct_answer": "The ratio of stored entries to buckets.",
+      "explanation": "Defined on page 1.",
+      "source_page_ref": 1,
+      "expect": "duplicate"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What is the amortised cost of a hash table insert in a persistent store?",
+      "options": null,
+      "correct_answer": "Constant.",
+      "explanation": "Not on any page of this lecture.",
+      "source_page_ref": 99,
+      "expect": "uncited"
+    }
+  ]
+}

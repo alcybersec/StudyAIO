@@ -107,7 +107,7 @@ class TestHandleRetryable:
 
 class TestTimeLimits:
     def test_every_stage_has_ordered_limits(self):
-        assert len(STAGE_TIME_LIMITS) == 6
+        assert len(STAGE_TIME_LIMITS) == 7  # six chain stages + targeted generation
         for soft, hard in STAGE_TIME_LIMITS.values():
             assert 0 < soft < hard
 

@@ -20,6 +20,8 @@ STAGE_TIME_LIMITS: dict[str, tuple[int, int]] = {
     "app.pipeline.summarize.summarize_artifact": (1500, 1560),
     "app.pipeline.index.index_artifact": (900, 960),
     "app.pipeline.assets.generate_assets": (1500, 1560),
+    # One AI call (the CLI backend allows 600 s) plus the writes; ADR 0007.
+    "app.pipeline.targeted_task.generate_targeted_items": (660, 720),
 }
 
 #: An in-progress artifact untouched this long is stuck. Above the largest hard

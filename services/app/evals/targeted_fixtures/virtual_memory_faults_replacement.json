@@ -1,0 +1,50 @@
+{
+  "kind": "quiz",
+  "items": [
+    {
+      "question_type": "short_answer",
+      "question": "When does an access raise a page fault?",
+      "options": null,
+      "correct_answer": "When the valid bit of the page table entry is 0.",
+      "explanation": "Stated on page 2.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What is thrashing and why does it make the system crawl?",
+      "options": null,
+      "correct_answer": "A high fault rate, because each fault costs millions of cycles.",
+      "explanation": "Stated on page 3.",
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "Which page does LRU choose as the victim?",
+      "options": null,
+      "correct_answer": "The least recently used page.",
+      "explanation": "Stated on page 3.",
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What is a page table?",
+      "options": null,
+      "correct_answer": "It maps each page number to a frame number.",
+      "explanation": "Same as an existing question.",
+      "source_page_ref": 2,
+      "expect": "duplicate"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What does the TLB cache?",
+      "options": null,
+      "correct_answer": "Recent translations.",
+      "explanation": "Not in the lecture.",
+      "source_page_ref": 6,
+      "expect": "uncited"
+    }
+  ]
+}

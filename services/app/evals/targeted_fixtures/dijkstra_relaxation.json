@@ -1,0 +1,50 @@
+{
+  "kind": "quiz",
+  "items": [
+    {
+      "question_type": "short_answer",
+      "question": "Why does Dijkstra's algorithm require non-negative edge weights?",
+      "options": null,
+      "correct_answer": "With a negative edge the greedy choice can be wrong.",
+      "explanation": "The page says the greedy choice can be wrong with a negative edge.",
+      "source_page_ref": 1,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "When relaxing the edge (u, v), which condition triggers an update of dist[v]?",
+      "options": null,
+      "correct_answer": "dist[u] + w(u, v) < dist[v].",
+      "explanation": "Relaxation updates the estimate when a shorter route is found.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "How is the shortest path itself recovered once the algorithm has finished?",
+      "options": null,
+      "correct_answer": "Store a predecessor for each vertex when relaxing and walk back from the target.",
+      "explanation": "Predecessors are recorded during relaxation.",
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "State the running time of Dijkstra's algorithm using a binary heap.",
+      "options": null,
+      "correct_answer": "O((V + E) log V).",
+      "explanation": "Same question as one the student already has.",
+      "source_page_ref": 3,
+      "expect": "duplicate"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "Which heap gives a better running time than a binary heap here?",
+      "options": null,
+      "correct_answer": "A Fibonacci heap.",
+      "explanation": "Not in the lecture.",
+      "source_page_ref": 4,
+      "expect": "uncited"
+    }
+  ]
+}

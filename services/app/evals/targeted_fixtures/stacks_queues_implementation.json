@@ -1,0 +1,50 @@
+{
+  "kind": "flashcards",
+  "items": [
+    {
+      "front": "Why does a queue on a plain array need a circular buffer?",
+      "back": "So dequeue does not shift every element.",
+      "tags": [
+        "queue implementation"
+      ],
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "front": "How do you check matching brackets with a stack?",
+      "back": "Push each opening bracket; on a closing bracket pop and compare.",
+      "tags": [
+        "stack uses"
+      ],
+      "source_page_ref": 1,
+      "expect": "keep"
+    },
+    {
+      "front": "What complexity do linked-list operations have?",
+      "back": "O(1).",
+      "tags": [
+        "queue implementation"
+      ],
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "front": "What does LIFO mean",
+      "back": "Last-in first-out.",
+      "tags": [
+        "stack uses"
+      ],
+      "source_page_ref": 1,
+      "expect": "duplicate"
+    },
+    {
+      "front": "What is a deque?",
+      "back": "A double-ended queue.",
+      "tags": [
+        "queue implementation"
+      ],
+      "source_page_ref": 3,
+      "expect": "uncited"
+    }
+  ]
+}

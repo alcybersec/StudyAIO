@@ -40,4 +40,5 @@ class QuizAttempt(Base):
         Index("ix_quiz_attempts_question", "quiz_question_id"),
         Index("ix_quiz_attempts_exam", "exam_id"),
         Index("ix_quiz_attempts_created", "created_at"),
+        Index("ix_quiz_attempts_question_created", "quiz_question_id", "created_at"),
     )

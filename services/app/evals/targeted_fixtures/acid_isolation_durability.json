@@ -1,0 +1,50 @@
+{
+  "kind": "quiz",
+  "items": [
+    {
+      "question_type": "short_answer",
+      "question": "What is a non-repeatable read?",
+      "options": null,
+      "correct_answer": "The same query returns different rows within one transaction.",
+      "explanation": "Defined on page 2.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "What does SERIALIZABLE isolation guarantee?",
+      "options": null,
+      "correct_answer": "The result of some serial order of the transactions.",
+      "explanation": "Stated on page 2.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "How does a write-ahead log provide durability?",
+      "options": null,
+      "correct_answer": "The log record is flushed before commit returns and replayed after a crash.",
+      "explanation": "Described on page 3.",
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "Define a dirty read",
+      "options": null,
+      "correct_answer": "Reading another transaction's uncommitted change.",
+      "explanation": "Same as an existing question.",
+      "source_page_ref": 2,
+      "expect": "duplicate"
+    },
+    {
+      "question_type": "short_answer",
+      "question": "Which isolation level does PostgreSQL use by default?",
+      "options": null,
+      "correct_answer": "Read committed.",
+      "explanation": "Not in the lecture.",
+      "source_page_ref": 7,
+      "expect": "uncited"
+    }
+  ]
+}

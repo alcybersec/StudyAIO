@@ -386,3 +386,65 @@ def format_report(report: RunReport) -> str:
         " — 0 tokens means the backend does not report them.",
     ]
     return "\n".join(lines)
+
+
+async def run_targeted(only: str | None = None, save_to: Path | None = None):
+    """Generate targeted items for every targeted case through the real adapter.
+
+    Mirrors the worker task's call (``generate_quiz`` / ``generate_flashcards`` with
+    a ``GenerationFocus``) but with no database: the lecture is the case's source
+    pages, the weak topics and already-owned stems come from the case file. Costs
+    AI calls; for an operator refreshing the stored fixtures.
+
+    Args:
+        only: Run a single targeted case id.
+        save_to: Write ``<dir>/<case id>.json`` fixtures. Each item gets an
+            ``expect`` label taken from the filter's verdict; review it by hand.
+
+    Returns:
+        The scored :class:`evals.targeted.TargetedRun`.
+    """
+    from dataclasses import asdict
+
+    from app.agents.base import GenerationFocus
+    from app.agents.factory import get_agent
+    from app.pipeline.targeted_items import select_items
+    from evals.targeted import (
+        TargetedRun,
+        lecture_pages,
+        load_targeted_cases,
+        score_targeted,
+        to_items,
+    )
+
+    run = TargetedRun()
+    for case in load_targeted_cases(only):
+        pages = lecture_pages(case)
+        extraction = ExtractionData(
+            pages=[{"page_number": n, "text": t} for n, t in sorted(pages.items())],
+            metadata={"course_code": "EVAL", "week": 1},
+        )
+        focus = GenerationFocus(
+            topics=[t["label"] for t in case["weak_topics"]],
+            avoid=list(case["existing"]),
+        )
+        agent = get_agent()
+        agent.reset_usage()
+        method = agent.generate_quiz if case["kind"] == "quiz" else agent.generate_flashcards
+        items = await method(summary="", extraction=extraction, count=case["count"], focus=focus)
+        generated = {"kind": case["kind"], "items": [asdict(i) for i in items]}
+        run.scores.append(score_targeted(case, generated))
+        if save_to is not None:
+            verdicts = select_items(
+                case["kind"],
+                to_items(case["kind"], generated["items"]),
+                valid_pages=set(pages),
+                existing=case["existing"],
+            ).outcomes
+            labels = {"kept": "keep", "uncited": "uncited", "duplicate": "duplicate"}
+            for item, verdict in zip(generated["items"], verdicts, strict=True):
+                item["expect"] = labels[verdict]
+            save_to.mkdir(parents=True, exist_ok=True)
+            (save_to / f"{case['id']}.json").write_text(json.dumps(generated, indent=2) + "\n")
+        logger.info("targeted_eval_run_scored", case=case["id"])
+    return run

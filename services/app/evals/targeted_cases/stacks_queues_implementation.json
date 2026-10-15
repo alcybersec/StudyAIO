@@ -1,0 +1,28 @@
+{
+  "id": "stacks_queues_implementation",
+  "source_case": "stacks_queues",
+  "kind": "flashcards",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Queue implementation",
+      "terms": [
+        "circular buffer",
+        "enqueue",
+        "dequeue"
+      ]
+    },
+    {
+      "label": "Stack uses",
+      "terms": [
+        "brackets",
+        "push",
+        "pop"
+      ]
+    }
+  ],
+  "existing": [
+    "What does LIFO mean?",
+    "What does FIFO mean?"
+  ]
+}

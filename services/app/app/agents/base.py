@@ -126,6 +126,26 @@ class QuizQuestionData:
 
 
 @dataclass
+class GenerationFocus:
+    """What a targeted generation should concentrate on (ADR 0007 Decision 5).
+
+    Passed as the optional ``focus`` keyword of ``generate_quiz`` /
+    ``generate_flashcards``. ``None`` means the ordinary, untargeted prompt.
+
+    Attributes:
+        topics: Weak-topic labels, most important first.
+        missed_questions: Stems of questions the student got wrong (never their answers).
+        avoid: Stems/fronts of items the student already has, to not repeat.
+        page_refs: Pages of the source the missed questions came from.
+    """
+
+    topics: list[str]
+    missed_questions: list[str] = field(default_factory=list)
+    avoid: list[str] = field(default_factory=list)
+    page_refs: list[int] = field(default_factory=list)
+
+
+@dataclass
 class AnswerResult:
     """Result of answering a question with citations."""
 
@@ -404,7 +424,11 @@ class AgentAdapter(ABC):
 
     @abstractmethod
     async def generate_flashcards(
-        self, summary: str, extraction: ExtractionData, count: int
+        self,
+        summary: str,
+        extraction: ExtractionData,
+        count: int,
+        focus: GenerationFocus | None = None,
     ) -> list[FlashcardData]:
         """Generate flashcard Q&A pairs.
 
@@ -412,6 +436,7 @@ class AgentAdapter(ABC):
             summary: Summary markdown for context.
             extraction: Full extraction data.
             count: Number of flashcards to generate.
+            focus: Weak-spot focus; when set the targeted template is used.
 
         Returns:
             List of FlashcardData.
@@ -420,7 +445,11 @@ class AgentAdapter(ABC):
 
     @abstractmethod
     async def generate_quiz(
-        self, summary: str, extraction: ExtractionData, count: int
+        self,
+        summary: str,
+        extraction: ExtractionData,
+        count: int,
+        focus: GenerationFocus | None = None,
     ) -> list[QuizQuestionData]:
         """Generate quiz questions (MCQ + short answer).
 
@@ -428,6 +457,7 @@ class AgentAdapter(ABC):
             summary: Summary markdown for context.
             extraction: Full extraction data.
             count: Number of questions to generate.
+            focus: Weak-spot focus; when set the targeted template is used.
 
         Returns:
             List of QuizQuestionData.

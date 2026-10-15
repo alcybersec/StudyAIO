@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
-import { Card, Button, Input } from '../ui'
+import { useLocation, useSearchParams } from 'react-router-dom'
+import { Card, Button, ErrorState, Input, Skeleton } from '../ui'
 import { CountdownTimer } from './CountdownTimer'
 import { useTimedPlan, useRecordReview } from '../../hooks/useApi'
-import { studyApi, examsApi } from '../../api/endpoints'
+import { studyApi, examsApi, assetsApi } from '../../api/endpoints'
+import { CitationChip } from '../week/CitationChip'
+import { PracticeBadge } from '../weakspots/PracticeBadge'
+import type { PlanRunState } from '../../lib/planRun'
 import { writeQueue } from '../../lib/writeQueue'
 import type { Flashcard, QuizQuestion, TimedSessionPlan } from '../../types'
 
@@ -16,10 +19,44 @@ interface StudyItem {
   id: string
 }
 
+interface RunData {
+  plan: TimedSessionPlan
+  cards: Flashcard[]
+  quizzes: QuizQuestion[]
+}
+
+/** Resolve a plan's ids to the items to study, looked up per course; ids that no longer resolve are skipped. */
+async function fetchRunData(plan: TimedSessionPlan, scopes: string[]): Promise<RunData> {
+  const cards: Flashcard[] = []
+  const quizzes: QuizQuestion[] = []
+
+  if (plan.card_ids.length > 0) {
+    const due: Flashcard[] = []
+    for (const scope of scopes) due.push(...(await studyApi.due(scope, undefined, plan.card_ids.length + 10)))
+    for (const id of plan.card_ids) {
+      const card = due.find(c => c.id === id)
+      if (card) cards.push(card)
+    }
+  }
+
+  if (plan.quiz_ids.length > 0) {
+    const all: QuizQuestion[] = []
+    for (const scope of scopes) all.push(...(await assetsApi.quiz(scope)))
+    for (const id of plan.quiz_ids) {
+      const q = all.find(qq => qq.id === id)
+      if (q) quizzes.push(q)
+    }
+  }
+
+  return { plan, cards, quizzes }
+}
+
 export function TimedStudyTab() {
   const { t } = useTranslation()
 
   const [searchParams] = useSearchParams()
+  const preset = (useLocation().state as { planRun?: PlanRunState } | null)?.planRun ?? null
+  const [presetError, setPresetError] = useState(false)
   const timedPlanMutation = useTimedPlan()
   const recordReview = useRecordReview()
 
@@ -48,6 +85,28 @@ export function TimedStudyTab() {
   const currentQuiz = currentItem?.type === 'quiz'
     ? quizzes.find(q => q.id === currentItem.id) : null
 
+  const beginRun = useCallback((run: RunData) => {
+    setPlan(run.plan)
+    setCards(run.cards)
+    setQuizzes(run.quizzes)
+
+    const studyItems: StudyItem[] = []
+    let ci = 0, qi = 0
+    while (ci < run.cards.length || qi < run.quizzes.length) {
+      for (let k = 0; k < 3 && ci < run.cards.length; k++, ci++) {
+        studyItems.push({ type: 'card', id: run.cards[ci].id })
+      }
+      if (qi < run.quizzes.length) {
+        studyItems.push({ type: 'quiz', id: run.quizzes[qi].id })
+        qi++
+      }
+    }
+
+    setItems(studyItems)
+    setCurrentIndex(0)
+    setPhase('studying')
+  }, [])
+
   const handleStart = async () => {
     try {
       const result = await timedPlanMutation.mutateAsync({
@@ -55,55 +114,35 @@ export function TimedStudyTab() {
         course_code: courseCode || undefined,
         exam_id: examId || undefined,
       })
-      setPlan(result)
-
-      const fetchedCards: Flashcard[] = []
-      const fetchedQuizzes: QuizQuestion[] = []
-
-      if (result.card_ids.length > 0) {
-        const scope = result.course_code || courseCode
-        if (scope) {
-          const dueCards = await studyApi.due(scope, undefined, result.card_ids.length + 10)
-          for (const id of result.card_ids) {
-            const card = dueCards.find(c => c.id === id)
-            if (card) fetchedCards.push(card)
-          }
-        }
-      }
-
-      if (result.quiz_ids.length > 0) {
-        const scope = result.course_code || courseCode
-        if (scope) {
-          const allQuiz = await import('../../api/endpoints').then(m => m.assetsApi.quiz(scope))
-          for (const id of result.quiz_ids) {
-            const q = allQuiz.find(qq => qq.id === id)
-            if (q) fetchedQuizzes.push(q)
-          }
-        }
-      }
-
-      setCards(fetchedCards)
-      setQuizzes(fetchedQuizzes)
-
-      const studyItems: StudyItem[] = []
-      let ci = 0, qi = 0
-      while (ci < fetchedCards.length || qi < fetchedQuizzes.length) {
-        for (let k = 0; k < 3 && ci < fetchedCards.length; k++, ci++) {
-          studyItems.push({ type: 'card', id: fetchedCards[ci].id })
-        }
-        if (qi < fetchedQuizzes.length) {
-          studyItems.push({ type: 'quiz', id: fetchedQuizzes[qi].id })
-          qi++
-        }
-      }
-
-      setItems(studyItems)
-      setCurrentIndex(0)
-      setPhase('studying')
+      const scope = result.course_code || courseCode
+      beginRun(await fetchRunData(result, scope ? [scope] : []))
     } catch {
       // mutation error handled by UI
     }
   }
+
+  // "Study tonight" hands over explicit item ids (api.weak-spots v1): run exactly those.
+  const presetStarted = useRef(false)
+  const runPreset = useCallback(() => {
+    if (!preset) return
+    fetchRunData(
+      {
+        total_minutes: preset.minutes,
+        card_ids: preset.cardIds,
+        quiz_ids: preset.quizIds,
+        estimated_card_minutes: 0,
+        estimated_quiz_minutes: 0,
+        course_code: null,
+        exam_id: null,
+      },
+      preset.courseCodes,
+    ).then(beginRun).catch(() => setPresetError(true))
+  }, [preset, beginRun])
+  useEffect(() => {
+    if (!preset || presetStarted.current) return
+    presetStarted.current = true
+    runPreset()
+  }, [preset, runPreset])
 
   const handleTimeUp = useCallback(() => setPhase('summary'), [])
   const handleFinish = useCallback(() => setPhase('summary'), [])
@@ -202,6 +241,23 @@ export function TimedStudyTab() {
     }
   }, [phase, examId, plan, cardsReviewed, quizAnswered, quizCorrect])
 
+  // ── Tonight's plan loading its items ──
+  if (preset && phase === 'setup') {
+    return presetError ? (
+      <ErrorState
+        title={t("Tonight's items couldn't load")}
+        onRetry={() => {
+          setPresetError(false)
+          runPreset()
+        }}
+      />
+    ) : (
+      <Card aria-busy="true">
+        <Skeleton height={120} />
+      </Card>
+    )
+  }
+
   // ── Setup Phase ──
   if (phase === 'setup') {
     return (
@@ -287,6 +343,10 @@ export function TimedStudyTab() {
           <Card>
             <div className="text-center py-8">
               <span className="text-xs font-medium text-text-muted uppercase tracking-wider">{t('Flashcard')}</span>
+              <span className="ml-2 inline-flex items-center gap-1 align-middle">
+                {currentCard.origin === 'targeted' && <PracticeBadge />}
+                {currentCard.source_page_ref > 0 && <CitationChip page={currentCard.source_page_ref} />}
+              </span>
               <button
                 type="button"
                 className="mt-4 w-full cursor-pointer min-h-[200px] flex items-center justify-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-peri"
@@ -334,6 +394,10 @@ export function TimedStudyTab() {
                 {currentQuiz.question_type === 'multiple_choice'
                       ? t('Quiz — Multiple Choice')
                       : t('Quiz — Short Answer')}
+              </span>
+              <span className="ml-2 inline-flex items-center gap-1 align-middle">
+                {currentQuiz.origin === 'targeted' && <PracticeBadge />}
+                {currentQuiz.source_page_ref > 0 && <CitationChip page={currentQuiz.source_page_ref} />}
               </span>
               <p className="text-lg font-medium text-text mt-3">{currentQuiz.question}</p>
 

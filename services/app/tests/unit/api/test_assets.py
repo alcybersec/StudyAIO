@@ -19,6 +19,8 @@ def mock_flashcard():
     fc.source_artifact_id = "art-001"
     fc.source_page_ref = 1
     fc.generation_version = 1
+    fc.origin = "pipeline"
+    fc.focus_topic = None
     fc.created_at = datetime(2025, 1, 1)
     return fc
 
@@ -38,6 +40,8 @@ def mock_quiz_question():
     q.source_artifact_id = "art-001"
     q.source_page_ref = 1
     q.generation_version = 1
+    q.origin = "pipeline"
+    q.focus_topic = None
     q.created_at = datetime(2025, 1, 1)
     return q
 

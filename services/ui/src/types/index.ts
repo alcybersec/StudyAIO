@@ -234,6 +234,8 @@ export interface Flashcard {
   source_artifact_id: string
   source_page_ref: number
   generation_version: number
+  /** `targeted` for practice generated from the student's own weak spots (ADR 0007). */
+  origin?: ItemOrigin
   created_at: string
 }
 
@@ -249,8 +251,11 @@ export interface QuizQuestion {
   source_artifact_id: string
   source_page_ref: number
   generation_version: number
+  origin?: ItemOrigin
   created_at: string
 }
+
+export type ItemOrigin = 'pipeline' | 'targeted'
 
 // ── Exams ───────────────────────────────────────────────────────
 
@@ -1446,4 +1451,101 @@ export interface RetentionFeatureWeek {
 export interface RetentionReadout {
   cohorts: RetentionCohort[]
   features: RetentionFeatureWeek[]
+}
+
+// ── Weak-spot engine (api.weak-spots v1, ADR 0007) ──────────────
+
+/** `shaky` is the ADR 0007 name of the middle band; `ok` is accepted as its alias. */
+export type WeakSpotStatus = 'unknown' | 'weak' | 'shaky' | 'ok' | 'solid'
+
+export interface WeakSpotEvidence {
+  quiz_attempts: number
+  quiz_accuracy: number | null
+  cards_reviewed: number
+  avg_ease: number | null
+  lapsed_cards: number
+  overdue_cards: number
+}
+
+export interface WeakSpotWeek {
+  week: number
+  status: WeakSpotStatus
+  weakness: number | null
+  confidence: number
+  urgency: number
+  priority: number
+  evidence: WeakSpotEvidence
+  next_exam: { exam_id: string; days_to_exam: number } | null
+}
+
+export interface WeakSpotCourse {
+  course_id: string
+  course_code: string
+  weeks: WeakSpotWeek[]
+}
+
+export interface WeakSpotsResponse {
+  local_date: string
+  courses: WeakSpotCourse[]
+}
+
+export interface DiagnosticResponse {
+  course_id: string
+  week: number
+  question_ids: string[]
+  needs_generation: boolean
+}
+
+export type TargetedKind = 'quiz' | 'flashcards'
+export type TargetedStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+export interface TargetedGeneration {
+  id: string
+  course_id: string
+  week: number
+  kind: TargetedKind
+  status: TargetedStatus
+  requested_count: number
+  created_count: number
+  dropped_duplicate_count: number
+  dropped_uncited_count: number
+  item_ids: string[]
+  /** In the contract's prose ("only error_code") but not its field list, so optional. */
+  error_code?: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface TonightItem {
+  item_type: 'card' | 'quiz'
+  item_id: string
+  course_id: string
+  course_code: string
+  week: number
+  reason: 'diagnostic' | 'missed' | 'review' | 'new' | 'targeted'
+  minutes: number
+  done: boolean
+}
+
+export interface TonightFocus {
+  course_id: string
+  course_code: string
+  week: number
+  status: WeakSpotStatus
+  weakness: number | null
+  priority: number
+  days_to_exam: number | null
+}
+
+export interface TonightPlan {
+  plan_date: string
+  minutes: number
+  version: number
+  algorithm_version: number
+  built_at: string
+  total_minutes: number
+  done_count: number
+  items: TonightItem[]
+  focus: TonightFocus[]
+  diagnostic: { course_id: string; course_code: string; week: number } | null
 }

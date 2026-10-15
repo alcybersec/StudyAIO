@@ -1,0 +1,50 @@
+{
+  "kind": "flashcards",
+  "items": [
+    {
+      "front": "What does a root server return to the recursive resolver?",
+      "back": "A referral to the TLD server, for example the .org server.",
+      "tags": [
+        "resolution steps"
+      ],
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "front": "Which server gives the final answer in DNS resolution?",
+      "back": "The authoritative server for the domain.",
+      "tags": [
+        "resolution steps"
+      ],
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "front": "How long may a DNS answer be cached?",
+      "back": "For its TTL.",
+      "tags": [
+        "caching and ttl"
+      ],
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "front": "What is a CNAME record",
+      "back": "An alias.",
+      "tags": [
+        "caching and ttl"
+      ],
+      "source_page_ref": 3,
+      "expect": "duplicate"
+    },
+    {
+      "front": "What does DNSSEC add to resolution?",
+      "back": "Signatures on records.",
+      "tags": [
+        "resolution steps"
+      ],
+      "source_page_ref": 12,
+      "expect": "uncited"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "id": "bst_degenerate_inorder",
+  "source_case": "binary_search_trees",
+  "kind": "flashcards",
+  "count": 5,
+  "weak_topics": [
+    {
+      "label": "Degenerate trees",
+      "terms": [
+        "degenerate",
+        "sorted order",
+        "height n"
+      ]
+    },
+    {
+      "label": "In-order traversal",
+      "terms": [
+        "in-order"
+      ]
+    }
+  ],
+  "existing": [
+    "What is the BST invariant?",
+    "What is the cost of search in a balanced BST?"
+  ]
+}

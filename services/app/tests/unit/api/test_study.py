@@ -24,6 +24,8 @@ class TestGetDueCards:
         mock_card.source_artifact_id = "art-001"
         mock_card.source_page_ref = 5
         mock_card.generation_version = 1
+        mock_card.origin = "pipeline"
+        mock_card.focus_topic = None
         mock_card.created_at = datetime(2024, 1, 1)
 
         with patch(

@@ -1,5 +1,7 @@
 """Custom exception classes for StudyAIO."""
 
+from datetime import datetime
+
 
 class StudyAIOError(Exception):
     """Base exception for all StudyAIO errors."""
@@ -264,3 +266,23 @@ class ReviewRequiredError(StudyAIOError):
 
 class ArtifactBusyError(StudyAIOError):
     """Raised when an operation requires an artifact that is not mid-pipeline."""
+
+
+class TargetedUnitNotFoundError(StudyAIOError):
+    """Raised when a targeted generation names a course/week the caller has no material for.
+
+    Covers a foreign course, an absent course and a week without a processed
+    artifact alike, so the API answers all of them with the same 404.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("No processed material for that course and week")
+
+
+class TargetedDailyCapError(StudyAIOError):
+    """Raised when the caller has used today's (UTC) targeted-generation allowance."""
+
+    def __init__(self, limit: int, reset_at: datetime) -> None:
+        self.limit = limit
+        self.reset_at = reset_at
+        super().__init__(f"Targeted practice is limited to {limit} requests per day")

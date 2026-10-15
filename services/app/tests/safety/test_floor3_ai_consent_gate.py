@@ -64,6 +64,8 @@ KNOWN_GATED = frozenset(
         ("POST", "/api/review-items/{review_id}/resolve"),
         ("POST", "/api/courses/{course_code}/merge"),
         ("POST", "/api/courseops/documents"),
+        # ADR 0007 (GL#45): reaches .delay() and check_ai_quota (SAFETY-024, M33-S2).
+        ("POST", "/api/weak-spots/targeted"),
     }
 )
 
