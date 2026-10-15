@@ -229,6 +229,24 @@ class TestPersist:
         session.add.assert_not_called()
         session.commit.assert_not_awaited()
 
+    async def test_the_recheck_refreshes_a_stale_identity_map_entry(self):
+        """expire_on_commit=False keeps the in-memory ``running`` object; the recheck
+        must populate_existing or a recovered row is never seen as such."""
+        stale = _gen(status="running")
+        fresh = _gen(status="failed")
+
+        async def execute(stmt):
+            refreshed = stmt.get_execution_options().get("populate_existing", False)
+            return _Result(fresh if refreshed else stale)
+
+        session = _session()
+        session.execute = AsyncMock(side_effect=execute)
+        selection = Selection(kept=[QuizQuestionData("short_answer", "q", None, "a", "e", 1)])
+        with pytest.raises(tt.TargetedError) as caught:
+            await tt._persist(session, stale, _ctx(), selection)
+        assert caught.value.code == "superseded"
+        session.add.assert_not_called()
+
     async def test_nothing_is_ever_updated_or_deleted(self):
         row = _gen()
         session = _session(row)
