@@ -14,7 +14,6 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
 import en from '../locales/en/common.json'
-import ru from '../locales/ru/common.json'
 
 /** Tags the app ships, mirroring `settings_service.SUPPORTED_LANGUAGES`. */
 export const SUPPORTED_LANGUAGES = ['en', 'ru'] as const
@@ -50,11 +49,44 @@ export function getStoredLanguage(): Language {
   return DEFAULT_LANGUAGE
 }
 
-void i18n.use(initReactI18next).init({
+/**
+ * Loads a non-English bundle on demand. Russian is ~130 KB of JSON that an
+ * English session never reads, so it is a separate chunk fetched when the
+ * language is first selected (at boot for a stored choice, see `i18nReady`).
+ * `changeLanguage` resolves only after the bundle is in, so callers that
+ * await it see the new language immediately.
+ */
+const lazyLocales: Record<Exclude<Language, 'en'>, () => Promise<{ default: Record<string, string> }>> = {
+  ru: () => import('../locales/ru/common.json'),
+}
+
+const lazyBackend = {
+  type: 'backend' as const,
+  init() {},
+  read(
+    language: string,
+    _namespace: string,
+    callback: (err: Error | null, data?: Record<string, string>) => void,
+  ) {
+    const load = lazyLocales[language as keyof typeof lazyLocales]
+    if (!load) {
+      callback(null, {})
+      return
+    }
+    load().then(
+      (mod) => callback(null, mod.default),
+      (err: unknown) => callback(err instanceof Error ? err : new Error(String(err))),
+    )
+  },
+}
+
+/** Resolves once the initial language's bundle is loaded; await before first render. */
+export const i18nReady: Promise<unknown> = i18n.use(lazyBackend).use(initReactI18next).init({
   // English lives in the keys, so its bundle holds only what a key cannot
   // express on its own: the plural forms. Without them a count key renders
   // as written — "5 course" — for the language the keys are authored in.
-  resources: { en: { common: en }, ru: { common: ru } },
+  resources: { en: { common: en } },
+  partialBundledLanguages: true,
   lng: getStoredLanguage(),
   fallbackLng: DEFAULT_LANGUAGE,
   defaultNS: 'common',
