@@ -1,10 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { useFlashcards, useStudyStats } from '../../hooks/useApi'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { useDeleteFlashcard, useFlashcards, useStudyStats } from '../../hooks/useApi'
+import { studyItemErrorMessage } from '../../lib/studyItems'
+import { DeleteItemModal } from './DeleteItemModal'
+import { FlashcardEditor } from './FlashcardEditor'
+import { OriginBadge } from './OriginBadge'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { AiFeedbackControl } from '../ui/AiFeedbackControl'
-import { Badge, EmptyState, ErrorState, Kbd, Skeleton } from '../ui'
+import { Badge, Button, EmptyState, ErrorState, Kbd, Skeleton } from '../ui'
 
 interface FlashcardsTabProps {
   courseCode: string
@@ -31,9 +36,19 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [shuffledCards, setShuffledCards] = useState<typeof flashcards>()
+  const [editor, setEditor] = useState<'add' | 'edit' | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string>()
+  const deleteCard = useDeleteFlashcard()
 
-  const cards = shuffledCards ?? flashcards ?? []
-  const card = cards[currentIndex]
+  // Drop shuffled copies of cards that were since edited or deleted: the list
+  // from the server (new ids after an edit) is the source of truth.
+  const live = new Set((flashcards ?? []).map((c) => c.id))
+  const shuffled = shuffledCards?.every((c) => live.has(c.id)) && shuffledCards.length === flashcards?.length
+    ? shuffledCards
+    : undefined
+  const cards = shuffled ?? flashcards ?? []
+  const card = cards[Math.min(currentIndex, Math.max(cards.length - 1, 0))]
   const flashcardIds = useMemo(() => (flashcards ?? []).map((c) => c.id), [flashcards])
 
   const goNext = useCallback(() => {
@@ -53,17 +68,20 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
   const toggleFlip = useCallback(() => setFlipped((f) => !f), [])
 
   const toggleShuffle = useCallback(() => {
-    if (shuffledCards) {
+    if (shuffled) {
       setShuffledCards(undefined)
     } else if (flashcards) {
       setShuffledCards([...flashcards].sort(() => Math.random() - 0.5))
     }
     setCurrentIndex(0)
     setFlipped(false)
-  }, [flashcards, shuffledCards])
+  }, [flashcards, shuffled])
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null
+      // Typing in the editor (or pressing a toolbar button) must not flip the card.
+      if (target?.closest('input, textarea, select, button, [role="dialog"], [role="radio"]')) return
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault()
         toggleFlip()
@@ -98,10 +116,18 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
   if (isLoading || !flashcards) return <FlashcardsSkeleton />
   if (!cards.length) {
     return (
-      <EmptyState
-        title={t('No flashcards yet')}
-        description={t('Flashcards will be generated when the pipeline processes lecture files.')}
-      />
+      <div className="space-y-4">
+        <EmptyState
+          title={t('No flashcards yet')}
+          description={t('Flashcards will be generated when the pipeline processes lecture files.')}
+        />
+        <div className="flex justify-center">
+          <Button variant="secondary" className="min-h-11" onClick={() => setEditor('add')}>
+            <Plus size={14} aria-hidden /> {t('Add card')}
+          </Button>
+        </div>
+        <FlashcardEditor open={editor === 'add'} onOpenChange={(o) => !o && setEditor(null)} courseCode={courseCode} week={week} />
+      </div>
     )
   }
 
@@ -141,12 +167,12 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
         <button
           onClick={toggleShuffle}
           className={`px-4 py-2.5 min-h-[44px] rounded-full text-xs font-medium transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peri ${
-            shuffledCards
+            shuffled
               ? 'bg-peri-soft text-peri-fg'
               : 'bg-surface-2 text-text-muted hover:text-text'
           }`}
         >
-          {t('Shuffle')} {shuffledCards ? t('On') : t('Off')}
+          {t('Shuffle')} {shuffled ? t('On') : t('Off')}
         </button>
       </div>
 
@@ -171,8 +197,46 @@ export function FlashcardsTab({ courseCode, week }: FlashcardsTabProps) {
             {tag}
           </Badge>
         ))}
-        <span className="text-xs font-mono text-text-faint">p.{card.source_page_ref}</span>
+        <OriginBadge origin={card.origin} />
+        {card.source_page_ref > 0 && (
+          <span className="text-xs font-mono text-text-faint">p.{card.source_page_ref}</span>
+        )}
       </div>
+
+      {/* Manage */}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Button variant="ghost" size="sm" className="min-h-11" onClick={() => setEditor('edit')}>
+          <Pencil size={13} aria-hidden /> {t('Edit')}
+        </Button>
+        <Button variant="ghost" size="sm" className="min-h-11" onClick={() => { setDeleteError(undefined); setDeleting(true) }}>
+          <Trash2 size={13} aria-hidden /> {t('Delete')}
+        </Button>
+        <Button variant="ghost" size="sm" className="min-h-11" onClick={() => setEditor('add')}>
+          <Plus size={13} aria-hidden /> {t('Add card')}
+        </Button>
+      </div>
+
+      <FlashcardEditor
+        open={editor !== null}
+        onOpenChange={(o) => !o && setEditor(null)}
+        courseCode={courseCode}
+        week={week}
+        card={editor === 'edit' ? card : undefined}
+      />
+      <DeleteItemModal
+        open={deleting}
+        onOpenChange={setDeleting}
+        title={t('Delete this flashcard?')}
+        preview={card.front}
+        pending={deleteCard.isPending}
+        error={deleteError}
+        onConfirm={() =>
+          deleteCard.mutate(card.id, {
+            onSuccess: () => setDeleting(false),
+            onError: (err) => setDeleteError(studyItemErrorMessage(err)),
+          })
+        }
+      />
 
       <AiFeedbackControl
         key={card.id}

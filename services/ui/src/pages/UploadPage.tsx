@@ -6,6 +6,8 @@ import { Lock, WifiOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { Card, EmptyState, PageHeader, toast } from '../components/ui'
 import { DropZone } from '../components/upload/DropZone'
+import { PlacementPicker } from '../components/upload/PlacementPicker'
+import { AUTO_PLACEMENT, placementFromDraft, validatePlacement, type PlacementDraft } from '../lib/studyItems'
 import { PipelineFileCard, type UploadStatus } from '../components/upload/PipelineFileCard'
 import { usePipelineProgress } from '../contexts/pipelineProgress'
 import { useRetryPipeline } from '../hooks/useApi'
@@ -13,7 +15,7 @@ import { mapPipelineEventsToStages } from '../lib/pipelineStages'
 import { toastMutationError } from '../lib/toast'
 import { uploadApi } from '../api/endpoints'
 import { useQueryClient } from '@tanstack/react-query'
-import type { BatchUploadResponse } from '../types'
+import type { BatchUploadResponse, UploadPlacement } from '../types'
 
 interface QueuedFile {
   id: string
@@ -21,6 +23,8 @@ interface QueuedFile {
   status: UploadStatus
   artifactId?: string
   error?: string
+  /** Explicit course + week chosen when the file was added; absent = AI classifies. */
+  placement?: UploadPlacement
 }
 
 let nextId = 0
@@ -36,6 +40,9 @@ export function UploadPage() {
   const queryClient = useQueryClient()
   const [batchResult, setBatchResult] = useState<BatchUploadResponse | null>(null)
   const retryPipeline = useRetryPipeline()
+  const [placementDraft, setPlacementDraft] = useState<PlacementDraft>(AUTO_PLACEMENT)
+  const placementErrors = validatePlacement(placementDraft)
+  const placementValid = Object.keys(placementErrors).length === 0
 
   const artifactIds = useMemo(
     () => queue.filter((f) => f.artifactId && f.status !== 'duplicate').map((f) => f.artifactId!),
@@ -48,7 +55,7 @@ export function UploadPage() {
   useEffect(() => {
     for (const f of queue) {
       if (f.artifactId && f.status !== 'duplicate') {
-        track({ key: f.id, name: f.file.name, sizeBytes: f.file.size, artifactId: f.artifactId })
+        track({ key: f.id, name: f.file.name, sizeBytes: f.file.size, artifactId: f.artifactId, placed: !!f.placement })
       }
     }
   }, [queue, track])
@@ -74,7 +81,7 @@ export function UploadPage() {
       )
 
       try {
-        const result = await uploadApi.batchUpload(toProcess.map(f => f.file))
+        const result = await uploadApi.batchUpload(toProcess.map(f => f.file), toProcess[0].placement)
         setBatchResult(result)
 
         // Update queue with results
@@ -108,7 +115,7 @@ export function UploadPage() {
           prev.map((f) => (f.id === item.id ? { ...f, status: 'uploading' as const } : f))
         )
         try {
-          const result = await uploadApi.upload(item.file)
+          const result = await uploadApi.upload(item.file, item.placement)
           const status: UploadStatus = result.status === 'duplicate' ? 'duplicate' : 'done'
           setQueue((prev) =>
             prev.map((f) =>
@@ -135,18 +142,21 @@ export function UploadPage() {
   }, [queryClient])
 
   const handleFiles = useCallback((files: File[]) => {
+    if (!placementValid) return
+    const placement = placementFromDraft(placementDraft)
     setBatchResult(null)
     const newItems: QueuedFile[] = files.map((file) => ({
       id: `upload-${++nextId}`,
       file,
       status: 'queued' as const,
+      placement,
     }))
     setQueue((prev) => {
       const updated = [...prev, ...newItems]
       processQueue(updated)
       return updated
     })
-  }, [processQueue])
+  }, [processQueue, placementValid, placementDraft])
 
   const handleRemove = useCallback((id: string) => {
     setQueue((prev) => prev.filter((f) => f.id !== id))
@@ -188,7 +198,14 @@ export function UploadPage() {
         subtitle={t('Files move through six stages — each retryable on its own')}
       />
 
-      <DropZone onFiles={handleFiles} disabled={hasActive} />
+      <PlacementPicker
+        value={placementDraft}
+        onChange={setPlacementDraft}
+        errors={placementErrors}
+        disabled={hasActive}
+      />
+
+      <DropZone onFiles={handleFiles} disabled={hasActive || !placementValid} />
 
       {/* Batch result summary */}
       {batchResult && (
@@ -230,7 +247,7 @@ export function UploadPage() {
               name={u.name}
               sizeBytes={u.sizeBytes}
               uploadStatus="done"
-              stages={mapPipelineEventsToStages(events.filter((e) => e.artifact_id === u.artifactId))}
+              stages={mapPipelineEventsToStages(events.filter((e) => e.artifact_id === u.artifactId), { placed: u.placed })}
               onRetryStage={() => handleRetryStage(u.artifactId)}
               retrying={retryPipeline.isPending && retryPipeline.variables === u.artifactId}
             />
@@ -243,7 +260,7 @@ export function UploadPage() {
               uploadStatus={f.status}
               uploadError={f.error}
               stages={f.artifactId && f.status !== 'duplicate'
-                ? mapPipelineEventsToStages(events.filter((e) => e.artifact_id === f.artifactId))
+                ? mapPipelineEventsToStages(events.filter((e) => e.artifact_id === f.artifactId), { placed: !!f.placement })
                 : undefined}
               onRetryStage={f.artifactId ? () => handleRetryStage(f.artifactId!) : undefined}
               retrying={retryPipeline.isPending && retryPipeline.variables === f.artifactId}

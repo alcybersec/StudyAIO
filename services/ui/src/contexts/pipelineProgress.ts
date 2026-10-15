@@ -8,6 +8,8 @@ export interface TrackedUpload {
   name: string
   sizeBytes: number
   artifactId: string
+  /** Uploaded with an explicit course + week: no ingest/classify events will arrive. */
+  placed?: boolean
 }
 
 export interface PipelineEventsValue {

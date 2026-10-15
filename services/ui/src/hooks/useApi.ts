@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { analyticsApi, artifactsApi, assetsApi, chatApi, conceptsApi, courseopsApi, coursesApi, dashboardApi, examsApi, gamificationApi, reviewApi, settingsApi, studyApi, uploadApi } from '../api/endpoints'
 import { adminApi } from '../api/admin'
 import { feedbackApi } from '../api/feedback'
-import type { AdminUserUpdate, CreateSessionRequest, FeedbackRequest, FeedbackStatus, DashboardData, DeadlineUpdate, MergeConflictPolicy, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
+import type { FlashcardCreate, FlashcardPatch, QuizQuestionCreate, QuizQuestionPatch, AdminUserUpdate, CreateSessionRequest, FeedbackRequest, FeedbackStatus, DashboardData, DeadlineUpdate, MergeConflictPolicy, QuizAttemptRequest, ReviewRequest, SettingsUpdate, TimedPlanRequest } from '../types'
 
 export function useDashboard() {
   return useQuery({
@@ -238,6 +238,86 @@ export function useQuizQuestions(courseCode: string, week?: number) {
     queryKey: ['assets', 'quiz', courseCode, week],
     queryFn: () => assetsApi.quiz(courseCode, week),
     enabled: !!courseCode,
+  })
+}
+
+// ── Study item CRUD (GL#48) ────────────────────────────────────
+
+type ItemList<T> = T[] | undefined
+
+/** Swap one item for another (by id) in every cached list under `key`. */
+function replaceInCache<T extends { id: string }>(
+  queryClient: ReturnType<typeof useQueryClient>,
+  key: readonly unknown[],
+  oldId: string,
+  next: T | null,
+) {
+  queryClient.setQueriesData<ItemList<T>>({ queryKey: key }, (list) => {
+    if (!list) return list
+    return next
+      ? list.map((item) => (item.id === oldId ? next : item))
+      : list.filter((item) => item.id !== oldId)
+  })
+}
+
+export function useCreateFlashcard() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: FlashcardCreate) => assetsApi.createFlashcard(body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['assets'] }),
+  })
+}
+
+export function useUpdateFlashcard() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: FlashcardPatch }) => assetsApi.updateFlashcard(id, body),
+    onSuccess: (card, { id }) => {
+      // The edit is a new row: swap it in under its new id straight away, then refetch.
+      replaceInCache(queryClient, ['assets', 'flashcards'], id, card)
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+    },
+  })
+}
+
+export function useDeleteFlashcard() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => assetsApi.deleteFlashcard(id),
+    onSuccess: (_void, id) => {
+      replaceInCache(queryClient, ['assets', 'flashcards'], id, null)
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+    },
+  })
+}
+
+export function useCreateQuizQuestion() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: QuizQuestionCreate) => assetsApi.createQuiz(body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['assets'] }),
+  })
+}
+
+export function useUpdateQuizQuestion() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: QuizQuestionPatch }) => assetsApi.updateQuiz(id, body),
+    onSuccess: (question, { id }) => {
+      replaceInCache(queryClient, ['assets', 'quiz'], id, question)
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+    },
+  })
+}
+
+export function useDeleteQuizQuestion() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => assetsApi.deleteQuiz(id),
+    onSuccess: (_void, id) => {
+      replaceInCache(queryClient, ['assets', 'quiz'], id, null)
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+    },
   })
 }
 

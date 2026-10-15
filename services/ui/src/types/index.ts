@@ -255,7 +255,44 @@ export interface QuizQuestion {
   created_at: string
 }
 
-export type ItemOrigin = 'pipeline' | 'targeted'
+export interface FlashcardCreate {
+  course_code: string
+  week: number
+  front: string
+  back: string
+  tags?: string[]
+}
+
+export interface FlashcardPatch {
+  front?: string
+  back?: string
+  tags?: string[]
+}
+
+export interface QuizQuestionCreate {
+  course_code: string
+  week: number
+  question_type: 'multiple_choice' | 'short_answer'
+  question: string
+  options?: string[]
+  correct_answer: string
+  explanation?: string
+}
+
+export interface QuizQuestionPatch {
+  question?: string
+  options?: string[]
+  correct_answer?: string
+  explanation?: string
+}
+
+/** Optional explicit placement for an upload; both fields or neither. */
+export interface UploadPlacement {
+  course_code: string
+  week: number
+}
+
+export type ItemOrigin = 'pipeline' | 'targeted' | 'user'
 
 // ── Exams ───────────────────────────────────────────────────────
 

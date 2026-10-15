@@ -105,6 +105,29 @@ describe('mapPipelineEventsToStages', () => {
   })
 })
 
+describe('placed uploads', () => {
+  it('treat ingest and classify as satisfied when the first event is extract', () => {
+    const stages = mapPipelineEventsToStages([ev('extract', 'started', { receivedAt: 0 })], { placed: true })
+    expect(stages.map((s) => s.status)).toEqual(['done', 'done', 'running', 'pending', 'pending', 'pending'])
+  })
+
+  it('without the flag the same events leave ingest and classify pending', () => {
+    const stages = mapPipelineEventsToStages([ev('extract', 'started')])
+    expect(stages.slice(0, 2).map((s) => s.status)).toEqual(['pending', 'pending'])
+  })
+
+  it('a placed upload completes as all-done once assets finishes', () => {
+    const events = ['extract', 'summarize', 'index', 'assets'].map((s) => ev(s, 'completed'))
+    const stages = mapPipelineEventsToStages(events, { placed: true })
+    expect(stages.every((s) => s.status === 'done')).toBe(true)
+  })
+
+  it('real ingest/classify events still win if the server sends them', () => {
+    const stages = mapPipelineEventsToStages([ev('classify', 'failed', { message: 'x' })], { placed: true })
+    expect(stages[1].status).toBe('failed')
+  })
+})
+
 describe('formatStageMs', () => {
   it('formats sub-second as ms and above as seconds', () => {
     expect(formatStageMs(850)).toBe('850ms')
