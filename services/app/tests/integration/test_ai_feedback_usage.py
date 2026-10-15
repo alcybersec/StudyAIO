@@ -525,9 +525,15 @@ class TestRetentionReadout:
         resp = await admin_client.get("/api/admin/usage/retention", params={"weeks": 8})
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        assert set(body) == {"cohorts", "features"}
+        assert set(body) == {"cohorts", "features", "plan_split"}
         row = self._cohort(body, wk)
         assert (row["signups"], row["d1"]) == (1, 1)
+        (split,) = [r for r in body["plan_split"] if r["week_start"] == wk.isoformat()]
+        assert set(split) == {"week_start", "with_plan", "without_plan"}
+        for arm in (split["with_plan"], split["without_plan"]):
+            assert set(arm) == {"signups", "d7", "d30"}
+        # The member never opened a study plan, so they sit in the without-plan arm.
+        assert (split["with_plan"]["signups"], split["without_plan"]["signups"]) == (0, 1)
         assert (
             await admin_client.get("/api/admin/usage/retention", params={"weeks": 0})
         ).status_code == 422
