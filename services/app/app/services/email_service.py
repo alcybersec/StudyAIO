@@ -1,9 +1,12 @@
 """Email notification service using aiosmtplib."""
 
 import os
+import re
 import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
+from html.parser import HTMLParser
 
 import structlog
 from jinja2 import Environment, FileSystemLoader
@@ -15,6 +18,71 @@ logger = structlog.get_logger()
 # Template directory — resolve relative to this file
 _TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 _jinja_env = Environment(loader=FileSystemLoader(_TEMPLATE_DIR), autoescape=True)
+
+
+_SKIP_TAGS = frozenset({"style", "script", "head", "title"})
+_BLOCK_TAGS = frozenset(
+    {"p", "div", "br", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "table", "ul", "ol", "hr"}
+)
+
+
+class _TextExtractor(HTMLParser):
+    """Collect readable text from HTML, keeping link targets as visible URLs."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._chunks: list[str] = []
+        self._skip_depth = 0
+        self._href: str | None = None
+        self._link_text = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _SKIP_TAGS:
+            self._skip_depth += 1
+        elif tag in _BLOCK_TAGS:
+            self._chunks.append("\n")
+        elif tag == "a":
+            self._href = dict(attrs).get("href")
+            self._link_text = ""
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _SKIP_TAGS:
+            self._skip_depth = max(0, self._skip_depth - 1)
+        elif tag in _BLOCK_TAGS:
+            self._chunks.append("\n")
+        elif tag == "a" and self._href:
+            href = self._href
+            # Show the URL unless the visible text already is the URL.
+            if href.startswith(("http://", "https://")) and href not in self._link_text:
+                self._chunks.append(f" {href} ")
+            self._href = None
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
+        self._chunks.append(data)
+        if self._href is not None:
+            self._link_text += data
+
+    def text(self) -> str:
+        raw = "".join(self._chunks)
+        lines = [re.sub(r"[ \t\r\f\v]+", " ", line).strip() for line in raw.split("\n")]
+        return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip() + "\n"
+
+
+def html_to_text(html_body: str) -> str:
+    """Derive a readable text/plain body from HTML, keeping links as visible URLs.
+
+    Args:
+        html_body: HTML email body.
+
+    Returns:
+        Plain text with style/script content dropped and link targets inline.
+    """
+    parser = _TextExtractor()
+    parser.feed(html_body)
+    parser.close()
+    return parser.text()
 
 
 def _smtp_configured() -> bool:
@@ -61,6 +129,10 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
         msg["From"] = f"{settings.smtp_from_name} <{settings.smtp_from_email}>"
         msg["To"] = to_email
         msg["Subject"] = subject
+        msg["Date"] = formatdate(localtime=False)
+        msg["Message-ID"] = make_msgid(domain=settings.smtp_from_email.rpartition("@")[2] or None)
+        # RFC 2046: the last alternative is the preferred one, so plain goes first.
+        msg.attach(MIMEText(html_to_text(html_body), "plain", "utf-8"))
         msg.attach(MIMEText(html_body, "html"))
 
         # aiosmtplib's `use_tls=True` means *implicit* TLS from the first byte
