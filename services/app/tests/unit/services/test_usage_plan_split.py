@@ -49,8 +49,8 @@ class TestReadoutQueries:
         result = MagicMock()
         result.all.return_value = []
         session.execute.return_value = result
-        out = await svc.retention_readout(session, weeks=8)
-        assert out["plan_split"] == []
+        out = await svc.plan_split_readout(session, weeks=8)
+        assert out == []
         calls = session.execute.await_args_list
         sql = " ".join(str(c.args[0].compile()) for c in calls)
         assert "study_plans" in sql

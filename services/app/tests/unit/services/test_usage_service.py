@@ -135,7 +135,7 @@ class TestRetentionQueries:
         result.all.return_value = []
         session.execute.return_value = result
         out = await svc.retention_readout(session, weeks=8)
-        assert out == {"cohorts": [], "features": [], "plan_split": []}
+        assert out == {"cohorts": [], "features": []}
         sql = " ".join(str(c.args[0].compile()) for c in session.execute.await_args_list)
         assert "users.role" in sql
         params = []

@@ -148,7 +148,10 @@ class TestDiagnostic:
         qs = [SimpleNamespace(id=f"q{i}") for i in range(count)]
         questions = AsyncMock(return_value=qs)
         with (
-            patch(f"{API}.course_service.get_course_by_id", AsyncMock(return_value=object())),
+            patch(
+                f"{API}.course_service.get_course_by_id",
+                AsyncMock(return_value=SimpleNamespace(code="CSIT302")),
+            ),
             patch(f"{API}.weakspot_service.get_diagnostic_questions", questions),
         ):
             response = await client.get(
@@ -159,6 +162,7 @@ class TestDiagnostic:
             "course_id": "c-1",
             "week": 4,
             "question_ids": [q.id for q in qs],
+            "items": [{"id": q.id, "course_code": "CSIT302", "week": 4} for q in qs],
             "needs_generation": needs,
         }
         assert questions.await_args.kwargs["user_id"] == user.id
@@ -194,7 +198,7 @@ class TestTargeted:
         assert (kwargs["course_id"], kwargs["week"], kwargs["kind"]) == ("c-1", 3, "quiz")
         body = response.json()
         assert body["id"] == "g-1" and body["status"] == "queued" and body["item_ids"] == []
-        assert "error_code" not in body and "error" not in body
+        assert body["error_code"] is None and "error" not in body
         event = wiring.record.await_args
         assert event.args[1] == user.id and event.args[2] == "targeted_generation_requested"
         assert event.kwargs["properties"] == {"count": 5, "week": 3}
@@ -396,8 +400,10 @@ class TestStudyPlan:
     def plan_wiring(self):
         with (
             patch(
-                f"{API}.weakspot_service.get_tonight_plan", AsyncMock(return_value=_plan())
+                f"{API}.weakspot_service.get_or_build_tonight_plan",
+                AsyncMock(return_value=(_plan(), True)),
             ) as get,
+            patch(f"{API}.usage_service.record", AsyncMock(return_value=True)) as record,
             patch(
                 f"{API}.weakspot_service.refresh_tonight_plan",
                 AsyncMock(return_value=_plan(version=2)),
@@ -406,7 +412,7 @@ class TestStudyPlan:
                 f"{API}.weakspot_service.resolve_plan_items", AsyncMock(return_value=RESOLVED)
             ) as resolve,
         ):
-            yield SimpleNamespace(get=get, refresh=refresh, resolve=resolve)
+            yield SimpleNamespace(get=get, refresh=refresh, resolve=resolve, record=record)
 
     async def test_get_returns_the_plan_with_done_flags(
         self, client_user, plan_wiring, mock_session
@@ -454,6 +460,21 @@ class TestStudyPlan:
         kwargs = plan_wiring.refresh.await_args.kwargs
         assert kwargs["user_id"] == user.id and kwargs["minutes"] == 30
         assert kwargs["tz"] == "Asia/Dubai"
+
+    async def test_built_plan_records_the_event_for_the_caller_reused_does_not(
+        self, client_user, plan_wiring
+    ):
+        client, user = client_user
+        await client.get("/api/study-plan/tonight")
+        event = plan_wiring.record.await_args
+        assert event.args[1] == user.id and event.args[2] == "study_plan_built"
+        assert event.kwargs["properties"] == {"count": 0, "duration_seconds": 1500}
+        plan_wiring.record.reset_mock()
+        plan_wiring.get.return_value = (_plan(), False)
+        await client.get("/api/study-plan/tonight")
+        plan_wiring.record.assert_not_awaited()
+        await client.post("/api/study-plan/tonight/refresh")
+        plan_wiring.record.assert_awaited_once()
 
     async def test_refresh_without_a_body_keeps_the_minutes(self, client_user, plan_wiring):
         client, _ = client_user

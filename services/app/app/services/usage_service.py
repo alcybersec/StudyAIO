@@ -17,6 +17,7 @@ from sqlalchemy import Date, Integer, cast, func, literal_column, select, type_c
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import utc_today
+from app.models.study_plan import StudyPlan
 from app.models.usage_event import UsageEvent
 from app.models.user import User
 
@@ -32,6 +33,8 @@ USAGE_EVENTS = frozenset(
         "chat_message_sent",
         "upload_completed",
         "feedback_given",
+        "study_plan_built",
+        "targeted_generation_requested",
     }
 )
 #: The only events a client may report: pure views, which no server action implies.
@@ -235,3 +238,89 @@ async def retention_readout(session: AsyncSession, *, weeks: int = 8) -> dict:
             for wk, event, users in feature_rows
         ],
     }
+
+
+def build_plan_split(
+    signups: dict[tuple[date, bool], int],
+    active: dict[tuple[date, bool], dict[int, int]],
+    *,
+    today: date,
+) -> list[dict]:
+    """Per signup cohort: D7/D30 of users with a study plan against those without.
+
+    Checkpoints follow `build_cohorts`: null until the cohort's first day has
+    reached them. This is a correlation, not an experiment (ADR 0007 Decision 9).
+
+    Args:
+        signups: (week_start, has_plan) -> signups.
+        active: (week_start, has_plan) -> {day offset -> distinct active users}.
+        today: The current UTC date.
+
+    Returns:
+        One row per cohort, oldest first, with a `with_plan` and `without_plan` arm.
+    """
+
+    def arm(start: date, has_plan: bool) -> dict:
+        counts = active.get((start, has_plan), {})
+        row: dict = {"signups": signups.get((start, has_plan), 0)}
+        for days in (7, 30):
+            known = start + timedelta(days=days) <= today
+            row[f"d{days}"] = counts.get(days, 0) if known else None
+        return row
+
+    starts = sorted({start for start, _ in signups})
+    return [
+        {"week_start": s.isoformat(), "with_plan": arm(s, True), "without_plan": arm(s, False)}
+        for s in starts
+    ]
+
+
+async def plan_split_readout(session: AsyncSession, *, weeks: int = 8) -> list[dict]:
+    """Per signup cohort, D7/D30 with a study plan (dated within days 0-6) against without."""
+    today = utc_today()
+    first_week = week_start(today) - timedelta(weeks=weeks - 1)
+    window_start = datetime(first_week.year, first_week.month, first_week.day, tzinfo=UTC)
+    cohort_week = func.date_trunc("week", _utc(User.created_at))
+    offset = type_coerce(_utc_date(UsageEvent.occurred_at) - _utc_date(User.created_at), Integer)
+    # A literal (not a bound parameter) so the expression is identical wherever it appears.
+    signup_day = _utc_date(User.created_at)
+    has_plan = (
+        select(literal_column("1"))
+        .where(
+            StudyPlan.user_id == User.id,
+            StudyPlan.plan_date >= signup_day,
+            StudyPlan.plan_date <= signup_day + literal_column("6"),
+        )
+        .exists()
+    )
+    real_user = User.role.not_in(_EXCLUDED_ROLES)
+    signup_rows = (
+        await session.execute(
+            select(cast(cohort_week, Date), has_plan, func.count())
+            .where(real_user, User.created_at >= window_start)
+            .group_by(literal_column("1"), literal_column("2"))
+        )
+    ).all()
+    active_rows = (
+        await session.execute(
+            select(
+                cast(cohort_week, Date),
+                has_plan,
+                offset,
+                func.count(func.distinct(UsageEvent.user_id)),
+            )
+            .join(User, User.id == UsageEvent.user_id)
+            .where(
+                real_user,
+                User.created_at >= window_start,
+                UsageEvent.occurred_at >= window_start,
+                offset.in_((7, 30)),
+            )
+            .group_by(literal_column("1"), literal_column("2"), literal_column("3"))
+        )
+    ).all()
+    signups = {(wk, bool(plan)): n for wk, plan, n in signup_rows}
+    active: dict[tuple[date, bool], dict[int, int]] = {}
+    for wk, plan, days, users in active_rows:
+        active.setdefault((wk, bool(plan)), {})[days] = users
+    return build_plan_split(signups, active, today=today)

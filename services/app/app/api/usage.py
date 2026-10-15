@@ -46,11 +46,28 @@ class FeatureRow(BaseModel):
     active_users: int
 
 
+class PlanArm(BaseModel):
+    """One arm of the plan split. A checkpoint is null until it can be known."""
+
+    signups: int
+    d7: int | None
+    d30: int | None
+
+
+class PlanSplitRow(BaseModel):
+    """D7/D30 of a signup cohort's users with a study plan against those without."""
+
+    week_start: str
+    with_plan: PlanArm
+    without_plan: PlanArm
+
+
 class RetentionResponse(BaseModel):
-    """Cohort retention and weekly active users per feature."""
+    """Cohort retention, weekly active users per feature, and the plan split."""
 
     cohorts: list[CohortRow]
     features: list[FeatureRow]
+    plan_split: list[PlanSplitRow] = []
 
 
 @router.post(
@@ -92,4 +109,6 @@ async def retention(
     session: AsyncSession = Depends(get_session),
 ) -> RetentionResponse:
     """Cohort retention readout (admin only)."""
-    return RetentionResponse(**await usage_service.retention_readout(session, weeks=weeks))
+    readout = await usage_service.retention_readout(session, weeks=weeks)
+    split = await usage_service.plan_split_readout(session, weeks=weeks)
+    return RetentionResponse(**readout, plan_split=split)

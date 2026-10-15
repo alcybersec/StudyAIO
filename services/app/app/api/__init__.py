@@ -28,6 +28,7 @@ from app.api.study import router as study_router
 from app.api.summaries import router as summaries_router
 from app.api.uploads import router as uploads_router
 from app.api.usage import router as usage_router
+from app.api.weakspots import router as weakspots_router
 
 __all__ = [
     "admin_router",
@@ -58,4 +59,5 @@ __all__ = [
     "summaries_router",
     "uploads_router",
     "usage_router",
+    "weakspots_router",
 ]

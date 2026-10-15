@@ -362,8 +362,16 @@ service lookup, and answers a foreign or absent id with `404`. `tz` comes from `
 | `POST` | `/api/study-plan/tonight/refresh` | `{minutes?}` | `200` `StudyPlanResponse` (rebuilt, `version` + 1) |
 
 `TargetedGenerationResponse` = `{id, course_id, week, kind, status, requested_count, created_count,
-dropped_duplicate_count, dropped_uncited_count, item_ids: [str], created_at, completed_at}`;
-`item_ids` is empty until `completed`. No `error` text, only `error_code`.
+dropped_duplicate_count, dropped_uncited_count, item_ids: [str], error_code: str | null, created_at,
+completed_at}`; `item_ids` is empty until `completed`. No `error` text, only the short machine
+`error_code`. The `429 targeted_daily_cap` body is `{detail, code, limit, reset_at}` (`reset_at` = next
+UTC midnight, ISO) with a `Retry-After` header. Mastery states are exactly `unknown | weak | shaky | solid`.
+`GET /api/weak-spots/diagnostic` also returns `items: [{id, course_code, week}]` beside `question_ids`.
+Additive, outside the table: `GET /api/study/items?flashcard_ids=..&quiz_question_ids=..` (at most 50 ids
+in total) returns `{flashcards, quiz_questions}` for the caller's active items only (foreign, archived and
+missing ids are omitted), and flashcard/quiz payloads of `/study/due` and `/assets/*` carry `origin` and
+`focus_topic`. The admin `plan_split` is served by `GET /admin/usage/retention` from
+`usage_service.plan_split_readout` (`{week_start, with_plan, without_plan}`, each `{signups, d7, d30}`).
 
 `StudyPlanResponse` = `{plan_date, minutes, version, algorithm_version, built_at, total_minutes,
 done_count, items: [{item_type, item_id, course_id, course_code, week, reason, minutes, done}],
@@ -499,3 +507,4 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-12 | api.weak-spots | v1 | New contract, recorded before implementation: heatmap, diagnostic, targeted request/status, tonight's plan and refresh. Contract test written red. | M33-S2-ARCH-018 |
 | 2026-10-12 | pipeline.targeted_generation | v1 | New contract, recorded before implementation: worker task, `GenerationFocus`, additive `focus` keyword (bumps `agents.AgentAdapter` to v2 on implementation). Contract test written red. | M33-S2-ARCH-018 |
 | 2026-10-12 | models.weakspot | v1 | New contract, recorded before implementation: `study_plans`, `targeted_generations`, provenance columns, attempts index. Contract test written red. | M33-S2-ARCH-018 |
+| 2026-10-15 | api.weak-spots | v1 | Additive as built: `error_code` on `TargetedGenerationResponse`, `items` on the diagnostic, `GET /api/study/items`, `origin`/`focus_topic` on card and quiz payloads, `plan_split` on the retention readout. | M33-S2-BACKEND-020 |

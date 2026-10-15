@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api.schemas import QuizQuestionResponse
+
 
 class DueCardResponse(BaseModel):
     """A flashcard due for review, with review state."""
@@ -20,6 +22,15 @@ class DueCardResponse(BaseModel):
     source_page_ref: int
     generation_version: int
     created_at: datetime
+    origin: str = "pipeline"
+    focus_topic: str | None = None
+
+
+class StudyItemsResponse(BaseModel):
+    """Owner-scoped batch fetch of study items by id (plan and targeted items)."""
+
+    flashcards: list[DueCardResponse]
+    quiz_questions: list[QuizQuestionResponse]
 
 
 class ReviewRequest(BaseModel):

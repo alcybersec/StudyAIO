@@ -41,7 +41,12 @@ async def save_flashcards(
     # Retire (not delete) the artifact's active flashcards: their reviews are study history.
     await session.execute(
         update(Flashcard)
-        .where(Flashcard.source_artifact_id == artifact_id, Flashcard.archived_at.is_(None))
+        .where(
+            Flashcard.source_artifact_id == artifact_id,
+            Flashcard.archived_at.is_(None),
+            # Targeted practice (ADR 0007) is never retired by a lecture re-run.
+            Flashcard.origin == "pipeline",
+        )
         .values(archived_at=datetime.now(UTC))
     )
 
@@ -109,7 +114,12 @@ async def save_quiz_questions(
     # Retire (not delete) the artifact's active questions: their attempts are study history.
     await session.execute(
         update(QuizQuestion)
-        .where(QuizQuestion.source_artifact_id == artifact_id, QuizQuestion.archived_at.is_(None))
+        .where(
+            QuizQuestion.source_artifact_id == artifact_id,
+            QuizQuestion.archived_at.is_(None),
+            # Targeted practice (ADR 0007) is never retired by a lecture re-run.
+            QuizQuestion.origin == "pipeline",
+        )
         .values(archived_at=datetime.now(UTC))
     )
 
@@ -151,6 +161,56 @@ async def save_quiz_questions(
         version=next_version,
     )
     return records
+
+
+async def get_items_by_ids(
+    session: AsyncSession,
+    flashcard_ids: list[str],
+    quiz_question_ids: list[str],
+    *,
+    user_id: str,
+) -> tuple[list[Flashcard], list[QuizQuestion]]:
+    """Fetch the caller's active cards and questions by id.
+
+    Foreign, archived and missing ids are silently omitted, so the result is no
+    oracle for whether an id exists.
+
+    Args:
+        session: Database session.
+        flashcard_ids: Flashcard ids to load.
+        quiz_question_ids: Quiz question ids to load.
+        user_id: Owner user UUID; rows are joined to ``courses.user_id``.
+
+    Returns:
+        (flashcards, quiz_questions), each ordered by creation time then id.
+    """
+    cards: list[Flashcard] = []
+    questions: list[QuizQuestion] = []
+    if flashcard_ids:
+        result = await session.execute(
+            select(Flashcard)
+            .join(Course, Flashcard.course_id == Course.id)
+            .where(
+                Flashcard.id.in_(flashcard_ids),
+                Flashcard.archived_at.is_(None),
+                Course.user_id == user_id,
+            )
+            .order_by(Flashcard.created_at, Flashcard.id)
+        )
+        cards = list(result.scalars().all())
+    if quiz_question_ids:
+        result = await session.execute(
+            select(QuizQuestion)
+            .join(Course, QuizQuestion.course_id == Course.id)
+            .where(
+                QuizQuestion.id.in_(quiz_question_ids),
+                QuizQuestion.archived_at.is_(None),
+                Course.user_id == user_id,
+            )
+            .order_by(QuizQuestion.created_at, QuizQuestion.id)
+        )
+        questions = list(result.scalars().all())
+    return cards, questions
 
 
 def _course_scope(*conditions, user_id: str):
