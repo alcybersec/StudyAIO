@@ -235,25 +235,17 @@ test.describe('Quiz: add, validate, grade', () => {
     await expect(page.getByText('Yours', { exact: true })).toBeVisible()
     await page.getByRole('radio', { name: /Small/ }).check()
     await page.getByRole('button', { name: 'Submit' }).click()
-    await expect(page.getByTestId('quiz-result').last()).toContainText('Incorrect.')
+    await expect(page.getByTestId('quiz-result')).toContainText('Incorrect.')
 
     // then correct: restart the run and pick "Large"
     await page.reload()
     await reachQuestion(page, 'Which is the biggest?')
     await page.getByRole('radio', { name: /Large/ }).check()
     await page.getByRole('button', { name: 'Submit' }).click()
-    await expect(page.getByTestId('quiz-result').last()).toContainText('Correct!')
+    await expect(page.getByTestId('quiz-result')).toContainText('Correct!')
   })
 
-  // PRODUCT BUG (reported to the orchestrator, not fixed here): after answering a
-  // question and pressing Next, the previous question's options and result stay
-  // in the DOM under the new question (5 radios instead of 2, the old
-  // quiz-result still present). Marked test.fail() so CI stays green while it is
-  // open; once the frontend fixes it this test starts passing, which test.fail()
-  // reports as a failure: delete the annotation then. The grading test above
-  // reads the last result for the same reason.
-  test('BUG: the previous question is cleared after Next', async ({ page, request }) => {
-    test.fail()
+  test('the previous question is cleared after Next', async ({ page, request }) => {
     await request.post(`${API_URL}/api/assets/quiz`, {
       data: {
         course_code: code,
