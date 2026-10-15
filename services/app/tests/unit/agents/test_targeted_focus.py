@@ -141,5 +141,5 @@ class TestBackends:
             await adapter.generate_quiz("# S", EXTRACTION, 5, focus=None)
         plain, explicit = (c.args[0] for c in call.await_args_list)
         assert plain == explicit
-        assert "Open addressing" not in plain
+        assert FOCUS.missed_questions[0] not in plain
         assert "weak topics" not in plain.lower()

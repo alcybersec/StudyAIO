@@ -20,10 +20,12 @@ from app.agents.base import (
     CourseOpsResult,
     ExtractionData,
     FlashcardData,
+    GenerationFocus,
     QuizQuestionData,
     SummaryResult,
     _string_leaves,
 )
+from app.agents.targeted_prompts import render_targeted_prompt
 from app.agents.transient import TransientAgentError, is_transient_text
 from app.core.ai_settings import get_effective_setting
 from app.core.clock import utc_now
@@ -615,7 +617,11 @@ After the summary, emit:
         )
 
     async def generate_flashcards(
-        self, summary: str, extraction: ExtractionData, count: int
+        self,
+        summary: str,
+        extraction: ExtractionData,
+        count: int,
+        focus: GenerationFocus | None = None,
     ) -> list[FlashcardData]:
         """Generate flashcards by calling Claude Code CLI.
 
@@ -636,7 +642,17 @@ After the summary, emit:
         week = extraction.metadata.get("week", 0)
 
         template_path = Path("/app/prompts/generate_flashcards.txt")
-        if template_path.exists():
+        if focus is not None:
+            prompt = render_targeted_prompt(
+                "flashcards",
+                course_code=course_code,
+                week=week,
+                summary=summary,
+                extraction_text=extraction_text,
+                count=count,
+                focus=focus,
+            )
+        elif template_path.exists():
             template = Template(template_path.read_text())
             prompt = template.render(
                 course_code=course_code,
@@ -686,7 +702,11 @@ Respond with ONLY a JSON array:
 """
 
     async def generate_quiz(
-        self, summary: str, extraction: ExtractionData, count: int
+        self,
+        summary: str,
+        extraction: ExtractionData,
+        count: int,
+        focus: GenerationFocus | None = None,
     ) -> list[QuizQuestionData]:
         """Generate quiz questions by calling Claude Code CLI.
 
@@ -707,7 +727,17 @@ Respond with ONLY a JSON array:
         week = extraction.metadata.get("week", 0)
 
         template_path = Path("/app/prompts/generate_quiz.txt")
-        if template_path.exists():
+        if focus is not None:
+            prompt = render_targeted_prompt(
+                "quiz",
+                course_code=course_code,
+                week=week,
+                summary=summary,
+                extraction_text=extraction_text,
+                count=count,
+                focus=focus,
+            )
+        elif template_path.exists():
             template = Template(template_path.read_text())
             prompt = template.render(
                 course_code=course_code,
