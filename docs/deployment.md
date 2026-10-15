@@ -530,7 +530,30 @@ occupy the slots a user's upload is waiting for (TECH-09, GL#51):
 |---|---|---|---|---|
 | `worker` | `pipeline@<host>` | `pipeline`, `celery` | 2 / 4 | upload chain (ingest to assets), course documents; AI credentials |
 | `worker-ondemand` | `ondemand@<host>` | `ai_ondemand` | 2 / 2 | targeted generation, concept extraction; AI credentials |
-| `worker-maintenance` | `maintenance@<host>` | `maintenance` | 1 / 1 | reminders, calendar sync, backups, stuck-job recovery, re-embedding; `data/` plus the backup script and `backups/` mounts, no AI credentials |
+| `worker-maintenance` | `maintenance@<host>` | `maintenance` | 1 / 1 | reminders, calendar sync, backups, stuck-job recovery, re-embedding; `data/` plus the backup script and `backups/` mounts; runs as the image user `studyaio`, no Claude login (it still gets `.env`) |
+
+**Maintenance pool user.** `worker-maintenance` runs as the image's unprivileged
+`studyaio` user (uid/gid 999), not root: the root in `x-worker-common` exists for the
+Claude credential mounts, which this pool does not have. "No Claude login" is the whole
+of the difference in credentials. Every pool, this one included, still receives `.env`:
+the instance AI keys and `SETTINGS_ENCRYPTION_KEY`. Splitting `env_file` per pool would
+shrink that and is a possible future hardening; it is not done, because the pools share
+one settings object and each would need its own audited variable list.
+
+Because the bind mounts take the host's ownership, uid 999 must be able to write
+`./backups` and read all of `./data` (the api already runs as 999 and writes `./data`,
+so a working deployment satisfies the second). A `./backups` that Docker auto-created
+(root-owned) or that the deploy user made makes `run_backup` fail with
+`Permission denied` on the `.partial` dump, which is a loud failure (the
+`BACKUP_RUNS` outcome is `failure`), not a silent one. One-time host fix, then no
+restart needed:
+
+```bash
+sudo chown 999:999 backups    # existing root-owned dumps stay; retention can still delete them
+```
+
+If something else on the host also writes to `backups/` as another user (a manual
+`make backup`), use a shared group with mode 2775 instead.
 
 `celery` is the legacy queue every task used before the split. Nothing routes there any
 more; the pipeline worker still drains it so messages enqueued before the rollout are

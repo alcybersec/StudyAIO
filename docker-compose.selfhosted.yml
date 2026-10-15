@@ -102,7 +102,9 @@ services:
       - /tmp/prometheus:mode=1777
 
   worker-maintenance:
-    # Maintenance pool: beat jobs, backups, re-embedding. No AI credentials.
+    # Maintenance pool: beat jobs, backups, re-embedding. No Claude login (it
+    # still gets .env, so instance AI keys and SETTINGS_ENCRYPTION_KEY). Runs as
+    # the image user, set in docker-compose.yml.
     <<: *worker-deploy
     command: celery -A app.worker:celery_app worker --loglevel=info -Q maintenance -n maintenance@%h --concurrency=1
     volumes: !override

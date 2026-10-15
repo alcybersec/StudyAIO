@@ -166,8 +166,14 @@ services:
       start_period: 30s
 
   worker-maintenance:
-    # Maintenance pool: beat jobs, backups, re-embedding. No AI credentials.
+    # Maintenance pool: beat jobs, backups, re-embedding. No Claude login (it
+    # still gets .env, so instance AI keys and SETTINGS_ENCRYPTION_KEY).
     <<: *worker-common
+    # Not root: the root in x-worker-common exists for the Claude credential
+    # mounts, which this pool does not have. The image's own unprivileged user;
+    # the overlays inherit this. It needs ./backups writable and ./data
+    # readable by that uid (docs/deployment.md "Maintenance pool user").
+    user: "studyaio:studyaio"
     volumes:
       - ./services/app/app:/app/app
       - ./services/app/prompts:/app/prompts
