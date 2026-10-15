@@ -118,6 +118,9 @@ async def ask_question(
             summary.content_md if summary is not None else None,
             label=f"{body.course_code} Week {body.week}",
         )
+    # Release the connection before the answer call; record_ai_call below opens
+    # a fresh transaction (GL#50).
+    await session.commit()
     try:
         answer_result = await agent.answer_question(question, chunks)
     except NotImplementedError:

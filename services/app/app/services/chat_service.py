@@ -483,6 +483,9 @@ async def send_message(
             context_question = await _with_week_summary(
                 session, user_id, plan, content, context_question, chunks
             )
+            # Release the connection before the (seconds-long) answer call: the
+            # writes below start a fresh transaction (GL#50).
+            await session.commit()
             answer_result = await agent.answer_question(context_question, chunks)
             answer_text = answer_result.answer
             # Sources are derived from the chunk order the [n] markers refer to,
@@ -646,6 +649,9 @@ async def stream_message(
             context_question = await _with_week_summary(
                 session, user_id, plan, content, context_question, chunks
             )
+            # Release the connection before the (seconds-long) answer call: the
+            # writes below start a fresh transaction (GL#50).
+            await session.commit()
             async for token in agent.stream_answer(context_question, chunks):
                 full_text += token
                 yield {"event": "token", "data": token}
