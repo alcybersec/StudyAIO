@@ -32,6 +32,14 @@ class Flashcard(Base):
     #: Soft-retire marker. Regeneration sets this instead of deleting, so the
     #: card's review (study history) survives. NULL = active.
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: ``pipeline`` (default) | ``targeted`` (weak-spot generation, ADR 0007).
+    origin: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pipeline", server_default="pipeline"
+    )
+    targeted_generation_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("targeted_generations.id"), nullable=True
+    )
+    focus_topic: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="flashcards")
