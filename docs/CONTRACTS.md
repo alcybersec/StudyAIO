@@ -554,7 +554,7 @@ Rules:
 
 Optional explicit placement on upload (GL#49, audit PROD-07).
 
-* `POST /api/uploads` (multipart form fields) and `POST /api/uploads/batch` (form fields applied to
+* `POST /api/uploads` and `POST /api/uploads/batch` accept query parameters (applied to
   every file) accept optional `course_code` (1-20 chars) and `week` (1-52). `course_code` and
   `week` must be given together; one without the other is `422`.
 * When both are given the artifact is created already placed (`course_id`, `week`,

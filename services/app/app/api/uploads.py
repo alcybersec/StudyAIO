@@ -37,6 +37,7 @@ from app.pipeline.orchestrator import resume_pipeline, run_pipeline
 from app.services import (
     artifact_service,
     billing_service,
+    course_service,
     pipeline_service,
     quota_service,
     usage_service,
@@ -52,6 +53,46 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx"}
 
 # Quick captures are limited to 1 MB of text
 MAX_CAPTURE_BYTES = 1024 * 1024
+
+MAX_PLACEMENT_WEEK = 52
+MAX_COURSE_CODE_LEN = 20
+
+
+def _parse_placement(course_code: str | None, week: int | None) -> tuple[str, int] | None:
+    """Validate the optional explicit course/week pair.
+
+    Blank values count as absent (an HTML form posts empty strings). Both or
+    neither must be given.
+
+    Returns:
+        ``(course_code, week)`` when placed, ``None`` for AI routing.
+
+    Raises:
+        HTTPException: 422 for half a pair, a bad week, or an over-long code.
+    """
+    code = (course_code or "").strip()
+    if not code and week is None:
+        return None
+    if not code or week is None:
+        raise HTTPException(
+            status_code=422, detail="course_code and week must be provided together"
+        )
+    if not 1 <= week <= MAX_PLACEMENT_WEEK:
+        raise HTTPException(
+            status_code=422, detail=f"week must be between 1 and {MAX_PLACEMENT_WEEK}"
+        )
+    if len(code) > MAX_COURSE_CODE_LEN:
+        raise HTTPException(
+            status_code=422, detail=f"course_code must be at most {MAX_COURSE_CODE_LEN} characters"
+        )
+    return code, week
+
+
+def _dispatch(artifact, user_id: str, *, placed: bool):
+    """Start the pipeline: from ingest, or from extract when the user placed the file."""
+    if placed:
+        return resume_pipeline(artifact.id, from_stage="extract", user_id=user_id)
+    return run_pipeline(artifact.file_path, user_id=user_id, artifact_id=artifact.id)
 
 
 @router.post(
@@ -73,6 +114,8 @@ MAX_CAPTURE_BYTES = 1024 * 1024
 async def upload_file(
     request: Request,
     file: UploadFile,
+    course_code: str | None = Query(None, max_length=64),
+    week: int | None = Query(None),
     user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> UploadResponse:
@@ -80,8 +123,11 @@ async def upload_file(
 
     Hashes and dedups the bytes in the request so the response can carry the
     real artifact id, then stores the file, creates the artifact and dispatches
-    the pipeline against it.
+    the pipeline against it. With an explicit ``course_code`` and ``week`` the
+    artifact is created already placed and the pipeline starts at extract, so
+    the classify stage (and its review item) never runs.
     """
+    placement = _parse_placement(course_code, week)
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
 
@@ -127,6 +173,15 @@ async def upload_file(
             pipeline_task_id=None,
         )
 
+    # An explicit placement resolves (or creates, within quota) the course
+    # before anything is stored, so a refusal leaves no orphaned file.
+    placed: dict = {}
+    if placement is not None:
+        course = await course_service.get_or_create_course(
+            session, placement[0], user_id=user.id, tier=user.tier
+        )
+        placed = {"course_id": course.id, "week": placement[1]}
+
     # Store the bytes and create the artifact row
     try:
         artifact = await artifact_service.create_upload_artifact(
@@ -135,6 +190,7 @@ async def upload_file(
             original_filename=file.filename,
             sha256=sha256,
             user_id=user.id,
+            **placed,
         )
     except IntegrityError:
         # Two identical uploads raced past the dedup check above; the
@@ -164,7 +220,7 @@ async def upload_file(
     )
 
     # Dispatch pipeline against the artifact we just created
-    result = run_pipeline(artifact.file_path, user_id=user.id, artifact_id=artifact.id)
+    result = _dispatch(artifact, user.id, placed=bool(placed))
 
     # Record upload usage for quota tracking (best-effort)
     await usage_service.record(session, user.id, "upload_completed")
@@ -212,12 +268,27 @@ async def upload_file(
 async def batch_upload(
     request: Request,
     files: list[UploadFile],
+    course_code: str | None = Query(None, max_length=64),
+    week: int | None = Query(None),
     user: User = Depends(get_current_user_or_default),
     session: AsyncSession = Depends(get_session),
 ) -> BatchUploadResponse:
-    """Upload multiple lecture files and start processing pipelines."""
+    """Upload multiple lecture files and start processing pipelines.
+
+    An explicit ``course_code`` + ``week`` applies to every file in the batch.
+    """
+    placement = _parse_placement(course_code, week)
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
+
+    # Resolve the chosen course once, up front: a quota refusal fails the
+    # request before any file is stored.
+    placed: dict = {}
+    if placement is not None:
+        course = await course_service.get_or_create_course(
+            session, placement[0], user_id=user.id, tier=user.tier
+        )
+        placed = {"course_id": course.id, "week": placement[1]}
 
     results: list[BatchUploadFileResult] = []
     succeeded = 0
@@ -314,6 +385,7 @@ async def batch_upload(
                 original_filename=filename,
                 sha256=sha256,
                 user_id=user.id,
+                **placed,
             )
         except IntegrityError:
             await session.rollback()
@@ -352,7 +424,7 @@ async def batch_upload(
 
         # Dispatch pipeline against the artifact we just created
         try:
-            run_pipeline(artifact.file_path, user_id=user.id, artifact_id=artifact.id)
+            _dispatch(artifact, user.id, placed=bool(placed))
             results.append(
                 BatchUploadFileResult(
                     filename=filename,

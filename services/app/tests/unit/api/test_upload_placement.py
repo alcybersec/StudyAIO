@@ -43,7 +43,7 @@ class TestSingleUploadPlacement:
         r = await async_client.post(
             "/api/uploads",
             files={"file": ("a.pdf", PDF, "application/pdf")},
-            data={"course_code": "CSIT302", "week": "4"},
+            params={"course_code": "CSIT302", "week": "4"},
         )
         assert r.status_code == 201
         assert r.json()["status"] == "processing"
@@ -54,7 +54,8 @@ class TestSingleUploadPlacement:
         assert kw["course_id"] == "course-1"
         assert kw["week"] == 4
         placed.resume.assert_called_once()
-        assert placed.resume.call_args.args[:2] == ("art-1", "extract")
+        assert placed.resume.call_args.args == ("art-1",)
+        assert placed.resume.call_args.kwargs["from_stage"] == "extract"
         assert placed.resume.call_args.kwargs["user_id"] == default_test_user.id
         placed.full.assert_not_called()
 
@@ -66,11 +67,11 @@ class TestSingleUploadPlacement:
         placed.get_course.assert_not_awaited()
         assert "course_id" not in placed.create.await_args.kwargs
 
-    async def test_blank_form_values_mean_absent(self, async_client, placed):
+    async def test_blank_course_code_means_absent(self, async_client, placed):
         r = await async_client.post(
             "/api/uploads",
             files={"file": ("a.pdf", PDF, "x/y")},
-            data={"course_code": "", "week": ""},
+            params={"course_code": "  "},
         )
         assert r.status_code == 201
         placed.full.assert_called_once()
@@ -87,7 +88,7 @@ class TestSingleUploadPlacement:
     )
     async def test_invalid_placement_is_422_and_stores_nothing(self, async_client, placed, data):
         r = await async_client.post(
-            "/api/uploads", files={"file": ("a.pdf", PDF, "x/y")}, data=data
+            "/api/uploads", files={"file": ("a.pdf", PDF, "x/y")}, params=data
         )
         assert r.status_code == 422
         placed.create.assert_not_awaited()
@@ -97,7 +98,7 @@ class TestSingleUploadPlacement:
         r = await async_client.post(
             "/api/uploads",
             files={"file": ("a.pdf", PDF, "x/y")},
-            data={"course_code": "NEW1", "week": "1"},
+            params={"course_code": "NEW1", "week": "1"},
         )
         assert r.status_code in (402, 403)
         placed.create.assert_not_awaited()
@@ -112,7 +113,7 @@ class TestSingleUploadPlacement:
             r = await async_client.post(
                 "/api/uploads",
                 files={"file": ("a.pdf", PDF, "x/y")},
-                data={"course_code": "CSIT302", "week": "2"},
+                params={"course_code": "CSIT302", "week": "2"},
             )
         assert r.json()["status"] == "duplicate"
         assert r.json()["artifact_id"] == "old"
@@ -128,7 +129,7 @@ class TestBatchUploadPlacement:
             ("files", ("b.pdf", io.BytesIO(PDF + b"2"), "x/y")),
         ]
         r = await async_client.post(
-            "/api/uploads/batch", files=files, data={"course_code": "CSIT302", "week": "2"}
+            "/api/uploads/batch", files=files, params={"course_code": "CSIT302", "week": "2"}
         )
         assert r.status_code == 201
         assert r.json()["succeeded"] == 2
@@ -150,7 +151,7 @@ class TestBatchUploadPlacement:
 
     async def test_half_given_is_422(self, async_client, placed):
         files = [("files", ("a.pdf", io.BytesIO(PDF), "x/y"))]
-        r = await async_client.post("/api/uploads/batch", files=files, data={"week": "2"})
+        r = await async_client.post("/api/uploads/batch", files=files, params={"week": "2"})
         assert r.status_code == 422
         placed.create.assert_not_awaited()
 
@@ -180,7 +181,7 @@ class TestGetOrCreateCourse:
             "app.services.course_service.check_course_quota", new_callable=AsyncMock
         ) as quota:
             got = await course_service.get_or_create_course(
-                mock_session, " csit302 ", user_id="u-1"
+                mock_session, " csit302 ", user_id="u-1", tier="pro"
             )
         quota.assert_awaited_once()
         assert quota.await_args.args[1:] == ("u-1", "pro")
