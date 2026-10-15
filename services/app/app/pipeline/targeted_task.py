@@ -211,7 +211,10 @@ async def _claim(session, generation_id: str) -> TargetedGeneration | None:
     follows is read from the row.
     """
     result = await session.execute(
-        select(TargetedGeneration).where(TargetedGeneration.id == generation_id).with_for_update()
+        select(TargetedGeneration)
+        .where(TargetedGeneration.id == generation_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     row = result.scalar_one_or_none()
     if row is None or row.status not in IN_FLIGHT:
@@ -320,6 +323,9 @@ async def _persist(
         select(TargetedGeneration)
         .where(TargetedGeneration.id == gen.id, TargetedGeneration.user_id == ctx.owner_id)
         .with_for_update()
+        # expire_on_commit=False keeps the stale in-memory ``running`` object in the
+        # identity map; refresh it so a row recovered meanwhile is seen as such.
+        .execution_options(populate_existing=True)
     )
     row = locked.scalar_one_or_none()
     if row is None or row.status != "running":
