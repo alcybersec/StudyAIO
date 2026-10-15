@@ -1,4 +1,4 @@
-import { test, expect, seedCourseRow, deleteCourse } from './fixtures'
+import { test, expect, seedCourseRow, deleteCourse, settle } from './fixtures'
 
 const courseCode = 'E2EMGT'
 
@@ -17,7 +17,7 @@ test.describe('Course management', () => {
 
   test('manage menu opens and delete modal gates the danger button', async ({ page }) => {
     await page.goto(`/courses/${courseCode}`)
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     // Open the manage menu
     const manageButton = page.getByRole('button', { name: /manage course/i })

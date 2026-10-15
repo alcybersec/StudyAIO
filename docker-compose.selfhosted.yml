@@ -5,6 +5,29 @@
 # Set GHCR_OWNER (default: alcybersec) and IMAGE_TAG (default: latest) to
 # control which images are used.
 
+x-worker-deploy: &worker-deploy
+  image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
+  restart: unless-stopped
+
+x-worker-environment: &worker-environment
+  # SEC-06: passed through from the environment / .env, deliberately no
+  # default -- the api and worker refuse to start without it unless
+  # SINGLE_USER_MODE=true. See docs/deployment.md.
+  SETTINGS_ENCRYPTION_KEY:
+  # Metrics, off by default. Set PROMETHEUS_ENABLED=true in .env to turn on
+  # /metrics on the api (:8000) and each worker (127.0.0.1:9101-9103). Beat gets none.
+  PROMETHEUS_ENABLED: ${PROMETHEUS_ENABLED:-false}
+
+x-claude-environment: &claude-environment
+  # Preferred login: a long-lived token (`claude setup-token`) stored as
+  # <dir>/oauth-token (0600). The adapter reads it from this file and hands
+  # it only to the CLI subprocess. .credentials.json stays as the fallback.
+  # Unprivileged uid/gid the adapter drops the CLI child to (GL#12, R-030);
+  # matches `claudecli` in services/app/Dockerfile. AI pools only.
+  CLAUDE_CLI_UID: "10001"
+  CLAUDE_CLI_GID: "10001"
+  CLAUDE_HOST_OAUTH_TOKEN_FILE: /run/claude-host/oauth-token
+
 services:
   ui:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-ui:${IMAGE_TAG:-latest}
@@ -23,9 +46,9 @@ services:
       - ./data:/app/data
 
   worker:
-    image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=4
+    # Pipeline pool (upload chain). Concurrency unchanged from the single worker.
+    <<: *worker-deploy
+    command: celery -A app.worker:celery_app worker --loglevel=info -Q pipeline,celery -n pipeline@%h --concurrency=4
     volumes: !override
       - ./data:/app/data
       # Claude CLI comes from the image — never bind-mount a host binary here
@@ -40,25 +63,65 @@ services:
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/settings.json:/root/.claude/settings.json:ro
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}:/run/claude-host:ro
     environment:
-      # SEC-06: passed through from the environment / .env, deliberately no
-      # default -- the api and worker refuse to start without it unless
-      # SINGLE_USER_MODE=true. See docs/deployment.md.
-      SETTINGS_ENCRYPTION_KEY:
-      # Preferred login: a long-lived token (`claude setup-token`) stored as
-      # <dir>/oauth-token (0600). The adapter reads it from this file and hands
-      # it only to the CLI subprocess. .credentials.json stays as the fallback.
-      # Unprivileged uid/gid the adapter drops the CLI child to (GL#12, R-030);
-      # matches `claudecli` in services/app/Dockerfile. Worker only.
-      CLAUDE_CLI_UID: "10001"
-      CLAUDE_CLI_GID: "10001"
-      CLAUDE_HOST_OAUTH_TOKEN_FILE: /run/claude-host/oauth-token
-      # Metrics, off by default. Set PROMETHEUS_ENABLED=true in .env to turn on
-      # /metrics on the api (:8000) and the worker (127.0.0.1:9101). Beat gets none.
-      PROMETHEUS_ENABLED: ${PROMETHEUS_ENABLED:-false}
+      <<: [*worker-environment, *claude-environment]
       WORKER_METRICS_PORT: "9101"
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
-    ports:
+    # Loopback only: a host-local scraper reaches it, nothing else. Each pool has
+    # its own host port; the container side is always 9101.
+    ports: !override
       - "127.0.0.1:9101:9101"
+    tmpfs:
+      - /tmp/prometheus:mode=1777
+
+  worker-ondemand:
+    # On-demand AI pool.
+    <<: *worker-deploy
+    command: celery -A app.worker:celery_app worker --loglevel=info -Q ai_ondemand -n ondemand@%h --concurrency=2
+    volumes: !override
+      - ./data:/app/data
+      # Claude CLI comes from the image — never bind-mount a host binary here
+      # (see the note in docker-compose.yml). Credentials only.
+      # Credentials come ONLY from the dedicated service-login directory
+      # (STUDYAIO_CLAUDE_LOGIN_DIR, see scripts/setup-claude-login.sh), never
+      # the operator's personal ~/.claude (R-025: transcripts, history and
+      # plugins must not be visible to a worker that feeds untrusted text to
+      # `claude -p`). Read-only on purpose: a writable mount would let a
+      # compromised worker plant hooks into the host's Claude config.
+      - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/.credentials.json:/root/.claude/.credentials.json:ro
+      - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/settings.json:/root/.claude/settings.json:ro
+      - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}:/run/claude-host:ro
+    environment:
+      <<: [*worker-environment, *claude-environment]
+      WORKER_METRICS_PORT: "9101"
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
+    # Loopback only: a host-local scraper reaches it, nothing else. Each pool has
+    # its own host port; the container side is always 9101.
+    ports: !override
+      - "127.0.0.1:9102:9101"
+    tmpfs:
+      - /tmp/prometheus:mode=1777
+
+  worker-maintenance:
+    # Maintenance pool: beat jobs, backups, re-embedding. No Claude login (it
+    # still gets .env, so instance AI keys and SETTINGS_ENCRYPTION_KEY). Runs as
+    # the image user, set in docker-compose.yml.
+    <<: *worker-deploy
+    command: celery -A app.worker:celery_app worker --loglevel=info -Q maintenance -n maintenance@%h --concurrency=1
+    volumes: !override
+      - ./data:/app/data
+      # See docker-compose.yml: run_backup needs the script and a persistent
+      # destination, neither of which the image carries. GL#24. run_backup runs
+      # on the maintenance queue, so only this pool mounts them.
+      - ./scripts/backup.sh:/app/scripts/backup.sh:ro
+      - ./backups:/app/backups
+    environment:
+      <<: *worker-environment
+      WORKER_METRICS_PORT: "9101"
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
+    # Loopback only: a host-local scraper reaches it, nothing else. Each pool has
+    # its own host port; the container side is always 9101.
+    ports: !override
+      - "127.0.0.1:9103:9101"
     tmpfs:
       - /tmp/prometheus:mode=1777
 

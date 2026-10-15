@@ -25,6 +25,7 @@ import { DeadlinesWidget } from '../components/dashboard/widgets/DeadlinesWidget
 import { ActivityWidget } from '../components/dashboard/widgets/ActivityWidget'
 import { QuickUploadWidget } from '../components/dashboard/widgets/QuickUploadWidget'
 import { CoursesWidget } from '../components/dashboard/widgets/CoursesWidget'
+import { FirstRunChecklist } from '../components/onboarding/FirstRunChecklist'
 import { AchievementUnlock } from '../components/gamification/AchievementUnlock'
 import { InstallPrompt } from '../components/pwa/InstallPrompt'
 
@@ -137,6 +138,7 @@ export function DashboardPage() {
         </div>
       </div>
 
+      <FirstRunChecklist />
       <ReviewAlert />
 
       {/* On narrow viewports, stack widgets naturally for auto-sizing (no fixed grid heights).

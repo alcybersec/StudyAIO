@@ -514,6 +514,60 @@ Account deletion removes both new tables' rows (`backend`, `account_service`).
 `services/app/tests/contracts/test_weakspot_storage_contract.py` checks this table against the ORM
 metadata.
 
+### api.study-items v1
+
+Owner-scoped create/edit/delete of flashcards and quiz questions (GL#48, audit PROD-05). Lives in
+`app/api/assets.py`, logic in `app/services/asset_service.py`. All routes need an authenticated
+caller; every lookup joins `courses.user_id`; a foreign, missing or already-archived id is a
+plain `404` (no existence oracle).
+
+| Route | Body | Result |
+|---|---|---|
+| `POST /api/assets/flashcards` | `{course_code, week 1-52, front, back, tags?: [str], source_artifact_id?}` | `201 FlashcardResponse`, `origin="user"` |
+| `PATCH /api/assets/flashcards/{id}` | any of `{front, back, tags}` (at least one) | `200 FlashcardResponse` of the **new** copy (new id) |
+| `DELETE /api/assets/flashcards/{id}` | none | `204`; the card is archived |
+| `POST /api/assets/quiz` | `{course_code, week, question_type, question, options?: [str], correct_answer, explanation?, source_artifact_id?}` | `201 QuizQuestionResponse`, `origin="user"` |
+| `PATCH /api/assets/quiz/{id}` | any of `{question, options, correct_answer, explanation}` | `200` of the **new** copy |
+| `DELETE /api/assets/quiz/{id}` | none | `204`; the question is archived |
+
+Rules:
+
+* **No silent loss (floor 4).** Nothing here issues a SQL `DELETE`. `DELETE` sets `archived_at`.
+  `PATCH` archives the original row and inserts an edited copy (same course, week, source
+  artifact, page ref and generation version; unchanged fields carried over; `origin="user"`).
+  The original keeps its `flashcard_reviews` / `quiz_attempts`, so study history stays valid.
+  For flashcards the SRS schedule (ease, interval, repetitions, next review) is copied onto the
+  new card so an edit does not reset progress.
+* **User items are protected.** `save_flashcards` / `save_quiz_questions` archive only
+  `origin="pipeline"` rows, so a lecture re-run never archives or overwrites `origin="user"`
+  (nor `"targeted"`). Targeted dedup reads every non-archived row, so user items count as existing.
+* `origin` is now `pipeline | targeted | user` (`String(20)`, no check constraint, no migration).
+* Manual items need a `source_artifact_id` (NOT NULL column): the given one (must be the caller's,
+  in that course and week) or else the caller's newest artifact in that course and week; with none,
+  `409 no_source_artifact`. `source_page_ref=0` marks "no page".
+* Quiz validation: `question_type` is `multiple_choice` (2-8 `options`, `correct_answer` must be
+  an option or its letter) or `short_answer` (no options). Text fields are stripped, non-empty,
+  bounded (front/back/question/explanation 4000 chars). `422` otherwise.
+* Unknown `course_code` for the caller is `404`.
+
+### api.upload-placement v1
+
+Optional explicit placement on upload (GL#49, audit PROD-07).
+
+* `POST /api/uploads` and `POST /api/uploads/batch` accept query parameters (applied to
+  every file) accept optional `course_code` (1-20 chars) and `week` (1-52). `course_code` and
+  `week` must be given together; one without the other is `422`.
+* When both are given the artifact is created already placed (`course_id`, `week`,
+  `status="classified"`) and the pipeline is dispatched from `extract`
+  (`resume_pipeline(..., from_stage="extract")`): the classify stage and its AI call are skipped
+  and no classification review item is created. The course is the caller's own (matched
+  case-insensitively on code); if they have none with that code it is created, subject to the
+  plan's course quota (`QuotaExceededError`, same as classify).
+* When absent, behaviour is unchanged (AI routing from `ingest`).
+* A duplicate upload returns the existing artifact untouched; the placement is ignored.
+* Failure to resolve the course (quota) fails before anything is stored. In batch it fails the
+  request with the quota error (placement is a single choice for all files).
+
 ## Change log
 
 The `Contract` column holds the name from that contract's `###` heading in Current.
@@ -534,3 +588,5 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-12 | models.weakspot | v1 | New contract, recorded before implementation: `study_plans`, `targeted_generations`, provenance columns, attempts index. Contract test written red. | M33-S2-ARCH-018 |
 | 2026-10-15 | agents.AgentAdapter | v2 | Additive: trailing `focus: GenerationFocus \| None = None` on `generate_flashcards` and `generate_quiz`, new `GenerationFocus` data type (14 types), `pipeline/targeted_task.py` added as a consumer (13 direct). v1 callers unaffected: `focus` defaults to `None`, which is v1 behaviour. No new request-time `get_agent` site; ADR 0003 unchanged. | M33-S2-ARCH-052 |
 | 2026-10-15 | api.weak-spots | v1 | Additive as built: `error_code` on `TargetedGenerationResponse`, `items` on the diagnostic, `GET /api/study/items`, `origin`/`focus_topic` on card and quiz payloads, `plan_split` on the retention readout. | M33-S2-BACKEND-020 |
+| 2026-10-15 | api.study-items | v1 | New contract, recorded before implementation: manual create, archive-and-copy edit, soft delete of flashcards and quiz questions; `origin="user"`. | M33-S3-BACKEND-027 |
+| 2026-10-15 | api.upload-placement | v1 | New contract, recorded before implementation: optional `course_code` + `week` on single and batch upload skip classification. | M33-S3-FRONTEND-028 |

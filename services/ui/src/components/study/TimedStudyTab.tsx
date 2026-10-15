@@ -6,7 +6,7 @@ import { CountdownTimer } from './CountdownTimer'
 import { useTimedPlan, useRecordReview } from '../../hooks/useApi'
 import { studyApi, examsApi, assetsApi } from '../../api/endpoints'
 import { CitationChip } from '../week/CitationChip'
-import { PracticeBadge } from '../weakspots/PracticeBadge'
+import { OriginBadge } from '../week/OriginBadge'
 import type { PlanRunState } from '../../lib/planRun'
 import { writeQueue } from '../../lib/writeQueue'
 import type { Flashcard, QuizQuestion, TimedSessionPlan } from '../../types'
@@ -344,7 +344,7 @@ export function TimedStudyTab() {
             <div className="text-center py-8">
               <span className="text-xs font-medium text-text-muted uppercase tracking-wider">{t('Flashcard')}</span>
               <span className="ml-2 inline-flex items-center gap-1 align-middle">
-                {currentCard.origin === 'targeted' && <PracticeBadge />}
+                <OriginBadge origin={currentCard.origin} />
                 {currentCard.source_page_ref > 0 && <CitationChip page={currentCard.source_page_ref} />}
               </span>
               <button
@@ -396,7 +396,7 @@ export function TimedStudyTab() {
                       : t('Quiz — Short Answer')}
               </span>
               <span className="ml-2 inline-flex items-center gap-1 align-middle">
-                {currentQuiz.origin === 'targeted' && <PracticeBadge />}
+                <OriginBadge origin={currentQuiz.origin} />
                 {currentQuiz.source_page_ref > 0 && <CitationChip page={currentQuiz.source_page_ref} />}
               </span>
               <p className="text-lg font-medium text-text mt-3">{currentQuiz.question}</p>

@@ -56,11 +56,15 @@ beforeEach(async () => {
 })
 
 describe('AppearanceSection language control', () => {
-  it('shows the stored language as selected', () => {
+  it('shows the stored language as selected', async () => {
     withSettings({ language: 'ru' })
     render(<AppearanceSection />)
 
-    expect(screen.getByRole('button', { name: 'Русский' })).toHaveAttribute('aria-pressed', 'true')
+    // The Russian bundle is a lazily loaded chunk, so adopting the stored
+    // language resolves a tick after mount rather than synchronously.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Русский' })).toHaveAttribute('aria-pressed', 'true'),
+    )
     expect(screen.getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'false')
   })
 

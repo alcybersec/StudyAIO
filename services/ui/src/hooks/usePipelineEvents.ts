@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { logRawError } from '../lib/userError'
 import type { PipelineEvent } from '../types'
 
@@ -9,7 +9,16 @@ const MAX_EVENTS = 200
 const MIN_BACKOFF_MS = 1_000
 const MAX_BACKOFF_MS = 30_000
 
-export function usePipelineEvents(artifactIds?: string[]) {
+/**
+ * Low-level SSE subscription. Do not call this from pages: the app shell owns
+ * the single connection via PipelineEventsProvider (use usePipelineProgress).
+ * `onEvent` fires for every well-formed, matching frame.
+ */
+export function usePipelineEvents(artifactIds?: string[], onEvent?: (event: PipelineEvent) => void) {
+  const onEventRef = useRef(onEvent)
+  useEffect(() => {
+    onEventRef.current = onEvent
+  })
   const [events, setEvents] = useState<PipelineEvent[]>([])
   const [connectionState, setConnectionState] = useState<PipelineConnectionState>('connecting')
 
@@ -23,6 +32,8 @@ export function usePipelineEvents(artifactIds?: string[]) {
     // Connect directly to API for SSE (Vite proxy buffers event streams)
     const sseBase = import.meta.env.VITE_SSE_URL || ''
     const url = `${sseBase}/api/uploads/pipeline-events${params}`
+
+    if (typeof EventSource === 'undefined') return
 
     let disposed = false
     let source: EventSource | null = null
@@ -40,7 +51,9 @@ export function usePipelineEvents(artifactIds?: string[]) {
       }
       if (ids.length === 0 || ids.includes(data.artifact_id)) {
         // Stamp receipt time so consumers can derive per-stage durations
-        setEvents((prev) => [...prev, { ...data, receivedAt: Date.now() }].slice(-MAX_EVENTS))
+        const stamped = { ...data, receivedAt: Date.now() }
+        setEvents((prev) => [...prev, stamped].slice(-MAX_EVENTS))
+        onEventRef.current?.(stamped)
       }
     }
 

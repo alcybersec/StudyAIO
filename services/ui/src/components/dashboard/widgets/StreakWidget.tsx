@@ -32,7 +32,7 @@ export const StreakWidget = memo(function StreakWidget() {
       state={state}
       onRetry={() => refetch()}
       emptyTitle={t('No sessions yet')}
-      emptyHint={t('Review a few cards to start a streak.')}
+      emptyHint={t('Cards appear after your first summary. Review a few to start a streak.')}
       emptyActionLabel={t('Start studying')}
       emptyActionTo="/study"
       skeleton={<StreakSkeleton />}

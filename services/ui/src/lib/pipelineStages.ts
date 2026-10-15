@@ -31,7 +31,10 @@ const RUNNING_STATUSES = new Set(['started', 'running'])
  * Durations come from the client-side `receivedAt` stamps applied by
  * usePipelineEvents; events without stamps simply omit the timing.
  */
-export function mapPipelineEventsToStages(events: PipelineEvent[]): PipelineStage[] {
+export function mapPipelineEventsToStages(
+  events: PipelineEvent[],
+  opts: { placed?: boolean } = {},
+): PipelineStage[] {
   const stages = new Map<PipelineStageName, PipelineStage>(
     PIPELINE_STAGE_NAMES.map((name) => [name, { name, status: 'pending' as StageStatus }]),
   )
@@ -59,8 +62,19 @@ export function mapPipelineEventsToStages(events: PipelineEvent[]): PipelineStag
     }
   }
 
+  // An upload placed by the user (course + week chosen) skips classification:
+  // the server never emits ingest/classify events, so treat the two stages as
+  // already satisfied rather than leaving the rail waiting on them forever.
+  if (opts.placed) {
+    for (const name of PLACED_SKIPPED_STAGES) {
+      if (stages.get(name)!.status === 'pending') stages.set(name, { name, status: 'done' })
+    }
+  }
+
   return PIPELINE_STAGE_NAMES.map((name) => stages.get(name)!)
 }
+
+const PLACED_SKIPPED_STAGES: PipelineStageName[] = ['ingest', 'classify']
 
 /** "850ms" under a second, "1.2s" above. */
 export function formatStageMs(ms: number): string {

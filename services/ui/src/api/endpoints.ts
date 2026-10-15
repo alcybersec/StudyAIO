@@ -27,6 +27,11 @@ import type {
   ExamProgress,
   ExamReadinessData,
   Flashcard,
+  FlashcardCreate,
+  FlashcardPatch,
+  QuizQuestionCreate,
+  QuizQuestionPatch,
+  UploadPlacement,
   HeatmapDay,
   MasteryWeek,
   MessageScope,
@@ -101,10 +106,19 @@ export const reviewApi = {
   dismiss: (reviewId: string) => api.post<ReviewItem>(`/review-items/${reviewId}/dismiss`),
 }
 
+/** `?course_code=…&week=…` for an explicitly placed upload; empty when the server should classify. */
+function placementQuery(placement?: UploadPlacement): string {
+  if (!placement) return ''
+  const params = new URLSearchParams({ course_code: placement.course_code, week: String(placement.week) })
+  return `?${params}`
+}
+
 export const uploadApi = {
-  upload: (file: File) => api.upload<UploadResult>('/uploads', file),
+  upload: (file: File, placement?: UploadPlacement) =>
+    api.upload<UploadResult>(`/uploads${placementQuery(placement)}`, file),
   capture: (body: CaptureRequest) => api.post<UploadResult>('/uploads/capture', body),
-  batchUpload: (files: File[]) => api.uploadMany<BatchUploadResponse>('/uploads/batch', files),
+  batchUpload: (files: File[], placement?: UploadPlacement) =>
+    api.uploadMany<BatchUploadResponse>(`/uploads/batch${placementQuery(placement)}`, files),
   status: (artifactId: string) => api.get<PipelineRun[]>(`/uploads/${artifactId}/status`),
   retry: (artifactId: string) => api.post<RetryResponse>(`/uploads/${artifactId}/retry`),
 }
@@ -205,6 +219,15 @@ export const assetsApi = {
     if (week !== undefined) params.set('week', String(week))
     return api.get<QuizQuestion[]>(`/assets/quiz?${params}`)
   },
+  createFlashcard: (body: FlashcardCreate) => api.post<Flashcard>('/assets/flashcards', body),
+  /** Returns the edited copy under a NEW id; the original is archived server-side. */
+  updateFlashcard: (id: string, body: FlashcardPatch) =>
+    api.patch<Flashcard>(`/assets/flashcards/${id}`, body),
+  deleteFlashcard: (id: string) => api.delete(`/assets/flashcards/${id}`),
+  createQuiz: (body: QuizQuestionCreate) => api.post<QuizQuestion>('/assets/quiz', body),
+  updateQuiz: (id: string, body: QuizQuestionPatch) =>
+    api.patch<QuizQuestion>(`/assets/quiz/${id}`, body),
+  deleteQuiz: (id: string) => api.delete(`/assets/quiz/${id}`),
 }
 
 export const analyticsApi = {

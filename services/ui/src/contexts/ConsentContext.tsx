@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import i18n from '../i18n'
 import { authApi } from '../api/auth'
@@ -6,6 +6,7 @@ import { setConsentRequiredHandler } from '../api/client'
 import { AppApiError } from '../api/errors'
 import { ConsentDialog } from '../components/auth/ConsentDialog'
 import { useAuth } from '../hooks/useAuth'
+import { ConsentContext } from './consentContext'
 import type { AuthUser } from '../types'
 
 /**
@@ -55,6 +56,17 @@ export function ConsentProvider({ children }: { children: ReactNode }) {
     return () => setConsentRequiredHandler(null)
   }, [])
 
+  const requestConsent = useCallback(
+    () =>
+      new Promise<boolean>((resolve) => {
+        waiters.current.push(resolve)
+        setVersion((v) => v ?? profileVersion)
+        setOpen(true)
+      }),
+    [profileVersion],
+  )
+  const controls = useMemo(() => ({ requestConsent }), [requestConsent])
+
   const settle = useCallback((accepted: boolean) => {
     setOpen(false)
     setChanged(false)
@@ -95,7 +107,7 @@ export function ConsentProvider({ children }: { children: ReactNode }) {
   }, [version, queryClient, settle])
 
   return (
-    <>
+    <ConsentContext.Provider value={controls}>
       {children}
       <ConsentDialog
         open={open}
@@ -105,6 +117,6 @@ export function ConsentProvider({ children }: { children: ReactNode }) {
         onAccept={() => void accept()}
         onDecline={decline}
       />
-    </>
+    </ConsentContext.Provider>
   )
 }

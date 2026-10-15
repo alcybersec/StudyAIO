@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthContextValue } from './AuthContext'
 import { ConsentProvider } from './ConsentContext'
+import { useConsent } from './consentContext'
 import { api } from '../api/client'
 import type { AuthUser } from '../types'
 
@@ -123,6 +124,46 @@ describe('consent dialog from the profile', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByText('app content')).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('requestConsent from the UI', () => {
+  function Asker({ onAnswer }: { onAnswer: (ok: boolean) => void }) {
+    const { requestConsent } = useConsent()
+    return <button onClick={() => void requestConsent().then(onAnswer)}>ask</button>
+  }
+  const renderAsker = (onAnswer: (ok: boolean) => void) => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    queryClient.setQueryData(['auth', 'me'], USER)
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <AuthContext.Provider value={{ user: USER } as unknown as AuthContextValue}>
+            <ConsentProvider>
+              <Asker onAnswer={onAnswer} />
+            </ConsentProvider>
+          </AuthContext.Provider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  it('opens the one shared dialog and resolves true after agreeing', async () => {
+    fetchMock.mockResolvedValue(json(200, { ai_consent_required: false, ai_consent_version: 3 }))
+    const answers: boolean[] = []
+    renderAsker((ok) => answers.push(ok))
+    await userEvent.click(screen.getByRole('button', { name: 'ask' }))
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    await userEvent.click(screen.getByRole('button', { name: 'I agree' }))
+    await waitFor(() => expect(answers).toEqual([true]))
+  })
+
+  it('resolves false when declined', async () => {
+    const answers: boolean[] = []
+    renderAsker((ok) => answers.push(ok))
+    await userEvent.click(screen.getByRole('button', { name: 'ask' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }))
+    await waitFor(() => expect(answers).toEqual([false]))
   })
 })
 

@@ -2,49 +2,54 @@
   "kind": "flashcards",
   "items": [
     {
-      "front": "What kind of tree do keys inserted in sorted order build?",
-      "back": "A degenerate tree, effectively a linked list with height n.",
+      "front": "What kind of tree results from inserting keys into a BST in sorted order, and why?",
+      "back": "A degenerate tree: it is effectively a linked list, because each key goes to one side of the previous node.",
       "tags": [
-        "degenerate trees"
+        "degenerate trees",
+        "bst"
       ],
       "source_page_ref": 3,
       "expect": "keep"
     },
     {
-      "front": "What is the search cost in a degenerate tree?",
-      "back": "O(n), because the height is n.",
+      "front": "What is the search cost in a degenerate BST built by inserting keys in sorted order?",
+      "back": "O(n), since the tree has height n.",
       "tags": [
-        "degenerate trees"
+        "degenerate trees",
+        "bst"
       ],
       "source_page_ref": 3,
       "expect": "keep"
     },
     {
-      "front": "What does an in-order traversal of a BST yield?",
-      "back": "The keys in sorted order.",
+      "front": "What is the height of a degenerate BST with n keys inserted in sorted order?",
+      "back": "About n, since it becomes effectively a linked list.",
       "tags": [
-        "in-order traversal"
+        "degenerate trees",
+        "bst"
       ],
       "source_page_ref": 3,
       "expect": "keep"
     },
     {
-      "front": "What is the cost of search in a balanced BST",
-      "back": "O(log n).",
+      "front": "What order does an in-order traversal visit the parts of a BST?",
+      "back": "Left subtree, then the node, then the right subtree.",
       "tags": [
-        "degenerate trees"
+        "in-order traversal",
+        "bst"
       ],
       "source_page_ref": 3,
-      "expect": "duplicate"
+      "expect": "keep"
     },
     {
-      "front": "How does an AVL tree rebalance?",
-      "back": "Rotations.",
+      "front": "What property do the keys have when output by an in-order traversal of a BST?",
+      "back": "They are yielded in sorted order.",
       "tags": [
-        "degenerate trees"
+        "in-order traversal",
+        "bst"
       ],
-      "source_page_ref": 8,
-      "expect": "uncited"
+      "source_page_ref": 3,
+      "expect": "keep"
     }
   ]
 }

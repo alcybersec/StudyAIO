@@ -1,4 +1,4 @@
-import { test, expect, testEmail, loginViaAPI, seedDb } from './fixtures'
+import { test, expect, testEmail, loginViaAPI, seedDb, settle } from './fixtures'
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:8000'
 
@@ -23,7 +23,7 @@ test.describe('Admin', () => {
 
     await page.goto('/admin')
     await expect(page.getByRole('heading', { name: /admin/i })).toBeVisible({ timeout: 10_000 })
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     // Metrics cards
     await expect(page.getByText(/^users$/i).first()).toBeVisible()
@@ -41,7 +41,7 @@ test.describe('Admin', () => {
     expect(resp.ok()).toBeFalsy()
 
     await page.goto('/admin')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     // The user table must not be populated for a non-admin session
     const rows = page.getByRole('columnheader', { name: /email/i })

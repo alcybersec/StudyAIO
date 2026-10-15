@@ -1,3 +1,39 @@
+# Three Celery pools, one per queue family (TECH-09, GL#51), so a slow beat job
+# or an on-demand generation cannot occupy the slots an upload is waiting for.
+# Routing lives in app/worker.py (TASK_ROUTES). `celery` is the legacy queue:
+# the pipeline pool also drains it so messages enqueued before the split are not
+# stranded. Single-worker fallback: one worker consuming
+# -Q pipeline,ai_ondemand,maintenance,celery (docs/deployment.md).
+x-worker-common: &worker-common
+  build:
+    context: ./services/app
+    dockerfile: Dockerfile
+  user: "0:0"  # Root required for the Claude credential mounts
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  env_file:
+    - .env
+
+x-worker-environment: &worker-environment
+  # SEC-06: passed through from the environment / .env, deliberately no
+  # default -- the api and worker refuse to start without it unless
+  # SINGLE_USER_MODE=true. See docs/deployment.md.
+  SETTINGS_ENCRYPTION_KEY:
+
+x-claude-environment: &claude-environment
+  # Preferred login: a long-lived token (`claude setup-token`) stored as
+  # <dir>/oauth-token (0600). The adapter reads it from this file and hands
+  # it only to the CLI subprocess. .credentials.json stays as the fallback.
+  # Unprivileged uid/gid the adapter drops the CLI child to (GL#12, R-030);
+  # matches `claudecli` in services/app/Dockerfile. AI pools only.
+  CLAUDE_CLI_UID: "10001"
+  CLAUDE_CLI_GID: "10001"
+  CLAUDE_HOST_OAUTH_TOKEN_FILE: /run/claude-host/oauth-token
+  CLAUDE_HOST_CREDENTIALS_FILE: /run/claude-host/.credentials.json
+
 services:
   ui:
     build:
@@ -50,15 +86,8 @@ services:
       start_period: 15s
 
   worker:
-    build:
-      context: ./services/app
-      dockerfile: Dockerfile
-    user: "0:0"  # Root required for the Claude credential mounts below
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    # Pipeline pool: the upload chain and course-document processing.
+    <<: *worker-common
     volumes:
       - ./services/app/app:/app/app
       - ./services/app/prompts:/app/prompts
@@ -70,12 +99,6 @@ services:
       # you only notice if the numbers refuse to move.
       - ./services/app/evals:/app/evals
       - ./data:/app/data
-      # run_backup (beat, BACKUP_ENABLED=true) execs /app/scripts/backup.sh and
-      # writes to /app/backups. Neither is in the image (build context is
-      # services/app), and the container filesystem is lost on redeploy, so both
-      # come from the host. GL#24.
-      - ./scripts/backup.sh:/app/scripts/backup.sh:ro
-      - ./backups:/app/backups
       # The Claude CLI is installed in the image (see services/app/Dockerfile) —
       # do NOT bind-mount a host binary over /usr/local/bin/claude. That path is
       # a symlink to .../claude-code/bin/claude.exe; Docker resolves the symlink
@@ -90,25 +113,92 @@ services:
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/.credentials.json:/root/.claude/.credentials.json:ro
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/settings.json:/root/.claude/settings.json:ro
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}:/run/claude-host:ro
-    env_file:
-      - .env
     environment:
-      # SEC-06: passed through from the environment / .env, deliberately no
-      # default -- the api and worker refuse to start without it unless
-      # SINGLE_USER_MODE=true. See docs/deployment.md.
-      SETTINGS_ENCRYPTION_KEY:
-      # Preferred login: a long-lived token (`claude setup-token`) stored as
-      # <dir>/oauth-token (0600). The adapter reads it from this file and hands
-      # it only to the CLI subprocess. .credentials.json stays as the fallback.
-      # Unprivileged uid/gid the adapter drops the CLI child to (GL#12, R-030);
-      # matches `claudecli` in services/app/Dockerfile. Worker only.
-      CLAUDE_CLI_UID: "10001"
-      CLAUDE_CLI_GID: "10001"
-      CLAUDE_HOST_OAUTH_TOKEN_FILE: /run/claude-host/oauth-token
-      CLAUDE_HOST_CREDENTIALS_FILE: /run/claude-host/.credentials.json
-    command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=2
+      <<: [*worker-environment, *claude-environment]
+    command: celery -A app.worker:celery_app worker --loglevel=info -Q pipeline,celery -n pipeline@%h --concurrency=2
     healthcheck:
-      test: ["CMD-SHELL", "celery -A app.worker:celery_app inspect ping --timeout 5"]
+      # -d targets this node only: an un-targeted ping is answered by ANY worker
+      # on the broker, so a dead node would pass on its siblings' replies.
+      test: ["CMD-SHELL", "celery -A app.worker:celery_app inspect ping -d pipeline@$$HOSTNAME --timeout 5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  worker-ondemand:
+    # On-demand AI pool: targeted generation and concept extraction.
+    <<: *worker-common
+    volumes:
+      - ./services/app/app:/app/app
+      - ./services/app/prompts:/app/prompts
+      # evals/ sits BESIDE app/, not inside it, so the mount above does not
+      # cover it and the container runs the copy baked into the image.
+      # Editing evals/scoring.py and re-running `cli evals` then silently
+      # measures the OLD scorer — that happened, and produced a run labelled
+      # as testing a fix it had never loaded. Nothing surfaces the mismatch;
+      # you only notice if the numbers refuse to move.
+      - ./services/app/evals:/app/evals
+      - ./data:/app/data
+      # The Claude CLI is installed in the image (see services/app/Dockerfile) —
+      # do NOT bind-mount a host binary over /usr/local/bin/claude. That path is
+      # a symlink to .../claude-code/bin/claude.exe; Docker resolves the symlink
+      # and mounts onto the .exe target, so node then refuses to load it
+      # (ERR_UNKNOWN_FILE_EXTENSION). Only credentials come from the host.
+      # Credentials come ONLY from the dedicated service-login directory
+      # (STUDYAIO_CLAUDE_LOGIN_DIR, see scripts/setup-claude-login.sh), never
+      # the operator's personal ~/.claude (R-025: transcripts, history and
+      # plugins must not be visible to a worker that feeds untrusted text to
+      # `claude -p`). Read-only on purpose: a writable mount would let a
+      # compromised worker plant hooks into the host's Claude config.
+      - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/.credentials.json:/root/.claude/.credentials.json:ro
+      - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}/settings.json:/root/.claude/settings.json:ro
+      - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}:/run/claude-host:ro
+    environment:
+      <<: [*worker-environment, *claude-environment]
+    command: celery -A app.worker:celery_app worker --loglevel=info -Q ai_ondemand -n ondemand@%h --concurrency=2
+    healthcheck:
+      # -d targets this node only: an un-targeted ping is answered by ANY worker
+      # on the broker, so a dead node would pass on its siblings' replies.
+      test: ["CMD-SHELL", "celery -A app.worker:celery_app inspect ping -d ondemand@$$HOSTNAME --timeout 5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  worker-maintenance:
+    # Maintenance pool: beat jobs, backups, re-embedding. No Claude login (it
+    # still gets .env, so instance AI keys and SETTINGS_ENCRYPTION_KEY).
+    <<: *worker-common
+    # Not root: the root in x-worker-common exists for the Claude credential
+    # mounts, which this pool does not have. The image's own unprivileged user;
+    # the overlays inherit this. It needs ./backups writable and ./data
+    # readable by that uid (docs/deployment.md "Maintenance pool user").
+    user: "studyaio:studyaio"
+    volumes:
+      - ./services/app/app:/app/app
+      - ./services/app/prompts:/app/prompts
+      # evals/ sits BESIDE app/, not inside it, so the mount above does not
+      # cover it and the container runs the copy baked into the image.
+      # Editing evals/scoring.py and re-running `cli evals` then silently
+      # measures the OLD scorer — that happened, and produced a run labelled
+      # as testing a fix it had never loaded. Nothing surfaces the mismatch;
+      # you only notice if the numbers refuse to move.
+      - ./services/app/evals:/app/evals
+      - ./data:/app/data
+      # run_backup (beat, BACKUP_ENABLED=true) execs /app/scripts/backup.sh and
+      # writes to /app/backups. Neither is in the image (build context is
+      # services/app), and the container filesystem is lost on redeploy, so both
+      # come from the host. GL#24. run_backup is routed to the maintenance queue
+      # (TECH-09), so only worker-maintenance needs these.
+      - ./scripts/backup.sh:/app/scripts/backup.sh:ro
+      - ./backups:/app/backups
+    environment:
+      <<: *worker-environment
+    command: celery -A app.worker:celery_app worker --loglevel=info -Q maintenance -n maintenance@%h --concurrency=1
+    healthcheck:
+      # -d targets this node only: an un-targeted ping is answered by ANY worker
+      # on the broker, so a dead node would pass on its siblings' replies.
+      test: ["CMD-SHELL", "celery -A app.worker:celery_app inspect ping -d maintenance@$$HOSTNAME --timeout 5"]
       interval: 30s
       timeout: 10s
       retries: 3

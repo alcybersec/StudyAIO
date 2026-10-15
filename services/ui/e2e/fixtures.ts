@@ -1,8 +1,52 @@
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
-import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test'
+import {
+  test as playwrightTest,
+  expect,
+  type APIRequestContext,
+  type Page,
+  type Request,
+} from '@playwright/test'
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:8000'
+
+// The app shell holds one pipeline event stream (SSE) open on every page, so
+// Playwright's own 'networkidle' never fires. `settle` is the same idea with
+// that one long-lived request left out.
+const LONG_LIVED = /\/api\/uploads\/pipeline-events/
+const inFlight = new WeakMap<Page, Set<Request>>()
+
+const base = playwrightTest.extend({
+  page: async ({ page }, provide) => {
+    const pending = new Set<Request>()
+    inFlight.set(page, pending)
+    const done = (r: Request) => pending.delete(r)
+    page.on('request', (r) => {
+      if (!LONG_LIVED.test(r.url())) pending.add(r)
+    })
+    page.on('requestfinished', done)
+    page.on('requestfailed', done)
+    await provide(page)
+  },
+})
+
+/**
+ * Wait for the page to load and for ordinary requests to stay quiet for
+ * `quietMs`. Use instead of `waitForLoadState('networkidle')`.
+ */
+export async function settle(page: Page, quietMs = 500, timeout = 15_000): Promise<void> {
+  await page.waitForLoadState('load')
+  const pending = inFlight.get(page)
+  if (!pending) throw new Error('settle() needs the page fixture from ./fixtures')
+  const deadline = Date.now() + timeout
+  let quietSince = Date.now()
+  while (Date.now() < deadline) {
+    if (pending.size > 0) quietSince = Date.now()
+    else if (Date.now() - quietSince >= quietMs) return
+    await page.waitForTimeout(50)
+  }
+  throw new Error(`settle(): ${pending.size} request(s) still in flight after ${timeout}ms`)
+}
 
 /** Generate a unique test email */
 export function testEmail(): string {
@@ -99,13 +143,13 @@ export async function seedCourse(
  * Needs DATABASE_URL_SYNC in the environment, as the e2e-tests job provides.
  * Fails loudly -- a missing seed must never turn into a skipped test.
  */
-export function seedDb(...args: string[]): void {
+export function seedDb(...args: string[]): string {
   const script = path.resolve(process.cwd(), 'e2e', 'seed_e2e.py')
   try {
-    execFileSync(process.env.E2E_PYTHON || 'python3', [script, ...args], {
+    return execFileSync(process.env.E2E_PYTHON || 'python3', [script, ...args], {
       stdio: 'pipe',
       env: process.env,
-    })
+    }).toString()
   } catch (err) {
     const e = err as { stderr?: Buffer; message: string }
     throw new Error(`seed_e2e.py ${args.join(' ')} failed: ${e.stderr?.toString() || e.message}`)
@@ -115,6 +159,48 @@ export function seedDb(...args: string[]): void {
 /** Seed an ordinary, AI-consented user who can log in (spends no register budget). */
 export function seedUser(email: string, password: string): void {
   seedDb('user', email, password)
+}
+
+/**
+ * Seed an ordinary user AND mint its session cookies without calling /login.
+ * Login is 5/minute per client, shared by every spec file, and a retried
+ * beforeAll that logs in again can be throttled. Returns a Playwright
+ * storageState to hand to browser.newContext / request.newContext.
+ */
+export function seedSession(email: string, password: string): {
+  cookies: Array<{
+    name: string
+    value: string
+    domain: string
+    path: string
+    expires: number
+    httpOnly: boolean
+    secure: boolean
+    sameSite: 'Lax'
+  }>
+  origins: []
+} {
+  // The app's logger may share stdout; the cookies are the last JSON object line.
+  const line = seedDb('session', email, password)
+    .split('\n')
+    .reverse()
+    .find((l) => l.startsWith('{"'))
+  if (!line) throw new Error('seed_e2e.py session printed no cookies')
+  const tokens = JSON.parse(line) as Record<string, string>
+  const domain = new URL(API_URL).hostname
+  return {
+    cookies: Object.entries(tokens).map(([name, value]) => ({
+      name,
+      value,
+      domain,
+      path: '/',
+      expires: -1,
+      httpOnly: true,
+      secure: false,
+      sameSite: 'Lax' as const,
+    })),
+    origins: [],
+  }
 }
 
 /** Seed a course (and optional concepts) owned by the self-hosted default user. */
@@ -128,6 +214,14 @@ export function seedCourseRow(code: string, concepts = 0): void {
  */
 export function seedWeakSpotCourse(code: string): void {
   seedDb('weakspots', code)
+}
+
+/**
+ * Seed a course for the self-hosted default user with one lecture in week 1
+ * (two cards, one multiple-choice question) and no lecture in week 2.
+ */
+export function seedStudyItems(code: string): void {
+  seedDb('studyitems', code)
 }
 
 /** Delete a seeded course (and its children) through the public API. */

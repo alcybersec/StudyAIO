@@ -2,49 +2,54 @@
   "kind": "flashcards",
   "items": [
     {
-      "front": "Which condition does hold and wait describe?",
+      "front": "State the mutual exclusion condition for deadlock.",
+      "back": "A resource is held by one process at a time.",
+      "tags": [
+        "coffman conditions",
+        "deadlock"
+      ],
+      "source_page_ref": 1,
+      "expect": "keep"
+    },
+    {
+      "front": "State the hold and wait condition for deadlock.",
       "back": "A process holds one resource while waiting for another.",
       "tags": [
-        "coffman conditions"
+        "coffman conditions",
+        "deadlock"
       ],
       "source_page_ref": 1,
       "expect": "keep"
     },
     {
-      "front": "How does a global resource order prevent deadlock?",
-      "back": "Acquiring resources in that order breaks circular wait.",
+      "front": "State the no preemption condition for deadlock.",
+      "back": "Resources cannot be taken away from a process holding them.",
       "tags": [
-        "deadlock prevention"
+        "coffman conditions",
+        "deadlock"
       ],
       "source_page_ref": 1,
       "expect": "keep"
     },
     {
-      "front": "What does no preemption mean for a resource?",
-      "back": "The resource cannot be taken away from the process holding it.",
+      "front": "State the circular wait condition for deadlock.",
+      "back": "A cycle of processes each waiting on the next.",
       "tags": [
-        "coffman conditions"
+        "coffman conditions",
+        "deadlock"
       ],
       "source_page_ref": 1,
       "expect": "keep"
     },
     {
-      "front": "Name the four conditions for a deadlock.",
-      "back": "Mutual exclusion, hold and wait, no preemption, circular wait.",
+      "front": "How can deadlock be prevented by breaking circular wait?",
+      "back": "Impose a global order on resources and acquire them in that order.",
       "tags": [
-        "coffman conditions"
+        "deadlock prevention",
+        "circular wait"
       ],
       "source_page_ref": 1,
-      "expect": "duplicate"
-    },
-    {
-      "front": "What is a livelock?",
-      "back": "Processes keep changing state without progress.",
-      "tags": [
-        "deadlock prevention"
-      ],
-      "source_page_ref": 0,
-      "expect": "uncited"
+      "expect": "keep"
     }
   ]
 }

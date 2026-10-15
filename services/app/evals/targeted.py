@@ -2,8 +2,7 @@
 
 A case is a synthetic lecture week (the pages of an existing summary case), the
 student's weak topics and the stems they already have. A stored fixture is what a
-model produced for it (hand-written until a live run replaces it, see
-``evals/BASELINE.md``). The fixture is scored **through the same pure rules the
+model produced for it (see ``evals/BASELINE.md`` for its provenance). The fixture is scored **through the same pure rules the
 worker task applies** (:func:`app.pipeline.targeted_items.select_items`), so the
 gate protects the contract, not the model:
 
@@ -33,10 +32,13 @@ FIXTURES_DIR = EVALS_DIR / "targeted_fixtures"
 SOURCE_CASES_DIR = EVALS_DIR / "cases"
 BASELINE_PATH = EVALS_DIR / "targeted_baseline.json"
 
-#: The bars (M33-S2-AI-021). Citation validity is exact: an item that cites a page
-#: the lecture does not have, or a page that does not support it, is a defect.
+#: The bars (M33-S2-AI-021, citation bar relaxed by the 2026-10-15 decision). The
+#: in-lecture page filter (``select_items``) guarantees every kept item cites a page
+#: that exists; whether that page is the *right* one cannot be enforced by a
+#: filter, so the aggregate citation validity must be at least ``CITATION_FLOOR``
+#: and each unsupported citation is reported, not silently absorbed.
 ON_TOPIC_FLOOR = 0.80
-CITATION_FLOOR = 1.0
+CITATION_FLOOR = 0.95
 DEDUP_FLOOR = 0.95
 #: How far an aggregate may fall below the baseline before ``--check`` fails.
 DEFAULT_THRESHOLD = 0.02
@@ -248,8 +250,8 @@ def check_targeted(run: TargetedRun, baseline: dict, *, expect_all_cases: bool =
     """The CI gate. Returns failures; empty means pass.
 
     Fails when: a case has no fixture; the baseline and the case set disagree; any
-    kept item cites an invalid or unsupporting page; aggregate on-topic is below
-    ``ON_TOPIC_FLOOR`` or dedup below ``DEDUP_FLOOR``; or an aggregate has fallen
+    aggregate citation validity is below ``CITATION_FLOOR``; aggregate on-topic is
+    below ``ON_TOPIC_FLOOR`` or dedup below ``DEDUP_FLOOR``; or an aggregate has fallen
     more than the threshold below the baseline's.
     """
     failures = [f"{cid}: no stored targeted fixture" for cid in run.missing_fixtures]
@@ -263,18 +265,21 @@ def check_targeted(run: TargetedRun, baseline: dict, *, expect_all_cases: bool =
     for score in run.scores:
         if score.case_id not in known:
             failures.append(f"{score.case_id}: not in baseline (refresh with --write-baseline)")
-        if score.citation_validity < CITATION_FLOOR:
-            failures.append(
-                f"{score.case_id}: citation validity {score.citation_validity:.2f} "
-                f"(must be {CITATION_FLOOR:.1f}): {'; '.join(score.problems)}"
-            )
+    if run.citation_validity < CITATION_FLOOR - 1e-9:
+        detail = "; ".join(
+            f"{s.case_id}: {p}" for s in run.scores for p in s.problems if "does not support" in p
+        )
+        failures.append(
+            f"citation validity {run.citation_validity:.3f} is below {CITATION_FLOOR}"
+            + (f" ({detail})" if detail else "")
+        )
     if run.on_topic < ON_TOPIC_FLOOR:
         failures.append(f"on-topic {run.on_topic:.3f} is below {ON_TOPIC_FLOOR}")
     if run.dedup < DEDUP_FLOOR:
         failures.append(f"dedup {run.dedup:.3f} is below {DEDUP_FLOOR}")
 
     threshold = float(baseline.get("threshold", DEFAULT_THRESHOLD))
-    for name in ("on_topic", "dedup", "filter_accuracy"):
+    for name in ("on_topic", "citation_validity", "dedup", "filter_accuracy"):
         base = float(baseline["aggregate"][name])
         now = getattr(run, name)
         if now < base - threshold:
@@ -299,7 +304,7 @@ def format_targeted_report(run: TargetedRun, baseline: dict | None, failures: li
     lines += [
         "",
         f"aggregate: on-topic {run.on_topic:.3f} (>= {ON_TOPIC_FLOOR}), "
-        f"citation validity {run.citation_validity:.3f} (= {CITATION_FLOOR}), "
+        f"citation validity {run.citation_validity:.3f} (>= {CITATION_FLOOR}), "
         f"dedup {run.dedup:.3f} (>= {DEDUP_FLOOR}), filter accuracy {run.filter_accuracy:.3f}",
     ]
     if baseline is not None:

@@ -1,5 +1,7 @@
 """Concept service — business logic for knowledge graph extraction and queries."""
 
+import asyncio
+
 import structlog
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +16,7 @@ from app.services import billing_service
 logger = structlog.get_logger()
 
 
-def _embed_concepts(concepts: list[Concept]) -> None:
+async def _embed_concepts(concepts: list[Concept]) -> None:
     """Attach embeddings to concepts in place, tolerating provider failures.
 
     Embedding is best-effort: a provider that is down or misconfigured must not
@@ -30,6 +32,10 @@ def _embed_concepts(concepts: list[Concept]) -> None:
     So infrastructure failures are swallowed and programming errors are not.
     If this function is wrong, the tests and the pipeline say so.
 
+    The encode runs on a worker thread (`asyncio.to_thread`): the local model is
+    CPU-bound for seconds and must not freeze the event loop. The caller must not
+    hold a transaction across this call (GL#50).
+
     Args:
         concepts: Concepts whose `embedding` is unset. Mutated in place.
     """
@@ -38,7 +44,8 @@ def _embed_concepts(concepts: list[Concept]) -> None:
     texts = [f"{c.name}: {c.description}" for c in concepts]
 
     try:
-        vectors = get_embedding_provider().embed_texts(texts)
+        provider = get_embedding_provider()
+        vectors = await asyncio.to_thread(provider.embed_texts, texts)
     except (ImportError, AttributeError, TypeError):
         # A missing module, a method that is not there, a bad signature — these
         # are defects in this code, not a provider having a bad day.
@@ -103,6 +110,11 @@ async def extract_and_save_concepts(
     # No output_language: this stage's output is parsed, not read.
     # See AgentAdapter.with_language.
     agent = get_agent(user_settings=user_agent_config)
+
+    # Release the connection before the provider call: it takes seconds to minutes
+    # and a transaction left open across it holds a Postgres connection idle (GL#50).
+    # The writes below start a fresh transaction on the same session.
+    await session.commit()
     ai_result: ConceptExtractionResult = await agent.extract_concepts(
         text=extraction_text,
         existing_concepts=existing_names if existing_names else None,
@@ -172,7 +184,10 @@ async def extract_and_save_concepts(
     # concept. The local model pays its cost per call, not per text.
     pending = [c for c in concept_map.values() if c.embedding is None]
     if pending:
-        _embed_concepts(pending)
+        # Persist the concepts (and the metering row) first so no transaction is
+        # open while the encode runs; the vectors land with the relations below.
+        await session.commit()
+        await _embed_concepts(pending)
 
     # Save relations (dedup by unique constraint)
     relation_count = 0

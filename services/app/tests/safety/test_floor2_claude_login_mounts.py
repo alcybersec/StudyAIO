@@ -9,7 +9,11 @@ be visible to a root process that feeds untrusted lecture text to ``claude -p``.
 These are static checks over every tracked compose file, so a new service or
 overlay that mounts a Claude directory fails here before it ships:
 
-* only ``worker`` mounts anything Claude-related; api, beat and the rest get nothing;
+* only the AI worker pools in ``CLAUDE_LOGIN_SERVICES`` (``worker`` and, since the
+  GL#51 queue split, ``worker-ondemand``) mount anything Claude-related; api, beat,
+  ``worker-maintenance`` and the rest get nothing, and a new service fails until it
+  is listed here with a reason (``test_floor2_worker_pool_credentials`` ties the
+  list to the queues each pool consumes);
 * every such mount is sourced from the dedicated-dir variable, read-only, onto
   one of three known targets (no directory overlay onto ``/root/.claude``);
 * a file that pins ``.credentials.json`` is always paired with the directory
@@ -47,6 +51,14 @@ ALLOWED_TARGETS = {
     "/root/.claude/settings.json": "/settings.json",
 }
 BASE = "docker-compose.yml"
+
+#: The only compose services that may see the Claude login (the mounts and the
+#: ``CLAUDE_HOST_*`` paths). Exact names, so ``worker-maintenance``, ``api``,
+#: ``beat``, ``ui`` and any service added later fail until listed here.
+#: ``worker`` consumes ``pipeline`` (classify, summarize, assets and courseops
+#: call the agent); ``worker-ondemand`` consumes ``ai_ondemand`` (targeted
+#: generation and concept extraction call the agent). M33-S3-SAFETY-059, GL#51.
+CLAUDE_LOGIN_SERVICES = frozenset({"worker", "worker-ondemand"})
 
 
 class _Tagged:
@@ -142,19 +154,23 @@ def _cases() -> list[tuple[str, str, tuple[str, str, str]]]:
 
 
 def test_floor2_compose_volume_parser_reads_the_dedicated_dir_mounts():
-    """Guard the guard: the parser must see the worker's three Claude mounts in base."""
+    """Guard the guard: the parser sees each AI pool's three Claude mounts in base."""
     base = [c for c in _cases() if c[0] == BASE]
-    targets = sorted(vol[1] for _f, _s, vol in base)
-    assert targets == sorted(ALLOWED_TARGETS), (
-        f"expected the worker's three dedicated-dir mounts in {BASE}, parsed {base}"
-    )
+    for svc in sorted(CLAUDE_LOGIN_SERVICES):
+        targets = sorted(vol[1] for _f, s, vol in base if s == svc)
+        assert targets == sorted(ALLOWED_TARGETS), (
+            f"expected {svc}'s three dedicated-dir mounts in {BASE}, parsed {base}"
+        )
 
 
-def test_floor2_only_the_worker_mounts_a_claude_login():
-    """api, beat, ui, db, redis and any future service never see a Claude login."""
-    leaks = [f"{f}: {svc} mounts {vol}" for f, svc, vol in _cases() if svc != "worker"]
-    assert not leaks, "Floor 2 (R-025): a non-worker service mounts a Claude login:\n" + "\n".join(
-        leaks
+def test_floor2_only_the_ai_worker_pools_mount_a_claude_login():
+    """api, beat, worker-maintenance, ui, db, redis and any new service see no login."""
+    leaks = [
+        f"{f}: {svc} mounts {vol}" for f, svc, vol in _cases() if svc not in CLAUDE_LOGIN_SERVICES
+    ]
+    assert not leaks, (
+        f"Floor 2 (R-025): a service outside {sorted(CLAUDE_LOGIN_SERVICES)} mounts a "
+        "Claude login:\n" + "\n".join(leaks)
     )
 
 
@@ -181,32 +197,36 @@ def test_floor2_pinned_credentials_file_is_paired_with_the_tracking_dir_mount():
     mount at ``/run/claude-host`` (a directory bind tracks renames), and the
     variable must survive every overlay's merge.
     """
-    per_file: dict[str, set[str]] = {}
-    for f, _svc, (_src, dst, _mode) in _cases():
-        per_file.setdefault(f, set()).add(dst)
-    for f, targets in per_file.items():
+    per_service: dict[tuple[str, str], set[str]] = {}
+    for f, svc, (_src, dst, _mode) in _cases():
+        per_service.setdefault((f, svc), set()).add(dst)
+    for (f, svc), targets in per_service.items():
         if "/root/.claude/.credentials.json" in targets:
             assert HOST_DIR_TARGET in targets, (
-                f"{f}: worker pins .credentials.json without the {HOST_DIR_TARGET} dir mount; "
+                f"{f}: {svc} pins .credentials.json without the {HOST_DIR_TARGET} dir mount; "
                 "the GL#8 retry would re-read the same stale inode"
             )
 
-    base_env, _ = _environment(_load(REPO_ROOT / BASE)["services"]["worker"])
     want = f"{HOST_DIR_TARGET}/.credentials.json"
-    assert base_env.get("CLAUDE_HOST_CREDENTIALS_FILE") == want, (
-        f"{BASE}: worker CLAUDE_HOST_CREDENTIALS_FILE must be {want!r}, "
-        f"got {base_env.get('CLAUDE_HOST_CREDENTIALS_FILE')!r}"
-    )
+    base_services = _load(REPO_ROOT / BASE)["services"]
+    for svc in sorted(CLAUDE_LOGIN_SERVICES):
+        base_env, _ = _environment(base_services[svc])
+        assert base_env.get("CLAUDE_HOST_CREDENTIALS_FILE") == want, (
+            f"{BASE}: {svc} CLAUDE_HOST_CREDENTIALS_FILE must be {want!r}, "
+            f"got {base_env.get('CLAUDE_HOST_CREDENTIALS_FILE')!r}"
+        )
     for path in _compose_files():
-        worker = (_load(path).get("services") or {}).get("worker") or {}
-        if "environment" not in worker:
-            continue
-        env, overridden = _environment(worker)
+        services = _load(path).get("services") or {}
         rel = path.relative_to(REPO_ROOT).as_posix()
-        if overridden or "CLAUDE_HOST_CREDENTIALS_FILE" in env:
-            assert env.get("CLAUDE_HOST_CREDENTIALS_FILE") == want, (
-                f"{rel}: worker environment drops or repoints CLAUDE_HOST_CREDENTIALS_FILE"
-            )
+        for svc in sorted(CLAUDE_LOGIN_SERVICES):
+            worker = services.get(svc) or {}
+            if "environment" not in worker:
+                continue
+            env, overridden = _environment(worker)
+            if overridden or "CLAUDE_HOST_CREDENTIALS_FILE" in env:
+                assert env.get("CLAUDE_HOST_CREDENTIALS_FILE") == want, (
+                    f"{rel}: {svc} environment drops or repoints CLAUDE_HOST_CREDENTIALS_FILE"
+                )
 
 
 def _live_lines(path: pathlib.Path) -> list[tuple[int, str]]:

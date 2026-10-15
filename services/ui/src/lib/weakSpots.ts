@@ -1,6 +1,8 @@
 import i18n from '../i18n'
 import { AppApiError } from '../api/errors'
+import type { PlanRunState } from './planRun'
 import type {
+  DiagnosticResponse,
   TargetedGeneration,
   TonightItem,
   TonightPlan,
@@ -155,4 +157,17 @@ export function focusWhy(status: WeakSpotStatus, daysToExam: number | null): str
   if (daysToExam == null) return state
   if (daysToExam === 0) return i18n.t('{{state}} · exam today', { state })
   return i18n.t('{{state}} · exam in {{days}}d', { state, days: daysToExam })
+}
+
+/** Minutes the study runner budgets per quiz question (timed_session_service). */
+export const MINUTES_PER_QUIZ = 3
+
+/** Router state that hands a diagnostic set to the timed study runner. */
+export function diagnosticRun(d: DiagnosticResponse, courseCode: string): PlanRunState {
+  return {
+    cardIds: [],
+    quizIds: d.question_ids,
+    minutes: d.question_ids.length * MINUTES_PER_QUIZ,
+    courseCodes: [courseCode],
+  }
 }

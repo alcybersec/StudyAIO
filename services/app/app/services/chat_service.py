@@ -1,5 +1,6 @@
 """Chat service — persistent AI study companion conversations with RAG."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -451,7 +452,12 @@ async def send_message(
         search_ok = False
         try:
             provider = get_embedding_provider()
-            query_embeddings = provider.embed_texts([_retrieval_query(content, plan, recent_user)])
+            # Release the connection and keep the loop free while the (slow, CPU-bound)
+            # encode runs: no transaction across a provider call (GL#50).
+            await session.commit()
+            query_embeddings = await asyncio.to_thread(
+                provider.embed_texts, [_retrieval_query(content, plan, recent_user)]
+            )
             if query_embeddings:
                 raw = await _search(session, user_id, plan, query_embeddings[0])
                 search_ok = True
@@ -477,6 +483,9 @@ async def send_message(
             context_question = await _with_week_summary(
                 session, user_id, plan, content, context_question, chunks
             )
+            # Release the connection before the (seconds-long) answer call: the
+            # writes below start a fresh transaction (GL#50).
+            await session.commit()
             answer_result = await agent.answer_question(context_question, chunks)
             answer_text = answer_result.answer
             # Sources are derived from the chunk order the [n] markers refer to,
@@ -601,7 +610,12 @@ async def stream_message(
         search_ok = False
         try:
             provider = get_embedding_provider()
-            query_embeddings = provider.embed_texts([_retrieval_query(content, plan, recent_user)])
+            # Release the connection and keep the loop free while the (slow, CPU-bound)
+            # encode runs: no transaction across a provider call (GL#50).
+            await session.commit()
+            query_embeddings = await asyncio.to_thread(
+                provider.embed_texts, [_retrieval_query(content, plan, recent_user)]
+            )
             if query_embeddings:
                 raw = await _search(session, user_id, plan, query_embeddings[0])
                 search_ok = True
@@ -635,6 +649,9 @@ async def stream_message(
             context_question = await _with_week_summary(
                 session, user_id, plan, content, context_question, chunks
             )
+            # Release the connection before the (seconds-long) answer call: the
+            # writes below start a fresh transaction (GL#50).
+            await session.commit()
             async for token in agent.stream_answer(context_question, chunks):
                 full_text += token
                 yield {"event": "token", "data": token}

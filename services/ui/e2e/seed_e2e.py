@@ -14,13 +14,16 @@ e2e-tests job already exports it.
     python3 e2e/seed_e2e.py course CODE [--concepts N]
     python3 e2e/seed_e2e.py admin EMAIL PASSWORD
     python3 e2e/seed_e2e.py user EMAIL PASSWORD
+    python3 e2e/seed_e2e.py session EMAIL PASSWORD   # as `user`, then print the session cookies as JSON
     python3 e2e/seed_e2e.py weakspots CODE
+    python3 e2e/seed_e2e.py studyitems CODE
 
 Both are idempotent. `course` seeds for the owner a self-hosted API resolves
 requests to (the default admin, created here if no API request has made it yet).
 """
 
 import argparse
+import json
 import os
 import sys
 from datetime import UTC, datetime, timedelta
@@ -39,7 +42,13 @@ from app.api.deps import (  # noqa: E402
     DEFAULT_ADMIN_USERNAME,
 )
 from app.config import settings
-from app.core.auth import hash_password  # noqa: E402
+from app.core.auth import (  # noqa: E402
+    ACCESS_TOKEN_COOKIE,
+    REFRESH_TOKEN_COOKIE,
+    create_access_token,
+    create_refresh_token,
+    hash_password,
+)
 from app.models.artifact import LectureArtifact  # noqa: E402
 from app.models.concept import Concept  # noqa: E402
 from app.models.course import Course  # noqa: E402
@@ -167,7 +176,9 @@ def seed_weakspots(session: Session, code: str) -> None:
             questions.append(q)
         session.flush()
         for q, ok in zip(questions, outcomes):
-            session.add(QuizAttempt(quiz_question_id=q.id, selected_answer="x", is_correct=ok))
+            session.add(
+                QuizAttempt(quiz_question_id=q.id, selected_answer="x", is_correct=ok)
+            )
     for i in range(3):
         card = Flashcard(
             course_id=course.id,
@@ -198,6 +209,68 @@ def seed_weakspots(session: Session, code: str) -> None:
             title=f"{code} midterm",
             exam_date=now + timedelta(days=5),
             weeks_scope=[1, 2, 3],
+        )
+    )
+
+
+def seed_studyitems(session: Session, code: str) -> None:
+    """A course with one lecture in week 1 holding two cards and a question.
+
+    Week 2 deliberately has no lecture, so adding an item there is refused with
+    409 `no_source_artifact`. Pipeline-origin rows, so "Yours" only appears once
+    a spec edits or adds. Idempotent: a course that already has cards is kept.
+    """
+    owner = _owner(session)
+    course = session.execute(
+        select(Course).where(Course.code == code, Course.user_id == owner.id)
+    ).scalar_one_or_none()
+    if course is None:
+        course = Course(code=code, name=f"{code} (e2e)", user_id=owner.id)
+        session.add(course)
+        session.flush()
+    if session.execute(
+        select(Flashcard.id).where(Flashcard.course_id == course.id).limit(1)
+    ).first():
+        return
+    artifact = LectureArtifact(
+        user_id=owner.id,
+        course_id=course.id,
+        week=1,
+        title=f"{code} week 1",
+        original_filename=f"{code}-w1.pdf",
+        file_path=f"uploads/e2e-{code}-w1.pdf",
+        file_type="pdf",
+        sha256=f"items{code}".encode().hex().ljust(64, "0")[:64],
+        file_size_bytes=1,
+        status="processed",
+    )
+    session.add(artifact)
+    session.flush()
+    for i, (front, back) in enumerate(
+        (("Seed front one", "Seed back one"), ("Seed front two", "Seed back two"))
+    ):
+        session.add(
+            Flashcard(
+                course_id=course.id,
+                week=1,
+                front=front,
+                back=back,
+                tags=[],
+                source_artifact_id=artifact.id,
+                source_page_ref=i + 1,
+            )
+        )
+    session.add(
+        QuizQuestion(
+            course_id=course.id,
+            week=1,
+            question_type="multiple_choice",
+            question="Seed which letter is second?",
+            options_json=["A. Alpha", "B. Beta", "C. Gamma"],
+            correct_answer="B",
+            explanation="Beta is second.",
+            source_artifact_id=artifact.id,
+            source_page_ref=1,
         )
     )
 
@@ -236,12 +309,28 @@ def seed_user(session: Session, email: str, password: str) -> None:
     user.ai_processing_consent_version = 1
 
 
+def session_cookies(session: Session, email: str) -> dict[str, str]:
+    """Mint the auth cookies for a seeded user, without spending the login budget.
+
+    Login is limited to 5/minute per client and every spec file shares it, so a
+    retried beforeAll that logs in can be throttled. The tokens are signed with
+    the same JWT secret the API process uses (the CI job exports it).
+    """
+    user = session.execute(select(User).where(User.email == email)).scalar_one()
+    return {
+        ACCESS_TOKEN_COOKIE: create_access_token(user.id, user.role, user.tier),
+        REFRESH_TOKEN_COOKIE: create_refresh_token(user.id),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("course")
     c.add_argument("code")
     c.add_argument("--concepts", type=int, default=0)
+    si = sub.add_parser("studyitems")
+    si.add_argument("code")
     w = sub.add_parser("weakspots")
     w.add_argument("code")
     a = sub.add_parser("admin")
@@ -250,6 +339,9 @@ def main() -> None:
     u = sub.add_parser("user")
     u.add_argument("email")
     u.add_argument("password")
+    ss = sub.add_parser("session")
+    ss.add_argument("email")
+    ss.add_argument("password")
     args = parser.parse_args()
 
     url = os.environ.get("DATABASE_URL_SYNC") or settings.database_url_sync
@@ -257,10 +349,16 @@ def main() -> None:
     with Session(engine) as session:
         if args.cmd == "course":
             seed_course(session, args.code, args.concepts)
+        elif args.cmd == "studyitems":
+            seed_studyitems(session, args.code)
         elif args.cmd == "weakspots":
             seed_weakspots(session, args.code)
         elif args.cmd == "user":
             seed_user(session, args.email, args.password)
+        elif args.cmd == "session":
+            seed_user(session, args.email, args.password)
+            session.flush()
+            print(json.dumps(session_cookies(session, args.email)))
         else:
             seed_admin(session, args.email, args.password)
         session.commit()

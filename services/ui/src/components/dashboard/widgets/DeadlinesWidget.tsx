@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useDashboardDeadlines } from '../../../hooks/useApi'
+import { useDashboardCourses, useDashboardDeadlines } from '../../../hooks/useApi'
 import { Skeleton } from '../../ui'
 import { WidgetShell } from './WidgetShell'
 import { selectWidgetState } from './widgetState'
@@ -23,6 +23,8 @@ export const DeadlinesWidget = memo(function DeadlinesWidget() {
   const { t } = useTranslation()
 
   const { data, isLoading, isError, refetch } = useDashboardDeadlines()
+  // The outline is imported per course, so the call to action needs one to point at.
+  const courseCode = useDashboardCourses().data?.[0]?.code
   // eslint-disable-next-line react-hooks/purity -- capture "now" once per mount for stable countdowns
   const now = useMemo(() => Date.now(), [])
   const state = selectWidgetState({
@@ -38,7 +40,13 @@ export const DeadlinesWidget = memo(function DeadlinesWidget() {
       state={state}
       onRetry={() => refetch()}
       emptyTitle={t('No deadlines')}
-      emptyHint={t('Import a course outline in Course Ops to track deadlines.')}
+      emptyHint={
+        courseCode
+          ? t('Import a course outline in Course Ops to track deadlines.')
+          : t('Upload a lecture first; then add the course outline to track deadlines.')
+      }
+      emptyActionLabel={courseCode ? t('Add a course outline') : t('Upload a lecture')}
+      emptyActionTo={courseCode ? `/courses/${encodeURIComponent(courseCode)}/ops` : '/upload'}
       skeleton={<DeadlinesSkeleton />}
     >
       <ul className="text-[13px] divide-y divide-border">

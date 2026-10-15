@@ -108,6 +108,10 @@ def value(expr: Any, row: Row) -> Any:
         if expr.operator is ops.inv:
             return _not(value(expr.element, row))
         raise Unreadable(f"unary {expr.operator}/{expr.modifier}")
+    if isinstance(expr, Function) and expr.name.lower() in {"upper", "lower"}:
+        (arg,) = expr.clauses
+        v = value(arg, row)
+        return None if v is None else (v.upper() if expr.name.lower() == "upper" else v.lower())
     if isinstance(expr, Function) and expr.name.lower() == "coalesce":
         for clause in expr.clauses:
             v = value(clause, row)

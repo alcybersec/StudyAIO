@@ -42,7 +42,9 @@ export const GamificationWidget = memo(function GamificationWidget() {
       state={state}
       onRetry={() => refetch()}
       emptyTitle={t('No XP yet')}
-      emptyHint={t('Study a few cards to start earning XP.')}
+      emptyHint={t('Cards appear after your first summary. Review a few to start earning XP.')}
+      emptyActionLabel={t('Start studying')}
+      emptyActionTo="/study"
       skeleton={<GamificationSkeleton />}
     >
       {data && (

@@ -142,8 +142,10 @@ GitLab CI (`.gitlab-ci.yml`) runs five stages — `lint`, `test`, `e2e`, `build`
      `SSH_ORIGINAL_COMMAND` — CI cannot run an arbitrary command on the host.
    - `deploy.sh` checks free disk, pins the host `.env` to that tag, pulls, starts
      db/redis, runs `alembic upgrade head` in a one-off container from the new api
-     image, and only then recreates api/worker/beat/ui. A failed migration aborts
-     the deploy with the old containers still running.
+     image, and only then recreates api/the three Celery workers/beat/ui (one `up -d`, so a
+     release that adds a worker service starts it together with the rest). It then
+     pings each Celery node by name and fails the deploy if one does not answer.
+     A failed migration aborts the deploy with the old containers still running.
 
    **Migrations must stay additive and backwards-compatible for one release**
    (new nullable/defaulted columns, new tables; no drops, renames or type
@@ -475,7 +477,9 @@ Metric names carry the `studyaio_` prefix. Two endpoints, neither public:
 | Target | Endpoint | Notes |
 |---|---|---|
 | api | `http://127.0.0.1:8000/metrics` | `PROMETHEUS_ENABLED=true` |
-| worker | `http://127.0.0.1:9101/metrics` | `WORKER_METRICS_PORT=9101`; published on the host loopback only; multiprocess aggregation via the `/tmp/prometheus` tmpfs |
+| worker (pipeline) | `http://127.0.0.1:9101/metrics` | `WORKER_METRICS_PORT=9101` inside each container; published on the host loopback only; multiprocess aggregation via the `/tmp/prometheus` tmpfs |
+| worker-ondemand | `http://127.0.0.1:9102/metrics` | same, host port 9102 |
+| worker-maintenance | `http://127.0.0.1:9103/metrics` | same, host port 9103 |
 
 Configure your reverse proxy to forward only `/api/*` and `/health/*` (the UI's nginx already
 answers `/metrics` with 404), so neither endpoint is reachable from the internet. The api port is still published on the host
@@ -493,7 +497,7 @@ scrape_configs:
       - targets: ["127.0.0.1:8000"]
   - job_name: studyaio-worker
     static_configs:
-      - targets: ["127.0.0.1:9101"]
+      - targets: ["127.0.0.1:9101", "127.0.0.1:9102", "127.0.0.1:9103"]
 ```
 
 Suggested alert rules (confirm exact metric names against `/metrics`):
@@ -515,6 +519,72 @@ Suggested alert rules (confirm exact metric names against `/metrics`):
 curl https://your-domain.com/health
 # {"status": "ok"}
 ```
+
+### Celery workers and queues
+
+Tasks are routed to three queues (`TASK_ROUTES` in `services/app/app/worker.py`), each
+consumed by its own worker service, so a slow beat job or an on-demand generation cannot
+occupy the slots a user's upload is waiting for (TECH-09, GL#51):
+
+| Service | Node name | Queues | Concurrency (dev / prod) | Carries |
+|---|---|---|---|---|
+| `worker` | `pipeline@<host>` | `pipeline`, `celery` | 2 / 4 | upload chain (ingest to assets), course documents; AI credentials |
+| `worker-ondemand` | `ondemand@<host>` | `ai_ondemand` | 2 / 2 | targeted generation, concept extraction; AI credentials |
+| `worker-maintenance` | `maintenance@<host>` | `maintenance` | 1 / 1 | reminders, calendar sync, backups, stuck-job recovery, re-embedding; `data/` plus the backup script and `backups/` mounts; runs as the image user `studyaio`, no Claude login (it still gets `.env`) |
+
+**Maintenance pool user.** `worker-maintenance` runs as the image's unprivileged
+`studyaio` user (uid/gid 999), not root: the root in `x-worker-common` exists for the
+Claude credential mounts, which this pool does not have. "No Claude login" is the whole
+of the difference in credentials. Every pool, this one included, still receives `.env`:
+the instance AI keys and `SETTINGS_ENCRYPTION_KEY`. Splitting `env_file` per pool would
+shrink that and is a possible future hardening; it is not done, because the pools share
+one settings object and each would need its own audited variable list.
+
+Because the bind mounts take the host's ownership, uid 999 must be able to write
+`./backups` and read all of `./data` (the api already runs as 999 and writes `./data`,
+so a working deployment satisfies the second). A `./backups` that Docker auto-created
+(root-owned) or that the deploy user made makes `run_backup` fail with
+`Permission denied` on the `.partial` dump, which is a loud failure (the
+`BACKUP_RUNS` outcome is `failure`), not a silent one. One-time host fix, then no
+restart needed:
+
+```bash
+sudo chown 999:999 backups    # existing root-owned dumps stay; retention can still delete them
+```
+
+If something else on the host also writes to `backups/` as another user (a manual
+`make backup`), use a shared group with mode 2775 instead.
+
+`celery` is the legacy queue every task used before the split. Nothing routes there any
+more; the pipeline worker still drains it so messages enqueued before the rollout are
+not stranded. Beat is unchanged: routing is applied when a task is published. Every
+node has its own healthcheck (`inspect ping -d <node>@$HOSTNAME`; a ping without `-d`
+is answered by any worker and would hide a dead one). The pools add idle memory (one
+Python process each), so on a small host watch `docker stats` after the first deploy.
+
+**Single-worker fallback.** On a very small host, or to roll back, run one worker that
+consumes every queue instead of the three services:
+
+```bash
+celery -A app.worker:celery_app worker --loglevel=info --concurrency=4 \
+  -Q pipeline,ai_ondemand,maintenance,celery
+```
+
+(`SINGLE_WORKER_QUEUES` in `worker.py` is that list.) Do not run it alongside the three
+services; it would just compete with them. A worker started with no `-Q` consumes all four
+queues as well.
+
+**Queue depth.** Each queue is a Redis list named after the queue; its length is the
+backlog (unacked in-flight tasks are not counted):
+
+```bash
+for q in pipeline ai_ondemand maintenance celery; do
+  echo "$q: $(docker compose exec -T redis redis-cli llen $q)"
+done
+```
+
+A steadily growing `pipeline` with a healthy `worker` means the pool is saturated; a
+non-zero `celery` that never drains means no worker is consuming it.
 
 ---
 
@@ -581,6 +651,8 @@ and `GHCR_OWNER` are left exactly as they are; do not edit or regenerate it):
 docker compose -f docker-compose.yml -f docker-compose.prod.yml \
   up -d --no-build --no-deps worker
 ```
+
+(Name `worker-ondemand` too if it needs recreating; both hold the AI credential mounts.)
 
 It must use both files CI uses (base plus prod overlay), run the GHCR images at
 the unchanged `IMAGE_TAG`, never `--build`, and touch only `worker`. If a
@@ -1003,7 +1075,7 @@ looking independent when they are not.
 
 ```bash
 docker compose logs api    # Check API logs
-docker compose logs worker # Check worker logs
+docker compose logs worker worker-ondemand worker-maintenance # Check worker logs
 docker compose exec db pg_isready -U studyaio  # Check DB
 docker compose exec redis redis-cli ping       # Check Redis
 ```

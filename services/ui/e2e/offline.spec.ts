@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures'
+import { test, expect, settle } from './fixtures'
 
 test.describe('Offline handling', () => {
   test('offline banner appears when connection drops and clears on reconnect', async ({
@@ -6,7 +6,7 @@ test.describe('Offline handling', () => {
     context,
   }) => {
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     const banner = page.getByText(/you're offline/i)
     await expect(banner).toBeHidden()

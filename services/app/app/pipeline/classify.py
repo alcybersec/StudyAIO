@@ -20,6 +20,7 @@ from app.models.course import Course
 from app.models.pipeline_run import PipelineRun
 from app.models.user import User
 from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
+from app.pipeline._session import release_connection
 from app.pipeline.failures import record_stage_failure
 from app.pipeline.resilience import handle_retryable, is_retryable
 from app.services import review_service
@@ -212,6 +213,8 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
             # No output_language: this stage's output is parsed, not read.
             # See AgentAdapter.with_language.
             agent = get_agent(user_settings=user_agent_config)
+            # No connection across the provider call (GL#50).
+            await release_connection(session)
             classification = await agent.classify_lecture(
                 text_preview=text_preview,
                 filename=artifact.original_filename,

@@ -1,6 +1,7 @@
 import type { Flashcard } from '../../types'
 import { useTranslation } from 'react-i18next'
 import { Badge, Kbd } from '../ui'
+import { OriginBadge } from '../week/OriginBadge'
 
 interface StudyCardProps {
   card: Flashcard
@@ -30,6 +31,7 @@ export function StudyCard({ card, onFlip, flipped }: StudyCardProps) {
             style={{ backfaceVisibility: 'hidden' }}
           >
             <div className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-faint mb-4">{t('Question')}</div>
+            {card.origin === 'user' && <div className="mb-3"><OriginBadge origin="user" /></div>}
             <div className="text-lg leading-relaxed text-text whitespace-pre-wrap">
               {card.front}
             </div>

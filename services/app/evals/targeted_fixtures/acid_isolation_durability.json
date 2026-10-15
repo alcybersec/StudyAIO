@@ -2,49 +2,64 @@
   "kind": "quiz",
   "items": [
     {
-      "question_type": "short_answer",
-      "question": "What is a non-repeatable read?",
-      "options": null,
-      "correct_answer": "The same query returns different rows within one transaction.",
-      "explanation": "Defined on page 2.",
+      "question_type": "multiple_choice",
+      "question": "A transaction runs the same query twice and gets different rows each time, even though it has not committed. Which phenomenon is this?",
+      "options": [
+        "A. Dirty read",
+        "B. Non-repeatable read",
+        "C. Durability failure",
+        "D. Serial execution"
+      ],
+      "correct_answer": "B",
+      "explanation": "Page 2 defines a non-repeatable read as the same query returning different rows within one transaction; a dirty read involves reading uncommitted changes.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "multiple_choice",
+      "question": "Why would a database designer choose a weaker isolation level rather than the strongest one?",
+      "options": [
+        "A. Weaker isolation provides more durability",
+        "B. Stronger isolation levels allow less concurrency, so weaker ones permit more simultaneous work",
+        "C. Weaker isolation eliminates the write-ahead log",
+        "D. Weaker isolation makes transactions atomic"
+      ],
+      "correct_answer": "B",
+      "explanation": "Page 2 states stronger isolation levels prevent more anomalies but allow less concurrency, so there is a trade-off.",
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "What does SERIALIZABLE isolation guarantee?",
+      "question": "What does SERIALIZABLE isolation guarantee about the outcome of concurrent transactions?",
       "options": null,
-      "correct_answer": "The result of some serial order of the transactions.",
-      "explanation": "Stated on page 2.",
+      "correct_answer": "It gives a result equal to some serial order of the transactions, as if they had run one after another.",
+      "explanation": "Page 2 defines SERIALIZABLE as producing the result of some serial order of the transactions.",
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "How does a write-ahead log provide durability?",
+      "question": "Explain how the write-ahead log ensures that a committed transaction's changes survive a crash.",
       "options": null,
-      "correct_answer": "The log record is flushed before commit returns and replayed after a crash.",
-      "explanation": "Described on page 3.",
+      "correct_answer": "The log record is flushed to disk before COMMIT returns, so after a crash the log can be replayed to redo the committed work.",
+      "explanation": "Page 3 states the log is written before commit returns and replayed after a crash to redo committed work.",
       "source_page_ref": 3,
       "expect": "keep"
     },
     {
-      "question_type": "short_answer",
-      "question": "Define a dirty read",
-      "options": null,
-      "correct_answer": "Reading another transaction's uncommitted change.",
-      "explanation": "Same as an existing question.",
-      "source_page_ref": 2,
-      "expect": "duplicate"
-    },
-    {
-      "question_type": "short_answer",
-      "question": "Which isolation level does PostgreSQL use by default?",
-      "options": null,
-      "correct_answer": "Read committed.",
-      "explanation": "Not in the lecture.",
-      "source_page_ref": 7,
-      "expect": "uncited"
+      "question_type": "multiple_choice",
+      "question": "A bank transfer debits account A and credits account B. A crash occurs after the debit is applied but before the credit. Which ACID-related mechanism ensures the debit is undone?",
+      "options": [
+        "A. Isolation, because the partial transaction is invisible",
+        "B. Durability, because the log is replayed",
+        "C. Atomicity, because a failure rolls back every statement in the transaction",
+        "D. Consistency, because constraints are checked"
+      ],
+      "correct_answer": "C",
+      "explanation": "Page 1 defines atomicity as all-or-nothing: a failure rolls back every statement, and page 3 uses this transfer as the example of the debit never happening without the credit.",
+      "source_page_ref": 1,
+      "expect": "keep"
     }
   ]
 }

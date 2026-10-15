@@ -1,10 +1,10 @@
-import { test, expect } from './fixtures'
+import { test, expect, settle } from './fixtures'
 
 test.describe('Notifications', () => {
   test('bell opens the notification panel', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     const bell = page.getByRole('button', { name: /notifications/i }).first()
     await expect(bell).toBeVisible({ timeout: 10_000 })

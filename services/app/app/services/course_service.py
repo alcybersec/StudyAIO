@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.storage import StorageBackend, get_storage, normalize_storage_key
+from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.flashcard import Flashcard
@@ -14,6 +15,7 @@ from app.models.quiz import QuizQuestion
 from app.models.summary import Summary
 from app.models.summary_version import SummaryVersion
 from app.services import summary_service
+from app.services.quota_service import check_course_quota
 
 logger = structlog.get_logger()
 
@@ -56,6 +58,41 @@ async def get_course_by_code(session: AsyncSession, code: str, *, user_id: str) 
     query = select(Course).where(Course.code == code, Course.user_id == user_id)
     result = await session.execute(query)
     return result.scalar_one_or_none()
+
+
+async def get_or_create_course(
+    session: AsyncSession, code: str, *, user_id: str, tier: str
+) -> Course:
+    """Return the caller's course for ``code`` (case-insensitive), creating it if absent.
+
+    Used when an upload names its course explicitly. A new course is subject to
+    the plan's course quota, exactly as when the classify stage creates one.
+
+    Args:
+        session: Database session.
+        code: Course code as typed; trimmed, matched and created upper-case.
+        user_id: Owner user UUID; only this user's courses match.
+        tier: The owner's plan tier, for the course quota.
+
+    Returns:
+        The existing or newly added (flushed, uncommitted) Course.
+
+    Raises:
+        QuotaExceededError: A new course would exceed the plan's limit; nothing is added.
+    """
+    code = code.strip().upper()
+    result = await session.execute(
+        select(Course).where(func.upper(Course.code) == code, Course.user_id == user_id)
+    )
+    course = result.scalar_one_or_none()
+    if course is not None:
+        return course
+    await check_course_quota(session, user_id, tier)
+    course = Course(id=generate_id(), code=code, user_id=user_id)
+    session.add(course)
+    await session.flush()
+    logger.info("course_created", course_id=course.id, code=code, user_id=user_id, via="upload")
+    return course
 
 
 async def get_course_by_id(session: AsyncSession, course_id: str, *, user_id: str) -> Course | None:

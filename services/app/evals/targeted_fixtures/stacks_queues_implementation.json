@@ -2,49 +2,54 @@
   "kind": "flashcards",
   "items": [
     {
+      "front": "How is a queue implemented on a linked list, and what is the time complexity of its operations?",
+      "back": "A queue can be built on a linked list with O(1) operations.",
+      "tags": [
+        "queue implementation",
+        "linked list"
+      ],
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
       "front": "Why does a queue on a plain array need a circular buffer?",
-      "back": "So dequeue does not shift every element.",
+      "back": "So that dequeue does not shift every element.",
       "tags": [
-        "queue implementation"
+        "queue implementation",
+        "circular buffer"
       ],
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
-      "front": "How do you check matching brackets with a stack?",
-      "back": "Push each opening bracket; on a closing bracket pop and compare.",
+      "front": "In a queue, what do enqueue and dequeue do?",
+      "back": "Enqueue adds at the back and dequeue removes from the front.",
       "tags": [
-        "stack uses"
-      ],
-      "source_page_ref": 1,
-      "expect": "keep"
-    },
-    {
-      "front": "What complexity do linked-list operations have?",
-      "back": "O(1).",
-      "tags": [
-        "queue implementation"
+        "queue implementation",
+        "fifo"
       ],
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
-      "front": "What does LIFO mean",
-      "back": "Last-in first-out.",
+      "front": "How is a stack used to match brackets in an expression?",
+      "back": "Push each opening bracket; on a closing bracket, pop and compare.",
       "tags": [
-        "stack uses"
+        "stack uses",
+        "bracket matching"
       ],
       "source_page_ref": 1,
-      "expect": "duplicate"
+      "expect": "keep"
     },
     {
-      "front": "What is a deque?",
-      "back": "A double-ended queue.",
+      "front": "What do the push, pop, and peek operations of a stack do?",
+      "back": "Push adds to the top, pop removes from the top, and peek reads the top without removing it.",
       "tags": [
-        "queue implementation"
+        "stack uses",
+        "lifo"
       ],
-      "source_page_ref": 3,
-      "expect": "uncited"
+      "source_page_ref": 1,
+      "expect": "keep"
     }
   ]
 }

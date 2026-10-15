@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, Button } from '../../ui'
 import { useTheme, type Theme } from '../../../hooks/useTheme'
 import { useTour } from '../../../hooks/useTour'
+import { useOnboardingState } from '../../../hooks/useOnboardingState'
 import { useLanguage } from '../../../hooks/useLanguage'
 import { TimeZoneField } from '../TimeZoneField'
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from '../../../i18n'
@@ -20,6 +22,8 @@ export function AppearanceSection() {
   const { theme, setTheme } = useTheme()
   const { language, contentLanguage, setLanguage, setContentLanguage, isSaving } = useLanguage()
   const { replay: replayTour } = useTour()
+  const { ready: onboardingReady, reopen: reopenChecklist } = useOnboardingState()
+  const [checklistShown, setChecklistShown] = useState(false)
 
   // "Also generate content in English" is the behaviour English already has,
   // so offering it as a switch would imply a choice that does nothing.
@@ -114,6 +118,29 @@ export function AppearanceSection() {
             {t("Walk through the app's main features with a guided tour.")}
           </p>
         </div>
+
+        {onboardingReady && (
+          <div>
+            <span className="block text-xs font-medium text-text-muted mb-1.5">
+              {t('Getting-started checklist')}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                reopenChecklist()
+                setChecklistShown(true)
+              }}
+            >
+              {t('Show checklist on Home')}
+            </Button>
+            <p className="mt-1.5 text-xs text-text-faint" role="status">
+              {checklistShown
+                ? t('The checklist is back on your Home page.')
+                : t('Upload, read a summary, take a check-in: the first-run steps.')}
+            </p>
+          </div>
+        )}
       </div>
     </Card>
   )

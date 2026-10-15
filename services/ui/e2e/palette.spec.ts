@@ -1,9 +1,9 @@
-import { test, expect } from './fixtures'
+import { test, expect, settle } from './fixtures'
 
 test.describe('Command palette', () => {
   test('opens with Ctrl+K and shows search input', async ({ page }) => {
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     await page.keyboard.press('ControlOrMeta+k')
 
@@ -21,7 +21,7 @@ test.describe('Command palette', () => {
 
   test('navigation action navigates to upload', async ({ page }) => {
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     await page.keyboard.press('ControlOrMeta+k')
     const input = page.getByRole('combobox', { name: /search commands/i })

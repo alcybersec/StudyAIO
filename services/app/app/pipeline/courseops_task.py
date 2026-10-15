@@ -11,6 +11,7 @@ from app.core.exceptions import CourseOpsError
 from app.core.storage import LocalStorageBackend, get_storage, normalize_storage_key
 from app.extractors import get_extractor
 from app.models.course_document import CourseDocument
+from app.pipeline._session import release_connection
 from app.pipeline.failures import record_document_failure
 from app.services import courseops_service
 from app.worker import celery_app
@@ -89,6 +90,8 @@ async def _process_document(document_id: str) -> dict:
             # No output_language: this stage's output is parsed, not read.
             # See AgentAdapter.with_language.
             agent = get_agent(user_settings=user_agent_config)
+            # No connection across the provider call (GL#50).
+            await release_connection(session)
             ai_result = await agent.extract_course_ops(
                 document_text=extracted_text,
                 course_code=course_code,

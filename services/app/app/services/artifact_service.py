@@ -47,6 +47,8 @@ async def create_upload_artifact(
     original_filename: str,
     sha256: str,
     user_id: str,
+    course_id: str | None = None,
+    week: int | None = None,
 ) -> LectureArtifact:
     """Store already-read upload bytes and create their artifact row.
 
@@ -60,6 +62,9 @@ async def create_upload_artifact(
         original_filename: Filename as supplied by the client.
         sha256: Hex digest of *content*, computed by the caller.
         user_id: Owner user UUID.
+        course_id: The caller's course, when the user chose one explicitly.
+        week: Week chosen with ``course_id``. Given together, the artifact is
+            created already ``classified`` so the pipeline can start at extract.
 
     Returns:
         The created LectureArtifact, already committed.
@@ -92,7 +97,9 @@ async def create_upload_artifact(
         file_type=file_type,
         sha256=sha256,
         file_size_bytes=len(content),
-        status="ingested",
+        course_id=course_id,
+        week=week,
+        status="classified" if course_id is not None and week is not None else "ingested",
         pipeline_started_at=datetime.now(UTC),
     )
     session.add(artifact)

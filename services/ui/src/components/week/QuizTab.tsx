@@ -1,8 +1,13 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuizQuestions, useRecordQuizAttempt } from '../../hooks/useApi'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { useDeleteQuizQuestion, useQuizQuestions, useRecordQuizAttempt } from '../../hooks/useApi'
+import { studyItemErrorMessage } from '../../lib/studyItems'
+import { DeleteItemModal } from './DeleteItemModal'
+import { OriginBadge } from './OriginBadge'
+import { QuizEditor } from './QuizEditor'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
-import { EmptyState, ErrorState, Skeleton } from '../ui'
+import { Button, EmptyState, ErrorState, Skeleton } from '../ui'
 import { AiFeedbackControl } from '../ui/AiFeedbackControl'
 import type { QuizQuestion } from '../../types'
 
@@ -82,6 +87,8 @@ function MCQOptions({
 
       {submitted && (
         <div
+          role="status"
+          data-testid="quiz-result"
           className={`p-3 rounded-lg text-sm ${
             isCorrect ? 'bg-sage-soft text-sage-fg' : 'bg-red-soft text-red-fg'
           }`}
@@ -205,9 +212,13 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<number, boolean>>({})
   const [finished, setFinished] = useState(false)
+  const [editor, setEditor] = useState<'add' | 'edit' | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string>()
+  const deleteQuestion = useDeleteQuizQuestion()
 
   const total = questions?.length ?? 0
-  const question = questions?.[currentIndex]
+  const question = questions?.[Math.min(currentIndex, Math.max(total - 1, 0))]
   const questionIds = useMemo(() => (questions ?? []).map((q) => q.id), [questions])
 
   const correctCount = useMemo(
@@ -264,10 +275,18 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
   if (isLoading || !questions) return <QuizSkeleton />
   if (!total) {
     return (
-      <EmptyState
-        title={t('No quiz questions yet')}
-        description={t('Quiz questions will be generated when the pipeline processes lecture files.')}
-      />
+      <div className="space-y-4">
+        <EmptyState
+          title={t('No quiz questions yet')}
+          description={t('Quiz questions will be generated when the pipeline processes lecture files.')}
+        />
+        <div className="flex justify-center">
+          <Button variant="secondary" className="min-h-11" onClick={() => setEditor('add')}>
+            <Plus size={14} aria-hidden /> {t('Add question')}
+          </Button>
+        </div>
+        <QuizEditor open={editor === 'add'} onOpenChange={(o) => !o && setEditor(null)} courseCode={courseCode} week={week} />
+      </div>
     )
   }
 
@@ -324,28 +343,67 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
       </div>
 
       {/* Question */}
-      <div className="text-base font-medium text-text">{question!.question}</div>
+      <div className="flex items-start gap-2">
+        <div className="text-base font-medium text-text flex-1">{question!.question}</div>
+        <OriginBadge origin={question!.origin} />
+      </div>
 
       {/* Answer area */}
       {question!.question_type === 'multiple_choice' ? (
         <MCQOptions
-          key={question!.id}
+          key={`answer-${question!.id}`}
           question={question!}
           onAnswer={handleAnswer}
         />
       ) : (
         <ShortAnswer
-          key={question!.id}
+          key={`answer-${question!.id}`}
           question={question!}
           onAnswer={handleAnswer}
         />
       )}
 
+      {/* Keys on siblings share one namespace: prefix them so they cannot collide on the question id. */}
       <AiFeedbackControl
-        key={question!.id}
+        key={`feedback-${question!.id}`}
         targetType="quiz_question"
         targetId={question!.id}
         batchIds={questionIds}
+      />
+
+      {/* Manage */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="ghost" size="sm" className="min-h-11" onClick={() => setEditor('edit')}>
+          <Pencil size={13} aria-hidden /> {t('Edit')}
+        </Button>
+        <Button variant="ghost" size="sm" className="min-h-11" onClick={() => { setDeleteError(undefined); setDeleting(true) }}>
+          <Trash2 size={13} aria-hidden /> {t('Delete')}
+        </Button>
+        <Button variant="ghost" size="sm" className="min-h-11" onClick={() => setEditor('add')}>
+          <Plus size={13} aria-hidden /> {t('Add question')}
+        </Button>
+      </div>
+
+      <QuizEditor
+        open={editor !== null}
+        onOpenChange={(o) => !o && setEditor(null)}
+        courseCode={courseCode}
+        week={week}
+        question={editor === 'edit' ? question : undefined}
+      />
+      <DeleteItemModal
+        open={deleting}
+        onOpenChange={setDeleting}
+        title={t('Delete this question?')}
+        preview={question!.question}
+        pending={deleteQuestion.isPending}
+        error={deleteError}
+        onConfirm={() =>
+          deleteQuestion.mutate(question!.id, {
+            onSuccess: () => setDeleting(false),
+            onError: (err) => setDeleteError(studyItemErrorMessage(err)),
+          })
+        }
       />
 
       {/* Next button (shown after answering) */}

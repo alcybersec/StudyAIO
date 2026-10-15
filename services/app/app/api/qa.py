@@ -1,5 +1,7 @@
 """Q&A API endpoint — ask questions about lecture content."""
 
+import asyncio
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,8 +64,11 @@ async def ask_question(
 
     # Embed the question
     provider = get_embedding_provider()
+    # The quota check and course lookup opened a transaction: end it so no pooled
+    # connection sits idle through the encode (GL#50).
+    await session.commit()
     try:
-        query_embeddings = provider.embed_texts([body.question])
+        query_embeddings = await asyncio.to_thread(provider.embed_texts, [body.question])
     except Exception as e:
         safe_error = await settings_service.redacted_error(session, user.id, e)
         logger.error("qa_embedding_error", error=safe_error)
@@ -113,6 +118,9 @@ async def ask_question(
             summary.content_md if summary is not None else None,
             label=f"{body.course_code} Week {body.week}",
         )
+    # Release the connection before the answer call; record_ai_call below opens
+    # a fresh transaction (GL#50).
+    await session.commit()
     try:
         answer_result = await agent.answer_question(question, chunks)
     except NotImplementedError:

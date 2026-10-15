@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures'
+import { test, expect, settle } from './fixtures'
 
 test.describe('Ask (merged Q&A)', () => {
   test('legacy /qa redirects to /ask', async ({ page }) => {
@@ -8,7 +8,7 @@ test.describe('Ask (merged Q&A)', () => {
 
   test('ask page shows the composer', async ({ page }) => {
     await page.goto('/ask')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     // The composer input should be visible (session may need creating first)
     const newBtn = page.getByRole('button', { name: /new question|new chat/i }).first()
@@ -22,7 +22,7 @@ test.describe('Ask (merged Q&A)', () => {
 
   test('composer offers course scoping', async ({ page }) => {
     await page.goto('/ask')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     const newBtn = page.getByRole('button', { name: /new question|new chat/i }).first()
     if (await newBtn.isVisible().catch(() => false)) {

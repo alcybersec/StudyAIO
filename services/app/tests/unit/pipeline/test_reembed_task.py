@@ -14,6 +14,7 @@ def _provider(window: int = 20) -> MagicMock:
     p = MagicMock()
     p._input_window.return_value = window
     p._word_tokens.side_effect = lambda words: [1 for _ in words]
+    p.embed_texts.side_effect = lambda texts: [[0.0] for _ in texts]
     return p
 
 

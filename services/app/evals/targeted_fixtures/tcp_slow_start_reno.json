@@ -2,49 +2,54 @@
   "kind": "flashcards",
   "items": [
     {
-      "front": "How fast does cwnd grow during slow start?",
-      "back": "It doubles every round trip, which is exponential growth.",
+      "front": "How does cwnd grow during TCP slow start?",
+      "back": "It starts at one segment and doubles every round trip \u2014 exponential growth.",
       "tags": [
-        "slow start"
+        "slow start",
+        "tcp"
       ],
       "source_page_ref": 1,
       "expect": "keep"
     },
     {
       "front": "When does slow start end?",
-      "back": "When cwnd reaches ssthresh or a loss occurs.",
+      "back": "When cwnd reaches the slow start threshold (ssthresh) or a loss occurs.",
       "tags": [
-        "slow start"
+        "slow start",
+        "tcp"
       ],
       "source_page_ref": 1,
       "expect": "keep"
     },
     {
-      "front": "What do three duplicate ACKs trigger in TCP Reno?",
-      "back": "Fast retransmit followed by fast recovery, halving cwnd.",
+      "front": "What triggers TCP Reno's fast retransmit?",
+      "back": "Three duplicate ACKs, which suggest the network is still delivering packets; Reno resends the missing segment immediately.",
       "tags": [
-        "fast retransmit"
+        "fast retransmit",
+        "tcp reno"
       ],
       "source_page_ref": 3,
       "expect": "keep"
     },
     {
-      "front": "What is the congestion window, cwnd?",
-      "back": "The congestion window limiting unacknowledged bytes in flight.",
+      "front": "What does fast recovery do to cwnd in TCP Reno after three duplicate ACKs?",
+      "back": "It halves cwnd rather than collapsing it to one segment.",
       "tags": [
-        "slow start"
+        "fast retransmit",
+        "tcp reno"
       ],
-      "source_page_ref": 1,
-      "expect": "duplicate"
+      "source_page_ref": 3,
+      "expect": "keep"
     },
     {
-      "front": "How does QUIC handle loss recovery?",
-      "back": "Per-packet numbers.",
+      "front": "How does TCP Reno treat a timeout?",
+      "back": "It treats it as TCP Tahoe does: ssthresh is set to half of cwnd, cwnd drops to one segment, and slow start re-enters.",
       "tags": [
-        "fast retransmit"
+        "fast retransmit",
+        "tcp reno"
       ],
-      "source_page_ref": 5,
-      "expect": "uncited"
+      "source_page_ref": 3,
+      "expect": "keep"
     }
   ]
 }
