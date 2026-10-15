@@ -2,49 +2,54 @@
   "kind": "flashcards",
   "items": [
     {
-      "front": "What does a root server return to the recursive resolver?",
-      "back": "A referral to the TLD server, for example the .org server.",
+      "front": "When a stub resolver looks up www.example.org, who does it ask first?",
+      "back": "The stub resolver asks the recursive resolver.",
       "tags": [
-        "resolution steps"
+        "resolution steps",
+        "dns"
       ],
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
-      "front": "Which server gives the final answer in DNS resolution?",
-      "back": "The authoritative server for the domain.",
+      "front": "In DNS resolution, what does the recursive resolver get when it asks a root server about www.example.org?",
+      "back": "A referral to the .org TLD server.",
       "tags": [
-        "resolution steps"
+        "resolution steps",
+        "dns"
       ],
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
-      "front": "How long may a DNS answer be cached?",
-      "back": "For its TTL.",
+      "front": "What does the .org TLD server return during resolution of www.example.org?",
+      "back": "A referral to the authoritative server for example.org.",
       "tags": [
-        "caching and ttl"
+        "resolution steps",
+        "dns"
       ],
-      "source_page_ref": 3,
+      "source_page_ref": 2,
       "expect": "keep"
     },
     {
-      "front": "What is a CNAME record",
-      "back": "An alias.",
+      "front": "Who provides the final answer (the IP address) in DNS resolution for www.example.org?",
+      "back": "The authoritative server for example.org.",
       "tags": [
-        "caching and ttl"
+        "resolution steps",
+        "dns"
       ],
-      "source_page_ref": 3,
-      "expect": "duplicate"
+      "source_page_ref": 2,
+      "expect": "keep"
     },
     {
-      "front": "What does DNSSEC add to resolution?",
-      "back": "Signatures on records.",
+      "front": "For how long are DNS answers cached?",
+      "back": "Answers are cached for their TTL.",
       "tags": [
-        "resolution steps"
+        "caching and ttl",
+        "dns"
       ],
-      "source_page_ref": 12,
-      "expect": "uncited"
+      "source_page_ref": 3,
+      "expect": "keep"
     }
   ]
 }

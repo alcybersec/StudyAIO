@@ -2,49 +2,64 @@
   "kind": "quiz",
   "items": [
     {
-      "question_type": "short_answer",
-      "question": "What do the right-hand columns contain in a LEFT JOIN row with no match?",
-      "options": null,
-      "correct_answer": "NULL.",
-      "explanation": "Stated on page 2.",
+      "question_type": "multiple_choice",
+      "question": "A student named Ada has no rows in enrolments. In the query SELECT s.name, e.course FROM students s LEFT JOIN enrolments e ON e.student_id = s.id, what appears for Ada's row?",
+      "options": [
+        "A. Ada is omitted entirely",
+        "B. Ada appears with NULL for e.course",
+        "C. Ada appears with course set to 0",
+        "D. Ada appears only if another student shares her id"
+      ],
+      "correct_answer": "B",
+      "explanation": "Page 2 states a LEFT JOIN keeps every row of the left table, filling unmatched right-hand columns with NULL.",
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "How do you find students with no enrolment using a LEFT JOIN?",
+      "question": "Using the students/enrolments tables, write a query that returns only the names of students who have no enrolment.",
       "options": null,
-      "correct_answer": "Add WHERE e.course IS NULL.",
-      "explanation": "Stated on page 2.",
+      "correct_answer": "SELECT s.name FROM students s LEFT JOIN enrolments e ON e.student_id = s.id WHERE e.course IS NULL;",
+      "explanation": "Page 2 says to find students with no enrolment, use a LEFT JOIN and add WHERE e.course IS NULL, since unmatched rows have NULL there.",
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
-      "question_type": "short_answer",
-      "question": "What is the difference between WHERE and HAVING?",
-      "options": null,
-      "correct_answer": "WHERE filters rows before grouping; HAVING filters groups after.",
-      "explanation": "Stated on page 3.",
+      "question_type": "multiple_choice",
+      "question": "In the lecture's LEFT JOIN + GROUP BY query, what does COUNT(e.course) count for a student who has no enrolments?",
+      "options": [
+        "A. 1, because the student still appears in the result",
+        "B. The total number of students",
+        "C. 0, because e.course is NULL for that student",
+        "D. It depends on the value of s.name"
+      ],
+      "correct_answer": "C",
+      "explanation": "With a LEFT JOIN, unmatched students get NULL for e.course, and page 3 shows COUNT(e.course) computed per group, so NULL rows are not counted as courses.",
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "question_type": "multiple_choice",
+      "question": "What is the difference between WHERE and HAVING when used with GROUP BY?",
+      "options": [
+        "A. WHERE filters groups after aggregation; HAVING filters rows before grouping",
+        "B. WHERE filters rows before grouping; HAVING filters groups after grouping",
+        "C. Both do the same thing, HAVING is just the newer syntax",
+        "D. HAVING only works with INNER JOIN queries"
+      ],
+      "correct_answer": "B",
+      "explanation": "Page 3 states that WHERE filters rows before grouping while HAVING filters groups after.",
       "source_page_ref": 3,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "What does an INNER JOIN keep",
+      "question": "Using the students/enrolments tables, how would you modify SELECT s.name, COUNT(e.course) FROM students s LEFT JOIN enrolments e ON e.student_id = s.id GROUP BY s.name; so it returns only students who have at least one enrolment?",
       "options": null,
-      "correct_answer": "Only rows that match on the ON condition.",
-      "explanation": "Same as an existing question.",
-      "source_page_ref": 1,
-      "expect": "duplicate"
-    },
-    {
-      "question_type": "short_answer",
-      "question": "What does a FULL OUTER JOIN return?",
-      "options": null,
-      "correct_answer": "All rows of both tables.",
-      "explanation": "Not in the lecture.",
-      "source_page_ref": 6,
-      "expect": "uncited"
+      "correct_answer": "Add HAVING COUNT(e.course) >= 1 after the GROUP BY clause, since HAVING filters groups after aggregation.",
+      "explanation": "Page 3 explains that HAVING filters groups after grouping, so it can keep only groups whose count of courses is at least 1.",
+      "source_page_ref": 3,
+      "expect": "keep"
     }
   ]
 }

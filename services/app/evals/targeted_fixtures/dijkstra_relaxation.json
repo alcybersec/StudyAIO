@@ -2,49 +2,64 @@
   "kind": "quiz",
   "items": [
     {
-      "question_type": "short_answer",
-      "question": "Why does Dijkstra's algorithm require non-negative edge weights?",
-      "options": null,
-      "correct_answer": "With a negative edge the greedy choice can be wrong.",
-      "explanation": "The page says the greedy choice can be wrong with a negative edge.",
+      "question_type": "multiple_choice",
+      "question": "Dijkstra's algorithm is applied to a weighted graph that contains one edge with a negative weight. What is the consequence?",
+      "options": [
+        "A. The algorithm still produces correct shortest paths",
+        "B. The greedy choice can be wrong, so the algorithm is not correct",
+        "C. The algorithm refuses to run and raises an error",
+        "D. Only the source vertex's distance may be wrong"
+      ],
+      "correct_answer": "B",
+      "explanation": "Page 1 states that with a negative edge the greedy choice can be wrong and the algorithm is not correct.",
       "source_page_ref": 1,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "When relaxing the edge (u, v), which condition triggers an update of dist[v]?",
+      "question": "Why must Dijkstra's algorithm require non-negative edge weights for its greedy step to be safe?",
       "options": null,
-      "correct_answer": "dist[u] + w(u, v) < dist[v].",
-      "explanation": "Relaxation updates the estimate when a shorter route is found.",
+      "correct_answer": "Because with a negative edge the greedy choice can be wrong, making the algorithm incorrect; the greedy step relies on the smallest estimate removed from the queue being final.",
+      "explanation": "Page 1 links non-negative weights to correctness of the greedy choice, and page 2 states removed vertices have final distances.",
+      "source_page_ref": 1,
+      "expect": "keep"
+    },
+    {
+      "question_type": "multiple_choice",
+      "question": "When relaxing an edge (u, v) with weight w(u, v), which condition triggers an update to dist[v]?",
+      "options": [
+        "A. dist[u] + w(u, v) < dist[v]",
+        "B. dist[v] + w(u, v) < dist[u]",
+        "C. dist[u] < dist[v]",
+        "D. w(u, v) < dist[v]"
+      ],
+      "correct_answer": "A",
+      "explanation": "Page 2 defines relaxation: if dist[u] + w(u, v) < dist[v], then dist[v] is updated.",
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "How is the shortest path itself recovered once the algorithm has finished?",
+      "question": "You relax edges from vertex u in Dijkstra's algorithm. After u has been removed from the priority queue, can a later relaxation change dist[u]? Explain.",
       "options": null,
-      "correct_answer": "Store a predecessor for each vertex when relaxing and walk back from the target.",
-      "explanation": "Predecessors are recorded during relaxation.",
-      "source_page_ref": 3,
+      "correct_answer": "No. Once a vertex is removed its distance is final, which is the greedy step, so relaxations only update estimates of vertices still in the queue.",
+      "explanation": "Page 2 states that once a vertex is removed its distance is final.",
+      "source_page_ref": 2,
       "expect": "keep"
     },
     {
-      "question_type": "short_answer",
-      "question": "State the running time of Dijkstra's algorithm using a binary heap.",
-      "options": null,
-      "correct_answer": "O((V + E) log V).",
-      "explanation": "Same question as one the student already has.",
+      "question_type": "multiple_choice",
+      "question": "A graph has V vertices and E edges. Using a binary heap, which running time correctly reflects Dijkstra's algorithm?",
+      "options": [
+        "A. O(V log E)",
+        "B. O((V + E) log V)",
+        "C. O(V + E)",
+        "D. O(E log E)"
+      ],
+      "correct_answer": "B",
+      "explanation": "Page 3 gives the running time with a binary heap as O((V + E) log V).",
       "source_page_ref": 3,
-      "expect": "duplicate"
-    },
-    {
-      "question_type": "short_answer",
-      "question": "Which heap gives a better running time than a binary heap here?",
-      "options": null,
-      "correct_answer": "A Fibonacci heap.",
-      "explanation": "Not in the lecture.",
-      "source_page_ref": 4,
-      "expect": "uncited"
+      "expect": "keep"
     }
   ]
 }

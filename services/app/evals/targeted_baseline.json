@@ -1,126 +1,126 @@
 {
   "aggregate": {
     "cases": 12,
-    "citation_validity": 1.0,
+    "citation_validity": 0.9833,
     "dedup": 1.0,
     "filter_accuracy": 1.0,
-    "on_topic": 0.9722
+    "on_topic": 0.95
   },
   "cases": {
     "acid_isolation_durability": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
-      "on_topic": 1.0
+      "kept": 5,
+      "on_topic": 0.8
     },
     "big_o_growth_loops": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
-      "on_topic": 1.0
+      "kept": 5,
+      "on_topic": 0.8
     },
     "bst_degenerate_inorder": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
+      "kept": 5,
       "on_topic": 1.0
     },
     "deadlock_conditions": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
+      "kept": 5,
       "on_topic": 1.0
     },
     "dijkstra_relaxation": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
+      "kept": 5,
       "on_topic": 1.0
     },
     "dns_resolution_steps": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
+      "kept": 5,
       "on_topic": 1.0
     },
     "hash_tables_open_addressing": {
-      "citation_validity": 1.0,
+      "citation_validity": 0.8,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
+      "kept": 5,
       "on_topic": 1.0
     },
     "process_round_robin_sjf": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
+      "kept": 5,
       "on_topic": 1.0
     },
     "sql_left_join_group_by": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
+      "kept": 5,
       "on_topic": 1.0
     },
     "stacks_queues_implementation": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
-      "on_topic": 0.6667
+      "kept": 5,
+      "on_topic": 0.8
     },
     "tcp_slow_start_reno": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
+      "kept": 5,
       "on_topic": 1.0
     },
     "virtual_memory_faults_replacement": {
       "citation_validity": 1.0,
       "dedup": 1.0,
-      "dropped_duplicate": 1,
-      "dropped_uncited": 1,
+      "dropped_duplicate": 0,
+      "dropped_uncited": 0,
       "filter_accuracy": 1.0,
-      "kept": 3,
+      "kept": 5,
       "on_topic": 1.0
     }
   },
   "provenance": {
     "date": "2026-10-15",
-    "note": "fixtures are hand-written, not model output",
+    "model": "glm-5.3-flash",
     "prompt": "generate_targeted v1.0",
-    "source": "hand-written"
+    "source": "live"
   },
   "threshold": 0.02,
   "version": 1

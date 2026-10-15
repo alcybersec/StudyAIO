@@ -3,48 +3,58 @@
   "items": [
     {
       "question_type": "short_answer",
-      "question": "When does an access raise a page fault?",
+      "question": "What happens to the instruction that triggered a page fault, once the operating system has loaded the page from disk?",
       "options": null,
-      "correct_answer": "When the valid bit of the page table entry is 0.",
-      "explanation": "Stated on page 2.",
-      "source_page_ref": 2,
-      "expect": "keep"
-    },
-    {
-      "question_type": "short_answer",
-      "question": "What is thrashing and why does it make the system crawl?",
-      "options": null,
-      "correct_answer": "A high fault rate, because each fault costs millions of cycles.",
-      "explanation": "Stated on page 3.",
+      "correct_answer": "The operating system loads the page from disk, updates the page table, and then restarts the instruction.",
+      "explanation": "Page 3 states that after loading the page and updating the page table, the instruction is restarted.",
       "source_page_ref": 3,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "Which page does LRU choose as the victim?",
+      "question": "What does a valid bit of 0 in a page table entry mean, and what is the immediate consequence for the running process?",
       "options": null,
-      "correct_answer": "The least recently used page.",
-      "explanation": "Stated on page 3.",
+      "correct_answer": "The page is not in memory, and the access raises a page fault.",
+      "explanation": "Page 2 says each page table entry holds a valid bit, and a valid bit of 0 causes a page fault on access.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "multiple_choice",
+      "question": "Why is a high page fault rate (thrashing) so damaging to system performance?",
+      "options": [
+        "A. Each fault corrupts a page table entry",
+        "B. A page fault costs millions of cycles, far more than a memory access",
+        "C. The valid bit is permanently cleared on each fault",
+        "D. Thrashing changes the page size, invalidating addresses"
+      ],
+      "correct_answer": "B",
+      "explanation": "Page 3 explains that a page fault costs millions of cycles versus a memory access, so a high fault rate makes the system crawl.",
+      "source_page_ref": 3,
+      "expect": "keep"
+    },
+    {
+      "question_type": "multiple_choice",
+      "question": "Under the FIFO page replacement policy, which page is chosen as the victim when no frame is free?",
+      "options": [
+        "A. The least recently used page",
+        "B. The page with a valid bit of 0",
+        "C. The oldest page",
+        "D. The most recently loaded page"
+      ],
+      "correct_answer": "C",
+      "explanation": "Page 3 defines FIFO as evicting the oldest page.",
       "source_page_ref": 3,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "What is a page table?",
+      "question": "Two pages, A and B, are in memory. A was loaded earlier than B, but B has not been used for a long time while A was accessed just now. State which page FIFO evicts and which page LRU evicts.",
       "options": null,
-      "correct_answer": "It maps each page number to a frame number.",
-      "explanation": "Same as an existing question.",
-      "source_page_ref": 2,
-      "expect": "duplicate"
-    },
-    {
-      "question_type": "short_answer",
-      "question": "What does the TLB cache?",
-      "options": null,
-      "correct_answer": "Recent translations.",
-      "explanation": "Not in the lecture.",
-      "source_page_ref": 6,
-      "expect": "uncited"
+      "correct_answer": "FIFO evicts A because it is the oldest loaded page; LRU evicts B because it is the least recently used.",
+      "explanation": "Page 3 defines FIFO as evicting the oldest page and LRU as evicting the least recently used page.",
+      "source_page_ref": 3,
+      "expect": "keep"
     }
   ]
 }

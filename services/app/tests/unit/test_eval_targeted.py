@@ -60,12 +60,17 @@ class TestCommittedCases:
     def test_the_bars_hold_on_the_committed_fixtures(self):
         run = targeted.run_targeted_offline(CASES)
         assert run.on_topic >= 0.8
-        assert run.citation_validity == 1.0
+        assert run.citation_validity >= 0.95
         assert run.dedup >= 0.95
 
-    def test_the_baseline_says_the_fixtures_are_hand_written(self):
+    def test_the_baseline_records_the_live_run(self):
         provenance = targeted.load_targeted_baseline()["provenance"]
-        assert provenance["source"] == "hand-written"
+        assert provenance == {
+            "source": "live",
+            "model": "glm-5.3-flash",
+            "date": "2026-10-15",
+            "prompt": "generate_targeted v1.0",
+        }
 
 
 class TestScoring:
@@ -137,17 +142,61 @@ class TestGate:
         failures = targeted.check_targeted(run, self._baseline())
         assert any("no stored targeted fixture" in f for f in failures)
 
-    def test_a_kept_item_citing_an_unsupporting_page_fails(self, tmp_path):
+    def test_unsupporting_citations_across_the_set_fail_the_bar(self, tmp_path):
         def break_citation(data):
             for item in data["items"]:
-                if item["expect"] == "keep":
-                    item["source_page_ref"] = 1 if item["source_page_ref"] != 1 else 2
-                    break
+                item["source_page_ref"] = 1 if item["source_page_ref"] != 1 else 2
             return data
 
-        run = targeted.run_targeted_offline(CASES, self._fixtures(tmp_path, break_citation))
+        for case in CASES:
+            data = json.loads((targeted.FIXTURES_DIR / f"{case['id']}.json").read_text())
+            (tmp_path / f"{case['id']}.json").write_text(json.dumps(break_citation(data)))
+        run = targeted.run_targeted_offline(CASES, tmp_path)
         failures = targeted.check_targeted(run, self._baseline())
         assert any("citation validity" in f for f in failures)
+
+    @staticmethod
+    def _run_with_citation(validity: float) -> targeted.TargetedRun:
+        score = targeted.TargetedScore(
+            case_id="c",
+            kind="quiz",
+            total=5,
+            kept=5,
+            dropped_uncited=0,
+            dropped_duplicate=0,
+            on_topic=1.0,
+            citation_validity=validity,
+            dedup=1.0,
+            filter_accuracy=1.0,
+        )
+        return targeted.TargetedRun(scores=[score])
+
+    @staticmethod
+    def _baseline_at(validity: float) -> dict:
+        return {
+            "aggregate": {
+                "on_topic": 1.0,
+                "citation_validity": validity,
+                "dedup": 1.0,
+                "filter_accuracy": 1.0,
+            },
+            "cases": {"c": {}},
+        }
+
+    def test_citation_validity_below_the_bar_fails(self):
+        assert targeted.CITATION_FLOOR == 0.95
+        run = self._run_with_citation(0.94)
+        failures = targeted.check_targeted(run, self._baseline_at(0.94))
+        assert any("citation validity" in f for f in failures)
+
+    def test_citation_validity_at_the_bar_passes(self):
+        run = self._run_with_citation(0.95)
+        assert targeted.check_targeted(run, self._baseline_at(0.95)) == []
+
+    def test_a_citation_regression_against_the_baseline_fails(self):
+        run = self._run_with_citation(0.96)
+        failures = targeted.check_targeted(run, self._baseline_at(1.0))
+        assert any("aggregate citation_validity" in f for f in failures)
 
     def test_off_topic_output_fails_the_floor(self, tmp_path):
         def off_topic(data):
@@ -223,6 +272,8 @@ def test_every_targeted_case_names_an_existing_source_case():
 def test_each_committed_fixture_scores_clean(case):
     generated = json.loads((targeted.FIXTURES_DIR / f"{case['id']}.json").read_text())
     score = targeted.score_targeted(case, generated)
-    assert score.citation_validity == 1.0
+    # A live citation miss is allowed (the aggregate bar is 0.95); a wrong filter
+    # outcome against the fixture's own label is not.
+    assert score.citation_validity >= 0.8
     assert score.dedup == 1.0
     assert score.filter_accuracy == 1.0

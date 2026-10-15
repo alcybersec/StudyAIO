@@ -2,49 +2,64 @@
   "kind": "quiz",
   "items": [
     {
-      "question_type": "short_answer",
-      "question": "What happens if the round robin quantum is too large?",
-      "options": null,
-      "correct_answer": "Round robin behaves like FCFS.",
-      "explanation": "Stated on page 2.",
+      "question_type": "multiple_choice",
+      "question": "In round robin scheduling, what happens when a process's time quantum expires?",
+      "options": [
+        "A. The process runs until completion",
+        "B. The process is preempted and moved to the back of the queue",
+        "C. The process is moved to the front of the queue",
+        "D. The scheduler waits for the process to finish before switching"
+      ],
+      "correct_answer": "B",
+      "explanation": "RR gives each process a fixed time quantum, then preempts it and moves it to the back of the queue.",
+      "source_page_ref": 2,
+      "expect": "keep"
+    },
+    {
+      "question_type": "multiple_choice",
+      "question": "What problem arises if a round robin quantum is too small?",
+      "options": [
+        "A. RR behaves like FCFS",
+        "B. Long jobs starve completely",
+        "C. Context-switch overhead dominates",
+        "D. Response time becomes very poor"
+      ],
+      "correct_answer": "C",
+      "explanation": "The lecture states that with too small a quantum, context-switch overhead dominates.",
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "Why can shortest job first starve long jobs?",
+      "question": "Why is round robin said to give good response time?",
       "options": null,
-      "correct_answer": "Short jobs keep being chosen first, so a long job may never run.",
-      "explanation": "Stated on page 2.",
+      "correct_answer": "Because each process gets a fixed time quantum and then is preempted, so every process runs shortly after arriving rather than waiting for earlier jobs to finish.",
+      "explanation": "The regular quantum-based preemption means processes do not wait long for their first turn.",
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "Why is the next CPU burst a problem for shortest job first?",
+      "question": "Two drawbacks of SJF are that it needs the next CPU burst length in advance and long jobs can starve. Why does starvation occur?",
       "options": null,
-      "correct_answer": "The system does not know the burst length in advance.",
-      "explanation": "Stated on page 2.",
+      "correct_answer": "SJF always picks the process with the shortest next CPU burst, so a long job can be repeatedly passed over whenever shorter jobs keep arriving.",
+      "explanation": "Page 2 notes SJF can starve long jobs because it always favours the shortest burst.",
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
-      "question_type": "short_answer",
-      "question": "What is the convoy effect?",
-      "options": null,
-      "correct_answer": "A long job at the front makes everything behind it wait.",
-      "explanation": "Same as an existing question.",
-      "source_page_ref": 1,
-      "expect": "duplicate"
-    },
-    {
-      "question_type": "short_answer",
-      "question": "What is multilevel feedback queue scheduling?",
-      "options": null,
-      "correct_answer": "Queues with different priorities.",
-      "explanation": "Not in the lecture.",
-      "source_page_ref": 9,
-      "expect": "uncited"
+      "question_type": "multiple_choice",
+      "question": "With bursts 24, 3, 3 arriving together, SJF runs P2, P3, P1 with waiting times 0, 3, 6. What is the average waiting time?",
+      "options": [
+        "A. 3",
+        "B. 6",
+        "C. 9",
+        "D. 17"
+      ],
+      "correct_answer": "A",
+      "explanation": "Page 3 gives the SJF waiting times as 0, 3, 6, so the average is (0+3+6)/3 = 3.",
+      "source_page_ref": 3,
+      "expect": "keep"
     }
   ]
 }

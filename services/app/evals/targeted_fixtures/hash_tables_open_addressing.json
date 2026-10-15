@@ -3,48 +3,63 @@
   "items": [
     {
       "question_type": "short_answer",
-      "question": "Why does linear probing suffer from primary clustering?",
+      "question": "Why can an open addressing hash table degrade to O(n) worst-case lookup?",
       "options": null,
-      "correct_answer": "Occupied runs grow, so further collisions become more likely.",
-      "explanation": "Linear probing checks the next bucket, so runs of occupied buckets get longer.",
+      "correct_answer": "With a bad hash function every key lands in the same bucket/region, so lookup degenerates into a linear scan of the occupied entries.",
+      "explanation": "The lecture states the worst case is O(n) when a bad hash function sends every key to the same bucket.",
+      "source_page_ref": 1,
+      "expect": "keep"
+    },
+    {
+      "question_type": "multiple_choice",
+      "question": "What is primary clustering in open addressing?",
+      "options": [
+        "A. Keys clustering at the front of linked lists",
+        "B. Occupied runs of buckets growing, making further collisions more likely",
+        "C. Multiple keys hashing to identical values",
+        "D. Clusters forming only after the table is resized"
+      ],
+      "correct_answer": "B",
+      "explanation": "With linear probing, occupied runs grow and make further collisions more likely \u2014 this is primary clustering.",
       "source_page_ref": 2,
       "expect": "keep"
     },
     {
-      "question_type": "short_answer",
-      "question": "What happens to the table when the load factor crosses a threshold?",
-      "options": null,
-      "correct_answer": "It is resized, usually doubled, and every key is rehashed.",
-      "explanation": "The page describes resizing and rehashing at a load factor threshold.",
-      "source_page_ref": 3,
-      "expect": "keep"
-    },
-    {
-      "question_type": "short_answer",
+      "question_type": "multiple_choice",
       "question": "How does quadratic probing avoid primary clustering?",
-      "options": null,
-      "correct_answer": "It checks buckets at increasing square offsets, which spreads entries out.",
-      "explanation": "Square offsets break up the occupied runs that linear probing creates.",
+      "options": [
+        "A. It stores a linked list at each bucket",
+        "B. It checks buckets at increasing square offsets, spreading entries out",
+        "C. It doubles the table on every collision",
+        "D. It uses a better hash function for each key"
+      ],
+      "correct_answer": "B",
+      "explanation": "Quadratic probing checks buckets at increasing square offsets instead, which spreads entries out and avoids primary clustering.",
       "source_page_ref": 3,
       "expect": "keep"
     },
     {
       "question_type": "short_answer",
-      "question": "What is a load factor of a hash table",
+      "question": "Rehashing every key during a resize costs O(n). Why is this still considered acceptable for a sequence of insertions?",
       "options": null,
-      "correct_answer": "The ratio of stored entries to buckets.",
-      "explanation": "Defined on page 1.",
-      "source_page_ref": 1,
-      "expect": "duplicate"
+      "correct_answer": "Because rehashing happens only when the load factor crosses a threshold, its O(n) cost is amortised across the insertions that caused it, so the cost per insertion stays constant.",
+      "explanation": "Page 3 states rehashing is O(n) but amortised across the insertions that caused it the per-insertion cost stays constant.",
+      "source_page_ref": 3,
+      "expect": "keep"
     },
     {
-      "question_type": "short_answer",
-      "question": "What is the amortised cost of a hash table insert in a persistent store?",
-      "options": null,
-      "correct_answer": "Constant.",
-      "explanation": "Not on any page of this lecture.",
-      "source_page_ref": 99,
-      "expect": "uncited"
+      "question_type": "multiple_choice",
+      "question": "A hash table is heavily loaded. A student says: 'The O(1) average lookup is guaranteed no matter what.' What does the lecture suggest is wrong with this claim?",
+      "options": [
+        "A. Average-case O(1) assumes a good hash function and a low load factor; performance degrades as the load factor approaches 1",
+        "B. Average case is always O(n) for hash tables",
+        "C. The claim is correct; lookup is always O(1)",
+        "D. Load factor only affects resizing, not lookup cost"
+      ],
+      "correct_answer": "A",
+      "explanation": "Page 1 says the average case is a claim about the hash function, and that performance degrades as the load factor approaches 1.",
+      "source_page_ref": 1,
+      "expect": "keep"
     }
   ]
 }
