@@ -9,6 +9,8 @@
 export class AppApiError extends Error {
   status: number
   detail?: unknown
+  /** Machine-readable error code (`targeted_daily_cap`, ...) when the body carries one. */
+  code?: string
 
   constructor(msg: string, status: number, detail?: unknown) {
     super(msg)
@@ -112,6 +114,25 @@ function extractFields(body: unknown): Record<string, string> {
  * @param retryAfterSeconds Parsed Retry-After header value, when present.
  */
 export function classifyResponse(
+  status: number,
+  body: unknown,
+  retryAfterSeconds?: number,
+): AppApiError {
+  const err = classifyByStatus(status, body, retryAfterSeconds)
+  const code = extractCode(body)
+  if (code) err.code = code
+  return err
+}
+
+/** `code` at the top of the body, or inside an object `detail`. */
+function extractCode(body: unknown): string | undefined {
+  if (isRecord(body) && typeof body.code === 'string') return body.code
+  const detail = extractDetail(body)
+  if (isRecord(detail) && typeof detail.code === 'string') return detail.code
+  return undefined
+}
+
+function classifyByStatus(
   status: number,
   body: unknown,
   retryAfterSeconds?: number,

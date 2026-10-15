@@ -9,13 +9,15 @@ import { PlanTab } from '../components/study/PlanTab'
 import { FlashcardsStudyTab } from '../components/study/FlashcardsStudyTab'
 import { TimedStudyTab } from '../components/study/TimedStudyTab'
 import { ExamsTab } from '../components/study/ExamsTab'
+import { MasteryTab } from '../components/weakspots/MasteryTab'
 import { HistoryTab } from '../components/study/HistoryTab'
 
-const TAB_VALUES = ['plan', 'flashcards', 'timed', 'exams', 'history'] as const
+const TAB_VALUES = ['plan', 'mastery', 'flashcards', 'timed', 'exams', 'history'] as const
 type TabValue = (typeof TAB_VALUES)[number]
 
 const tabLabels: Record<TabValue, string> = {
   plan: 'Plan',
+  mastery: 'Mastery',
   flashcards: 'Flashcards',
   timed: 'Timed',
   exams: 'Exams',
@@ -104,6 +106,10 @@ export function StudyHubPage() {
             onStartToday={() => setTab('flashcards')}
             onCreateExam={() => setTab('exams')}
           />
+        </Tabs.Content>
+
+        <Tabs.Content value="mastery" className="focus:outline-none">
+          <MasteryTab />
         </Tabs.Content>
 
         <Tabs.Content value="flashcards" className="focus:outline-none">

@@ -51,7 +51,7 @@ export function PlanTab({ onStartToday, onCreateExam }: PlanTabProps) {
   const online = useOnlineStatus()
 
   // One view event each time the plan is shown with data. Fire-and-forget.
-  // TODO(M33-S2): the "Study tonight" entry point should record the same event.
+  // The dashboard "Study tonight" card (TonightCard) records the same event.
   const planLoaded = !!data
   useEffect(() => {
     if (planLoaded) recordUsageEvent('study_plan_viewed')

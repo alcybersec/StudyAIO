@@ -38,5 +38,9 @@
   "{{count}} users · page {{page}}/{{pages}}_one": "{{count}} user · page {{page}}/{{pages}}",
   "{{count}} users · page {{page}}/{{pages}}_other": "{{count}} users · page {{page}}/{{pages}}",
   "{{count}} weeks of summaries_one": "{{count}} week of summaries",
-  "{{count}} weeks of summaries_other": "{{count}} weeks of summaries"
+  "{{count}} weeks of summaries_other": "{{count}} weeks of summaries",
+  "{{count}} items · about {{minutes}} min · {{done}} done_one": "{{count}} item · about {{minutes}} min · {{done}} done",
+  "{{count}} items · about {{minutes}} min · {{done}} done_other": "{{count}} items · about {{minutes}} min · {{done}} done",
+  "{{count}} new practice items are ready._one": "{{count}} new practice item is ready.",
+  "{{count}} new practice items are ready._other": "{{count}} new practice items are ready."
 }

@@ -15,9 +15,10 @@ export interface WidgetDef {
  * layout whose version doesn't match, so stale/corrupt geometry (e.g. the
  * pre-rework 1×1 widgets) is replaced with fresh defaults on next load.
  */
-export const LAYOUT_VERSION = 2
+export const LAYOUT_VERSION = 3
 
 export const widgets: WidgetDef[] = [
+  { key: 'tonight', label: 'Study tonight', defaultVisible: true, minW: 4, minH: 4 },
   { key: 'streak', label: 'Streak', defaultVisible: true, minW: 4, minH: 3 },
   { key: 'exams', label: 'Exam Countdown', defaultVisible: true, minW: 4, minH: 3 },
   { key: 'gamification', label: 'Gamification', defaultVisible: true, minW: 4, minH: 3 },
@@ -34,23 +35,25 @@ export const widgetByKey: Record<string, WidgetDef> = Object.fromEntries(
 
 export const defaultLayouts: ResponsiveLayouts = {
   lg: [
-    { i: 'streak', x: 0, y: 0, w: 6, h: 3, minW: 4, minH: 3 },
-    { i: 'exams', x: 6, y: 0, w: 6, h: 3, minW: 4, minH: 3 },
-    { i: 'gamification', x: 0, y: 3, w: 12, h: 3, minW: 4, minH: 3 },
-    { i: 'study', x: 0, y: 6, w: 12, h: 6, minW: 6, minH: 5 },
-    { i: 'deadlines', x: 0, y: 12, w: 6, h: 5, minW: 4, minH: 3 },
-    { i: 'activity', x: 6, y: 12, w: 6, h: 5, minW: 4, minH: 5 },
-    { i: 'upload', x: 0, y: 17, w: 6, h: 4, minW: 3, minH: 4 },
-    { i: 'courses', x: 6, y: 17, w: 6, h: 4, minW: 6, minH: 4 },
+    { i: 'tonight', x: 0, y: 0, w: 12, h: 5, minW: 4, minH: 4 },
+    { i: 'streak', x: 0, y: 5, w: 6, h: 3, minW: 4, minH: 3 },
+    { i: 'exams', x: 6, y: 5, w: 6, h: 3, minW: 4, minH: 3 },
+    { i: 'gamification', x: 0, y: 8, w: 12, h: 3, minW: 4, minH: 3 },
+    { i: 'study', x: 0, y: 11, w: 12, h: 6, minW: 6, minH: 5 },
+    { i: 'deadlines', x: 0, y: 17, w: 6, h: 5, minW: 4, minH: 3 },
+    { i: 'activity', x: 6, y: 17, w: 6, h: 5, minW: 4, minH: 5 },
+    { i: 'upload', x: 0, y: 22, w: 6, h: 4, minW: 3, minH: 4 },
+    { i: 'courses', x: 6, y: 22, w: 6, h: 4, minW: 6, minH: 4 },
   ],
   sm: [
-    { i: 'streak', x: 0, y: 0, w: 12, h: 3, minW: 4, minH: 3 },
-    { i: 'exams', x: 0, y: 3, w: 12, h: 3, minW: 4, minH: 3 },
-    { i: 'gamification', x: 0, y: 6, w: 12, h: 3, minW: 4, minH: 3 },
-    { i: 'study', x: 0, y: 9, w: 12, h: 6, minW: 6, minH: 5 },
-    { i: 'deadlines', x: 0, y: 15, w: 12, h: 4, minW: 4, minH: 3 },
-    { i: 'activity', x: 0, y: 19, w: 12, h: 5, minW: 4, minH: 5 },
-    { i: 'upload', x: 0, y: 24, w: 12, h: 4, minW: 3, minH: 4 },
-    { i: 'courses', x: 0, y: 28, w: 12, h: 4, minW: 6, minH: 4 },
+    { i: 'tonight', x: 0, y: 0, w: 12, h: 5, minW: 4, minH: 4 },
+    { i: 'streak', x: 0, y: 5, w: 12, h: 3, minW: 4, minH: 3 },
+    { i: 'exams', x: 0, y: 8, w: 12, h: 3, minW: 4, minH: 3 },
+    { i: 'gamification', x: 0, y: 11, w: 12, h: 3, minW: 4, minH: 3 },
+    { i: 'study', x: 0, y: 14, w: 12, h: 6, minW: 6, minH: 5 },
+    { i: 'deadlines', x: 0, y: 20, w: 12, h: 4, minW: 4, minH: 3 },
+    { i: 'activity', x: 0, y: 24, w: 12, h: 5, minW: 4, minH: 5 },
+    { i: 'upload', x: 0, y: 29, w: 12, h: 4, minW: 3, minH: 4 },
+    { i: 'courses', x: 0, y: 33, w: 12, h: 4, minW: 6, minH: 4 },
   ],
 }
