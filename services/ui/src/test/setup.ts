@@ -2,7 +2,13 @@ import '@testing-library/jest-dom'
 
 // i18n, so components calling `t()` render text rather than warning about a
 // missing instance. English is the key set, so tests read as English.
-import '../i18n'
+import i18n, { i18nReady } from '../i18n'
+
+// Russian is a lazily imported chunk. Load it once, up front, so a test that
+// switches to it resolves from the in-memory bundle rather than racing a
+// dynamic import against waitFor's timeout on a loaded runner.
+await i18nReady
+await i18n.loadLanguages('ru')
 
 // Node's experimental localStorage global (undefined without --localstorage-file)
 // shadows jsdom's; provide a real in-memory Storage for tests.
