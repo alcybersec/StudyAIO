@@ -209,7 +209,9 @@ class TestCompleted:
             async with async_session_factory() as s:
                 s.add(
                     QuizAttempt(
-                        quiz_question_id=world.questions[0].id, selected_answer="x", is_correct=False
+                        quiz_question_id=world.questions[0].id,
+                        selected_answer="x",
+                        is_correct=False,
                     )
                 )
                 await s.commit()
