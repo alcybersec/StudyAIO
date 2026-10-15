@@ -19,6 +19,7 @@ from app.models.extraction import Extraction
 from app.models.pipeline_run import PipelineRun
 from app.models.summary import Summary
 from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
+from app.pipeline._session import release_connection
 from app.pipeline.failures import record_stage_failure
 from app.pipeline.resilience import handle_retryable, is_retryable
 from app.services import asset_service
@@ -109,21 +110,19 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
             owner_id = artifact.user_id
             user_agent_config, output_language = await get_user_ai_context(session, owner_id)
             agent = get_agent(user_settings=user_agent_config, output_language=output_language)
+            # No pooled connection idle-in-transaction across either provider call
+            # (GL#50). Both calls run before anything is saved, so the flashcard and
+            # quiz writes stay in one transaction as before and a failed quiz call
+            # leaves no half-saved set.
+            await release_connection(session)
             flashcard_data = await agent.generate_flashcards(
                 summary=summary_md,
                 extraction=extraction_data,
                 count=get_effective_setting("flashcard_count_per_week"),
             )
 
-            flashcards = await asset_service.save_flashcards(
-                session=session,
-                course_id=artifact.course_id,
-                week=artifact.week,
-                artifact_id=artifact_id,
-                flashcards=flashcard_data,
-            )
-
             # Generate quiz questions
+            await release_connection(session)
             quiz_data = await agent.generate_quiz(
                 summary=summary_md,
                 extraction=extraction_data,
@@ -136,6 +135,13 @@ async def _generate_assets(artifact_id: str, user_id: str | None = None) -> dict
 
             await record_agent_usage(session, artifact.user_id, agent)
 
+            flashcards = await asset_service.save_flashcards(
+                session=session,
+                course_id=artifact.course_id,
+                week=artifact.week,
+                artifact_id=artifact_id,
+                flashcards=flashcard_data,
+            )
             quiz_questions = await asset_service.save_quiz_questions(
                 session=session,
                 course_id=artifact.course_id,

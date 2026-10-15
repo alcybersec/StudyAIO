@@ -46,6 +46,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import structlog
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artifact import LectureArtifact
@@ -114,18 +115,23 @@ async def record_stage_failure(
             run is still recorded as failed, but the artifact keeps its
             in-progress status; the final attempt fails it.
     """
-    # Read these *before* the rollback. Each was assigned by the stage's own
-    # `PipelineRun(...)` call and nothing has committed since, so none is expired
-    # and none of these reads emits SQL — which matters, because on a session
-    # marked for rollback any SQL raises PendingRollbackError.
-    run_id = run.id
-    stage = run.stage
-    started_at = run.started_at
+    # Read these *before* the rollback, and without SQL: on a session marked for
+    # rollback any statement raises PendingRollbackError. A run that was only
+    # flushed is transient after the failure and keeps its attributes. A run the
+    # stage committed before a provider call (GL#50, `release_connection`) is
+    # persistent, and the failed flush's internal rollback has expired it, so its
+    # attributes cannot be read; its identity still can, and the row itself
+    # (committed) supplies `stage`/`started_at` once the session is clean.
+    state = sa_inspect(run)
+    loaded = state.dict
+    run_id = state.identity[0] if state.identity else loaded.get("id")
+    stage = loaded.get("stage")
+    started_at = loaded.get("started_at")
     message = str(error)
 
-    async with _clean_transaction(session, stage=stage, subject=artifact_id):
-        # Normally gone: the run's INSERT was in the rolled-back transaction.
-        # `get()` keeps this correct anyway for a stage whose run was committed.
+    async with _clean_transaction(session, stage=stage or "unknown", subject=artifact_id):
+        # The committed run (see above), or normally gone: the run's INSERT was in
+        # the rolled-back transaction.
         failed_run = await session.get(PipelineRun, run_id)
         if failed_run is None:
             failed_run = PipelineRun(
@@ -135,6 +141,8 @@ async def record_stage_failure(
                 started_at=started_at,
             )
             session.add(failed_run)
+        else:
+            started_at = failed_run.started_at
 
         completed_at = datetime.now(UTC)
         failed_run.status = FAILED

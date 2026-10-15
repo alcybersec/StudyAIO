@@ -45,6 +45,7 @@ from app.models.quiz_attempt import QuizAttempt
 from app.models.summary import Summary
 from app.models.targeted_generation import TargetedGeneration
 from app.pipeline import metrics
+from app.pipeline._session import release_connection
 from app.pipeline.resilience import backoff_countdown
 from app.pipeline.targeted_items import (
     AVOID_LIMIT,
@@ -417,6 +418,10 @@ async def _generate(session, gen: TargetedGeneration, ctx: TargetContext) -> lis
     owner = gen.user_id
     user_config, language = await get_user_ai_context(session, owner)
     agent = get_agent(user_settings=user_config, output_language=language)
+    # The context reads above left a transaction open: end it before the (minutes-long)
+    # provider call so no pooled connection sits idle-in-transaction (GL#50). `_persist`
+    # re-locks and re-checks the row in a fresh transaction afterwards.
+    await release_connection(session)
     kwargs = {
         "summary": ctx.summary_md,
         "extraction": ctx.extraction,

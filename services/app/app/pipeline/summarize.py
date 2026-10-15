@@ -21,6 +21,7 @@ from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
 from app.models.pipeline_run import PipelineRun
 from app.pipeline._owner import resolve_event_owner, warn_on_owner_mismatch
+from app.pipeline._session import release_connection
 from app.pipeline.failures import record_stage_failure
 from app.pipeline.resilience import StageBusyError, count_metric, handle_retryable, is_retryable
 from app.services import summary_service
@@ -175,6 +176,13 @@ async def _summarize(artifact_id: str, user_id: str | None = None) -> dict:
             owner_id = artifact.user_id
             user_agent_config, output_language = await get_user_ai_context(session, owner_id)
             agent = get_agent(user_settings=user_agent_config, output_language=output_language)
+            # No pooled connection idle-in-transaction across the provider call
+            # (GL#50). The week lock lives on its own autocommit connection (no
+            # transaction, so nothing idle-in-transaction) and is deliberately kept
+            # across the call: it is what serialises "read existing -> generate ->
+            # version+1" for TECH-05, and releasing it would let two workers
+            # both generate from the same prior version.
+            await release_connection(session)
             summary_result = await agent.generate_summary(extraction_data, existing_md)
 
             # Meter the AI spend. Usage accumulates on the adapter, so one call

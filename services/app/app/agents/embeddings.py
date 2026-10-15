@@ -9,8 +9,12 @@ Embeddings are AI calls under floor 3; see
 docs/adr/0005-floor3-embedding-gateway.md for the gateway and its allowlist.
 """
 
+import asyncio
+import contextvars
 import math
+import threading
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 
 import structlog
 
@@ -81,6 +85,10 @@ class SentenceTransformerProvider(EmbeddingProvider):
         self._model_name = model_name
         self._model = None
         self._dimensions = 384
+        # `embed_texts` runs on worker threads (see `aembed_texts`): one load, and one
+        # encode at a time so concurrent callers queue instead of oversubscribing CPUs.
+        self._load_lock = threading.Lock()
+        self._encode_lock = threading.Lock()
 
     @property
     def dimensions(self) -> int:
@@ -102,17 +110,26 @@ class SentenceTransformerProvider(EmbeddingProvider):
         if not words:
             return []
         self._load_model()
-        ids = self._model.tokenizer(words, add_special_tokens=False)["input_ids"]
+        # The fast tokenizer is not safe to share across threads ("Already borrowed"),
+        # and `encode` (which uses it) runs on worker threads: take the encode lock.
+        with self._encode_lock:
+            ids = self._model.tokenizer(words, add_special_tokens=False)["input_ids"]
         return [max(1, len(i)) for i in ids]
 
     def _load_model(self):
-        """Lazy-load the sentence-transformers model."""
-        if self._model is None:
+        """Lazy-load the sentence-transformers model (thread-safe, loads once)."""
+        if self._model is not None:
+            return
+        with self._load_lock:
+            if self._model is not None:
+                return
             from sentence_transformers import SentenceTransformer
 
             logger.info("loading_embedding_model", model=self._model_name)
-            self._model = SentenceTransformer(self._model_name)
-            self._dimensions = self._model.get_sentence_embedding_dimension()
+            model = SentenceTransformer(self._model_name)
+            self._dimensions = model.get_sentence_embedding_dimension()
+            # Publish last: another thread seeing `_model` set must see a usable model.
+            self._model = model
             logger.info(
                 "embedding_model_loaded",
                 model=self._model_name,
@@ -132,7 +149,8 @@ class SentenceTransformerProvider(EmbeddingProvider):
             return []
 
         self._load_model()
-        embeddings = self._model.encode(texts, show_progress_bar=False)
+        with self._encode_lock:
+            embeddings = self._model.encode(texts, show_progress_bar=False)
         return [emb.tolist() for emb in embeddings]
 
     def preload(self) -> None:
@@ -254,6 +272,35 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         )
 
         return response.embeddings
+
+
+#: Bounded pool for blocking embedding calls made from async code. Two threads: the
+#: local encode is serialised by the provider anyway, and the API backends are I/O.
+_EMBED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="embed")
+
+
+async def aembed_texts(provider: EmbeddingProvider, texts: list[str]) -> list[list[float]]:
+    """Embed `texts` on a worker thread so the event loop keeps running.
+
+    `embed_texts` is synchronous (and CPU-bound for the local model: seconds for a
+    lecture's chunks), and ADR 0005 pins the `EmbeddingProvider` surface, so async
+    callers go through this module function rather than a new provider method. It
+    is the same provider obtained from `get_embedding_provider`, called the same
+    way, only not on the loop thread. The caller's contextvars (structlog bindings)
+    are carried across.
+
+    Args:
+        provider: The embedding provider.
+        texts: Texts to embed.
+
+    Returns:
+        One vector per text; `[]` for no texts (the provider is not touched).
+    """
+    if not texts:
+        return []
+    ctx = contextvars.copy_context()
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_EMBED_EXECUTOR, ctx.run, provider.embed_texts, texts)
 
 
 # Context windows of the non-local backends, in their own tokens.
