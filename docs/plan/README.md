@@ -21,7 +21,9 @@ Orchestrator updates here.
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| _none — M33 S2 deployed; S3 next_ | | | |
+| M33-S3-BACKEND-027 (GL#48: edit/delete/add AI cards + quiz items, versioned) + FRONTEND-028 backend half (GL#49: upload course/week override) | `backend` | 2026-10-15 | isolated |
+| GL#52 chat-delete confirmation + M33-S3-FRONTEND-026 (GL#47: upload progress across navigation) | `frontend` | 2026-10-15 | isolated |
+| M33-S3-AI-029 (GL#50: embedding off the event loop; no DB session across provider calls) | `ai` | 2026-10-15 | isolated |
 
 ## Completed
 
