@@ -1,4 +1,4 @@
-import { test, expect, seedCourseRow, deleteCourse } from './fixtures'
+import { test, expect, seedCourseRow, deleteCourse, settle } from './fixtures'
 
 const courseCode = 'E2EKG'
 
@@ -29,7 +29,7 @@ test.describe('Knowledge', () => {
 
   test('graph/list toggle switches views', async ({ page }) => {
     await page.goto('/knowledge')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     const toggle = page.getByRole('group', { name: /view/i })
     const listButton = toggle.getByRole('button', { name: /list/i })
@@ -45,7 +45,7 @@ test.describe('Knowledge', () => {
 
   test('list view supports keyboard navigation', async ({ page }) => {
     await page.goto('/knowledge')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     await page.getByRole('group', { name: /view/i }).getByRole('button', { name: /list/i }).click()
 

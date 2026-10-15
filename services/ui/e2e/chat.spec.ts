@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures'
+import { test, expect, settle } from './fixtures'
 
 test.describe('Ask (chat sessions)', () => {
   test('legacy /chat redirects to /ask', async ({ page }) => {
@@ -8,7 +8,7 @@ test.describe('Ask (chat sessions)', () => {
 
   test('ask page loads with welcome message', async ({ page }) => {
     await page.goto('/ask')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     // Should show the Ask surface or welcome text
     await expect(
@@ -18,7 +18,7 @@ test.describe('Ask (chat sessions)', () => {
 
   test('new question button is visible', async ({ page }) => {
     await page.goto('/ask')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     const newBtn = page.getByRole('button', { name: /new question|new chat/i }).first()
     await expect(newBtn).toBeVisible({ timeout: 10_000 })
@@ -26,7 +26,7 @@ test.describe('Ask (chat sessions)', () => {
 
   test('clicking new question creates a session', async ({ page }) => {
     await page.goto('/ask')
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     const newBtn = page.getByRole('button', { name: /new question|new chat/i }).first()
     await expect(newBtn).toBeVisible({ timeout: 10_000 })

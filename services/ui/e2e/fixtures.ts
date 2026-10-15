@@ -1,8 +1,52 @@
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
-import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test'
+import {
+  test as playwrightTest,
+  expect,
+  type APIRequestContext,
+  type Page,
+  type Request,
+} from '@playwright/test'
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:8000'
+
+// The app shell holds one pipeline event stream (SSE) open on every page, so
+// Playwright's own 'networkidle' never fires. `settle` is the same idea with
+// that one long-lived request left out.
+const LONG_LIVED = /\/api\/uploads\/pipeline-events/
+const inFlight = new WeakMap<Page, Set<Request>>()
+
+const base = playwrightTest.extend({
+  page: async ({ page }, use) => {
+    const pending = new Set<Request>()
+    inFlight.set(page, pending)
+    const done = (r: Request) => pending.delete(r)
+    page.on('request', (r) => {
+      if (!LONG_LIVED.test(r.url())) pending.add(r)
+    })
+    page.on('requestfinished', done)
+    page.on('requestfailed', done)
+    await use(page)
+  },
+})
+
+/**
+ * Wait for the page to load and for ordinary requests to stay quiet for
+ * `quietMs`. Use instead of `waitForLoadState('networkidle')`.
+ */
+export async function settle(page: Page, quietMs = 500, timeout = 15_000): Promise<void> {
+  await page.waitForLoadState('load')
+  const pending = inFlight.get(page)
+  if (!pending) throw new Error('settle() needs the page fixture from ./fixtures')
+  const deadline = Date.now() + timeout
+  let quietSince = Date.now()
+  while (Date.now() < deadline) {
+    if (pending.size > 0) quietSince = Date.now()
+    else if (Date.now() - quietSince >= quietMs) return
+    await page.waitForTimeout(50)
+  }
+  throw new Error(`settle(): ${pending.size} request(s) still in flight after ${timeout}ms`)
+}
 
 /** Generate a unique test email */
 export function testEmail(): string {
@@ -128,6 +172,14 @@ export function seedCourseRow(code: string, concepts = 0): void {
  */
 export function seedWeakSpotCourse(code: string): void {
   seedDb('weakspots', code)
+}
+
+/**
+ * Seed a course for the self-hosted default user with one lecture in week 1
+ * (two cards, one multiple-choice question) and no lecture in week 2.
+ */
+export function seedStudyItems(code: string): void {
+  seedDb('studyitems', code)
 }
 
 /** Delete a seeded course (and its children) through the public API. */

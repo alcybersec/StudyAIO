@@ -1,4 +1,4 @@
-import { test, expect, seedCourseRow, deleteCourse } from './fixtures'
+import { test, expect, seedCourseRow, deleteCourse, settle } from './fixtures'
 
 const COURSE_CODE = 'E2ECRS'
 
@@ -26,7 +26,7 @@ test.describe('Course', () => {
 
   test('course page displays week rows', async ({ page }) => {
     await page.goto(`/courses/${COURSE_CODE}`)
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     // Should show week entries or empty state
     const hasWeeks = await page.getByText(/week\s+\d|no weeks|no artifacts/i).isVisible().catch(() => false)
@@ -36,7 +36,7 @@ test.describe('Course', () => {
 
   test('week view page shows summary tab', async ({ page }) => {
     await page.goto(`/courses/${COURSE_CODE}/weeks/1`)
-    await page.waitForLoadState('networkidle')
+    await settle(page)
 
     // Should show tabs or content
     const pageContent = await page.textContent('body')
@@ -45,7 +45,7 @@ test.describe('Course', () => {
 
   test('course ops page loads', async ({ page }) => {
     await page.goto(`/courses/${COURSE_CODE}/ops`)
-    await page.waitForLoadState('networkidle')
+    await settle(page)
     const pageContent = await page.textContent('body')
     expect(pageContent).toBeTruthy()
   })
