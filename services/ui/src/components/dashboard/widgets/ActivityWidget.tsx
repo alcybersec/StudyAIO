@@ -37,6 +37,8 @@ export const ActivityWidget = memo(function ActivityWidget() {
       onRetry={() => refetch()}
       emptyTitle={t('No activity yet')}
       emptyHint={t('Pipeline runs show up here as your files are processed.')}
+      emptyActionLabel={t('Upload a lecture')}
+      emptyActionTo="/upload"
       skeleton={<ActivitySkeleton />}
     >
       <ul className="divide-y divide-border">

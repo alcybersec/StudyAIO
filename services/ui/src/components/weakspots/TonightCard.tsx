@@ -2,6 +2,7 @@ import { memo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Check, RefreshCw } from 'lucide-react'
+import { useDashboardCourses } from '../../hooks/useApi'
 import { useRefreshTonightPlan, useTonightPlan } from '../../hooks/useWeakSpots'
 import { recordUsageEvent } from '../../api/usage'
 import { userErrorMessage } from '../../lib/userError'
@@ -34,6 +35,8 @@ export const TonightCard = memo(function TonightCard() {
   const navigate = useNavigate()
   const { data: plan, isLoading, isError, refetch } = useTonightPlan()
   const refresh = useRefreshTonightPlan()
+  // Before any upload there is nothing to check in on, so the way forward is Upload.
+  const hasMaterial = useDashboardCourses().data?.some((c) => c.total_artifacts > 0) ?? true
 
   // One view event each time the plan is shown with data. Fire-and-forget.
   const loaded = !!plan
@@ -71,9 +74,13 @@ export const TonightCard = memo(function TonightCard() {
       onRetry={() => refetch()}
       emptyIcon="🌙"
       emptyTitle={t('Nothing to practise tonight')}
-      emptyHint={t("Answer a few quiz questions or review some cards and tonight's plan will take shape.")}
-      emptyActionLabel={t('See your mastery map')}
-      emptyActionTo="/study?tab=mastery"
+      emptyHint={
+        hasMaterial
+          ? t("Take a short check-in or review some cards and tonight's plan will take shape.")
+          : t("Upload a lecture, then take a short check-in; tonight's plan builds from your answers.")
+      }
+      emptyActionLabel={hasMaterial ? t('See your mastery map') : t('Upload a lecture')}
+      emptyActionTo={hasMaterial ? '/study?tab=mastery' : '/upload'}
       skeleton={<TonightSkeleton />}
     >
       {plan && (

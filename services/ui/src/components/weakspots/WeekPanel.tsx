@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button, Card } from '../ui'
 import { useDiagnostic } from '../../hooks/useWeakSpots'
 import { userErrorMessage } from '../../lib/userError'
-import { masteryLabel, masteryState } from '../../lib/weakSpots'
-import type { PlanRunState } from '../../lib/planRun'
+import { diagnosticRun, masteryLabel, masteryState } from '../../lib/weakSpots'
 import type { WeakSpotCourse, WeakSpotWeek } from '../../types'
 import { PracticeRequest } from './PracticeRequest'
 
@@ -12,9 +11,6 @@ interface WeekPanelProps {
   course: WeakSpotCourse
   week: WeakSpotWeek
 }
-
-/** Minutes the study runner budgets per quiz question (timed_session_service). */
-const MINUTES_PER_QUIZ = 3
 
 /** Detail for one selected cell: evidence, the diagnostic entry for unknown weeks, and "practise". */
 export function WeekPanel({ course, week }: WeekPanelProps) {
@@ -33,13 +29,7 @@ export function WeekPanel({ course, week }: WeekPanelProps) {
       {
         onSuccess: (d) => {
           if (d.question_ids.length === 0) return
-          const run: PlanRunState = {
-            cardIds: [],
-            quizIds: d.question_ids,
-            minutes: d.question_ids.length * MINUTES_PER_QUIZ,
-            courseCodes: [course.course_code],
-          }
-          navigate('/study?tab=timed', { state: { planRun: run } })
+          navigate('/study?tab=timed', { state: { planRun: diagnosticRun(d, course.course_code) } })
         },
       },
     )
