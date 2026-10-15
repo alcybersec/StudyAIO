@@ -161,3 +161,69 @@ def test_floor2_claude_login_only_where_the_agent_is_called(routing):
         if hit:
             bad.append(f"{svc} consumes AI queue(s) {hit} with no Claude login")
     assert not bad, "Floor 2 (R-025, GL#51):\n" + "\n".join(bad)
+
+
+def _landed(task: str, queue: str, *, addressed: bool, monkeypatch) -> set[str]:
+    """Queues one message for ``task`` is delivered to, on an in-memory broker.
+
+    ``addressed=False`` publishes as Celery does (``send_task``: the anonymous
+    exchange, keyed on the queue name). ``addressed=True`` publishes to the routed
+    queue's declared exchange and routing key, as any explicitly addressed
+    publisher would; that is the path a shared binding fans out on.
+    """
+    from kombu import Connection
+
+    from app.worker import celery_app
+
+    # The result backend is Redis; do not open a socket to subscribe.
+    monkeypatch.setattr(type(celery_app.backend), "on_task_call", lambda *a, **k: None)
+    declared = list(celery_app.amqp.queues.values())
+    with Connection("memory://") as conn, conn.channel() as channel:
+        bound = [q(channel) for q in declared]
+        for q in bound:
+            q.declare()
+        with conn.Producer(channel=channel) as producer:
+            if addressed:
+                target = next(q for q in bound if q.name == queue)
+                producer.publish(
+                    {"task": task},
+                    exchange=target.exchange.name,
+                    routing_key=target.routing_key,
+                    declare=[],
+                )
+            else:
+                celery_app.send_task(task, producer=producer, args=[], kwargs={})
+        landed = set()
+        for q in bound:
+            while q.get(no_ack=True) is not None:
+                landed.add(q.name)
+    return landed
+
+
+@pytest.mark.parametrize("addressed", [False, True], ids=["send_task", "declared-address"])
+def test_floor2_an_ai_task_message_reaches_only_a_pool_with_the_login(
+    routing, monkeypatch, addressed
+):
+    """The static routing above is only sound if the broker honours it (AI-067, R-044).
+
+    With bare ``Queue(name)`` every queue bound to the same exchange and routing
+    key. Celery's own publish (anonymous exchange) still reached one queue, so the
+    fault was latent, but a message sent to an AI queue's declared address was
+    also delivered to ``maintenance``, whose pool holds no Claude login. Publish
+    every task that reaches ``get_agent`` both ways and require it to land on its
+    routed queue only, and that queue to be consumed by allowlisted pools alone.
+    """
+    pools = _service_queues()
+    ai_tasks = sorted(
+        (q, t) for q, tasks in routing.items() for t in tasks if _reaches(t, GET_AGENT)
+    )
+    assert {t for _, t in ai_tasks} >= KNOWN_AI_TASKS, "the probe is blind"
+    bad = []
+    for queue, task in ai_tasks:
+        landed = _landed(task, queue, addressed=addressed, monkeypatch=monkeypatch)
+        if landed != {queue}:
+            bad.append(f"{task}: routed to {queue}, delivered to {sorted(landed)}")
+        for svc, consumed in pools.items():
+            if svc not in CLAUDE_LOGIN_SERVICES and ("*" in consumed or consumed & landed):
+                bad.append(f"{task}: delivered to a queue {svc} consumes, with no Claude login")
+    assert not bad, "Floor 2 (GL#51, AI-067):\n" + "\n".join(sorted(set(bad)))

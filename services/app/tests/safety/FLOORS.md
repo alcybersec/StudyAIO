@@ -210,10 +210,12 @@ an enqueue, not an edge).
 | `…::test_floor2_pool_call_graph_is_not_blind` | The graph stops seeing `get_agent` from any known AI task (classify, summarize, assets, courseops, targeted, concepts), `get_embedding_provider` from `reembed_user_chunks`, or recovery's function-local `resume_pipeline` import; or it starts treating `reembed_all_chunks`'s `.delay()` fan-out as a call. |
 | `…::test_floor2_maintenance_tasks_never_reach_the_agent` | A task routed to `maintenance` reaches `get_agent`. `worker-maintenance` has no Claude login. |
 | `…::test_floor2_claude_login_only_where_the_agent_is_called` | An allowlisted pool consumes no queue with an AI task (a login with no purpose), or a pool outside the allowlist consumes one (a worker without `-Q` counts as consuming every queue). |
+| `…::test_floor2_an_ai_task_message_reaches_only_a_pool_with_the_login[send_task\|declared-address]` | A task that reaches `get_agent`, published on an in-memory broker either through `celery_app.send_task` or to its routed queue's declared exchange and routing key, is delivered to any other queue, or to a queue that a pool outside the allowlist consumes. The static pins above assume delivery follows the routing. Before AI-067 (`2bed33a`, R-044), bare `Queue(name)` shared one binding, so a message sent to an AI queue's declared address also reached `maintenance`. Added at the M33 gate. |
 
 Revert-checked in SAFETY-059: the login dir mount plus `*claude-environment` added to
 `worker-maintenance` (mount and token-path pins red); `worker-maintenance` added to the allowlist
 (pool, parser and pairing pins red); `extract_concepts` routed to `maintenance` (both routing pins red).
+Mutation-checked at the M33 gate: `app/worker.py` back to bare `Queue(name)` (the delivery pin red).
 
 ### Operator-only AI settings (SEC-01, SEC-03; backend `a5f3255`)
 
@@ -298,6 +300,14 @@ Mutation-checked in SAFETY-033, all red: `logger.info(..., email=user.email)` in
 Mutation-checked in SAFETY-040, all red: `app/core/logging.py` reverted to before `06c4fcb` (the F1 test);
 `app/worker.py` reverted to before `344ce7e` (both worker tests); only the `@setup_logging.connect` decorator
 removed (the signal test, which the AST check alone misses).
+
+Outgoing mail (GL#53, `0be417c`, M33 gate). The text/plain alternative repeats every link as a
+visible URL, so reset, verification and invite tokens appear twice in each message.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_email_delivery_logs.py::test_floor2_sent_mail_logs_no_address_token_or_body[…]` | Sending a reset, verification or invite mail through the real logging configuration (DEBUG) puts the recipient address, the link token or the body into the handler stream. Not vacuous: the token must be in both MIME alternatives and `email_sent` must be logged. |
+| `…::test_floor2_failed_mail_logs_no_address_or_token[…]` | An SMTP failure (a recipients-refused error, or any exception whose text names the recipient) leaves the address or the token in the `email_send_failed` line or its traceback. |
 
 ## 3. AI only via the adapter (amended by ADR 0003 and ADR 0005)
 

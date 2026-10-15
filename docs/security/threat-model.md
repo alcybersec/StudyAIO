@@ -1,6 +1,6 @@
 # StudyAIO threat model
 
-**Owner:** `safety` · **First written:** 2026-10-11 (M32 gate) · **Tree:** `94a1374`
+**Owner:** `safety` · **First written:** 2026-10-11 (M32 gate) · **Last delta:** 2026-10-15 (M33 gate, tree `58c4e91`)
 
 This is a living document. Every gate's Floors file links to it and adds a dated delta (§5).
 The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
@@ -18,6 +18,9 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | AI-processing consent record (SEC-08, GL#38) | `users.ai_processing_consent_at` / `_version` | Evidence that the user agreed to the disclosure in force before their content left the instance. Only `ai_consent_required` is exposed by the API; the raw record is not |
 | AI feedback votes and comments (GL#36) | `ai_feedback` | Owned by the voter. The comment is free text and may hold personal data; it is shown to admins in the aggregate, never logged and never copied into usage events |
 | Usage events (GL#37) | `usage_events` | Owned by the actor. Event name from a fixed list, scalar properties under an allowlist, no content; read cross-user only as admin aggregates with no user id |
+| Weak-spot state (ADR 0007) | `study_plans`, `targeted_generations`, item provenance on `flashcards`/`quiz_questions` | Owned by the learner; derived from their study history. A generation row names the course and week it targets, so a cross-user read would leak what someone is struggling with |
+| User-authored and edited study items (GL#48) | `flashcards`/`quiz_questions` with `origin="user"`; originals kept with `archived_at` | Floor 4: an edit or delete must never destroy the generated original or its review and attempt history |
+| Outgoing mail | SMTP, never stored | Reset, verification and invite links are bearer tokens. Since GL#53 each one appears in both the HTML and the plain-text part |
 | Database dumps | the deploy directory's `backups/` (predeploy + nightly), readable only by the deploy user and the DB container | They hold everything above except the env secrets. AI credentials in them are ciphertext |
 
 ## 2. Actors
@@ -37,7 +40,7 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | B1 | Internet → API | JWT cookie auth on every user route (unit `test_endpoint_authn_guard.py`). Since SEC-05, `SELF_HOSTED` is authenticated, and anonymous-as-admin needs `SINGLE_USER_MODE` (`test_floor1_anonymous_caller.py`). Startup refuses the committed JWT key whenever login is on (`test_floor2_jwt_default_secret.py`). Redis-backed rate limits fail closed on `/api/auth/*` (SEC-10) | Rate limits key on `request.client.host` and depend on `FORWARDED_ALLOW_IPS` (issue #39; startup warns only). `BIND_HOST` is declared by the operator, not observed, so a mis-declared loopback bind with a published port passes the single-user guard |
 | B2 | Tenant → tenant | Floor-1 route sweep (115 method+path pairs, 99 reaching owned tables at M32), function-level unscoped-query and optional-caller detectors (C6), owner-routed SSE events, worker-job pins (recovery, nudges, webhook) | R-010: `review_items` and `quiz_attempts` have no `user_id` and are scoped by join. Opted-in leaderboard rows are visible by the user's own choice |
 | B3 | API/worker → AI provider | Floor 3: `get_agent` and `get_embedding_provider` only at the ADR 0003 and ADR 0005 sites. Adapter-boundary redaction with `from None`. Global `AgentError` handler withholds the text (C4). User base URLs are public-only, re-checked at use, with no redirects (SEC-03) | DNS rebinding is narrowed (checked when the config is built and again before connecting), not closed by pinning |
-| B4 | Worker → `claude -p` child | `--tools ""`, `--strict-mcp-config`, an allowlisted env, a fresh empty cwd per call, operator-only binary and model (SEC-01), a fixed system prompt, a uid drop to 10001 with `extra_groups=[]` (AGENT-01), and the host-login copy redacted and removed | The uid drop is configured only by `CLAUDE_CLI_UID` in compose. If it is unset, the child stays root with only a log line. The worker itself runs as root (`user: "0:0"`) and parses untrusted documents |
+| B4 | Worker → `claude -p` child | `--tools ""`, `--strict-mcp-config`, an allowlisted env, a fresh empty cwd per call, operator-only binary and model (SEC-01), a fixed system prompt, a uid drop to 10001 with `extra_groups=[]` (AGENT-01), and the host-login copy redacted and removed | The uid drop is configured only by `CLAUDE_CLI_UID` in compose. If it is unset, the child stays root with only a log line. The two AI pools (`worker`, `worker-ondemand`) run as root (`user: "0:0"`) for the login mounts, and `worker` parses untrusted documents. `worker-maintenance` runs as the image user and holds no login (M33) |
 | B5 | App → storage (`data/`, DB) | Floor 4: every blob delete is classified against ADR 0004. Re-summarize and regeneration keep versions and history. The account purge sweeps every summary blob, including deleted courses' (C5 ledger, id-shaped segments only) | Courses deleted before `a3ab6ce` are unattributable (R-020 residual) |
 | B6 | Credentials at rest | SEC-06: `enc:v1:` MultiFernet. A multi-user start refuses with no key and refuses the all-zero test key outside pytest. Ciphertext-shaped input is never stored verbatim. Export never returns credentials | OAuth and calendar tokens are plaintext (R-017). Rotation is manual (`encrypt-user-secrets`). The key lives in the same `.env` as every other secret |
 | B7 | Billing webhook | Stripe signature, dedupe by event id (`SET NX`), per-customer ordering, customer-scoped mutation (BILL-01, floor-1 pins) | Dedupe and ordering state lives in Redis with a TTL. Redis is ephemeral by policy, so a flush reopens replay and reordering for old events. Events in the same second are not ordered |
@@ -204,3 +207,54 @@ fixed in M33-S2-AI-053. Pins in `services/app/tests/safety/FLOORS.md`, "Weak-spo
    inserted and was flipped back to `completed`. Found by `qa`; fixed in M33-S2-AI-053
    (`.execution_options(populate_existing=True)` on the `_persist` and `_claim` re-selects). The floor
    pin runs on an identity-map session; it fails with `populate_existing` removed from `_persist`.
+
+### 2026-10-15, M33 gate
+
+Roll-up of every M33 surface since the M32 gate, with the S3 tail (AI-067, GL#53, FRONTEND-063,
+QA-064) reviewed for the first time. Detail and the mutation table are in `docs/gates/M33/floors.md`.
+
+1. **Consent, feedback, usage events (S1).** Unchanged since the S1 deltas above. Re-mutated at the
+   gate: dropping `require_ai_consent` from the targeted route, and dropping the caller's ownership
+   from the feedback target lookup, each turn floor pins red.
+2. **Weak-spot API and targeted queue (S2).** No request-time AI site was added (ADR 0007 Decision 5,
+   ADR 0003 unchanged at five). The worker acts as the row owner. Re-mutated at the gate: an
+   unscoped `get_targeted` and a missing `populate_existing` are each red.
+3. **Study-item CRUD and upload placement (S3).** Owner-scoped, soft delete only, no existence oracle
+   (SAFETY-059). Re-mutated at the gate: unscoped `_owned_item`, code-only `get_or_create_course`
+   and a hard delete in `archive_flashcard` are each red.
+4. **Three worker pools and the credential split (GL#51).** `worker` and `worker-ondemand` hold the
+   Claude login; `worker-maintenance` holds none and, since `1815812`, runs as the image user, not
+   root. It still receives `.env` (instance AI keys, `SETTINGS_ENCRYPTION_KEY`) because re-embed may
+   need the embedding key. The static routing pins assume the broker delivers each message only to
+   its routed queue. Before AI-067 (`2bed33a`, R-044) every queue was a bare `Queue(name)` sharing one
+   exchange and routing key. Celery's own publish uses the anonymous exchange keyed on the queue name,
+   so tasks still reached one queue and the fault stayed latent. A publisher that addressed an AI
+   queue's declared exchange, though, would also have delivered to `maintenance`, whose pool has no
+   login. That would have meant a failed task, or a call on instance keys through the adapter. No
+   floor would have been crossed, but the split's floor-2 premise would not have held. A delivery
+   pin now publishes every AI task both ways (as `send_task` and to the declared address) on an
+   in-memory broker. It fails if the task lands anywhere but its routed queue.
+5. **Outgoing mail (GL#53).** `Date`, `Message-ID` (sender domain only) and a `text/plain` part
+   derived from the HTML body. The plain part repeats each link as a visible URL, so a reset,
+   verification or invite token now appears twice per message. Logging is unchanged: `email_sent`
+   and `email_send_failed` carry the subject only, and subjects carry no address or token. A runtime
+   pin sends each token-bearing mail through the real logging configuration at DEBUG, on success and
+   on SMTP failures that name the recipient, and finds neither the address, the token nor the body
+   in the stream. Residual (pre-M33): the pipeline-complete and exam-reminder subjects carry a file
+   name, course code or exam title, which reach the `email_sent` line.
+6. **Russian locale on demand (FRONTEND-063).** The loader is a fixed map from a supported tag to a
+   bundled chunk. No URL, user input or credential is involved. No floor surface.
+7. **e2e session minting (QA-064).** `services/ui/e2e/seed_e2e.py session` writes a consented
+   user (resetting the password of an existing one with that address) and prints access and refresh
+   tokens signed with whatever `JWT_SECRET_KEY` it is given. It is test-only by location: neither
+   image contains it (the UI runtime stage copies only `dist/` and `nginx.conf`; the API build context
+   is `services/app`), and only Playwright fixtures call it, in the CI `e2e-tests` job against its
+   own throwaway Postgres. Against production config it gives nothing an operator lacks: minting a
+   valid token needs the production signing key and a DB connection, which is already full control.
+   Without that key it signs with the committed default, which production refuses at startup, so its
+   tokens are rejected. Residual: the script has no guard of its own. Pointed at a real database, it
+   would reset the named user's password. Recommendation (`qa`): refuse unless an explicit e2e marker
+   is set, or the target database is not the configured production one.
+8. **Floor-1 sweep growth.** 169 `/api` routes, 133 swept pairs and 111 owned-reaching, against
+   149, 115 and 99 at M32. The only violation is still the ruled opt-in leaderboard. No dependency
+   moved in M33, so the R-040 lift rule did not apply.
