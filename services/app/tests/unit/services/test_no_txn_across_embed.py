@@ -28,12 +28,13 @@ class TxnState:
         self.open = False
         self.violations: list[str] = []
         self.calls: list[str] = []
-        self.threads: list[int] = []
+        self.threads: list[int] = []  # threads embed_texts ran on
         self.ticks = 0
 
     def check(self, name: str) -> None:
         self.calls.append(name)
-        self.threads.append(threading.get_ident())
+        if name == "embed_texts":
+            self.threads.append(threading.get_ident())
         if self.open:
             self.violations.append(f"{name} entered with an open transaction")
 

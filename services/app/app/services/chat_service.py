@@ -1,5 +1,6 @@
 """Chat service — persistent AI study companion conversations with RAG."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -451,7 +452,12 @@ async def send_message(
         search_ok = False
         try:
             provider = get_embedding_provider()
-            query_embeddings = provider.embed_texts([_retrieval_query(content, plan, recent_user)])
+            # Release the connection and keep the loop free while the (slow, CPU-bound)
+            # encode runs: no transaction across a provider call (GL#50).
+            await session.commit()
+            query_embeddings = await asyncio.to_thread(
+                provider.embed_texts, [_retrieval_query(content, plan, recent_user)]
+            )
             if query_embeddings:
                 raw = await _search(session, user_id, plan, query_embeddings[0])
                 search_ok = True
@@ -601,7 +607,12 @@ async def stream_message(
         search_ok = False
         try:
             provider = get_embedding_provider()
-            query_embeddings = provider.embed_texts([_retrieval_query(content, plan, recent_user)])
+            # Release the connection and keep the loop free while the (slow, CPU-bound)
+            # encode runs: no transaction across a provider call (GL#50).
+            await session.commit()
+            query_embeddings = await asyncio.to_thread(
+                provider.embed_texts, [_retrieval_query(content, plan, recent_user)]
+            )
             if query_embeddings:
                 raw = await _search(session, user_id, plan, query_embeddings[0])
                 search_ok = True

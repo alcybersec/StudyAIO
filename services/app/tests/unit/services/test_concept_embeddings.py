@@ -10,7 +10,7 @@ without ever erroring. See issue #33.
 These tests exist to make that class of failure loud.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -22,26 +22,28 @@ def _concept(name: str) -> Concept:
     return Concept(id=name, name=name, description=f"description of {name}", embedding=None)
 
 
-def test_embeddings_are_attached():
+@pytest.mark.asyncio
+async def test_embeddings_are_attached():
     concepts = [_concept("tls"), _concept("kerberos")]
     provider = MagicMock()
     provider.embed_texts.return_value = [[0.1] * 384, [0.2] * 384]
 
     with patch("app.agents.embeddings.get_embedding_provider", return_value=provider):
-        _embed_concepts(concepts)
+        await _embed_concepts(concepts)
 
     assert concepts[0].embedding == [0.1] * 384
     assert concepts[1].embedding == [0.2] * 384
 
 
-def test_the_provider_is_called_once_for_the_whole_batch():
+@pytest.mark.asyncio
+async def test_the_provider_is_called_once_for_the_whole_batch():
     """One provider call, not one per concept — the model pays per call."""
     concepts = [_concept("a"), _concept("b"), _concept("c")]
     provider = MagicMock()
     provider.embed_texts.return_value = [[0.0] * 384] * 3
 
     with patch("app.agents.embeddings.get_embedding_provider", return_value=provider):
-        _embed_concepts(concepts)
+        await _embed_concepts(concepts)
 
     provider.embed_texts.assert_called_once()
     assert provider.embed_texts.call_args.args[0] == [
@@ -51,7 +53,8 @@ def test_the_provider_is_called_once_for_the_whole_batch():
     ]
 
 
-def test_the_declared_interface_method_is_used():
+@pytest.mark.asyncio
+async def test_the_declared_interface_method_is_used():
     """`embed_texts` is what the ABC declares; `embed` is not.
 
     Calling a method the interface does not have is the second half of #33.
@@ -61,19 +64,20 @@ def test_the_declared_interface_method_is_used():
     provider.embed_texts.return_value = [[0.0] * 384]
 
     with patch("app.agents.embeddings.get_embedding_provider", return_value=provider):
-        _embed_concepts([_concept("x")])
+        await _embed_concepts([_concept("x")])
 
     provider.embed_texts.assert_called_once()
 
 
-def test_a_provider_failure_is_tolerated():
+@pytest.mark.asyncio
+async def test_a_provider_failure_is_tolerated():
     """A provider that is down must not lose the extracted concepts."""
     concepts = [_concept("tls")]
     provider = MagicMock()
     provider.embed_texts.side_effect = ConnectionError("provider unreachable")
 
     with patch("app.agents.embeddings.get_embedding_provider", return_value=provider):
-        _embed_concepts(concepts)
+        await _embed_concepts(concepts)
 
     assert concepts[0].embedding is None
 
@@ -82,7 +86,8 @@ def test_a_provider_failure_is_tolerated():
     "programming_error",
     [ImportError("no such module"), AttributeError("no such method"), TypeError("bad signature")],
 )
-def test_programming_errors_are_not_swallowed(programming_error):
+@pytest.mark.asyncio
+async def test_programming_errors_are_not_swallowed(programming_error):
     """The exact failures #33 hid must now propagate.
 
     A missing module, a method that is not there, a bad signature — these are
@@ -94,17 +99,18 @@ def test_programming_errors_are_not_swallowed(programming_error):
 
     with patch("app.agents.embeddings.get_embedding_provider", return_value=provider):
         with pytest.raises(type(programming_error)):
-            _embed_concepts([_concept("tls")])
+            await _embed_concepts([_concept("tls")])
 
 
-def test_a_short_response_is_refused_rather_than_misaligned():
+@pytest.mark.asyncio
+async def test_a_short_response_is_refused_rather_than_misaligned():
     """Fewer vectors than concepts would silently mislabel every one after the gap."""
     concepts = [_concept("a"), _concept("b"), _concept("c")]
     provider = MagicMock()
     provider.embed_texts.return_value = [[0.1] * 384, [0.2] * 384]
 
     with patch("app.agents.embeddings.get_embedding_provider", return_value=provider):
-        _embed_concepts(concepts)
+        await _embed_concepts(concepts)
 
     assert all(c.embedding is None for c in concepts)
 
@@ -120,8 +126,6 @@ class TestWiring:
     @pytest.mark.asyncio
     @patch("app.agents.factory.get_agent")
     async def test_extraction_embeds_the_concepts_it_creates(self, mock_get_agent, mock_session):
-        from unittest.mock import AsyncMock
-
         from app.agents.base import ConceptData, ConceptExtractionResult
         from app.services.concept_service import extract_and_save_concepts
 
@@ -147,7 +151,7 @@ class TestWiring:
         mock_session.commit = AsyncMock()
         mock_session.add = MagicMock()
 
-        with patch("app.services.concept_service._embed_concepts") as embed:
+        with patch("app.services.concept_service._embed_concepts", new_callable=AsyncMock) as embed:
             await extract_and_save_concepts(
                 session=mock_session,
                 artifact_id="art-001",

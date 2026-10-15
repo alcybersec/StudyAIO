@@ -132,7 +132,7 @@ async def _backfill_concept_embeddings(batch_size: int) -> int:
             if not batch:
                 break
 
-            _embed_concepts(batch)
+            await _embed_concepts(batch)
 
             # A provider that returns nothing would loop forever on the same
             # rows, so stop rather than spin.
