@@ -351,20 +351,21 @@ export function QuizTab({ courseCode, week, examId }: QuizTabProps) {
       {/* Answer area */}
       {question!.question_type === 'multiple_choice' ? (
         <MCQOptions
-          key={question!.id}
+          key={`answer-${question!.id}`}
           question={question!}
           onAnswer={handleAnswer}
         />
       ) : (
         <ShortAnswer
-          key={question!.id}
+          key={`answer-${question!.id}`}
           question={question!}
           onAnswer={handleAnswer}
         />
       )}
 
+      {/* Keys on siblings share one namespace: prefix them so they cannot collide on the question id. */}
       <AiFeedbackControl
-        key={question!.id}
+        key={`feedback-${question!.id}`}
         targetType="quiz_question"
         targetId={question!.id}
         batchIds={questionIds}
