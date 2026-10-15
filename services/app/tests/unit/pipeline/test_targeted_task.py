@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from celery.exceptions import SoftTimeLimitExceeded
 from prometheus_client import REGISTRY
 from sqlalchemy.dialects import postgresql
 
@@ -166,77 +167,78 @@ class TestRun:
         seams.load.side_effect = tt.TargetedError("no_source")
         result = await tt._run(GEN_ID)
         assert result["status"] == "failed"
-        seams.fail.assert_awaited_once_with(GEN_ID, "no_source")
+        seams.fail.assert_awaited_once_with(GEN_ID, OWNER, "no_source")
         seams.get_agent.assert_not_called()
 
     async def test_empty_model_output_fails(self, seams):
         seams.agent.generate_quiz.return_value = []
         result = await tt._run(GEN_ID)
         assert result["status"] == "failed"
-        seams.fail.assert_awaited_once_with(GEN_ID, "empty_output")
+        seams.fail.assert_awaited_once_with(GEN_ID, OWNER, "empty_output")
         seams.persist.assert_not_awaited()
 
     async def test_provider_error_stores_a_code_never_the_text(self, seams):
         seams.agent.generate_quiz.side_effect = AgentError(SECRET_TEXT)
         result = await tt._run(GEN_ID)
         assert result["status"] == "failed"
-        seams.fail.assert_awaited_once_with(GEN_ID, "ai_error")
+        seams.fail.assert_awaited_once_with(GEN_ID, OWNER, "ai_error")
         assert SECRET_TEXT not in repr(result)
 
     async def test_transient_error_propagates_for_a_retry(self, seams):
         seams.agent.generate_quiz.side_effect = TransientAgentError("429")
         with pytest.raises(TransientAgentError):
-            await tt._run(GEN_ID)
+            await tt._run(GEN_ID, final=False)
         seams.fail.assert_not_awaited()
 
+    async def test_transient_error_on_the_last_attempt_fails_the_row(self, seams):
+        seams.agent.generate_quiz.side_effect = TransientAgentError(SECRET_TEXT)
+        result = await tt._run(GEN_ID, final=True)
+        assert result["status"] == "failed"
+        seams.fail.assert_awaited_once_with(GEN_ID, OWNER, "ai_unavailable")
+        seams.persist.assert_not_awaited()
+
+    async def test_soft_time_limit_on_the_last_attempt_is_a_timeout(self, seams):
+        seams.agent.generate_quiz.side_effect = SoftTimeLimitExceeded()
+        result = await tt._run(GEN_ID, final=True)
+        assert result["status"] == "failed"
+        seams.fail.assert_awaited_once_with(GEN_ID, OWNER, "timeout")
+
+    async def test_usage_is_metered_when_the_call_fails(self, seams):
+        seams.agent.generate_quiz.side_effect = AgentError("boom")
+        await tt._run(GEN_ID)
+        seams.usage.assert_awaited_once()
+
     async def test_persist_failure_marks_internal_error(self, seams):
+        seams.agent.generate_quiz.return_value = [_quiz("What is probing?", 2)]
         seams.persist.side_effect = RuntimeError(SECRET_TEXT)
         result = await tt._run(GEN_ID)
         assert result["status"] == "failed"
-        seams.fail.assert_awaited_once_with(GEN_ID, "internal_error")
+        seams.fail.assert_awaited_once_with(GEN_ID, OWNER, "internal_error")
 
     async def test_metrics_use_only_the_allowed_labels(self, seams):
-        before = _sample(
-            "studyaio_targeted_generations_total",
-            stage="quiz",
-            outcome="completed",
-            error_class="none",
-        )
-        items_before = _sample("studyaio_targeted_items_total", stage="quiz", outcome="created")
+        seams.agent.generate_quiz.return_value = [_quiz("What is probing?", 2)]
+        done = {"stage": "quiz", "outcome": "completed"}
+        before = _sample("studyaio_targeted_generations_total", **done)
+        created = {"stage": "quiz", "outcome": "created"}
+        items_before = _sample("studyaio_targeted_items_total", **created)
+        seconds = {"stage": "quiz", "outcome": "completed"}
+        seconds_before = _sample("studyaio_targeted_generation_seconds_count", **seconds)
         await tt._run(GEN_ID)
-        assert (
-            _sample(
-                "studyaio_targeted_generations_total",
-                stage="quiz",
-                outcome="completed",
-                error_class="none",
-            )
-            == before + 1
-        )
-        assert _sample("studyaio_targeted_items_total", stage="quiz", outcome="created") == (
-            items_before + 0
-        )  # the persist seam is mocked with no kept items: nothing was created
-        assert (
-            _sample("studyaio_targeted_generation_seconds_count", stage="quiz", outcome="completed")
-            >= 1
+        assert _sample("studyaio_targeted_generations_total", **done) == before + 1
+        assert _sample("studyaio_targeted_items_total", **created) == items_before + 1
+        assert _sample("studyaio_targeted_generation_seconds_count", **seconds) == (
+            seconds_before + 1
         )
 
     async def test_failure_metric_carries_the_class_name_only(self, seams):
         seams.agent.generate_quiz.side_effect = AgentError(SECRET_TEXT)
-        before = _sample(
-            "studyaio_targeted_generations_total",
-            stage="quiz",
-            outcome="failed",
-            error_class="AgentError",
-        )
+        failed = {"stage": "quiz", "outcome": "failed"}
+        cls = {"stage": "quiz", "error_class": "AgentError"}
+        before = _sample("studyaio_targeted_generations_total", **failed)
+        before_cls = _sample("studyaio_targeted_generation_failures_total", **cls)
         await tt._run(GEN_ID)
-        after = _sample(
-            "studyaio_targeted_generations_total",
-            stage="quiz",
-            outcome="failed",
-            error_class="AgentError",
-        )
-        assert after == before + 1
+        assert _sample("studyaio_targeted_generations_total", **failed) == before + 1
+        assert _sample("studyaio_targeted_generation_failures_total", **cls) == before_cls + 1
 
 
 def test_task_is_registered_and_bound():
@@ -260,21 +262,36 @@ def test_task_has_time_limits():
 
 
 class TestTaskWrapper:
-    def test_last_transient_failure_marks_the_row_failed(self):
+    def _call(self, *, retries: int, error: BaseException | None):
         task = tt.generate_targeted_items
+        run_mock = MagicMock(side_effect=error) if error else MagicMock(return_value={"ok": 1})
         with (
-            patch.object(tt, "run_async") as run,
-            patch.object(task, "retry") as retry,
+            patch.object(tt, "run_async", run_mock),
+            patch.object(tt, "_run", new=MagicMock()) as run,
+            patch.object(task, "retry", side_effect=RuntimeError("retried")) as retry,
         ):
-            run.side_effect = [TransientAgentError("boom"), None]
-            task.push_request(retries=tt.MAX_RETRIES)
+            task.push_request(retries=retries)
             try:
-                with pytest.raises(TransientAgentError):
-                    task.run(GEN_ID)
+                result = task.run(GEN_ID)
             finally:
                 task.pop_request()
-        retry.assert_not_called()
-        assert run.call_count == 2  # the run, then the failure write
+        return result, run, retry
+
+    def test_the_last_attempt_asks_the_run_to_finish_the_row(self):
+        _, run, _ = self._call(retries=tt.MAX_RETRIES, error=None)
+        assert run.call_args.kwargs == {"final": True}
+
+    def test_an_early_attempt_does_not(self):
+        _, run, _ = self._call(retries=0, error=None)
+        assert run.call_args.kwargs == {"final": False}
+
+    def test_a_transient_error_before_the_last_attempt_retries_with_backoff(self):
+        with pytest.raises(RuntimeError, match="retried"):
+            self._call(retries=0, error=TransientAgentError("429"))
+
+    def test_a_transient_error_on_the_last_attempt_propagates(self):
+        with pytest.raises(TransientAgentError):
+            self._call(retries=tt.MAX_RETRIES, error=TransientAgentError("429"))
 
 
 def _sql(statement) -> tuple[str, dict]:
@@ -349,4 +366,4 @@ class TestRecovery:
 
         _, hard = STAGE_TIME_LIMITS["app.pipeline.targeted_task.generate_targeted_items"]
         retries_worst_case = (tt.MAX_RETRIES + 1) * hard + tt.MAX_RETRIES * 600
-        assert tt.STUCK_GENERATION_SECONDS > retries_worst_case
+        assert retries_worst_case < tt.STUCK_GENERATION_SECONDS

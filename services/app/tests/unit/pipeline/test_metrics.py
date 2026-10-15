@@ -192,7 +192,7 @@ class TestLabelPolicy:
 
     def test_no_metric_carries_an_identifier_label(self):
         found = [m for m in vars(metrics).values() if hasattr(m, "_labelnames")]
-        assert len(found) == 10
+        assert len(found) == 14
         for m in found:
             assert m._name.startswith("studyaio_")
             assert not self.FORBIDDEN & set(m._labelnames), m._name

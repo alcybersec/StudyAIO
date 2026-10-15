@@ -28,6 +28,7 @@ APP_ROOT = pathlib.Path(__file__).resolve().parents[3] / "app"
 CONTENT_CALL_SITES = {
     ("pipeline/summarize.py", "_summarize"),
     ("pipeline/assets.py", "_generate_assets"),
+    ("pipeline/targeted_task.py", "_generate"),
     ("services/chat_service.py", "send_message"),
     ("services/chat_service.py", "stream_message"),
     ("api/qa.py", "ask_question"),

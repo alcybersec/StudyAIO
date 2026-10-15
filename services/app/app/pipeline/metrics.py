@@ -64,6 +64,28 @@ REEMBED_ARTIFACTS = Counter(
     "Artifacts processed by the re-embed job.",
     ["outcome"],  # reembedded | skipped_fit | skipped_no_extraction | failed
 )
+#: Targeted (weak-spot) generation, ADR 0007. ``stage`` carries the kind (quiz | flashcards).
+TARGETED_GENERATIONS = Counter(
+    "studyaio_targeted_generations_total",
+    "Targeted generations by kind (stage) and outcome.",
+    ["stage", "outcome"],  # outcome: completed | failed | retry | skipped | recovered
+)
+TARGETED_FAILURES = Counter(
+    "studyaio_targeted_generation_failures_total",
+    "Targeted generations that failed or retried, by kind (stage) and exception class.",
+    ["stage", "error_class"],  # error_class is type(exc).__name__, never a message
+)
+TARGETED_ITEMS = Counter(
+    "studyaio_targeted_items_total",
+    "Items a targeted generation produced or dropped, by kind (stage).",
+    ["stage", "outcome"],  # outcome: created | dropped_uncited | dropped_duplicate
+)
+TARGETED_SECONDS = Histogram(
+    "studyaio_targeted_generation_seconds",
+    "Wall time of one targeted generation task run.",
+    ["stage", "outcome"],
+    buckets=(1, 5, 15, 30, 60, 120, 300, 600),
+)
 BACKUP_RUNS = Counter("studyaio_backup_runs_total", "Backup runs by outcome.", ["outcome"])
 BACKUP_DURATION = Histogram(
     "studyaio_backup_duration_seconds", "Wall time of a backup run.", buckets=_BACKUP_BUCKETS
