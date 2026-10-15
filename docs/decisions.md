@@ -13,7 +13,7 @@ is the index plus the small rulings that do not warrant one.
 | [0004](adr/0004-floor4-user-initiated-item-deletes.md) | Floor 4 admits explicit user-initiated deletes of the user's own items | Accepted |
 | [0005](adr/0005-floor3-embedding-gateway.md) | Floor 3 covers embeddings through a second gateway, `get_embedding_provider` (amends 0003) | Accepted |
 | [0006](adr/0006-clock-policy.md) | Clock policy: user-local "today" for the study surface, UTC for quota and money | Accepted |
-| [0007](adr/0007-weak-spot-engine.md) | Weak-spot engine: per-week weakness score, daily "study tonight" plan, targeted generation in the worker | Proposed |
+| [0007](adr/0007-weak-spot-engine.md) | Weak-spot engine: per-week weakness score, daily "study tonight" plan, targeted generation in the worker | Accepted |
 
 ## Rulings
 
@@ -46,3 +46,4 @@ is the index plus the small rulings that do not warrant one.
 | 2026-10-11 | GL#34 acceptance bar: on the 21-case eval set, aggregate faithfulness ≥ 0.93 (baseline 0.878 + 0.05), no target case (dp_knapsack, binary_search_trees, rsa_public_key, sorting_algorithms) below 0.80, both footer breaks fixed, Key Concepts citation coverage ≥ 90% (report-only until a new baseline is recorded, then gated) | user | `ai` M33-S1-AI-013 |
 | 2026-10-12 | GL#34: ship summarize prompt v2.5 (measured 2 runs/case: mean faithfulness 0.955, citation coverage 94%, 0 broken footers; dp_knapsack mean 0.75 < 0.80 from one run) now; keep GL#34 open and try a low summarization temperature as the next lever before closing | user | `ai` M33-S1-AI-045 |
 | 2026-10-12 | **GL#34 closed with one known exception.** Shipped: summarize v2.5 + summarization temperature 0.2. Measured on the production model, 2 runs/case: mean faithfulness 0.983, citation coverage 91%, 0 broken footers, targets binary_search_trees 1.00, rsa_public_key 1.00, sorting_algorithms 0.90. Exception: dp_knapsack 0.75 — in about half of runs the summary contrasts DP with a greedy approach the lecture never names (accurate commentary, but outside material). The case stays in the eval so any worsening still shows | user | `ai` M33-S1-AI-048 |
+| 2026-10-15 | **ADR 0007 accepted** (weak-spot engine) with the defaults for its open questions: no hold-out group for now (revisit when there are enough users for a causal D7/D30 comparison); targeted-generation cap stays flat at 6 per UTC day (not tier-based); "Study tonight" default budget 25 minutes | user | `data` DATA-019, `backend` BACKEND-020, `ai` AI-021, `frontend` FRONTEND-022, `qa` QA-023, `safety` SAFETY-024 |
