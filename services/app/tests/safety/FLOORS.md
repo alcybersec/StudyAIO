@@ -101,6 +101,26 @@ predicates dropped; usage record with another user's id; the foreign-course chec
 `require_role("admin")` swapped for a plain caller on the retention route; `admin_summary` called from
 `GET /feedback/mine`.
 
+### User-authored study items and upload placement (GL#48, GL#49; backend `3c1ef9c`, SAFETY-059)
+
+`test_floor1_study_item_crud.py`, real routes and services over MiniDB with two users.
+
+| Test | Fails when |
+|---|---|
+| `…::test_floor1_foreign_item_edit_or_delete_is_404_like_missing[…]` | `PATCH`/`DELETE /api/assets/{flashcards,quiz}/{id}` on B's item answers other than the missing-id 404, changes any column of B's item or review, or writes a row. |
+| `…::test_floor1_create_cannot_target_a_foreign_course_or_lecture[…]` | `POST /api/assets/{flashcards,quiz}` with B's course code or B's `source_artifact_id` is not a 404 or writes a row; or the caller's own create lands outside their course and latest lecture. |
+| `…::test_floor4_flashcard_edit_archives_the_original_and_keeps_its_history` | Editing removes or rewrites the original card (its AI text), drops its review row, or the copy's schedule is not the caller's own. |
+| `…::test_floor4_quiz_edit_archives_the_original` | Editing removes or rewrites the original question. |
+| `…::test_floor4_item_delete_is_a_soft_delete[…]` | `DELETE` removes the row (rather than setting `archived_at`) or drops review history. |
+| `…::test_floor1_upload_placement_never_resolves_a_foreign_course` | `course_service.get_or_create_course` (explicit upload placement) returns B's course for B's code, misses the caller's own in another case, or checks the course quota for anyone but the caller. |
+
+Revert-checked in SAFETY-059: `_owned_item` without `Course.user_id` (4 red); the artifact lookup
+without both the owner and the course predicate (2 red; either alone still scopes it, so green);
+archive/edit as `session.delete` (4 red, and the floor-4 delete inventory); `get_or_create_course`
+unscoped (red). The route wiring is pinned in `tests/unit/api/test_asset_items_api.py` and
+`test_upload_placement.py`: every `user_id=user.id` swapped for another value turns 10 and 2 of
+them red.
+
 ### Retrieval relevance floor and follow-ups (GL#35; `a290904`..`3f5e506`)
 
 | Test | Fails when |
@@ -151,9 +171,9 @@ plus `test_idor_scoping.py` cover endpoint wiring.
 | `…::test_floor2_container_login_token_is_redacted_from_cli_failures` | The worker's own mounted `~/.claude` token appears unredacted in a CLI failure or its logs. |
 | `…::test_floor2_host_credential_retry_is_not_logged_as_user_credentials` | The host retry logs `claude_code_using_user_credentials`, which attributes the operator's login to the user. |
 | `…::test_floor2_expired_host_login_is_not_spent_and_never_leaks` | AI-049: a re-read host token whose `expiresAt` has passed still gets a second CLI call, or its token leaks into `pipeline_runs`, the logs or the cause chain. Mutation-checked: `_host_token_expired` forced to `False` turns it red on the call count. |
-| `test_floor2_claude_login_mounts.py::test_floor2_only_the_worker_mounts_a_claude_login` | R-025 (user ruling 2026-10-10): in any tracked `docker-compose*.yml`, a service other than `worker` mounts something whose source or target names `claude`. |
+| `test_floor2_claude_login_mounts.py::test_floor2_only_the_ai_worker_pools_mount_a_claude_login` | R-025 (user ruling 2026-10-10): in any tracked `docker-compose*.yml`, a service outside `CLAUDE_LOGIN_SERVICES` (`worker`, `worker-ondemand` since GL#51, SAFETY-059) mounts something whose source or target names `claude`. Exact names: `worker-maintenance`, `api`, `beat`, `ui` and any new service fail. |
 | `…::test_floor2_claude_mounts_come_only_from_the_dedicated_dir_read_only` | A Claude mount is not sourced from `${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}`, is writable, or lands anywhere except `/run/claude-host`, `/root/.claude/.credentials.json` or `/root/.claude/settings.json` (a directory overlay onto `/root/.claude` included). |
-| `…::test_floor2_pinned_credentials_file_is_paired_with_the_tracking_dir_mount` | A file mounts `.credentials.json` as a single file (which pins its inode, GL#8) without the `/run/claude-host` directory mount. Also fails if base `CLAUDE_HOST_CREDENTIALS_FILE` is not `/run/claude-host/.credentials.json`, or an overlay drops or repoints it (`environment: !override` included). |
+| `…::test_floor2_pinned_credentials_file_is_paired_with_the_tracking_dir_mount` | A service (per file, per service since SAFETY-059) mounts `.credentials.json` as a single file (which pins its inode, GL#8) without the `/run/claude-host` directory mount. Also fails if either AI pool's base `CLAUDE_HOST_CREDENTIALS_FILE` is not `/run/claude-host/.credentials.json`, or an overlay drops or repoints it (`environment: !override` included). |
 | `…::test_floor2_no_compose_or_env_example_line_points_at_the_personal_claude_dir` | An uncommented line in a compose file or `.env.example` names `CLAUDE_CONFIG_DIR`, `~/.claude` or `$HOME/.claude`. |
 | `…::test_floor2_setup_script_creates_a_private_empty_dir_and_copies_no_login` | `scripts/setup-claude-login.sh` (run for real with no token on stdin, via `setpriv` to uid 65534 when the suite runs as root) leaves the directory other than 0700, leaves `settings.json` other than a private `{}`, puts anything besides it and an optional private `{}` `.credentials.json` placeholder in the directory (SAFETY-053 allows the placeholder), or prints a planted personal token. |
 | `…::test_floor2_setup_script_refuses_to_run_as_root` / `…has_its_root_guard_before_mkdir` | The script runs as root, or its refuse-root guard is missing or comes after `mkdir`. The behavioural variant runs only as root (CI). SAFETY-053 removed four assertions that followed `assert not target.exists()` and called `target.stat()`, which would have errored on every root run. Verified as root in the app image. |
@@ -161,7 +181,7 @@ plus `test_idor_scoping.py` cover endpoint wiring.
 | `…::test_floor2_setup_token_echoed_on_auth_failure_never_stores_or_logs_and_is_not_retried` | The real classify task fails on a CLI 401 that quotes the token, and the token (or the configured `.credentials.json` fallback login) reaches `pipeline_runs.error_message`, a log, or the exception's cause chain. Also fails if the auth failure is retried. |
 | `…::test_floor2_setup_token_echoed_on_any_failure_is_redacted` | A non-auth CLI failure that quotes the token raises an `AgentError` whose chain, or a log, contains it. |
 | `…::test_floor2_per_user_credentials_win_over_the_setup_token` | A per-user-credential run is also handed the operator's token (env or temp config dir), the token surfaces in `refreshed_credentials`, or a per-user auth failure is retried on a host login. |
-| `…::test_floor2_only_the_worker_is_told_where_the_setup_token_is` | A non-worker service in any tracked compose file sets `CLAUDE_HOST_OAUTH_TOKEN_FILE`, or the worker's value points outside `/run/claude-host/`. It also fails if base compose loses the variable, which would make the pin vacuous. |
+| `…::test_floor2_only_the_ai_worker_pools_are_told_where_the_setup_token_is` | A service outside `CLAUDE_LOGIN_SERVICES` in any tracked compose file sets `CLAUDE_HOST_OAUTH_TOKEN_FILE`, or an AI pool's value points outside `/run/claude-host/`. It also fails if base compose loses the variable on either AI pool, which would make the pin vacuous. |
 | `…::test_floor2_no_compose_or_env_template_carries_the_token_value` | A live line in a compose file or `.env.example` sets `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_AUTH_TOKEN`. A token placed there would be readable through `docker inspect` or `.env`. |
 | `…::test_floor2_worker_image_pins_the_claude_cli_version` | `services/app/Dockerfile` installs `@anthropic-ai/claude-code` without an exact `@x.y.z`. This CLI is the binary that receives the operator's token. |
 | `…::test_floor2_setup_script_stores_the_token_private_and_never_prints_it` | The script, given the token on stdin, stores it as anything other than `oauth-token` 0600 in a 0700 dir. Also fails if it prints the token, leaves a `.oauth-token.*` temp file, lets a re-run without `--rotate` replace the token, or ignores `--rotate`. |
@@ -176,6 +196,24 @@ plus `test_idor_scoping.py` cover endpoint wiring.
 Mutation-checked in SAFETY-053, each mutant on a scratch git repo, all caught: token on argv; token in `os.environ`; token dropped from `_credential_values`; auth retry despite a token; per-user env also given the token; api told the token path; `CLAUDE_CODE_OAUTH_TOKEN=` in `.env.example`; unpinned CLI; script writing the token 0644; script echoing the token; script personal-dir guard removed; `--rotate` ignored.
 
 Mutation-checked in SAFETY-057 (scratch copy of services/app, `scratchpad/muts_057.py`), all caught: `--tools ""` dropped; `--tools default`; `DATABASE_URL` / `REDIS_URL` / `SENTRY_DSN` added to the adapter allowlist (the last two only by the exact-allowlist pin); child env `{**os.environ}`; pre-fix `env=None` + `{**os.environ, …}`; operator token handed to every mode; `include_local_variables=False` and the frame-vars scrub removed together, and each alone.
+
+### Claude login per worker pool (GL#51 queue split; devops `aec844a`, SAFETY-059)
+
+`test_floor2_worker_pool_credentials.py` ties `CLAUDE_LOGIN_SERVICES` to the queue routing in
+`app/worker.py` (`_QUEUE_TASKS`) through a static call graph (`_callgraph.py`: function-local
+imports and package re-exports followed; `.s()`/`.delay()`/`.apply_async()` of a Celery task is
+an enqueue, not an edge).
+
+| Test | Fails when |
+|---|---|
+| `…::test_floor2_pool_guard_parses_routing_and_compose` | `_QUEUE_TASKS` is gone or names a non-task, or base compose loses one of the three pools. |
+| `…::test_floor2_pool_call_graph_is_not_blind` | The graph stops seeing `get_agent` from any known AI task (classify, summarize, assets, courseops, targeted, concepts), `get_embedding_provider` from `reembed_user_chunks`, or recovery's function-local `resume_pipeline` import; or it starts treating `reembed_all_chunks`'s `.delay()` fan-out as a call. |
+| `…::test_floor2_maintenance_tasks_never_reach_the_agent` | A task routed to `maintenance` reaches `get_agent`. `worker-maintenance` has no Claude login. |
+| `…::test_floor2_claude_login_only_where_the_agent_is_called` | An allowlisted pool consumes no queue with an AI task (a login with no purpose), or a pool outside the allowlist consumes one (a worker without `-Q` counts as consuming every queue). |
+
+Revert-checked in SAFETY-059: the login dir mount plus `*claude-environment` added to
+`worker-maintenance` (mount and token-path pins red); `worker-maintenance` added to the allowlist
+(pool, parser and pairing pins red); `extract_concepts` routed to `maintenance` (both routing pins red).
 
 ### Operator-only AI settings (SEC-01, SEC-03; backend `a5f3255`)
 

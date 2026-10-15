@@ -861,10 +861,18 @@ def test_floor1_predicate_evaluator_models_sql_semantics():
     assert keeps(outer.where(sa.func.coalesce(opt, sa.null()).is_(None))) == (False, False, True)
     assert value(sa.null(), opted) is None
     assert value(sa.literal(3).label("x"), opted) == 3
+    # upper()/lower() are modelled since SAFETY-059 (case-insensitive course-code match).
+    assert keeps(base.where(sa.func.upper(UserXP.user_id) == "U-IN")) == (True, False, False)
+    assert keeps(base.where(sa.func.lower(sa.literal("U-IN")) == UserXP.user_id)) == (
+        True,
+        False,
+        False,
+    )
+    assert value(sa.func.upper(sa.null()), opted) is None
 
     for unreadable in (
         base.where(User.email.like("%x%")),
-        base.where(sa.func.lower(User.username) == "x"),
+        base.where(sa.func.length(User.username) == 1),
         base.where(UserXP.user_id.in_(sa.select(UserSettings.user_id, UserSettings.id))),
         base.where(sa.exists(sa.select(UserSettings.id))),
         base.where(UserXP.total_xp.desc()),
