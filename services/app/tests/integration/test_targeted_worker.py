@@ -381,15 +381,6 @@ class TestRecovery:
         assert targeted_task.recover_stuck_generations() == {"failed": 0}
         assert _run(_row(fresh)).status == "running"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "DEFECT (ai): _persist re-selects the row FOR UPDATE but the session keeps "
-            "expire_on_commit=False, so the identity map returns the stale 'running' object "
-            "and a task recovered mid-call still completes and inserts. Needs "
-            "execution_options(populate_existing=True) on that select."
-        ),
-    )
     def test_recovered_while_the_model_was_running_inserts_nothing(self, users):
         alice = users()
         world = _run(_world(alice))
