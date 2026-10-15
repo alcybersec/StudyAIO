@@ -193,6 +193,7 @@ test.describe('Quiz: add, validate, grade', () => {
     await dialog.getByRole('button', { name: 'Add question' }).click()
     await expect(dialog.getByText('This field is required')).toBeVisible()
     await expect(dialog.getByText(/Give 2 to 8 options/)).toBeVisible()
+    await expect(dialog.getByText('Mark the correct option')).toBeVisible()
 
     await dialog.getByLabel('Question', { exact: true }).fill('Which is the biggest?')
     await dialog.getByRole('textbox', { name: 'Option 1', exact: true }).fill('Small')
@@ -207,6 +208,7 @@ test.describe('Quiz: add, validate, grade', () => {
     await expect(dialog.getByRole('textbox', { name: 'Option 3', exact: true })).toBeVisible()
     await dialog.getByRole('button', { name: 'Add question' }).click()
     await expect(dialog.getByText(/Give 2 to 8 options/)).toBeVisible()
+    await expect(dialog.getByText('Mark the correct option')).toBeVisible()
     await expect(dialog).toBeVisible()
   })
 
@@ -233,14 +235,43 @@ test.describe('Quiz: add, validate, grade', () => {
     await expect(page.getByText('Yours', { exact: true })).toBeVisible()
     await page.getByRole('radio', { name: /Small/ }).check()
     await page.getByRole('button', { name: 'Submit' }).click()
-    await expect(page.getByText('Incorrect.').first()).toBeVisible()
+    await expect(page.getByTestId('quiz-result').last()).toContainText('Incorrect.')
 
     // then correct: restart the run and pick "Large"
     await page.reload()
     await reachQuestion(page, 'Which is the biggest?')
     await page.getByRole('radio', { name: /Large/ }).check()
     await page.getByRole('button', { name: 'Submit' }).click()
-    await expect(page.getByText('Correct!').first()).toBeVisible()
+    await expect(page.getByTestId('quiz-result').last()).toContainText('Correct!')
+  })
+
+  // PRODUCT BUG (reported to the orchestrator, not fixed here): after answering a
+  // question and pressing Next, the previous question's options and result stay
+  // in the DOM under the new question (5 radios instead of 2, the old
+  // quiz-result still present). Marked test.fail() so CI stays green while it is
+  // open; once the frontend fixes it this test starts passing, which test.fail()
+  // reports as a failure: delete the annotation then. The grading test above
+  // reads the last result for the same reason.
+  test('BUG: the previous question is cleared after Next', async ({ page, request }) => {
+    test.fail()
+    await request.post(`${API_URL}/api/assets/quiz`, {
+      data: {
+        course_code: code,
+        week: 1,
+        question_type: 'multiple_choice',
+        question: 'Second?',
+        options: ['A. x', 'B. y'],
+        correct_answer: 'B',
+      },
+    })
+    await page.goto(weekUrl(code, 1, 'quiz'))
+    await expect(page.getByText(/Question 1 \/ 2/)).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('radio').first().check()
+    await page.getByRole('button', { name: 'Submit' }).click()
+    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await expect(page.getByText('Second?', { exact: true })).toBeVisible()
+    await expect(page.getByRole('radio')).toHaveCount(2)
+    await expect(page.getByTestId('quiz-result')).toHaveCount(0)
   })
 
   test('a short-answer question can be added and shows its model answer', async ({ page }) => {

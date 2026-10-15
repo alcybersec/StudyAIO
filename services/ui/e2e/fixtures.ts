@@ -17,7 +17,7 @@ const LONG_LIVED = /\/api\/uploads\/pipeline-events/
 const inFlight = new WeakMap<Page, Set<Request>>()
 
 const base = playwrightTest.extend({
-  page: async ({ page }, use) => {
+  page: async ({ page }, provide) => {
     const pending = new Set<Request>()
     inFlight.set(page, pending)
     const done = (r: Request) => pending.delete(r)
@@ -26,7 +26,7 @@ const base = playwrightTest.extend({
     })
     page.on('requestfinished', done)
     page.on('requestfailed', done)
-    await use(page)
+    await provide(page)
   },
 })
 
