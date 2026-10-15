@@ -258,6 +258,18 @@ describe('quiz editing', () => {
     expect(assetsApi.createQuiz).not.toHaveBeenCalled()
   })
 
+  it('shows the options error and the missing-answer error together', async () => {
+    const user = userEvent.setup()
+    vi.mocked(assetsApi.quiz).mockResolvedValue([mcq()])
+    renderUi(<QuizTab courseCode="CSIT302" week={3} />)
+    await screen.findByText('Which is LIFO?')
+    await user.click(screen.getByRole('button', { name: 'Add question' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Add question' }))
+    expect(await within(dialog).findByText(/Give 2 to 8 options/)).toBeInTheDocument()
+    expect(within(dialog).getByText('Mark the correct option')).toBeInTheDocument()
+  })
+
   it('adds a short-answer question', async () => {
     const user = userEvent.setup()
     vi.mocked(assetsApi.quiz).mockResolvedValue([mcq()])

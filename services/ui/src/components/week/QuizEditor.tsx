@@ -100,9 +100,14 @@ function OptionsEditor({
           <Plus size={12} aria-hidden /> {t('Add option')}
         </Button>
       )}
-      {(errors.options || errors.correct) && (
+      {errors.options && (
         <p role="alert" className="text-xs text-red-fg">
-          {errors.options ?? errors.correct}
+          {errors.options}
+        </p>
+      )}
+      {errors.correct && (
+        <p role="alert" className="text-xs text-red-fg">
+          {errors.correct}
         </p>
       )}
     </fieldset>

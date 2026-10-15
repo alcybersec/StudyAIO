@@ -87,6 +87,8 @@ function MCQOptions({
 
       {submitted && (
         <div
+          role="status"
+          data-testid="quiz-result"
           className={`p-3 rounded-lg text-sm ${
             isCorrect ? 'bg-sage-soft text-sage-fg' : 'bg-red-soft text-red-fg'
           }`}
