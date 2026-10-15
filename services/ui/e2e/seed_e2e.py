@@ -14,6 +14,7 @@ e2e-tests job already exports it.
     python3 e2e/seed_e2e.py course CODE [--concepts N]
     python3 e2e/seed_e2e.py admin EMAIL PASSWORD
     python3 e2e/seed_e2e.py user EMAIL PASSWORD
+    python3 e2e/seed_e2e.py session EMAIL PASSWORD   # as `user`, then print the session cookies as JSON
     python3 e2e/seed_e2e.py weakspots CODE
     python3 e2e/seed_e2e.py studyitems CODE
 
@@ -22,6 +23,7 @@ requests to (the default admin, created here if no API request has made it yet).
 """
 
 import argparse
+import json
 import os
 import sys
 from datetime import UTC, datetime, timedelta
@@ -40,7 +42,13 @@ from app.api.deps import (  # noqa: E402
     DEFAULT_ADMIN_USERNAME,
 )
 from app.config import settings
-from app.core.auth import hash_password  # noqa: E402
+from app.core.auth import (  # noqa: E402
+    ACCESS_TOKEN_COOKIE,
+    REFRESH_TOKEN_COOKIE,
+    create_access_token,
+    create_refresh_token,
+    hash_password,
+)
 from app.models.artifact import LectureArtifact  # noqa: E402
 from app.models.concept import Concept  # noqa: E402
 from app.models.course import Course  # noqa: E402
@@ -301,6 +309,20 @@ def seed_user(session: Session, email: str, password: str) -> None:
     user.ai_processing_consent_version = 1
 
 
+def session_cookies(session: Session, email: str) -> dict[str, str]:
+    """Mint the auth cookies for a seeded user, without spending the login budget.
+
+    Login is limited to 5/minute per client and every spec file shares it, so a
+    retried beforeAll that logs in can be throttled. The tokens are signed with
+    the same JWT secret the API process uses (the CI job exports it).
+    """
+    user = session.execute(select(User).where(User.email == email)).scalar_one()
+    return {
+        ACCESS_TOKEN_COOKIE: create_access_token(user.id, user.role, user.tier),
+        REFRESH_TOKEN_COOKIE: create_refresh_token(user.id),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -317,6 +339,9 @@ def main() -> None:
     u = sub.add_parser("user")
     u.add_argument("email")
     u.add_argument("password")
+    ss = sub.add_parser("session")
+    ss.add_argument("email")
+    ss.add_argument("password")
     args = parser.parse_args()
 
     url = os.environ.get("DATABASE_URL_SYNC") or settings.database_url_sync
@@ -330,6 +355,10 @@ def main() -> None:
             seed_weakspots(session, args.code)
         elif args.cmd == "user":
             seed_user(session, args.email, args.password)
+        elif args.cmd == "session":
+            seed_user(session, args.email, args.password)
+            session.flush()
+            print(json.dumps(session_cookies(session, args.email)))
         else:
             seed_admin(session, args.email, args.password)
         session.commit()

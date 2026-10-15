@@ -143,13 +143,13 @@ export async function seedCourse(
  * Needs DATABASE_URL_SYNC in the environment, as the e2e-tests job provides.
  * Fails loudly -- a missing seed must never turn into a skipped test.
  */
-export function seedDb(...args: string[]): void {
+export function seedDb(...args: string[]): string {
   const script = path.resolve(process.cwd(), 'e2e', 'seed_e2e.py')
   try {
-    execFileSync(process.env.E2E_PYTHON || 'python3', [script, ...args], {
+    return execFileSync(process.env.E2E_PYTHON || 'python3', [script, ...args], {
       stdio: 'pipe',
       env: process.env,
-    })
+    }).toString()
   } catch (err) {
     const e = err as { stderr?: Buffer; message: string }
     throw new Error(`seed_e2e.py ${args.join(' ')} failed: ${e.stderr?.toString() || e.message}`)
@@ -159,6 +159,48 @@ export function seedDb(...args: string[]): void {
 /** Seed an ordinary, AI-consented user who can log in (spends no register budget). */
 export function seedUser(email: string, password: string): void {
   seedDb('user', email, password)
+}
+
+/**
+ * Seed an ordinary user AND mint its session cookies without calling /login.
+ * Login is 5/minute per client, shared by every spec file, and a retried
+ * beforeAll that logs in again can be throttled. Returns a Playwright
+ * storageState to hand to browser.newContext / request.newContext.
+ */
+export function seedSession(email: string, password: string): {
+  cookies: Array<{
+    name: string
+    value: string
+    domain: string
+    path: string
+    expires: number
+    httpOnly: boolean
+    secure: boolean
+    sameSite: 'Lax'
+  }>
+  origins: []
+} {
+  // The app's logger may share stdout; the cookies are the last JSON object line.
+  const line = seedDb('session', email, password)
+    .split('\n')
+    .reverse()
+    .find((l) => l.startsWith('{"'))
+  if (!line) throw new Error('seed_e2e.py session printed no cookies')
+  const tokens = JSON.parse(line) as Record<string, string>
+  const domain = new URL(API_URL).hostname
+  return {
+    cookies: Object.entries(tokens).map(([name, value]) => ({
+      name,
+      value,
+      domain,
+      path: '/',
+      expires: -1,
+      httpOnly: true,
+      secure: false,
+      sameSite: 'Lax' as const,
+    })),
+    origins: [],
+  }
 }
 
 /** Seed a course (and optional concepts) owned by the self-hosted default user. */

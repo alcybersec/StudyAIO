@@ -1,9 +1,9 @@
-import { request as pwRequest, type BrowserContext } from '@playwright/test'
-import { test, expect, testEmail, seedUser, expectNotThrottled } from './fixtures'
+import type { BrowserContext } from '@playwright/test'
+import { test, expect, testEmail, seedSession } from './fixtures'
 
 // GL#46: a brand-new account sees a three-step checklist and call-to-action
 // empty widgets instead of blank cards. The account is seeded straight into the
-// database (registering spends the shared 3/minute budget) and logged in once;
+// database (registering spends the shared 3/minute budget) with minted cookies;
 // every test gets its own browser context carrying that session.
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:8000'
@@ -18,19 +18,12 @@ trailer<</Size 4/Root 1 0 R>>
 test.describe('First run on an empty account', () => {
   test.describe.configure({ mode: 'serial' })
 
-  let storageState: Awaited<ReturnType<import('@playwright/test').APIRequestContext['storageState']>>
-  let email: string
+  let storageState: ReturnType<typeof seedSession>
 
-  test.beforeAll(async () => {
-    email = testEmail()
-    const password = 'TestPass123!'
-    seedUser(email, password)
-    const api = await pwRequest.newContext()
-    const login = await api.post(`${API_URL}/api/auth/login`, { data: { email, password } })
-    expectNotThrottled(login.status(), 'login')
-    expect(login.ok()).toBeTruthy()
-    storageState = await api.storageState()
-    await api.dispose()
+  test.beforeAll(() => {
+    // Minted from the database, not via /login: the login budget (5/min) is
+    // shared by every spec file, and a retried beforeAll would spend it again.
+    storageState = seedSession(testEmail(), 'TestPass123!')
   })
 
   /**
@@ -44,10 +37,19 @@ test.describe('First run on an empty account', () => {
     opts: { lang?: 'ru'; viewport?: { width: number; height: number } } = {},
   ): Promise<BrowserContext> {
     const context = await browser.newContext({ storageState, viewport: opts.viewport })
-    await context.route('**/api/auth/config', async (route) => {
-      const upstream = await route.fetch()
-      await route.fulfill({ response: upstream, json: { ...(await upstream.json()), self_hosted: false } })
-    })
+    // A static body: nothing is left in flight when the context closes.
+    await context.route('**/api/auth/config', (route) =>
+      route.fulfill({
+        json: {
+          self_hosted: false,
+          registration_enabled: true,
+          oauth_providers: [],
+          demo_enabled: false,
+          registration_mode: 'open',
+          invite_required: false,
+        },
+      }),
+    )
     if (opts.lang) {
       await context.addInitScript((l) => window.localStorage.setItem('studyaio-language', l), opts.lang)
     }
@@ -70,6 +72,7 @@ test.describe('First run on an empty account', () => {
     await expect(checklist.getByRole('link', { name: 'Open summary' })).toHaveCount(0)
     await expect(checklist.getByRole('button', { name: 'Start the check-in' })).toHaveCount(0)
     await expect(checklist.getByText('Ready a minute or two after your upload finishes.')).toBeVisible()
+    await context.unrouteAll({ behavior: 'ignoreErrors' })
     await context.close()
   })
 
@@ -87,6 +90,7 @@ test.describe('First run on an empty account', () => {
     const study = main.getByRole('link', { name: 'Start studying' }).first()
     await expect(study).toBeVisible()
     await expect(study).toHaveAttribute('href', '/study')
+    await context.unrouteAll({ behavior: 'ignoreErrors' })
     await context.close()
   })
 
@@ -106,6 +110,7 @@ test.describe('First run on an empty account', () => {
       Object.keys(window.localStorage).filter((k) => k.startsWith('studyaio_onboarding:')),
     )
     expect(keys).toHaveLength(1)
+    await context.unrouteAll({ behavior: 'ignoreErrors' })
     await context.close()
   })
 
@@ -117,6 +122,7 @@ test.describe('First run on an empty account', () => {
     await expect(checklist).toBeVisible({ timeout: 15_000 })
     await expect(checklist.getByText('Загрузите первую лекцию')).toBeVisible()
     await expect(checklist.getByRole('button', { name: 'Скрыть этот список' })).toBeVisible()
+    await context.unrouteAll({ behavior: 'ignoreErrors' })
     await context.close()
   })
 
@@ -133,6 +139,7 @@ test.describe('First run on an empty account', () => {
     expect(m.scroll).toBeLessThanOrEqual(m.inner)
     const hide = await checklist.getByRole('button', { name: 'Hide this checklist' }).boundingBox()
     expect(hide!.height).toBeGreaterThanOrEqual(44)
+    await context.unrouteAll({ behavior: 'ignoreErrors' })
     await context.close()
   })
 
@@ -154,6 +161,7 @@ test.describe('First run on an empty account', () => {
     await expect(steps.nth(0).getByRole('link', { name: 'Upload a lecture' })).toHaveCount(0)
     await expect(steps.nth(1).getByText('Ready a minute or two after your upload finishes.')).toBeVisible()
     await expect(steps.nth(2).getByRole('button', { name: 'Start the check-in' })).toHaveCount(0)
+    await context.unrouteAll({ behavior: 'ignoreErrors' })
     await context.close()
   })
 })
