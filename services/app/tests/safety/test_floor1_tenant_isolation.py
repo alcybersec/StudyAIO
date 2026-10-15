@@ -1046,6 +1046,20 @@ UNSCOPED_FUNCTION_ALLOWED = {
         "rows and a status, never a delete, and only app/worker.py names it. Pinned by "
         "test_floor1_worker_jobs.py (SAFETY-027)"
     ),
+    ("app/pipeline/targeted_task.py", "_claim"): (
+        "worker-only (ADR 0007, GL#45): the task receives only the targeted_generations "
+        "row id, minted by the owner's own request; _claim locks that row by id and every "
+        "later read, adapter call, usage record and insert acts as row.user_id (each "
+        "statement filters on it). Only targeted_task.py and worker.py name it. Pinned by "
+        "test_floor1_targeted_generation.py (SAFETY-024, M33-S2)"
+    ),
+    ("app/pipeline/targeted_task.py", "_recover_stuck"): (
+        "beat task (ADR 0007, GL#45): fails every user's targeted_generations rows stuck "
+        "in flight past STUCK_GENERATION_SECONDS by design, as recovery._recover; one UPDATE "
+        "to failed/'timeout' on that table only, touches no item and never deletes; a late "
+        "worker result then inserts nothing (_persist re-checks under the row lock). Pinned "
+        "by test_floor1_targeted_generation.py (SAFETY-024, M33-S2)"
+    ),
     ("app/services/ai_feedback_service.py", "admin_summary"): (
         "admin aggregate (GL#36): only api/ai_feedback.py::admin_ai_feedback calls it, behind "
         "require_role('admin'); returns counts and recent thumbs-down comments with no user id, "
