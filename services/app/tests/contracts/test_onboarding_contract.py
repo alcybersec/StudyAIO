@@ -34,6 +34,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import operators
 from sqlalchemy.sql.dml import Update
 
+from tests._routes import api_routes
 from tests.contracts._weakspot_docs import (
     PACKAGE_ROOT,
     constants,
@@ -182,10 +183,9 @@ def app_routes() -> dict[tuple[str, str], APIRoute]:
     from app.main import app
 
     out: dict[tuple[str, str], APIRoute] = {}
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            for method in route.methods:
-                out[(method, route.path)] = route
+    for route in api_routes(app):
+        for method in route.methods:
+            out[(method, route.path)] = route
     return out
 
 

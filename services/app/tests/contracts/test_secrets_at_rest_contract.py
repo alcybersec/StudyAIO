@@ -52,6 +52,7 @@ import pytest
 from pydantic import BaseModel
 from structlog.testing import capture_logs
 
+from tests._routes import api_routes
 from tests.contracts._weakspot_docs import (
     APP_ROOT,
     contract_section,
@@ -361,13 +362,12 @@ def _models_in(annotation) -> list[type[BaseModel]]:
 
 
 def test_no_response_model_carries_a_token_field():
-    from fastapi.routing import APIRoute
 
     from app.main import app
 
     leaks = []
-    for route in app.routes:
-        if isinstance(route, APIRoute) and route.response_model is not None:
+    for route in api_routes(app):
+        if route.response_model is not None:
             for model in _models_in(route.response_model):
                 hit = _field_names(model, set()) & TOKEN_FIELD_NAMES
                 if hit:

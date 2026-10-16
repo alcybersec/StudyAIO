@@ -51,6 +51,7 @@ import pytest
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
 
+from tests._routes import api_routes
 from tests.safety._payload import (
     FOREIGN_ID,
     FOREIGN_INT,
@@ -153,8 +154,8 @@ def _sweep_routes() -> list[tuple[str, str, APIRoute]]:
     from app.main import app
 
     out = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or not _requires_user(route):
+    for route in api_routes(app):
+        if not _requires_user(route):
             continue
         if route.path.startswith(ADMIN_PREFIX) or route.path in SWEEP_EXCLUDED:
             continue
@@ -174,12 +175,29 @@ def test_floor1_route_enumeration_is_not_vacuous():
     """
     from app.main import app
 
-    api_routes = [r for r in app.routes if isinstance(r, APIRoute) and r.path.startswith("/api/")]
-    others = sorted({type(r).__name__ for r in app.routes if not isinstance(r, APIRoute)})
-    assert len(api_routes) >= MIN_API_ROUTES, (
-        f"app.routes yields only {len(api_routes)} /api APIRoutes (floor {MIN_API_ROUTES}); "
-        f"non-APIRoute entries: {others}. A lazy include_router (fastapi>=0.137) does this, "
-        "and leaves every route-walking safety guard vacuous."
+    expanded = api_routes(app)
+    served = [r for r in expanded if r.path.startswith("/api/")]
+    top_level = sorted({type(r).__name__ for r in app.routes})
+    assert len(served) >= MIN_API_ROUTES, (
+        f"expanding app.routes yields only {len(served)} /api APIRoutes (floor {MIN_API_ROUTES}); "
+        f"top-level entries: {top_level}. The route-walking safety guards would be vacuous."
+    )
+    # Cross-check against a source that does not go through the walker: every
+    # operation OpenAPI documents must be an enumerated (method, path) pair.
+    enumerated = {
+        (m, re.sub(r":\w+}", "}", r.path))  # OpenAPI drops the {x:path} convertor
+        for r in expanded
+        if r.include_in_schema
+        for m in r.methods - {"HEAD", "OPTIONS"}
+    }
+    documented = {
+        (m.upper(), path)
+        for path, item in app.openapi()["paths"].items()
+        for m in item
+        if m.upper() in {"GET", "POST", "PUT", "PATCH", "DELETE"}
+    }
+    assert documented <= enumerated, (
+        f"OpenAPI documents operations the route walker misses: {sorted(documented - enumerated)}"
     )
     swept = _sweep_routes()
     assert len(swept) >= MIN_SWEPT_ROUTES, (

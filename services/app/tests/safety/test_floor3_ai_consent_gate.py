@@ -32,6 +32,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests._routes import api_routes
 from tests.safety._source import APP_ROOT, SERVICE_ROOT, dotted, parse, rel
 
 #: A call whose final name is one of these spends AI or enqueues AI work.
@@ -171,11 +172,10 @@ def sink_path(mod_name: str, fn_name: str, seen: set | None = None) -> list[str]
 
 
 def _api_routes():
-    from fastapi.routing import APIRoute
 
     from app.main import app
 
-    return [r for r in app.routes if isinstance(r, APIRoute)]
+    return api_routes(app)
 
 
 def _handler(route) -> tuple[str, str]:

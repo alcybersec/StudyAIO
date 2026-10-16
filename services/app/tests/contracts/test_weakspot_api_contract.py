@@ -22,6 +22,7 @@ Red until ``backend`` lands ``app/api/weakspots.py`` (M33-S2-BACKEND-020).
 import pytest
 from fastapi.routing import APIRoute
 
+from tests._routes import api_routes
 from tests.contracts._weakspot_docs import contract_section, table_rows
 
 HEADING = "### api.weak-spots v1"
@@ -42,10 +43,9 @@ def app_routes() -> dict[tuple[str, str], APIRoute]:
     from app.main import app
 
     out: dict[tuple[str, str], APIRoute] = {}
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            for method in route.methods:
-                out[(method, route.path)] = route
+    for route in api_routes(app):
+        for method in route.methods:
+            out[(method, route.path)] = route
     return out
 
 
