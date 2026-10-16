@@ -146,11 +146,13 @@ class TestTelegram:
 
         with (
             patch("app.config.settings.telegram_bot_token", SecretStr("123:abc")),
+            patch("app.config.settings.telegram_bot_username", "StudyAIOBot"),
             patch("app.config.settings.telegram_webhook_secret", SecretStr("s")),
         ):
             link = (await client.post("/api/notifications/telegram/link")).json()
             token = link["link_token"]
-            assert link["deep_link"].endswith(f"?start={token}")
+            assert link["deep_link"] == f"https://t.me/StudyAIOBot?start={token}"
+            assert link["bot_username"] == "StudyAIOBot"
 
             hook = client_factory()
             hdr = {"x-telegram-bot-api-secret-token": "s"}
@@ -203,6 +205,24 @@ class TestTelegram:
         unlinked = (await client.delete("/api/notifications/telegram/unlink")).json()
         assert unlinked["linked"] is False and unlinked["verified"] is False
         assert await telegram_service.get_link(db_session, user.id) is None
+
+    async def test_link_without_bot_username_is_400_and_issues_no_token(
+        self, client_factory, make_user, db_session
+    ):
+        user = await make_user()
+        with (
+            patch("app.config.settings.telegram_bot_token", SecretStr("123:abc")),
+            patch("app.config.settings.telegram_bot_username", ""),
+        ):
+            resp = await client_factory(user).post("/api/notifications/telegram/link")
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Telegram bot username not configured"
+        rows = (
+            (await db_session.execute(select(TelegramLink).where(TelegramLink.user_id == user.id)))
+            .scalars()
+            .all()
+        )
+        assert rows == []
 
     async def test_webhook_secret_is_enforced_when_configured(self, client_factory):
         url = "https://example.com/hook-secret"
