@@ -298,7 +298,7 @@ AI-processing disclosure and consent (SEC-08, GL#38). Provider: `backend` —
   `app.core.logging.redact_emails` and the stdlib `EmailRedactingFilter` redact any address-shaped
   value as defence in depth.
 
-### api.ai_feedback v1
+### api.ai_feedback v2
 
 Per-item thumbs up/down on AI output (M33-S1-BACKEND-015, GL#36). Provider: `backend` —
 `services/app/app/api/ai_feedback.py`, `services/app/app/services/ai_feedback_service.py`. Consumer:
@@ -318,8 +318,40 @@ Rules: `target_type` in `AI_FEEDBACK_TARGET_TYPES`; `rating` is `1` or `-1`; `re
 exist **and** one owned by someone else both return `404` (no existence probe), resolved through the
 owner-scoped getters (floor 1). `course_id` is inferred from the target, never taken from the
 client. The admin route lives at `/admin/ai-feedback` because `/admin/feedback` is the app-bug
-inbox. `answer` resolves to an assistant `chat_message`; `/qa/ask` answers are not persisted and
-carry no id, so they cannot be rated. Account deletion removes the rows (`user_id` column).
+inbox. `answer` resolves to an assistant `chat_message`. Account deletion removes the rows
+(`user_id` column).
+
+**v2 (M34-S3-BACKEND-012, recorded before implementation; additive):** a sixth target type,
+`qa_answer`, so a `POST /api/qa/ask` answer can be rated. In v1 those answers were not persisted and
+carried no id.
+
+- `AI_FEEDBACK_TARGET_TYPES` = `("summary", "answer", "flashcard", "quiz_question",
+  "chat_message", "qa_answer")`, in that order. Still a plain string column, so no migration on
+  `ai_feedback`.
+- `QAResponse` gains `answer_id: str | None`. It is the id of a new `qa_answers` row when the
+  answer came from the agent; it is `None` for the deterministic "nothing relevant" reply, which
+  makes no AI call and is not AI output.
+- `qa_answers` stores **no question or answer text**, only enough to scope and aggregate:
+
+  | Table | Column | Type | Null | Notes |
+  |---|---|---|---|---|
+  | `qa_answers` | `user_id` | `String(36)` FK `users.id` | no | index `(user_id, created_at)` |
+  | `qa_answers` | `course_id` | `String(36)` FK `courses.id` | yes | `ondelete SET NULL`; set when the question named a course |
+  | `qa_answers` | `week` | `Integer` | yes | |
+  | `qa_answers` | `citation_count` | `Integer` | no | `len(citations)` of the response |
+
+  Plus `id` (`String(36)`, `generate_id`) and `created_at`. Written in the same request, after the
+  agent returned and before the response is built; committed with the usage record. Account
+  deletion removes the rows (`user_id` column); nothing else deletes them (floor 4).
+- `qa_answer` resolves owner-scoped: `qa_answers.id == target_id AND qa_answers.user_id ==
+  caller`; a miss or a foreign id is `404`, as for every other type. `course_id` comes from the
+  row.
+- **Study cards need no new type.** The study surfaces (Study hub review, timed and plan runs)
+  rate a card with `flashcard` and a question with `quiz_question`, the card's or question's own
+  id, exactly as the week tabs do. That half of BACKEND-012 is `frontend` work; the backend
+  already serves it. Unchanged from v1: the owner-scoped getters skip archived rows, so a vote on
+  a card or question archived after it was shown (`api.study-items`) is `404`; the control treats
+  that as "item gone", not as an error to retry.
 
 ### services.usage v1
 
@@ -514,7 +546,7 @@ Account deletion removes both new tables' rows (`backend`, `account_service`).
 `services/app/tests/contracts/test_weakspot_storage_contract.py` checks this table against the ORM
 metadata.
 
-### api.study-items v1
+### api.study-items v2
 
 Owner-scoped create/edit/delete of flashcards and quiz questions (GL#48, audit PROD-05). Lives in
 `app/api/assets.py`, logic in `app/services/asset_service.py`. All routes need an authenticated
@@ -550,6 +582,21 @@ Rules:
   bounded (front/back/question/explanation 4000 chars). `422` otherwise.
 * Unknown `course_code` for the caller is `404`.
 
+**v2 (M34-S3-BACKEND-012, recorded before implementation):** `course_code` on both `POST` routes
+is matched the way upload placement matches it (`api.upload-placement v1`), not exactly. In v1
+`csit302` was `404` for a caller who owns `CSIT302`; upload placement found it.
+
+* The lookup is `course_service.get_course_by_code_ci(session, code, *, user_id) -> Course | None`:
+  `code.strip().upper()` compared with `upper(courses.code)`, filtered on `courses.user_id ==
+  user_id` (floor 1). `asset_service` resolves `course_code` through it and through nothing else.
+* `uq_courses_code_user` is case-sensitive, so legacy data can hold two codes that differ only in
+  case for one user. The exact-case match wins; otherwise the oldest by `created_at`. Never
+  `MultipleResultsFound`, never a `500`.
+* It never creates a course: unknown for the caller stays `404` (upload placement creates one;
+  card add does not). Archived courses resolve as before (v1 did not filter them).
+* `get_course_by_code` (exact match) is unchanged: the course routes keyed on `{code}` in the URL
+  keep their behaviour.
+
 ### api.upload-placement v1
 
 Optional explicit placement on upload (GL#49, audit PROD-07).
@@ -567,6 +614,249 @@ Optional explicit placement on upload (GL#49, audit PROD-07).
 * A duplicate upload returns the existing artifact untouched; the placement is ignored.
 * Failure to resolve the course (quota) fails before anything is stored. In batch it fails the
   request with the quota error (placement is a single choice for all files).
+
+### models.third-party-tokens v1
+
+OAuth and Google Calendar tokens encrypted at rest (M34-S2-SEC-005, R-017, M32 N-7). Provider:
+`backend` — `services/app/app/core/secret_box.py` (`EncryptedText`) and `app/cli.py` (rotation);
+`data` — `app/models/oauth_account.py`, `app/models/calendar_sync.py`, one Alembic revision.
+Consumers: `backend` (`user_service`, `gcal_service`, `account_service`), `safety` (floor-2 pin).
+The scheme is the one per-user AI credentials already use (SEC-06): `secret_box`, Fernet under
+`SETTINGS_ENCRYPTION_KEY`, stored as `enc:v1:<token>`. No second key and no second format.
+
+**Columns.** These four, and only these, hold a third-party credential:
+
+| Table | Column | Type | Null | Notes |
+|---|---|---|---|---|
+| `oauth_accounts` | `access_token` | `EncryptedText` | yes | was `String(1000)`; widened, since Fernet output is about 1.4x the input plus 57 bytes |
+| `oauth_accounts` | `refresh_token` | `EncryptedText` | yes | was `String(1000)` |
+| `calendar_syncs` | `access_token` | `EncryptedText` | no | was `Text` |
+| `calendar_syncs` | `refresh_token` | `EncryptedText` | yes | was `Text` |
+
+Looked at and **not** in scope: `calendar_syncs.sync_token` is Google's incremental-sync cursor, not
+a credential (it authorises nothing without the access token); `magic_links.token_hash` and
+`invite_codes.token_hash` are already SHA-256 hashes; `push_subscriptions.p256dh` and `.auth` are the
+browser's push-encryption keys, which the push sender needs in the clear; `users.mfa_secret` is a
+TOTP seed, ours rather than a third party's, stored in plaintext today — an open question for the
+user, not part of this contract.
+
+**Accessor.** Encryption is a column type, so no call site can forget it:
+
+```python
+class EncryptedText(TypeDecorator):
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value: str | None, dialect: Dialect) -> str | None: ...
+
+    def process_result_value(self, value: str | None, dialect: Dialect) -> str | None: ...
+```
+
+- Write: `None` stays `None`; any `str` goes through `secret_box.encrypt`. Every write produces
+  ciphertext, including a value that merely starts with `enc:v1:`. With no key on a single-user
+  instance `secret_box.encrypt` stores plaintext, as it does for AI credentials; a multi-user
+  instance refuses to start without a key (`secret_box.check_startup`).
+- Read: `None` stays `None`; legacy plaintext (no prefix) is returned as is, so rows written
+  before the migration still work; ciphertext is decrypted. Ciphertext that fails authentication
+  (tampered, or written under a key no longer configured) reads as **`None`**, logs
+  `third_party_token_undecryptable` with no value in it, and never raises: loading a user, linking
+  an account or deleting one must not fail on one bad token. A `None` calendar access token takes
+  the existing "reconnect needed" path in `gcal_service`.
+- ORM attributes hold plaintext in memory, so `user_service` and `gcal_service` need no change to
+  read or write them.
+- **Never logged, never returned (floor 2).** No log call passes a token value; no API response
+  model has a field named `access_token`, `refresh_token` or `sync_token`.
+  `account_service.EXPORT_EXCLUDED_COLUMNS` keeps excluding `access_token` and `refresh_token` from
+  the data export.
+
+**Key rotation.** Same stance as SEC-06: `SETTINGS_ENCRYPTION_KEY` is a comma-separated list, the
+first key encrypts and every key decrypts. `python -m app.cli encrypt-user-secrets --apply`
+re-encrypts these four columns as well as the `user_settings` credentials, under the first key, and
+reports counts only. Rotation is therefore: prepend the new key, run the command, drop the old key.
+A token unreadable under every configured key is counted and left as is.
+
+**Migration.** One Alembic revision, after the current head:
+
+- `upgrade`: widen `oauth_accounts.access_token`/`refresh_token` to `Text`; then, for every row of
+  both tables, encrypt each non-NULL value of the four columns that is not already `enc:v1:`.
+  Idempotent: a second run changes nothing. Without a key (single-user) it leaves the values as
+  they are and says so in its output.
+- `downgrade`: decrypt every `enc:v1:` value of the four columns back to plaintext, then narrow the
+  two `oauth_accounts` columns to `String(1000)`. A value that cannot be decrypted aborts the
+  downgrade (nothing is narrowed or lost) rather than being dropped.
+- Neither direction prints or logs a value.
+
+`services/app/tests/contracts/test_third_party_tokens_contract.py` checks the column types, the
+accessor's behaviour under the test key, the migration and CLI coverage, and the API response
+models.
+
+### models.stripe-webhook-events v1
+
+Stripe webhook dedupe and ordering state in Postgres (M34-S2-SEC-008, M32 N-8). Provider: `data` —
+`app/models/stripe_webhook_event.py`, one Alembic revision; `backend` —
+`app/services/billing_service.py` (`handle_webhook_event`). Replaces the Redis keys
+`stripe:event:<id>` (dedupe, 30-day TTL) and `stripe:last_created:<customer>` (ordering watermark,
+90-day TTL). With this, `billing_service` does not touch Redis at all, so a Redis flush or outage
+can no longer re-apply a delivered event or let a stale one undo a newer state.
+
+| Table | Column | Type | Null | Notes |
+|---|---|---|---|---|
+| `stripe_webhook_events` | `stripe_event_id` | `String(255)` | no | unique |
+| `stripe_webhook_events` | `event_type` | `String(100)` | no | |
+| `stripe_webhook_events` | `stripe_customer_id` | `String(255)` | yes | index `(stripe_customer_id, stripe_created)` |
+| `stripe_webhook_events` | `stripe_created` | `DateTime(timezone=True)` | yes | the event's `created` |
+| `stripe_webhook_events` | `outcome` | `String(20)` | no | `applied` \| `stale` |
+
+Plus `id` (`String(36)`, `generate_id`) and `created_at`. No payload, no user id, no email: the
+row is Stripe's ids and our decision, nothing else.
+
+`handle_webhook_event(session, event_type, data, *, event_id=None, created=None) -> None` keeps its
+signature. For the three `customer.subscription.*` types (every other type is still ignored and
+records nothing):
+
+1. **Claim.** `INSERT … ON CONFLICT (stripe_event_id) DO NOTHING RETURNING id` in the request's
+   transaction. No row back means the event was already processed: log `webhook_replay_ignored`,
+   change nothing, return. An event without an id is processed without a claim, as today.
+2. **Order.** If `created` is given and an `applied` row for the same customer has a later
+   `stripe_created`, mark the claimed row `stale`, commit, log `webhook_stale_ignored`, return.
+3. **Apply.** Run the subscription handler and mark the row `applied`; one commit covers the claim
+   and the effect.
+4. **Failure.** Any exception rolls the transaction back, claim included, so Stripe's retry is
+   processed afresh. The exception propagates (the route answers `500`, Stripe retries).
+
+**Concurrent duplicate delivery.** Two requests carrying one event id race on the unique index:
+the second `INSERT` waits for the first transaction. If the first commits, the second gets no row
+and is a replay (step 1). If the first rolls back, the second claims and applies. The effect is
+applied exactly once either way, with no lock beyond the index.
+
+**Retention.** Rows are kept. Volume is a handful per subscriber per month, the table is the only
+record of which Stripe events changed a plan, and the ordering watermark is read from it. No beat
+task prunes it in v1. The table has no `user_id`, so account deletion leaves it; it holds only
+Stripe's opaque ids. `account_service` lists it among the tables that belong to nobody.
+
+Required behaviour tests (`backend` unit, `qa` integration on Postgres): replay of an applied event
+is a no-op; replay after a failed first attempt applies; a stale `updated` after a newer one is
+ignored and recorded `stale`; two concurrent deliveries of one id apply once; no Redis call on any
+path. `services/app/tests/contracts/test_stripe_webhook_events_contract.py` pins the table and the
+Redis-free service.
+
+### core.login-throttle-metrics v1
+
+A counter for the auth throttle's Redis being unreachable (M34-S3-BACKEND-012). Provider:
+`backend` — `app/core/login_throttle.py` (defines it) and `app/core/rate_limit.py` (also
+increments it). Consumer: whoever reads `/metrics` (alert rules are `devops`').
+
+```python
+LOGIN_THROTTLE_UNAVAILABLE = Counter(
+    "studyaio_login_throttle_unavailable_total",
+    "Auth throttle store unreachable, by operation.",
+    ["action"],
+)
+```
+
+`action` is exactly one of four values; never an email, a key or a path:
+
+| `action` | Where | What the caller gets |
+|---|---|---|
+| `read` | `login_throttle.apply_delay` could not read the failure count | login proceeds with no delay (fails open) |
+| `record` | `login_throttle.record_failure` could not count a failure | the failure is not counted (fails open) |
+| `clear` | `login_throttle.clear` could not reset the count | nothing visible |
+| `limit` | the rate limiter's store failed on an `/api/auth/` path | `503` with `Retry-After: 5` (fails closed) |
+
+Incremented once per occurrence, next to the existing `login_throttle_unavailable` and
+`rate_limit_store_down_failing_closed` log lines, which stay. The limiter's fail-open branch on
+non-auth paths is not counted here. Exported on `/metrics` from the default registry.
+`services/app/tests/contracts/test_login_throttle_metrics_contract.py` checks the definition and
+drives each `action` against a store that raises.
+
+### api.onboarding v1
+
+Server-side first-run status, the source the dashboard checklist reads (M34-S3-BACKEND-012).
+Provider: `backend` — `app/services/onboarding_service.py`, `app/api/onboarding.py`; `data` — one
+column on `users`, one Alembic revision. Consumer: `frontend` (`FirstRunChecklist`, which today
+derives the same steps from three queries and keeps dismissal in `localStorage`).
+
+| Method | Path | Body / query | Result |
+|---|---|---|---|
+| `GET` | `/api/onboarding` | none | `200` `OnboardingResponse` |
+| `PATCH` | `/api/onboarding` | `{checklist}` | `200` `OnboardingResponse`; `422` for a value outside `ONBOARDING_CHECKLIST_STATES` |
+
+`OnboardingResponse` = `{phase, steps: {upload, summary, check_in}, summary_target: {course_id,
+course_code, week} | null, checklist, visible}`. Both routes require a caller
+(`get_current_user_or_default`); neither spends AI or takes an id.
+
+Storage: `users.onboarding_checklist` `String(20)`, NOT NULL, server default `'auto'`, so existing
+users backfill to `auto` without a data migration. It is the only stored state; everything else is
+derived on read, per caller, with every query filtered on the caller (floor 1):
+
+- `uploaded`: the caller has at least one `lecture_artifacts` row, any status.
+- `summary_target`: the caller's first summary in a non-archived course, ordered by course code
+  then week (`summaries` joined to `courses` on `courses.user_id`).
+- `summary_read`: the caller has a `summary_viewed` usage event (`services.usage v1`, already sent
+  by the summary view).
+- `check_in_done`: the caller has a `flashcard_reviews` row, or a `quiz_attempts` row on a quiz
+  question in a course they own.
+
+```python
+ONBOARDING_CHECKLIST_STATES = ("auto", "dismissed", "pinned")
+ONBOARDING_PHASES = ("new", "processing", "has_summary", "done")
+ONBOARDING_STEP_STATUSES = ("done", "active", "locked")
+
+
+@dataclass(frozen=True)
+class SummaryTarget:
+    course_id: str
+    course_code: str
+    week: int
+
+
+@dataclass(frozen=True)
+class OnboardingStatus:
+    phase: str
+    upload: str
+    summary: str
+    check_in: str
+    summary_target: SummaryTarget | None
+    checklist: str
+    visible: bool
+
+
+def derive_status(
+    *,
+    uploaded: bool,
+    summary_target: SummaryTarget | None,
+    summary_read: bool,
+    check_in_done: bool,
+    checklist: str,
+) -> OnboardingStatus: ...
+
+
+async def get_status(session: AsyncSession, *, user_id: str) -> OnboardingStatus: ...
+
+
+async def set_checklist(
+    session: AsyncSession, *, user_id: str, checklist: str
+) -> OnboardingStatus: ...
+```
+
+`derive_status` is the UI's `deriveOnboarding` moved server-side: a check-in finishes the checklist
+whichever door the user came through, and a summary target unlocks both later steps. `visible` is
+`checklist != "dismissed" and (phase != "done" or checklist == "pinned")`: `pinned` is the "show it
+again" choice in settings, `dismissed` hides it. Worked examples (`set` is any `SummaryTarget`):
+
+| uploaded | target | summary_read | check_in_done | checklist | phase | upload | summary | check_in | visible |
+|---|---|---|---|---|---|---|---|---|---|
+| no | none | no | no | auto | new | active | locked | locked | yes |
+| yes | none | no | no | auto | processing | done | locked | locked | yes |
+| yes | set | no | no | auto | has_summary | done | active | active | yes |
+| yes | set | yes | no | auto | has_summary | done | done | active | yes |
+| yes | set | no | yes | auto | done | done | done | done | no |
+| yes | set | no | yes | pinned | done | done | done | done | yes |
+| no | none | no | no | dismissed | new | active | locked | locked | no |
+| no | none | no | yes | auto | done | done | done | done | no |
+
+`services/app/tests/contracts/test_onboarding_contract.py` compares the block with the source, runs
+the table through `derive_status`, and checks the routes and the column.
 
 ## Change log
 
@@ -590,3 +880,9 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-15 | api.weak-spots | v1 | Additive as built: `error_code` on `TargetedGenerationResponse`, `items` on the diagnostic, `GET /api/study/items`, `origin`/`focus_topic` on card and quiz payloads, `plan_split` on the retention readout. | M33-S2-BACKEND-020 |
 | 2026-10-15 | api.study-items | v1 | New contract, recorded before implementation: manual create, archive-and-copy edit, soft delete of flashcards and quiz questions; `origin="user"`. | M33-S3-BACKEND-027 |
 | 2026-10-15 | api.upload-placement | v1 | New contract, recorded before implementation: optional `course_code` + `week` on single and batch upload skip classification. | M33-S3-FRONTEND-028 |
+| 2026-10-16 | models.third-party-tokens | v1 | New contract, recorded before implementation: `EncryptedText` column type over `secret_box` on the four OAuth/calendar token columns, read failure is `None`, rotation through `encrypt-user-secrets`, reversible re-encrypting migration. Contract test written red. | M34-S2-SEC-005 |
+| 2026-10-16 | models.stripe-webhook-events | v1 | New contract, recorded before implementation: `stripe_webhook_events` (unique event id) replaces the Redis dedupe and ordering keys; claim, apply and commit in one transaction. Contract test written red. | M34-S2-SEC-008 |
+| 2026-10-16 | api.study-items | v2 | `course_code` on card and quiz create is matched case-insensitively through `course_service.get_course_by_code_ci`, as upload placement does; exact case wins a tie; still never creates. Contract test written red. | M34-S3-BACKEND-012 |
+| 2026-10-16 | core.login-throttle-metrics | v1 | New contract, recorded before implementation: `studyaio_login_throttle_unavailable_total{action}`, `read`/`record`/`clear` (fail open) and `limit` (fail closed). Contract test written red. | M34-S3-BACKEND-012 |
+| 2026-10-16 | api.onboarding | v1 | New contract, recorded before implementation: `GET`/`PATCH /api/onboarding`, `users.onboarding_checklist`, pure `derive_status` with worked examples. Contract test written red. | M34-S3-BACKEND-012 |
+| 2026-10-16 | api.ai_feedback | v2 | Additive: `qa_answer` target type, `qa_answers` table (no text), `answer_id` on `QAResponse`; study cards use the existing `flashcard`/`quiz_question` types. Contract test written red. | M34-S3-BACKEND-012 |
