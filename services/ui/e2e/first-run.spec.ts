@@ -1,10 +1,16 @@
-import type { BrowserContext } from '@playwright/test'
-import { test, expect, testEmail, seedSession } from './fixtures'
+import type { Browser, BrowserContext } from '@playwright/test'
+import { test, expect, testEmail, seedSession, openSession, closeSession } from './fixtures'
 
 // GL#46: a brand-new account sees a three-step checklist and call-to-action
 // empty widgets instead of blank cards. The account is seeded straight into the
 // database (registering spends the shared 3/minute budget) with minted cookies;
 // every test gets its own browser context carrying that session.
+//
+// M34: the checklist is server state (GET/PATCH /api/onboarding), so hiding it
+// is stored on the user, not in the browser. The test that hides it therefore
+// owns a user of its own; the others share one that is never dismissed.
+// The advancing steps, pinning and the legacy-key migration live in
+// onboarding.spec.ts.
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:8000'
 
@@ -26,35 +32,10 @@ test.describe('First run on an empty account', () => {
     storageState = seedSession(testEmail(), 'TestPass123!')
   })
 
-  /**
-   * The CI stack is self-hosted, where the SPA never asks who is signed in (it
-   * would have no user id to key the checklist's dismissal on). The API still
-   * honours the session cookie, so only the config is rewritten to make the SPA
-   * look the user up the way a multi-user deployment does.
-   */
-  async function open(
-    browser: import('@playwright/test').Browser,
+  const open = (
+    browser: Browser,
     opts: { lang?: 'ru'; viewport?: { width: number; height: number } } = {},
-  ): Promise<BrowserContext> {
-    const context = await browser.newContext({ storageState, viewport: opts.viewport })
-    // A static body: nothing is left in flight when the context closes.
-    await context.route('**/api/auth/config', (route) =>
-      route.fulfill({
-        json: {
-          self_hosted: false,
-          registration_enabled: true,
-          oauth_providers: [],
-          demo_enabled: false,
-          registration_mode: 'open',
-          invite_required: false,
-        },
-      }),
-    )
-    if (opts.lang) {
-      await context.addInitScript((l) => window.localStorage.setItem('studyaio-language', l), opts.lang)
-    }
-    return context
-  }
+  ): Promise<BrowserContext> => openSession(browser, storageState, opts)
 
   test('the dashboard offers the three steps with upload as the next action', async ({ browser }) => {
     const context = await open(browser)
@@ -72,8 +53,7 @@ test.describe('First run on an empty account', () => {
     await expect(checklist.getByRole('link', { name: 'Open summary' })).toHaveCount(0)
     await expect(checklist.getByRole('button', { name: 'Start the check-in' })).toHaveCount(0)
     await expect(checklist.getByText('Ready a minute or two after your upload finishes.')).toBeVisible()
-    await context.unrouteAll({ behavior: 'ignoreErrors' })
-    await context.close()
+    await closeSession(context)
   })
 
   test('empty widgets carry a call to action', async ({ browser }) => {
@@ -90,28 +70,41 @@ test.describe('First run on an empty account', () => {
     const study = main.getByRole('link', { name: 'Start studying' }).first()
     await expect(study).toBeVisible()
     await expect(study).toHaveAttribute('href', '/study')
-    await context.unrouteAll({ behavior: 'ignoreErrors' })
-    await context.close()
+    await closeSession(context)
   })
 
-  test('hiding the checklist sticks across a reload', async ({ browser }) => {
-    const context = await open(browser)
+  test('hiding the checklist is stored on the server and sticks across a reload', async ({ browser }) => {
+    // Its own user: the dismissal is the user's, so it would hide the checklist
+    // from every later test that shares `storageState`.
+    const own = seedSession(testEmail(), 'TestPass123!')
+    const context = await openSession(browser, own)
     const page = await context.newPage()
     await page.goto('/')
     const checklist = page.getByRole('region', { name: 'Get started' })
     await expect(checklist).toBeVisible({ timeout: 15_000 })
+
+    const patched = page.waitForRequest(
+      (r) => r.url().endsWith('/api/onboarding') && r.method() === 'PATCH',
+    )
     await checklist.getByRole('button', { name: 'Hide this checklist' }).click()
+    expect((await patched).postDataJSON()).toEqual({ checklist: 'dismissed' })
     await expect(checklist).toBeHidden()
-    await page.reload()
+
+    // After a reload the server, not the browser, says it stays hidden.
+    const [reloaded] = await Promise.all([
+      page.waitForResponse((r) => r.url().endsWith('/api/onboarding') && r.request().method() === 'GET'),
+      page.reload(),
+    ])
+    expect(await reloaded.json()).toMatchObject({ checklist: 'dismissed', visible: false })
     await expect(page.getByRole('heading', { name: /home/i })).toBeVisible({ timeout: 15_000 })
     await expect(page.getByRole('region', { name: 'Get started' })).toHaveCount(0)
-    // Other accounts in the same browser are unaffected: the flag is per user id.
+
+    // Nothing about the checklist is kept in the browser any more.
     const keys = await page.evaluate(() =>
-      Object.keys(window.localStorage).filter((k) => k.startsWith('studyaio_onboarding:')),
+      Object.keys(window.localStorage).filter((k) => k.startsWith('studyaio_onboarding')),
     )
-    expect(keys).toHaveLength(1)
-    await context.unrouteAll({ behavior: 'ignoreErrors' })
-    await context.close()
+    expect(keys).toEqual([])
+    await closeSession(context)
   })
 
   test('the checklist and its actions are translated', async ({ browser }) => {
@@ -122,8 +115,7 @@ test.describe('First run on an empty account', () => {
     await expect(checklist).toBeVisible({ timeout: 15_000 })
     await expect(checklist.getByText('Загрузите первую лекцию')).toBeVisible()
     await expect(checklist.getByRole('button', { name: 'Скрыть этот список' })).toBeVisible()
-    await context.unrouteAll({ behavior: 'ignoreErrors' })
-    await context.close()
+    await closeSession(context)
   })
 
   test('at 375px the checklist fits and Hide is a 44px target', async ({ browser }) => {
@@ -139,8 +131,7 @@ test.describe('First run on an empty account', () => {
     expect(m.scroll).toBeLessThanOrEqual(m.inner)
     const hide = await checklist.getByRole('button', { name: 'Hide this checklist' }).boundingBox()
     expect(hide!.height).toBeGreaterThanOrEqual(44)
-    await context.unrouteAll({ behavior: 'ignoreErrors' })
-    await context.close()
+    await closeSession(context)
   })
 
   test('after a first upload step 1 is done and the summary step says it is waiting', async ({ browser }) => {
@@ -155,13 +146,11 @@ test.describe('First run on an empty account', () => {
 
     await page.goto('/')
     const checklist = page.getByRole('region', { name: 'Get started' })
-    // Hiding in an earlier test is per browser profile; a fresh context shows it again.
     await expect(checklist).toBeVisible({ timeout: 15_000 })
     const steps = checklist.getByRole('listitem')
     await expect(steps.nth(0).getByRole('link', { name: 'Upload a lecture' })).toHaveCount(0)
     await expect(steps.nth(1).getByText('Ready a minute or two after your upload finishes.')).toBeVisible()
     await expect(steps.nth(2).getByRole('button', { name: 'Start the check-in' })).toHaveCount(0)
-    await context.unrouteAll({ behavior: 'ignoreErrors' })
-    await context.close()
+    await closeSession(context)
   })
 })

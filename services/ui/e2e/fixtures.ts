@@ -4,6 +4,8 @@ import {
   test as playwrightTest,
   expect,
   type APIRequestContext,
+  type Browser,
+  type BrowserContext,
   type Page,
   type Request,
 } from '@playwright/test'
@@ -168,7 +170,7 @@ export function seedUser(email: string, password: string): void {
  * beforeAll that logs in again can be throttled. Returns a Playwright
  * storageState to hand to browser.newContext / request.newContext.
  */
-export function seedSession(email: string, password: string): {
+export function seedSession(email: string, password: string, opts: { admin?: boolean } = {}): {
   cookies: Array<{
     name: string
     value: string
@@ -182,7 +184,7 @@ export function seedSession(email: string, password: string): {
   origins: []
 } {
   // The app's logger may share stdout; the cookies are the last JSON object line.
-  const line = seedDb('session', email, password)
+  const line = seedDb('session', email, password, ...(opts.admin ? ['--admin'] : []))
     .split('\n')
     .reverse()
     .find((l) => l.startsWith('{"'))
@@ -202,6 +204,55 @@ export function seedSession(email: string, password: string): {
     })),
     origins: [],
   }
+}
+
+/**
+ * Give a seeded user (see seedSession) a course of its own with a week-1
+ * summary, two flashcards and three multiple-choice questions: what the
+ * pipeline would have produced for that user's first upload. The CI job runs no
+ * worker, so this is the only way a non-default user gets study material.
+ */
+export function seedLearner(email: string, code: string): void {
+  seedDb('learner', email, code)
+}
+
+type SessionState = ReturnType<typeof seedSession>
+
+/**
+ * A browser context signed in as a seeded user. The CI stack is self-hosted,
+ * where the SPA never asks who is signed in (it would have no user id to key
+ * per-user state on). The API still honours the session cookie, so only the
+ * config is rewritten, with a static body, to make the SPA look the user up the
+ * way a multi-user deployment does.
+ */
+export async function openSession(
+  browser: Browser,
+  storageState: SessionState,
+  opts: { lang?: 'ru'; viewport?: { width: number; height: number } } = {},
+): Promise<BrowserContext> {
+  const context = await browser.newContext({ storageState, viewport: opts.viewport })
+  await context.route('**/api/auth/config', (route) =>
+    route.fulfill({
+      json: {
+        self_hosted: false,
+        registration_enabled: true,
+        oauth_providers: [],
+        demo_enabled: false,
+        registration_mode: 'open',
+        invite_required: false,
+      },
+    }),
+  )
+  if (opts.lang) {
+    await context.addInitScript((l) => window.localStorage.setItem('studyaio-language', l), opts.lang)
+  }
+  return context
+}
+
+/** Close a context opened with openSession without leaving a route handler mid-flight. */
+export async function closeSession(context: BrowserContext): Promise<void> {
+  await context.unrouteAll({ behavior: 'ignoreErrors' })
+  await context.close()
 }
 
 /** Seed a course (and optional concepts) owned by the self-hosted default user. */
