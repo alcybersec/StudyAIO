@@ -51,3 +51,27 @@ class TestLogRendererSelection:
         # Verify structlog is configured by getting a logger
         log = structlog.get_logger()
         assert log is not None
+
+
+class TestUrlLoggersCapped:
+    """Libraries that log full request URLs at INFO are capped at WARNING (SEC-015 F1)."""
+
+    def test_configure_logging_caps_url_logging_libraries(self):
+        import logging
+
+        names = ("httpx", "httpcore", "googleapiclient", "stripe")
+        saved = {n: logging.getLogger(n).level for n in names}
+        root = logging.getLogger()
+        root_level = root.level
+        try:
+            root.setLevel(logging.DEBUG)
+            for n in names:
+                logging.getLogger(n).setLevel(logging.NOTSET)
+            configure_logging("DEBUG")
+            root.setLevel(logging.DEBUG)
+            for n in names:
+                assert logging.getLogger(n).getEffectiveLevel() >= logging.WARNING, n
+        finally:
+            root.setLevel(root_level)
+            for n, level in saved.items():
+                logging.getLogger(n).setLevel(level)

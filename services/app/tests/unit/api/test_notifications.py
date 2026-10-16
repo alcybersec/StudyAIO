@@ -146,7 +146,7 @@ class TestTelegramLink:
             ),
         ):
             mock_settings.telegram_bot_token.get_secret_value.return_value = "123:abc"
-            mock_settings.telegram_webhook_url = "StudyAIOBot"
+            mock_settings.telegram_bot_username = "StudyAIOBot"
             response = await notif_client.post("/api/notifications/telegram/link")
             assert response.status_code == 200
             data = response.json()
@@ -287,6 +287,44 @@ class TestTelegramWebhookSecretConfig:
         field = Settings.model_fields["telegram_webhook_secret"]
         assert field.annotation is SecretStr
         assert field.default.get_secret_value() == ""
+
+
+class TestBotUsernameDeepLink:
+    @pytest.mark.asyncio
+    async def test_deep_link_uses_configured_bot_username(self, notif_client) -> None:
+        with (
+            patch("app.api.notifications.settings") as s,
+            patch(
+                "app.api.notifications.telegram_service.generate_link_token",
+                new_callable=AsyncMock,
+                return_value="tok",
+            ),
+        ):
+            s.telegram_bot_token.get_secret_value.return_value = "123:abc"
+            s.telegram_bot_username = "@MyStudyBot"
+            s.telegram_webhook_url = "https://h.example/api/notifications/telegram/webhook"
+            r = await notif_client.post("/api/notifications/telegram/link")
+        assert r.status_code == 200
+        assert r.json()["bot_username"] == "MyStudyBot"
+        assert r.json()["deep_link"] == "https://t.me/MyStudyBot?start=tok"
+
+    @pytest.mark.asyncio
+    async def test_unset_bot_username_fails_clearly_and_issues_no_token(
+        self, notif_client
+    ) -> None:
+        gen = AsyncMock(return_value="tok")
+        with (
+            patch("app.api.notifications.settings") as s,
+            patch("app.api.notifications.telegram_service.generate_link_token", gen),
+        ):
+            s.telegram_bot_token.get_secret_value.return_value = "123:abc"
+            s.telegram_bot_username = ""
+            s.telegram_webhook_url = "https://h.example/api/notifications/telegram/webhook"
+            r = await notif_client.post("/api/notifications/telegram/link")
+        assert r.status_code == 400
+        assert "username" in r.json()["detail"].lower()
+        assert "123:abc" not in r.text
+        gen.assert_not_awaited()
 
 
 class TestTestNotification:
