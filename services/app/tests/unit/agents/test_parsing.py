@@ -422,3 +422,17 @@ class TestNormaliseSummaryFooter:
         raw = '# T\n\nbody\n\n---*Sources: n. Version: 1.*\n---JSON_META---\n{"embedded_images": []}\n---JSON_META---'
         markdown, _ = parse_summary_response(raw)
         assert markdown.endswith("\n\n---\n*Sources: n. Version: 1.*")
+
+
+class TestSummaryMetaLogging:
+    def test_unparseable_meta_logs_length_not_content(self):
+        import structlog.testing
+
+        secret = "LECTURE-DERIVED-SNIPPET {not json"
+        with structlog.testing.capture_logs() as logs:
+            _, images = parse_summary_response(f"# T\n\n---JSON_META---\n{secret}")
+        assert images == []
+        event = next(e for e in logs if e["event"] == "failed_to_parse_summary_meta")
+        assert event["meta_chars"] == len(secret)
+        assert "LECTURE-DERIVED" not in repr(event)
+        assert "meta_text" not in event
