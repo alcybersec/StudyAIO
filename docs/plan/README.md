@@ -13,7 +13,7 @@ Orchestrator updates here.
 
 ## Next task
 
-Wave 1 in flight (below). Then: SEC-005 + SEC-008 implementation (`data`, `backend`) against the architect's red contract tests; BACKEND-012; AI-010 ai half (drop `_Precomputed`); SEC-007 fastapi cap lift (`backend`); safety review. Time-bound: M34-OPS-001 D7 readout from 2026-10-22, M34-OPS-002 D30 from 2026-11-14, M34-OPS-004 on first prod targeted generation.
+Wave 1 in flight (below). Applied: SEC-007 devops part (`8c64d1c`: pip-audit pinned, deploy key check round-trips the key — host deploy.sh reinstall needed at next deploy). Then: SEC-005 + SEC-008 implementation (`data`, `backend`) against the architect's red contract tests; BACKEND-012; AI-010 ai half (drop `_Precomputed`); SEC-007 fastapi cap lift (`backend`); safety review. Time-bound: M34-OPS-001 D7 readout from 2026-10-22, M34-OPS-002 D30 from 2026-11-14, M34-OPS-004 on first prod targeted generation.
 
 ## Active
 
@@ -21,7 +21,7 @@ Wave 1 in flight (below). Then: SEC-005 + SEC-008 implementation (`data`, `backe
 |---|---|---|---|
 | Contract amendments per user decisions (drop `qa_answers`; add `users.mfa_secret` to SEC-005; Stripe rows kept) — first pass applied (`4371b29`, ADR 0003 refresh `110f84b`); red tests held on `hold/m34-contract-red` | `architect` | 2026-10-16 | isolated |
 | Review-before-build of SEC-005 / SEC-008 contracts + floor-2 red pin | `safety` | 2026-10-16 | isolated |
-| M34-S2-SEC-006 (AI pools non-root) + SEC-007 devops part (pip-audit pin, real deploy-key check) | `devops` | 2026-10-16 | isolated |
+| M34-S2-SEC-006 isolation trade-off: non-root AI pools (`b27fc19`, held on `hold/m34-sec006`) lose the CLI child's separate uid — safety to recommend | `safety` | 2026-10-16 | isolated |
 | M34-S3-FRONTEND-011 (lazy chunk ≤ 420 KB; R-045 QuickCaptureModal test) | `frontend` | 2026-10-16 | isolated |
 | M34-S3-AI-010 backend half (index embed/store split) + SEC-009 backend bits (typed admin feedback view, template name in email logs, remove `proof.py`) | `backend` | 2026-10-16 | isolated |
 | SEC-009 qa bit (`seed_e2e.py` refuses without an e2e marker) | `qa` | 2026-10-16 | isolated |
