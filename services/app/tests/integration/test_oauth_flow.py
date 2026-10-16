@@ -229,9 +229,7 @@ class TestTokensNotStored:
     async def _tokens(self, db_session, user_id):
         row = (
             await db_session.execute(
-                text(
-                    "SELECT access_token, refresh_token FROM oauth_accounts WHERE user_id = :u"
-                ),
+                text("SELECT access_token, refresh_token FROM oauth_accounts WHERE user_id = :u"),
                 {"u": user_id},
             )
         ).one()
