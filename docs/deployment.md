@@ -790,6 +790,25 @@ old dumps age out.
 
 ---
 
+## Telegram webhook secret
+
+The Telegram webhook only accepts calls that carry the shared secret Telegram
+echoes in its `X-Telegram-Bot-Api-Secret-Token` header. In multi-user mode,
+with `TELEGRAM_WEBHOOK_SECRET` unset, every call is rejected (fail closed).
+
+1. Generate a secret (1-256 characters of `A-Za-z0-9_-`):
+   `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+2. Put it in the server's secret store as `TELEGRAM_WEBHOOK_SECRET`.
+3. Deploy so the api container sees it.
+4. Re-register the webhook, which sends the secret to Telegram. This needs
+   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_URL` and `TELEGRAM_WEBHOOK_SECRET`:
+   `docker compose exec api python -m app.cli register-telegram-webhook`
+
+Until the webhook is re-registered, Telegram updates are rejected. Rotate by
+repeating the steps with a new value.
+
+---
+
 ## Environment Variable Reference
 
 | Variable | Default | Description |
