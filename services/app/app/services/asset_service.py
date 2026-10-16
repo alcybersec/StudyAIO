@@ -287,7 +287,7 @@ async def _resolve_manual_target(
     source_artifact_id: str | None,
 ) -> tuple[str, str]:
     """Return (course_id, source_artifact_id) for a manual item, owner-scoped."""
-    course = await course_service.get_course_by_code(session, course_code, user_id=user_id)
+    course = await course_service.get_course_by_code_ci(session, course_code, user_id=user_id)
     if course is None:
         raise ItemNotFoundError(course_code)
     query = select(LectureArtifact.id).where(

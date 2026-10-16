@@ -157,7 +157,7 @@ class TestCreate:
     async def test_create_flashcard_uses_newest_artifact_of_the_week(self, mock_session):
         course = MagicMock(id="c-1")
         with patch(
-            "app.services.asset_service.course_service.get_course_by_code",
+            "app.services.asset_service.course_service.get_course_by_code_ci",
             new_callable=AsyncMock,
             return_value=course,
         ) as get_course:
@@ -180,7 +180,7 @@ class TestCreate:
 
     async def test_create_flashcard_unknown_course_raises_not_found(self, mock_session):
         with patch(
-            "app.services.asset_service.course_service.get_course_by_code",
+            "app.services.asset_service.course_service.get_course_by_code_ci",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -196,7 +196,7 @@ class TestCreate:
 
     async def test_create_without_any_artifact_raises_no_source(self, mock_session):
         with patch(
-            "app.services.asset_service.course_service.get_course_by_code",
+            "app.services.asset_service.course_service.get_course_by_code_ci",
             new_callable=AsyncMock,
             return_value=MagicMock(id="c-1"),
         ):
@@ -216,7 +216,7 @@ class TestCreate:
 
     async def test_explicit_source_artifact_is_owner_and_course_scoped(self, mock_session):
         with patch(
-            "app.services.asset_service.course_service.get_course_by_code",
+            "app.services.asset_service.course_service.get_course_by_code_ci",
             new_callable=AsyncMock,
             return_value=MagicMock(id="c-1"),
         ):
