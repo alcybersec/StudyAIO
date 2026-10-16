@@ -117,3 +117,55 @@ class TestParametersSectionIsStripped:
 
     def test_result_is_json_serialisable(self):
         json.dumps(redact_emails(None, "i", {"event": RENDERED}))
+
+
+def _rendered_json_line(exception: str) -> str:
+    return json.dumps(
+        {
+            "exception": exception,
+            "event": "oauth_callback_failed",
+            "level": "error",
+            "timestamp": "2026-10-16T00:00:00Z",
+        }
+    )
+
+
+class TestRenderedJsonLineKeepsItsTail:
+    """The stdlib filter sees the already-rendered JSON line, not the event dict."""
+
+    def _filtered(self, line: str) -> str:
+        rec = logging.LogRecord("n", logging.ERROR, "f", 1, line, None, None)
+        EmailRedactingFilter().filter(rec)
+        return rec.getMessage()
+
+    def test_db_error_line_keeps_event_level_timestamp_and_drops_value(self):
+        out = self._filtered(_rendered_json_line(RENDERED))
+        assert SENTINEL not in out
+        parsed = json.loads(out)
+        assert parsed["event"] == "oauth_callback_failed"
+        assert parsed["level"] == "error"
+        assert parsed["timestamp"] == "2026-10-16T00:00:00Z"
+        assert "Background on this error" in parsed["exception"]
+
+    def test_value_with_bracket_and_no_trailer_is_dropped_and_tail_kept(self):
+        exc = f"boom\n[parameters: ({{'a': ['{SENTINEL}']}},)]"
+        out = self._filtered(_rendered_json_line(exc))
+        assert SENTINEL not in out
+        parsed = json.loads(out)
+        assert parsed["level"] == "error"
+        assert parsed["timestamp"] == "2026-10-16T00:00:00Z"
+
+    def test_value_containing_a_quote_is_dropped_in_json_line(self):
+        exc = f"boom\n[parameters: ('a\"b{SENTINEL}',)]"
+        out = self._filtered(_rendered_json_line(exc))
+        assert SENTINEL not in out
+        assert json.loads(out)["level"] == "error"
+
+    def test_already_redacted_section_is_not_rematched(self):
+        line = _rendered_json_line("x [parameters: redacted] y")
+        assert self._filtered(line) == line
+
+    def test_processor_then_filter_is_stable(self):
+        once = redact_emails(None, "e", {"event": RENDERED})["event"]
+        assert once.count("[parameters: redacted]") == 1
+        assert self._filtered(once) == once
