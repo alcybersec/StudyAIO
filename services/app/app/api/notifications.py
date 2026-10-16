@@ -88,16 +88,12 @@ async def generate_telegram_link(
     if not bot_token:
         raise HTTPException(status_code=400, detail="Telegram bot not configured")
 
+    bot_username = settings.telegram_bot_username.strip().lstrip("@")
+    if not bot_username:
+        raise HTTPException(status_code=400, detail="Telegram bot username not configured")
+
     token = await telegram_service.generate_link_token(session, user.id)
     await session.commit()
-
-    # Extract bot username from token (format: <id>:<secret>)
-    # We need the bot username for the deep link — use a placeholder if not derivable
-    bot_username = (
-        settings.telegram_webhook_url.split("/")[-1]
-        if settings.telegram_webhook_url
-        else "StudyAIOBot"
-    )
 
     deep_link = f"https://t.me/{bot_username}?start={token}"
 

@@ -1,7 +1,11 @@
 """Application configuration loaded from environment variables."""
 
+import re
+
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+_TELEGRAM_SECRET_RE = re.compile(r"[A-Za-z0-9_-]{32,256}")
 
 
 class Settings(BaseSettings):
@@ -231,6 +235,9 @@ class Settings(BaseSettings):
     notifications_enabled: bool = True
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_webhook_url: str = ""
+    #: Bot handle (without `@`) used for the `t.me/<username>?start=` deep link.
+    #: Unset means the link endpoint refuses with a clear 400.
+    telegram_bot_username: str = ""
     #: Shared secret Telegram echoes in `X-Telegram-Bot-Api-Secret-Token` on every
     #: webhook call (SEC-015). Random, 1-256 chars of [A-Za-z0-9_-]; never the URL.
     #: Unset in multi-user mode means the webhook rejects every call.
@@ -258,7 +265,8 @@ class Settings(BaseSettings):
         ""  # e.g. "https://app.studyaio.com" — defaults to http://localhost:8000
     )
 
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    # `hide_input_in_errors`: a ValidationError must never echo a rejected secret.
+    model_config = {"env_file": ".env", "extra": "ignore", "hide_input_in_errors": True}
 
     @property
     def uploads_dir(self) -> str:
@@ -278,6 +286,21 @@ class Settings(BaseSettings):
         if self.single_user_mode:
             self.self_hosted = True
         return self
+
+    @field_validator("telegram_webhook_secret")
+    @classmethod
+    def _validate_telegram_webhook_secret(cls, value: SecretStr) -> SecretStr:
+        """Refuse a secret Telegram would reject: 32-256 chars of [A-Za-z0-9_-].
+
+        Unset stays allowed (the webhook then fails closed). The message names the
+        rule only, never the value.
+        """
+        raw = value.get_secret_value()
+        if raw and not _TELEGRAM_SECRET_RE.fullmatch(raw):
+            raise ValueError(
+                "TELEGRAM_WEBHOOK_SECRET must be 32-256 characters of A-Z, a-z, 0-9, _ and -"
+            )
+        return value
 
     @field_validator("registration_mode")
     @classmethod

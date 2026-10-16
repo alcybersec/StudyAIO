@@ -309,9 +309,7 @@ class TestBotUsernameDeepLink:
         assert r.json()["deep_link"] == "https://t.me/MyStudyBot?start=tok"
 
     @pytest.mark.asyncio
-    async def test_unset_bot_username_fails_clearly_and_issues_no_token(
-        self, notif_client
-    ) -> None:
+    async def test_unset_bot_username_fails_clearly_and_issues_no_token(self, notif_client) -> None:
         gen = AsyncMock(return_value="tok")
         with (
             patch("app.api.notifications.settings") as s,

@@ -83,6 +83,11 @@ class EmailRedactingFilter(logging.Filter):
         return True
 
 
+#: Libraries whose own INFO lines print full request URLs. httpx embeds the
+#: Telegram bot token (`/bot<token>/...`); googleapiclient prints query strings.
+_URL_LOGGING_LIBRARIES = ("httpx", "httpcore", "googleapiclient", "stripe")
+
+
 def _should_use_json() -> bool:
     """Determine if JSON renderer should be used based on config."""
     fmt = settings.log_format.lower()
@@ -130,3 +135,7 @@ def configure_logging(log_level: str = "INFO") -> None:
     for handler in logging.getLogger().handlers:
         if not any(isinstance(f, EmailRedactingFilter) for f in handler.filters):
             handler.addFilter(EmailRedactingFilter())
+
+    # Cap them at WARNING whatever the root level (SEC-015 F1).
+    for name in _URL_LOGGING_LIBRARIES:
+        logging.getLogger(name).setLevel(logging.WARNING)

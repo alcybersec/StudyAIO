@@ -33,10 +33,9 @@ Pins:
   send path logs no bot token on a network failure;
 * ``register_webhook`` is called only from the CLI, which logs at ``WARNING``.
 
-Finding F1 (strict ``xfail``, not blocking): at ``INFO`` httpx's own request log
-prints the ``setWebhook`` URL, which carries the bot token. Unreachable while the
-CLI is the only caller (pinned); RED until ``configure_logging`` caps the
-``httpx``/``httpcore`` loggers at ``WARNING``.
+Finding F1 (fixed): at ``INFO`` httpx's own request log printed the ``setWebhook``
+URL, which carries the bot token. ``configure_logging`` now caps the ``httpx`` and
+``httpcore`` loggers at ``WARNING``.
 """
 
 from __future__ import annotations
@@ -536,14 +535,6 @@ async def test_floor2_send_path_logs_no_bot_token_on_network_failure(log_stream)
         assert value not in text, "the bot token reached the log on a send failure"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "F1 (SEC-015): httpx logs `HTTP Request: POST https://api.telegram.org/bot<token>/"
-        "setWebhook` at INFO. Unreachable while only the CLI (WARNING) calls register_webhook; "
-        "RED until configure_logging caps the httpx/httpcore loggers at WARNING."
-    ),
-)
 @pytest.mark.asyncio
 async def test_floor2_register_webhook_logs_no_bot_token_at_info(log_stream):
     import httpx
