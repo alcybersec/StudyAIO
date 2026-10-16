@@ -1,6 +1,6 @@
 # StudyAIO threat model
 
-**Owner:** `safety` · **First written:** 2026-10-11 (M32 gate) · **Last delta:** 2026-10-16 (M34-S2, SEC-006 option F)
+**Owner:** `safety` · **First written:** 2026-10-11 (M32 gate) · **Last delta:** 2026-10-16 (M34-S2, SEC-005 secrets at rest)
 
 This is a living document. Every gate's Floors file links to it and adds a dated delta (§5).
 The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
@@ -14,7 +14,7 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | Per-user AI credentials (API keys, Claude CLI OAuth JSON) | `user_settings.settings_json`, `enc:v1:` Fernet ciphertext since SEC-06 | Floor 2. They spend the user's money and identify them to a provider |
 | Instance AI credentials (`ZAI_API_KEY` and others, Claude service login) | env from the secret manager; `/run/claude-host` read-only mount | Floor 2 and cost. Prod runs metered `zai` |
 | `SETTINGS_ENCRYPTION_KEY`, `JWT_SECRET_KEY`, DB password | env from the secret manager → the deploy directory's `.env` | Losing the key means losing every stored credential. Leaking the JWT key means session forgery (floor 1) |
-| OAuth and calendar tokens | `oauth_accounts`, `calendar_syncs`, **plaintext** | R-017 residual. They are not AI credentials, so outside floor 2's literal text |
+| OAuth and calendar tokens, TOTP seed | `oauth_accounts`, `calendar_syncs`, `users.mfa_secret`; `enc:v1:` ciphertext under the same key since SEC-005 | Floor 2 (reviewed scope; R-017 mitigated, closing is the Orchestrator's call). The tokens reach the user's Google/GitHub account; the seed is their second factor |
 | AI-processing consent record (SEC-08, GL#38) | `users.ai_processing_consent_at` / `_version` | Evidence that the user agreed to the disclosure in force before their content left the instance. Only `ai_consent_required` is exposed by the API; the raw record is not |
 | AI feedback votes and comments (GL#36) | `ai_feedback` | Owned by the voter. The comment is free text and may hold personal data; it is shown to admins in the aggregate, never logged and never copied into usage events |
 | Usage events (GL#37) | `usage_events` | Owned by the actor. Event name from a fixed list, scalar properties under an allowlist, no content; read cross-user only as admin aggregates with no user id |
@@ -42,7 +42,7 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | B3 | API/worker → AI provider | Floor 3: `get_agent` and `get_embedding_provider` only at the ADR 0003 and ADR 0005 sites. Adapter-boundary redaction with `from None`. Global `AgentError` handler withholds the text (C4). User base URLs are public-only, re-checked at use, with no redirects (SEC-03) | DNS rebinding is narrowed (checked when the config is built and again before connecting), not closed by pinning |
 | B4 | Worker → `claude -p` child | `--tools ""`, `--strict-mcp-config`, an allowlisted env, a fresh empty cwd per call, operator-only binary and model (SEC-01), a fixed system prompt, and the host-login copy redacted and removed. Since SEC-006 (option F) every worker pool runs as uid 999, so no pool can drop the child to 10001; instead the adapter **refuses** the CLI before reading any login or spawning (`ClaudeCliUnavailableError`, counted on `studyaio_claude_cli_spawn_refusals_total`) on a non-root multi-user worker, unless the operator sets `CLAUDE_CLI_SHARED_UID_ACCEPTED` or runs `SINGLE_USER_MODE`. `CLAUDE_CLI_UID` on a non-root worker is refused outright. A root worker keeps the AGENT-01 drop to `CLAUDE_CLI_UID` with `extra_groups=[]`. The CLI's `HOME` is a uid-999 `0700` tmpfs (`test_floor2_cli_shared_uid_refusal.py`, `test_floor2_worker_pools_nonroot.py`) | With the opt-in (or single-user) the child runs **at the worker's uid**: it can read `/proc/<worker>/environ` (JWT key, DB URL, `SETTINGS_ENCRYPTION_KEY`), the login mount and every tenant's `data/`. Its only containment then is `--tools ""` and the env allowlist. Prod users who chose `claude_code` lose it until the CLI sidecar (option B) lands. The refusal is a runtime error, not a startup one: the API still offers `claude_code` in settings (backend owes an availability surface) |
 | B5 | App → storage (`data/`, DB) | Floor 4: every blob delete is classified against ADR 0004. Re-summarize and regeneration keep versions and history. The account purge sweeps every summary blob, including deleted courses' (C5 ledger, id-shaped segments only) | Courses deleted before `a3ab6ce` are unattributable (R-020 residual) |
-| B6 | Credentials at rest | SEC-06: `enc:v1:` MultiFernet. A multi-user start refuses with no key and refuses the all-zero test key outside pytest. Ciphertext-shaped input is never stored verbatim. Export never returns credentials | OAuth and calendar tokens are plaintext (R-017). Rotation is manual (`encrypt-user-secrets`). The key lives in the same `.env` as every other secret |
+| B6 | Credentials at rest | SEC-06: `enc:v1:` MultiFernet. A multi-user start refuses with no key and refuses the all-zero test key outside pytest. Ciphertext-shaped input is never stored verbatim. Export never returns credentials | Since SEC-005 the OAuth and calendar tokens and the TOTP seed are ciphertext too (`EncryptedText`); a value that cannot be decrypted reads as `None` and is never written back. Rotation is manual (`encrypt-user-secrets`, which exits 2 while any value is unreadable). The key lives in the same `.env` as every other secret, so it does not protect against a host compromise, only against a leaked dump or backup. The migration's downgrade removes at-rest protection (§5, SEC-005) |
 | B7 | Billing webhook | Stripe signature, dedupe by event id (unique claim in `stripe_webhook_events`, same transaction as the effect), per-customer ordering under a per-customer advisory lock, customer-scoped mutation (BILL-01, SEC-008, floor-1 pins) | Since M34-S2-SEC-008 the state is in Postgres and kept indefinitely, so a Redis flush no longer reopens replay or reordering. Events in the same second are not ordered. An event with no `id` is applied without a claim row, so it is neither deduped nor a watermark (Stripe always sends one) |
 | B8 | Cost | Per-user quota, global daily ceilings and metering on upload, batch, retry, reclassify, merge, review-resolve, CourseOps, chat, Q&A, concepts and, since `421dfa9`, the instance-provider path of `POST /api/settings/test-ai` (QUOTA-01/COST-01, M32 G1). Every ADR 0003 request-time site's route checks the caller's quota before the spend and records against the caller (`test_floor3_request_time_ai_quota.py`) | Own-credential test-ai is rate limited (5/min) but not quota-checked, by design: it spends the user's money. Concepts records only a successful call; a failed provider call there is not metered |
 | B9 | CI/CD → prod | Images by SHA from GHCR. `deploy.sh` refuses without the encryption key (exit 68) or without a good pre-migration dump (exit 67), and migrates in a one-off container before start (R-028). `dependency-audit` CI job (pip-audit on the lock, npm audit high/critical; allowlist empty) | The key check tests presence, not validity: a malformed or test key passes the guard, then crash-loops after migrating. `pip-audit` is installed unpinned in CI. The host's `deploy.sh` is a manually installed copy and can drift from the repo |
@@ -258,6 +258,45 @@ QA-064) reviewed for the first time. Detail and the mutation table are in `docs/
 8. **Floor-1 sweep growth.** 169 `/api` routes, 133 swept pairs and 111 owned-reaching, against
    149, 115 and 99 at M32. The only violation is still the ruled opt-in leaderboard. No dependency
    moved in M33, so the R-040 lift rule did not apply.
+
+### 2026-10-16, M34 S2 (M34-S2-SEC-005, secrets at rest)
+
+Third-party tokens and the TOTP seed are encrypted at rest (`models.secrets-at-rest v1`). Review:
+`docs/gates/M34/sec005-safety.md`. Verdict: APPROVE.
+
+1. **Scope.** `oauth_accounts.access_token`/`refresh_token`, `calendar_syncs.access_token`/`refresh_token`
+   and `users.mfa_secret` are `secret_box.EncryptedText`: `enc:v1:` MultiFernet ciphertext under
+   `SETTINGS_ENCRYPTION_KEY`, the SEC-06 scheme. A database dump or a `backups/` file no longer hands over
+   anyone's Google or GitHub access or their second factor. `calendar_syncs.sync_token` and
+   `telegram_links.link_token` are reviewed and stay plaintext (`test_floor2_tokens_at_rest.py`).
+2. **Unreadable reads as `None`, and fails closed.** A value written under a key that is no longer configured,
+   or tampered with, loads as `None` and logs `secret_at_rest_undecryptable` with the column name only. For
+   the seed, `mfa_enabled` alone decides whether a second factor is required: a TOTP code against a `None`
+   seed is refused exactly like a wrong code and counted by the login throttle, on the password and the OAuth
+   path. Backup codes still sign in. `disable_mfa` refuses and changes nothing; recovery is the admin
+   `clear_mfa`.
+3. **Rotation works on stored strings.** `encrypt-user-secrets` reads and writes the five columns through
+   Core over plain `Text` columns, never the mapped attribute, so an unreadable value is left byte-for-byte
+   as stored and is counted. The command exits 2 while the count is above 0. **Do not drop an old key until a
+   dry run reports `re-keyed: 0` and exits 0.**
+4. **Error text.** Both engines (`app/core/database.py`, `alembic/env.py`) set `hide_parameters=True`, and the
+   logging backstop redacts any `[parameters: ...]` section. Before this change a failed flush in the OAuth
+   callback logged the plaintext provider tokens.
+5. **Upgrade.** Revision `b2d4f6a8c0e1` calls `secret_box.check_startup()` first. A multi-user instance with no
+   key aborts before any column is touched. A single-user instance with no key keeps its values and prints
+   how many remain plaintext and the `encrypt-user-secrets --apply` command. It never prints a value.
+6. **Downgrade.** The downgrade removes at-rest protection: it decrypts every value of the five columns and
+   writes it back as plaintext, then narrows the OAuth columns to `String(1000)` and `mfa_secret` to
+   `String(64)`. It runs in the single migration transaction and aborts, changing nothing, when ciphertext
+   exists and no key is set, when any value cannot be decrypted, or when a decrypted value is longer than the
+   narrowed width. An operator runs it only to roll the application back to a release older than SEC-005,
+   because that code cannot read ciphertext: it would send `enc:v1:...` to Google as a bearer token and
+   compare TOTP codes against ciphertext. It is an explicit operator act, never a step in a routine redeploy.
+   After it, every token and seed is plaintext in the database and in every later dump; re-run the upgrade as
+   soon as the rollback is over, and treat dumps taken in between as holding live credentials.
+7. **Residual.** The key sits in the same `.env` as the database password, so this protects dumps and backups,
+   not a compromised host. Nothing in `app/` reads `oauth_accounts` tokens after login; not storing them at
+   all (contracts-safety R1) remains the stronger follow-up for `backend`.
 
 ### 2026-10-16, M34 S2 (M34-S2-SEC-006, option F)
 

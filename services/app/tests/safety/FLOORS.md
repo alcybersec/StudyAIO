@@ -309,6 +309,39 @@ the guard returning early for non-root; the `CLAUDE_CLI_UID` check moved after t
 the opt-in defaulted `true` in `prod.yml`; `HOME: /root`; the HOME tmpfs at `0755`; `chmod 750` in the
 preflight hint; `USER root` appended to the Dockerfile.
 
+### Third-party tokens and the TOTP seed at rest (SEC-005, `models.secrets-at-rest v1`; backend `4daef70`, data `9ecd47a` on `hold/m34-sec005`)
+
+`oauth_accounts.access_token`/`refresh_token`, `calendar_syncs.access_token`/`refresh_token` and
+`users.mfa_secret` are `secret_box.EncryptedText`. Review: `docs/gates/M34/contracts-safety.md` (C1-C7) and
+`docs/gates/M34/sec005-safety.md`; threat model §5, SEC-005. The architect's contract
+(`tests/contracts/test_secrets_at_rest_contract.py`) pins the same entry from the interface side; the rows
+below are the floor tier's own.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_tokens_at_rest.py::test_floor2_credential_column_scan_is_not_vacuous` | The name scan (`*token`, `*secret`, `*password`, `*api_key`) stops finding the five columns, or a reviewed exclusion has gone stale. |
+| `…::test_floor2_every_credential_column_is_encrypted_or_reviewed` | A credential-named column is neither encrypted nor classified in `NOT_ENCRYPTED_REVIEWED` with a reason (`calendar_syncs.sync_token`, `telegram_links.link_token` today). |
+| `…::test_floor2_credential_reaches_the_driver_as_ciphertext[5]` | Binding a sentinel through the column type for Postgres yields anything but `enc:v1:` ciphertext without the sentinel, or the value does not read back. |
+| `…::test_floor2_failed_insert_error_text_carries_no_plaintext[5]` | The text of a failed INSERT's `DBAPIError`, as `logger.exception` renders it, carries the sentinel. |
+| `…::test_floor2_engine_hides_bound_parameters_from_error_text` | The request engine's `hide_parameters` is off (C6). |
+| `…::test_floor2_unreadable_totp_seed_never_bypasses_mfa[2]`, `…::test_floor2_unreadable_totp_seed_never_bypasses_oauth_mfa` | With `mfa_enabled` and a `None` (unreadable) seed, a password login with or without a TOTP code, or the OAuth pending-MFA step with a code, gets anything but `403` and no session cookies; `verify_totp` is handed `None`; or (OAuth) the failure is not counted by the login throttle (C2.1, C2.2). |
+| `…::test_floor2_backup_code_still_signs_in_when_the_seed_is_unreadable` | A valid backup code is refused because the seed is unreadable (C2.3), or the seed rather than `mfa_enabled` decides whether MFA applies. |
+| `…::test_floor2_disable_mfa_with_unreadable_seed_refuses_and_changes_nothing` | `disable_mfa` with `mfa_enabled` and a `None` seed clears anything, flushes, or answers "MFA is not enabled" (C2.4, C2.5). |
+| `…::test_floor2_rotation_rekeys_stored_strings_and_never_rewrites_an_unreadable_one` | `encrypt-user-secrets`' column pass, run on real SQL (SQLite) over plaintext, current-key, old-key and undecryptable values: a dry run writes; an unreadable or current value is not byte-for-byte as stored; a plaintext or old-key value is not under the first key; or the `(encrypted, rotated, unreadable)` counts that gate the exit code are wrong (C1). |
+| `…::test_floor2_upgrade_without_a_key_on_multi_user_aborts_before_touching_anything`, `…::test_floor2_upgrade_with_a_key_leaves_no_plaintext` | Revision `b2d4f6a8c0e1`, run on SQLite with `op` stood in: a multi-user upgrade with no key alters a column or writes a value instead of raising, or a keyed upgrade leaves a plaintext value (C4). |
+| `…::test_floor2_downgrade_abort_paths_change_nothing[no_key\|undecryptable\|too_long]` | The downgrade, facing ciphertext with no key, an undecryptable value, or a decrypted seed longer than 64, narrows a column or writes any value before raising (C5). |
+| `…::test_floor2_fresh_logger_proxy_is_redacted_like_a_module_logger`, `…::test_floor2_undecryptable_column_log_names_the_column_not_the_value` | Under the real `configure_logging`, a call-time `structlog.get_logger()` line (the SEC-005 log sites use one so `capture_logs` sees them) carries an address or a bound-parameter value, or `secret_at_rest_undecryptable` carries the ciphertext or plaintext instead of only the column. |
+| `…::test_floor2_calendar_revoke_sends_the_token_in_the_body_not_the_url` | `disconnect_calendar` puts the access token in the revoke URL or `params=` rather than the form body (C7). |
+
+Mutation-checked in the SEC-005 review (scratch copy of `services/app`, `scratchpad/mut/muts.py`), each red in
+this file alone: rotation through the ORM attribute; rotation writing `NULL` over an unreadable value;
+rotation not counting it; `_totp_matches` returning `True` on a `None` seed; the login gate keyed on the seed;
+`disable_mfa` clearing MFA, or answering "not enabled", on a `None` seed; `EncryptedText` binding plaintext;
+the undecryptable log carrying the stored value; revoke via `params=`; `hide_parameters=False`; the upgrade
+without `check_startup()`; the downgrade not aborting on an undecryptable value; a backup code refused on a
+`None` seed; `mfa_secret` back to `String(64)`. Revoke attempted with a `None` token (availability, not floor)
+is caught only by the contract test.
+
 ### Metrics labels (M32 G3)
 
 Both `/metrics` endpoints are unauthenticated: the worker's on `127.0.0.1:9101` and the
