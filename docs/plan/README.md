@@ -19,7 +19,8 @@ Wave 1 in flight (below). Then: SEC-005 + SEC-008 implementation (`data`, `backe
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-| Contracts + red tests for SEC-005 (token encryption at rest), SEC-008 (Stripe dedupe in Postgres), BACKEND-012; ADR 0003 line refresh (SEC-009) | `architect` | 2026-10-16 | isolated |
+| Contract amendments per user decisions (drop `qa_answers`; add `users.mfa_secret` to SEC-005; Stripe rows kept) — first pass applied (`4371b29`, ADR 0003 refresh `110f84b`); red tests held on `hold/m34-contract-red` | `architect` | 2026-10-16 | isolated |
+| Review-before-build of SEC-005 / SEC-008 contracts + floor-2 red pin | `safety` | 2026-10-16 | isolated |
 | M34-S2-SEC-006 (AI pools non-root) + SEC-007 devops part (pip-audit pin, real deploy-key check) | `devops` | 2026-10-16 | isolated |
 | M34-S3-FRONTEND-011 (lazy chunk ≤ 420 KB; R-045 QuickCaptureModal test) | `frontend` | 2026-10-16 | isolated |
 | M34-S3-AI-010 backend half (index embed/store split) + SEC-009 backend bits (typed admin feedback view, template name in email logs, remove `proof.py`) | `backend` | 2026-10-16 | isolated |
