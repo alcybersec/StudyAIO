@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.config import settings
 from app.models.notification_preference import NotificationPreference
 
 
@@ -167,38 +168,125 @@ class TestTelegramLink:
 
 
 class TestTelegramWebhook:
-    """Tests for POST /api/notifications/telegram/webhook."""
+    """Tests for POST /api/notifications/telegram/webhook (SEC-015)."""
 
-    @pytest.mark.asyncio
-    async def test_webhook_valid(self, notif_client) -> None:
-        """Webhook processes valid update."""
+    URL = "/api/notifications/telegram/webhook"
+    HEADER = "x-telegram-bot-api-secret-token"
+    SECRET = "s3cret-value_ABC"
+    BODY = {"message": {"text": "/start token", "chat": {"id": 123}, "from": {}}}
+
+    @pytest.fixture(autouse=True)
+    def _reset_warning(self):
+        from app.api import notifications
+
+        notifications._unset_secret_warned = False
+        yield
+        notifications._unset_secret_warned = False
+
+    @pytest.fixture
+    def handler(self):
+        with patch(
+            "app.api.notifications.telegram_service.handle_telegram_webhook",
+            new_callable=AsyncMock,
+            return_value="Linked!",
+        ) as mock:
+            yield mock
+
+    @pytest.fixture
+    def secret_set(self):
+        from pydantic import SecretStr
+
         with (
-            patch("app.api.notifications.settings") as mock_settings,
-            patch(
-                "app.api.notifications.telegram_service.handle_telegram_webhook",
-                new_callable=AsyncMock,
-                return_value="Linked!",
-            ),
+            patch.object(settings, "telegram_webhook_secret", SecretStr(self.SECRET)),
+            patch.object(settings, "single_user_mode", False),
         ):
-            mock_settings.telegram_webhook_url = ""
-            response = await notif_client.post(
-                "/api/notifications/telegram/webhook",
-                json={"message": {"text": "/start token", "chat": {"id": 123}, "from": {}}},
-            )
-            assert response.status_code == 200
-            assert response.json()["ok"] is True
+            yield
 
     @pytest.mark.asyncio
-    async def test_webhook_invalid_secret(self, notif_client) -> None:
-        """Webhook rejects request with wrong secret."""
-        with patch("app.api.notifications.settings") as mock_settings:
-            mock_settings.telegram_webhook_url = "correct-secret"
+    async def test_correct_secret_is_handled(self, notif_client, handler, secret_set) -> None:
+        response = await notif_client.post(
+            self.URL, json=self.BODY, headers={self.HEADER: self.SECRET}
+        )
+        assert response.status_code == 200
+        assert response.json()["ok"] is True
+        handler.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_wrong_secret_rejected_without_side_effects(
+        self, notif_client, handler, secret_set
+    ) -> None:
+        response = await notif_client.post(
+            self.URL, json=self.BODY, headers={self.HEADER: "wrong-secret"}
+        )
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Invalid webhook secret"}
+        handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_missing_header_rejected(self, notif_client, handler, secret_set) -> None:
+        response = await notif_client.post(self.URL, json=self.BODY)
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Invalid webhook secret"}
+        handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_webhook_url_is_not_accepted_as_secret(
+        self, notif_client, handler, secret_set
+    ) -> None:
+        url = "https://studyaio.example.com/api/notifications/telegram/webhook"
+        with patch.object(settings, "telegram_webhook_url", url):
+            response = await notif_client.post(self.URL, json=self.BODY, headers={self.HEADER: url})
+        assert response.status_code == 403
+        handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_compare_is_constant_time(self, notif_client, handler, secret_set) -> None:
+        with patch("app.api.notifications.hmac.compare_digest", return_value=False) as compare:
             response = await notif_client.post(
-                "/api/notifications/telegram/webhook",
-                json={"message": {}},
-                headers={"x-telegram-bot-api-secret-token": "wrong-secret"},
+                self.URL, json=self.BODY, headers={self.HEADER: self.SECRET}
             )
-            assert response.status_code == 403
+        compare.assert_called_once()
+        assert response.status_code == 403
+        handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_unset_secret_multi_user_rejects_everything(self, notif_client, handler) -> None:
+        from pydantic import SecretStr
+
+        with (
+            patch.object(settings, "telegram_webhook_secret", SecretStr("")),
+            patch.object(settings, "single_user_mode", False),
+        ):
+            for hdr in ({}, {self.HEADER: ""}, {self.HEADER: "anything"}):
+                response = await notif_client.post(self.URL, json=self.BODY, headers=hdr)
+                assert response.status_code == 403
+                assert response.json() == {"detail": "Invalid webhook secret"}
+        handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_unset_secret_warns_once_without_value(self, notif_client, handler) -> None:
+        from pydantic import SecretStr
+
+        with (
+            patch.object(settings, "telegram_webhook_secret", SecretStr("")),
+            patch.object(settings, "single_user_mode", False),
+            patch("app.api.notifications.logger") as log,
+        ):
+            for _ in range(3):
+                await notif_client.post(self.URL, json=self.BODY, headers={self.HEADER: "x"})
+        assert log.warning.call_count == 1
+        assert "x" not in log.warning.call_args.kwargs.values()
+
+
+class TestTelegramWebhookSecretConfig:
+    def test_secret_defaults_empty_and_is_secretstr(self) -> None:
+        from pydantic import SecretStr
+
+        from app.config import Settings
+
+        field = Settings.model_fields["telegram_webhook_secret"]
+        assert field.annotation is SecretStr
+        assert field.default.get_secret_value() == ""
 
 
 class TestTestNotification:
