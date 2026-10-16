@@ -13,11 +13,22 @@ from app.config import settings
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-']+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+")
 REDACTED_EMAIL = "[redacted-email]"
 
+#: SQLAlchemy's `[parameters: ...]` section echoes bound values (tokens, emails,
+#: ciphertext). Engines hide it; this is the backstop. Runs to the "(Background on
+#: this error" trailer, or end of text, since the value may itself contain `]`.
+_PARAMS_RE = re.compile(r"\[parameters:.*?(?=\n\(Background on this error|\Z)", re.DOTALL)
+REDACTED_PARAMS = "[parameters: redacted]"
+
+
+def _scrub_text(text: str) -> str:
+    """Redact bound-parameter sections and address-shaped substrings in ``text``."""
+    return _EMAIL_RE.sub(REDACTED_EMAIL, _PARAMS_RE.sub(REDACTED_PARAMS, text))
+
 
 def _scrub(value: Any) -> Any:
     """Return ``value`` with every address-shaped substring replaced, recursively."""
     if isinstance(value, str):
-        return _EMAIL_RE.sub(REDACTED_EMAIL, value)
+        return _scrub_text(value)
     if isinstance(value, dict):
         return {k: _scrub(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -50,16 +61,16 @@ class EmailRedactingFilter(logging.Filter):
         handler attached after :func:`configure_logging` must add it itself.
         """
         message = record.getMessage()
-        scrubbed = _EMAIL_RE.sub(REDACTED_EMAIL, message)
+        scrubbed = _scrub_text(message)
         if scrubbed != message:
             record.msg = scrubbed
             record.args = None
         if record.exc_info and not record.exc_text:
             record.exc_text = logging.Formatter().formatException(record.exc_info)
         if record.exc_text:
-            record.exc_text = _EMAIL_RE.sub(REDACTED_EMAIL, record.exc_text)
+            record.exc_text = _scrub_text(record.exc_text)
         if record.stack_info:
-            record.stack_info = _EMAIL_RE.sub(REDACTED_EMAIL, record.stack_info)
+            record.stack_info = _scrub_text(record.stack_info)
         return True
 
 
