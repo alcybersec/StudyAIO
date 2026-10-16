@@ -11,7 +11,7 @@ empty. The 2026-10-04 rulings emptied every one of them. The tier holds no `xfai
 the SAFETY-027 veto marker on the JWT default-secret check (floor 2) XPASSed on
 `8356b15` and was removed in SAFETY-028. SAFETY-033 added two **strict** `xfail`s on the
 email-redaction *backstop* (SEC-08), findings F1 and F2; both fixes landed (`06c4fcb`, `344ce7e`) and
-SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free.
+SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free. At M34-S2 SEC-015 added one strict `xfail`, finding F1 (`test_floor2_register_webhook_logs_no_bot_token_at_info`, httpx's INFO request line carries the bot token); it is not blocking because the only caller logs at WARNING, which two plain pins hold, and it is **RED until** `backend` caps the `httpx`/`httpcore` loggers in `configure_logging`.
 
 Run:
 
@@ -371,6 +371,38 @@ by the callback; `**kwargs`; the callback logging the token on success or failur
 plaintext stored on create or regenerate; plaintext lookup; lookup also accepting the digest; the code logged on
 generate or `/start`; the code not consumed; the upgrade deleting OAuth rows or pending Telegram rows, leaving
 codes, or printing a token; the downgrade leaving digests; the docstring warning removed).
+
+### Telegram webhook authenticity (SEC-015, R-052), floors 1 and 2
+
+The webhook takes no user session. Since SEC-015 it compares `X-Telegram-Bot-Api-Secret-Token` in constant time
+with a dedicated `TELEGRAM_WEBHOOK_SECRET` (`SecretStr`) that `python -m app.cli register-telegram-webhook`
+registers with Telegram. An authentic update can only bind its chat to the `telegram_links` row whose digest
+matches a `/start` code. Review: `docs/gates/M34/sec015-safety.md`; threat model §5, SEC-015. Tests are in
+`test_floor2_telegram_webhook_secret.py`.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_webhook_secret_is_compared_only_with_compare_digest` | `telegram_webhook` does not call `hmac.compare_digest` exactly once, compares the header or the secret with `==`/`!=`/`in`, or names `telegram_webhook_url`. |
+| `test_floor2_webhook_compare_digest_sees_the_header_and_the_secret` | The digest compare is not given exactly the presented header and the configured secret. |
+| `test_floor1_forged_update_with_a_valid_pairing_code_pairs_nothing[…]` | With the secret set, a `/start` that carries user B's real pairing code and no header, an empty, wrong, prefix, extended or upper-cased secret, the webhook URL, its last segment or the bot token gets anything but `403 {"detail": "Invalid webhook secret"}`, runs any statement or commit, changes any link, or puts the secret, bot token, code or digest in the log. |
+| `test_floor1_correct_secret_pairs_only_the_row_the_code_names` | Control. The correct secret does not pair B with the sending chat, changes A's verified link (same chat), inserts or deletes anything, touches a table other than `telegram_links`, or returns the secret, bot token or URL; or an unknown code mutates anything. |
+| `test_floor1_unset_secret_on_a_multi_user_instance_rejects_everything[cloud\|self-hosted]` | With the secret unset and `SINGLE_USER_MODE` off, any call (a value, no header, empty, the URL) is accepted or runs a statement, or the warning is not logged exactly once, or it carries the presented value. |
+| `test_floor1_single_user_unset_secret_accepts_by_ruling` | Pins the SEC-015 ruling: single-user with no secret accepts. Flip it deliberately if the ruling changes. |
+| `test_floor1_single_user_still_enforces_a_set_secret` | Single-user mode bypasses a configured secret. |
+| `test_floor2_webhook_secret_and_bot_token_reach_no_response_or_log_call` | Outside `config.py`, `telegram_webhook_secret` or `telegram_bot_token` is read anywhere but the reviewed functions, or the link endpoint uses the token beyond its presence check. |
+| `test_floor2_register_webhook_is_called_only_from_the_cli_at_warning` | `register_webhook` is referenced or imported outside `cli._register_telegram_webhook`, or the CLI's `configure_logging` level is not `WARNING` (F1 below). |
+| `test_floor2_cli_prints_no_bot_token_or_secret[ok\|connect-error\|timeout\|rejected\|not-json]` | In a fresh process (the CLI's own logging in force), `register-telegram-webhook` prints the bot token, its secret half or the webhook secret on success, a connection error or timeout whose text names the request URL, a Telegram rejection whose body names it, or a non-JSON reply; or exits with the wrong code. |
+| `test_floor2_send_path_logs_no_bot_token_on_network_failure` | `send_telegram_message`'s `exc_info` log on a refused connection carries the bot token. |
+| `test_floor2_register_webhook_logs_no_bot_token_at_info` | **Strict `xfail`, finding F1.** httpx logs `HTTP Request: POST https://api.telegram.org/bot<token>/setWebhook` at INFO. Unreachable while only the CLI (WARNING) calls it, which the two pins above hold. XPASSes, and so fails, once `configure_logging` caps `httpx`/`httpcore` at WARNING; then remove the marker. |
+
+Mutation-checked in the SEC-015 review on a scratch copy of `services/app` outside the worktree, these pins only:
+19/19 red (`!=` compare; the URL as the secret; unset accepted in multi-user; unset falling through to the compare
+so an empty header passes; single-user bypassing a set secret; prefix compare; case-insensitive compare; the
+warning logging the presented value; warning on every call; a rejection logging the secret; the handler running
+before the check; the response echoing the secret; the CLI printing httpx error text; the CLI at INFO;
+`register_webhook` logging the request URL; printing Telegram's reply; an import of `register_webhook` in
+`main.py`; the send path logging the token; the link endpoint returning the token). The F1 marker was checked to
+XPASS with the httpx logger capped.
 
 ### Metrics labels (M32 G3)
 
