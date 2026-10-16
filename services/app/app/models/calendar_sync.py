@@ -2,10 +2,11 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.secret_box import EncryptedText
 from app.core.utils import generate_id
 
 
@@ -20,8 +21,12 @@ class CalendarSync(Base):
     sync_direction: Mapped[str] = mapped_column(
         String(20), nullable=False, default="push"
     )  # "push", "pull", "bidirectional"
-    access_token: Mapped[str] = mapped_column(Text, nullable=False)
-    refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_token: Mapped[str] = mapped_column(
+        EncryptedText(column="calendar_syncs.access_token"), nullable=False
+    )
+    refresh_token: Mapped[str | None] = mapped_column(
+        EncryptedText(column="calendar_syncs.refresh_token"), nullable=True
+    )
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sync_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

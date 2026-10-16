@@ -6,6 +6,7 @@ from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.secret_box import EncryptedText
 from app.core.utils import generate_id
 
 
@@ -20,8 +21,12 @@ class OAuthAccount(Base):
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    access_token: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    refresh_token: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    access_token: Mapped[str | None] = mapped_column(
+        EncryptedText(column="oauth_accounts.access_token"), nullable=True
+    )
+    refresh_token: Mapped[str | None] = mapped_column(
+        EncryptedText(column="oauth_accounts.refresh_token"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
