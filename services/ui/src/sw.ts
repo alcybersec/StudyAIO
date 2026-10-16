@@ -7,6 +7,7 @@ import {
   CacheFirst,
 } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
+import { isEventStream, isGeneralApiCacheable } from './lib/swRoutes'
 import { getQueueOwner, selectDrainable, type OwnedRow } from './lib/queueOwner'
 
 declare const self: ServiceWorkerGlobalScope
@@ -24,11 +25,12 @@ registerRoute(new NavigationRoute(navigationHandler))
 
 // ── Study API routes — StaleWhileRevalidate for offline study ─
 registerRoute(
-  ({ url }) =>
-    url.pathname.startsWith('/api/study/due') ||
-    url.pathname.startsWith('/api/assets/flashcards') ||
-    url.pathname.startsWith('/api/assets/quiz') ||
-    url.pathname.startsWith('/api/courses'),
+  ({ url, request }) =>
+    !isEventStream(url, request) &&
+    (url.pathname.startsWith('/api/study/due') ||
+      url.pathname.startsWith('/api/assets/flashcards') ||
+      url.pathname.startsWith('/api/assets/quiz') ||
+      url.pathname.startsWith('/api/courses')),
   new StaleWhileRevalidate({
     cacheName: 'study-api',
     plugins: [
@@ -40,11 +42,9 @@ registerRoute(
 
 // ── General API — NetworkFirst with cache fallback ───────────
 registerRoute(
-  ({ url }) =>
-    url.pathname.startsWith('/api/') &&
-    !url.pathname.startsWith('/api/auth/') &&
-    !url.pathname.startsWith('/api/study/review') &&
-    !url.pathname.startsWith('/api/study/quiz-attempt'),
+  // Excludes event streams (pipeline-events): a worker-side fetch of a
+  // never-ending stream outlives the page and exhausts the connection pool.
+  ({ url, request }) => isGeneralApiCacheable(url, request),
   new NetworkFirst({
     cacheName: 'api-general',
     networkTimeoutSeconds: 5,
@@ -71,7 +71,8 @@ registerRoute(
 // thing keeping the longer-lived cache from being readable by the next person
 // to sign in on a shared browser (issue #73).
 registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/files/extractions/'),
+  ({ url, request }) =>
+    !isEventStream(url, request) && url.pathname.startsWith('/api/files/extractions/'),
   new CacheFirst({
     cacheName: 'extraction-images',
     plugins: [
