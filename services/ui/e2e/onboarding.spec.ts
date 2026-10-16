@@ -124,9 +124,8 @@ test.describe('Onboarding checklist is server state', () => {
     await closeSession(context)
 
     // The summary exists: reading it becomes the next step, the check-in is open too.
-    // A fresh browser context for the rest: the state is the server's, and each full page
-    // load in one context leaks a pipeline-event stream through the service worker (see
-    // service-worker.spec.ts), so one context cannot carry every step on a 6-connection pool.
+    // A fresh browser context for the rest: the state is the server's, and the
+    // summary and check-in are seeded after the first context closed.
     seedLearner(email, code)
     const second = await openSession(browser, state)
     const page2 = await second.newPage()

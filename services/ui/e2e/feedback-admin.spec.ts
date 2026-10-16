@@ -8,25 +8,9 @@ import {
   closeSession,
 } from './fixtures'
 
-// PRODUCT BUG (found writing M34-QA-015), pinned as an expected failure.
-//
-// GET /api/admin/ai-feedback answers `by_target_type` as {type: {up, down}}
-// (e.g. {"flashcard": {"up": 3, "down": 3}}), but AiFeedbackPanel renders each
-// value as a count (the unit test fixture is {summary: 3}), so the first time
-// anyone has rated anything the whole /admin page falls to the error boundary
-// ("This page hit a problem"; React error #31, object with keys {up, down}).
-// With an empty table it renders, which is why admin.spec.ts passes: it must run
-// before any vote exists, and this file's name sorts after it for that reason
-// (a spec that rates something must never sort before admin.spec.ts).
-//
-// `test.fail()` keeps the suite green while the bug stands and turns red the day
-// it is fixed; delete the annotation then.
-
 const API_URL = process.env.E2E_API_URL || 'http://localhost:8000'
 
 test('the admin page renders once someone has rated an AI item', async ({ browser }) => {
-  test.fail(true, 'AiFeedbackPanel renders by_target_type values ({up, down}) as numbers')
-
   // Someone rates a flashcard.
   const email = testEmail()
   const code = `QAF${Math.random().toString(36).slice(2, 7).toUpperCase()}`

@@ -1,23 +1,11 @@
 import { test, expect, testEmail, seedSession, openSession, closeSession } from './fixtures'
 
-// PRODUCT BUG (found writing M34-QA-015), pinned as an expected failure.
-//
-// The service worker's general API route (src/sw.ts, NetworkFirst for every GET
-// under /api/ except auth and the two study writes) also matches
-// /api/uploads/pipeline-events, the long-lived SSE stream every page opens. The
-// worker's own fetch for it does not end when the page that asked goes away, so
-// each full page load leaves one stream open. After about six loads in one
-// browser profile the HTTP/1.1 connection pool is full and every later request
-// (the dashboard, a mutation, anything) waits forever. Measured against the CI
-// stack: connections to the API grew by one or two per reload, the sixth reload
-// never rendered, and the same run with serviceWorkers: 'block' stayed flat.
-//
-// `test.fail()` keeps the suite green while the bug stands and turns red the day
-// it is fixed (exclude the stream from the route), which is the cue to delete
-// the annotation. Other specs keep their own loads per context under six.
+// Regression guard: the service worker's general API route once captured the
+// long-lived /api/uploads/pipeline-events SSE stream, so each full page load left
+// a stream open and after about six loads in one profile the HTTP/1.1 connection
+// pool was full and nothing rendered. The stream is now excluded from the route.
 
 test('many full page loads in one browser profile keep rendering', async ({ browser }) => {
-  test.fail(true, 'service worker NetworkFirst route captures the pipeline-events SSE stream')
   test.setTimeout(60_000)
   const context = await openSession(browser, seedSession(testEmail(), 'TestPass123!'))
   const page = await context.newPage()

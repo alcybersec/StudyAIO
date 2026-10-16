@@ -12,8 +12,7 @@ import {
 // M34 (M34-QA-015): thumbs up/down on AI flashcards and quiz questions inside
 // the study runners (api.ai_feedback v1). Every test owns a user whose course is
 // seeded with seedLearner (two cards, three questions), so a vote, a review or an
-// archive never touches another test's rows. Each context stays under six full
-// page loads (see service-worker.spec.ts).
+// archive never touches another test's rows.
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:8000'
 const PASSWORD = 'TestPass123!'
@@ -152,14 +151,7 @@ test.describe('Flashcard study: rating the card itself', () => {
     await closeSession(context)
   })
 
-  // PRODUCT BUG (found writing M34-QA-015; not from M34), pinned as an expected failure.
-  // useRecordReview invalidates ['study', 'due', ...] on success, so the list the runner
-  // walks shrinks by the card just rated while currentIndex still advances by one: with
-  // two cards due, rating the first lands on "All caught up!" with the second never shown
-  // (with twenty, every other card is skipped). `test.fail()` turns red the day it is
-  // fixed; delete the annotation then.
   test('rating the first of two due cards shows the second', async ({ browser }) => {
-    test.fail(true, 'the due list refetches without the rated card and the index skips past the next one')
     const { context, code } = await learner(browser)
     const page = await context.newPage()
     await startFlashcards(page, code)
