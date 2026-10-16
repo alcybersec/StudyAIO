@@ -100,6 +100,12 @@ async def test_ai_connection(
         if user_agent_config
         else settings_service.STUDYAIO_BACKEND
     )
+    # SEC-006 option F: answer from the availability check, never by spawning.
+    if backend == "claude_code":
+        available, reason = settings_service.claude_code_availability()
+        if not available:
+            raise HTTPException(status_code=422, detail=reason)
+
     # A probe on the operator's key is real spend: it counts against the
     # caller's quota and the global ceilings, and is recorded. A user testing
     # their own credentials spends their own money, so only the rate limit
