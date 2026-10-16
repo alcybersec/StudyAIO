@@ -26,14 +26,21 @@ Re-derived on 2026-10-04 at `7cd283c` with `grep -rn "get_agent" services/app/ap
 
 | # | Call site (`services/app/`) | Enclosing function | Route (handler) | Adapter method |
 |---|---|---|---|---|
-| 1 | `app/api/qa.py:85` | `ask_question` | `POST /api/qa/ask` (`api/qa.py:31`) | `answer_question` |
-| 2 | `app/api/settings.py:94` | `test_ai_connection` | `POST /api/settings/test-ai` (`api/settings.py:78`) | `classify_lecture` |
-| 3 | `app/services/chat_service.py:215` | `send_message` | `POST /api/chat/sessions/{session_id}/messages` (`api/chat.py:167`) | `answer_question` |
-| 4 | `app/services/chat_service.py:349` | `stream_message` | `POST /api/chat/sessions/{session_id}/messages/stream` (`api/chat.py:215`) | `stream_answer` |
-| 5 | `app/services/concept_service.py:104` | `extract_and_save_concepts` | `POST /api/concepts/extract/{artifact_id}` (`api/concepts.py:167`) | `extract_concepts` |
+| 1 | `app/api/qa.py:110` | `ask_question` | `POST /api/qa/ask` (`api/qa.py:33`) | `answer_question` |
+| 2 | `app/api/settings.py:111` | `test_ai_connection` | `POST /api/settings/test-ai` (`api/settings.py:78`) | `classify_lecture` |
+| 3 | `app/services/chat_service.py:480` | `send_message` | `POST /api/chat/sessions/{session_id}/messages` (`api/chat.py:161`) | `answer_question` |
+| 4 | `app/services/chat_service.py:646` | `stream_message` | `POST /api/chat/sessions/{session_id}/messages/stream` (`api/chat.py:224`) | `stream_answer` |
+| 5 | `app/services/concept_service.py:112` | `extract_and_save_concepts` | `POST /api/concepts/extract/{artifact_id}` (`api/concepts.py:160`) | `extract_concepts` |
 
-No sixth site exists. The worker-side sites are `app/pipeline/classify.py:188`,
-`summarize.py:102`, `assets.py:105` and `courseops_task.py:91`.
+No sixth site exists. The worker-side sites are `app/pipeline/classify.py:215`,
+`summarize.py:178`, `assets.py:112`, `courseops_task.py:92` and `targeted_task.py:420` (the last
+added in M33 by ADR 0007, worker-side, so no amendment here).
+
+**Line numbers refreshed 2026-10-16 at `b81e5d6`** (M34-S2-SEC-009, M33 floors note N-4), by the
+same grep. The `(module, enclosing function)` set is unchanged and the floor test agrees with it;
+only the `file:line` cells moved. A route cell is the line of its `@router.post(` decorator. Line
+numbers are a reading aid: the allowlist below is keyed on the function, and the floor test reads
+the code, not this table.
 
 Each of the five answers the user in the same request: live Q&A and chat return the answer (chat
 streams it token by token over SSE), the settings probe reports whether the user's credentials
@@ -94,8 +101,8 @@ new function, or an existing one moved to another module, may not.
 - **`CLAUDE.md` is wrong about concept extraction.** It lists
   `app.pipeline.concepts_task.extract_concepts` as the on-demand handler for
   `POST /api/concepts/extract/{artifact_id}`. As built, the route calls
-  `concept_service.extract_and_save_concepts` in-request (`api/concepts.py:207`); the Celery task
-  is registered but nothing in `services/app/app/` enqueues it. This ADR records the discrepancy
+  `concept_service.extract_and_save_concepts` in-request (`api/concepts.py:210` at `b81e5d6`);
+  the Celery task is registered but nothing in `services/app/app/` enqueues it. This ADR records the discrepancy
   and does not edit `CLAUDE.md`; correcting the line, and deciding whether the unused task stays,
   is the Orchestrator's call.
 - **`docs/CONTRACTS.md`** — the `agents.AgentAdapter` v1 entry's open question against floor 3 is
@@ -103,7 +110,8 @@ new function, or an existing one moved to another module, may not.
 - **Open, not decided here: embeddings.** `app/agents/embeddings.py` defines `EmbeddingProvider`,
   a separate abstraction from `AgentAdapter`, with `OpenAIEmbeddingProvider` and
   `OllamaEmbeddingProvider` that call a remote model. It is called at request time
-  (`api/qa.py:58`, `services/chat_service.py:197` and `:326`, `services/concept_service.py:40`)
+  (as of `b81e5d6`: `api/qa.py:66`, `services/chat_service.py:454` and `:612`,
+  `services/concept_service.py:47`)
   and in the worker (`pipeline/index.py`). Floor 3 never said whether an embedding is an "AI call".
   If it is, these calls bypass `AgentAdapter` under the old wording and the new one alike. The
   floor test above does not catch them, because the SDK imports sit inside `app/agents/**`. This
