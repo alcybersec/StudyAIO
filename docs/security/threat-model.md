@@ -14,7 +14,9 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | Per-user AI credentials (API keys, Claude CLI OAuth JSON) | `user_settings.settings_json`, `enc:v1:` Fernet ciphertext since SEC-06 | Floor 2. They spend the user's money and identify them to a provider |
 | Instance AI credentials (`ZAI_API_KEY` and others, Claude service login) | env from the secret manager; `/run/claude-host` read-only mount | Floor 2 and cost. Prod runs metered `zai` |
 | `SETTINGS_ENCRYPTION_KEY`, `JWT_SECRET_KEY`, DB password | env from the secret manager → the deploy directory's `.env` | Losing the key means losing every stored credential. Leaking the JWT key means session forgery (floor 1) |
-| OAuth and calendar tokens, TOTP seed | `oauth_accounts`, `calendar_syncs`, `users.mfa_secret`; `enc:v1:` ciphertext under the same key since SEC-005 | Floor 2 (reviewed scope; R-017 mitigated, closing is the Orchestrator's call). The tokens reach the user's Google/GitHub account; the seed is their second factor |
+| Calendar tokens, TOTP seed | `calendar_syncs`, `users.mfa_secret`; `enc:v1:` ciphertext under the same key since SEC-005 | Floor 2. The calendar tokens reach the user's Google Calendar; the seed is their second factor |
+| OAuth sign-in tokens (Google, GitHub) | Not stored since SEC-013: used once inside the callback to fetch the userinfo, then discarded. `oauth_accounts.access_token`/`refresh_token` stay one release, always NULL, `EncryptedText` (dropped by `models.secrets-at-rest v3`) | Floor 2. Already-issued tokens stay valid at the provider until expiry or revocation (sign-in scopes only); the copies in pre-SEC-013 dumps are ciphertext |
+| Telegram pairing code | `telegram_links.link_token`, SHA-256 digest since SEC-014; the plaintext exists only in the `POST /api/notifications/telegram/link` response to its own user | Whoever holds a pending code can pair their own chat with the account and receive its notifications. Codes never expire (R-048, open) |
 | AI-processing consent record (SEC-08, GL#38) | `users.ai_processing_consent_at` / `_version` | Evidence that the user agreed to the disclosure in force before their content left the instance. Only `ai_consent_required` is exposed by the API; the raw record is not |
 | AI feedback votes and comments (GL#36) | `ai_feedback` | Owned by the voter. The comment is free text and may hold personal data; it is shown to admins in the aggregate, never logged and never copied into usage events |
 | Usage events (GL#37) | `usage_events` | Owned by the actor. Event name from a fixed list, scalar properties under an allowlist, no content; read cross-user only as admin aggregates with no user id |
@@ -42,7 +44,7 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | B3 | API/worker → AI provider | Floor 3: `get_agent` and `get_embedding_provider` only at the ADR 0003 and ADR 0005 sites. Adapter-boundary redaction with `from None`. Global `AgentError` handler withholds the text (C4). User base URLs are public-only, re-checked at use, with no redirects (SEC-03) | DNS rebinding is narrowed (checked when the config is built and again before connecting), not closed by pinning |
 | B4 | Worker → `claude -p` child | `--tools ""`, `--strict-mcp-config`, an allowlisted env, a fresh empty cwd per call, operator-only binary and model (SEC-01), a fixed system prompt, and the host-login copy redacted and removed. Since SEC-006 (option F) every worker pool runs as uid 999, so no pool can drop the child to 10001; instead the adapter **refuses** the CLI before reading any login or spawning (`ClaudeCliUnavailableError`, counted on `studyaio_claude_cli_spawn_refusals_total`) on a non-root multi-user worker, unless the operator sets `CLAUDE_CLI_SHARED_UID_ACCEPTED` or runs `SINGLE_USER_MODE`. `CLAUDE_CLI_UID` on a non-root worker is refused outright. A root worker keeps the AGENT-01 drop to `CLAUDE_CLI_UID` with `extra_groups=[]`. The CLI's `HOME` is a uid-999 `0700` tmpfs (`test_floor2_cli_shared_uid_refusal.py`, `test_floor2_worker_pools_nonroot.py`) | With the opt-in (or single-user) the child runs **at the worker's uid**: it can read `/proc/<worker>/environ` (JWT key, DB URL, `SETTINGS_ENCRYPTION_KEY`), the login mount and every tenant's `data/`. Its only containment then is `--tools ""` and the env allowlist. Prod users who chose `claude_code` lose it until the CLI sidecar (option B) lands. The refusal is a runtime error, not a startup one: the API still offers `claude_code` in settings (backend owes an availability surface) |
 | B5 | App → storage (`data/`, DB) | Floor 4: every blob delete is classified against ADR 0004. Re-summarize and regeneration keep versions and history. The account purge sweeps every summary blob, including deleted courses' (C5 ledger, id-shaped segments only) | Courses deleted before `a3ab6ce` are unattributable (R-020 residual) |
-| B6 | Credentials at rest | SEC-06: `enc:v1:` MultiFernet. A multi-user start refuses with no key and refuses the all-zero test key outside pytest. Ciphertext-shaped input is never stored verbatim. Export never returns credentials | Since SEC-005 the OAuth and calendar tokens and the TOTP seed are ciphertext too (`EncryptedText`); a value that cannot be decrypted reads as `None` and is never written back. Rotation is manual (`encrypt-user-secrets`, which exits 2 while any value is unreadable). The key lives in the same `.env` as every other secret, so it does not protect against a host compromise, only against a leaked dump or backup. The migration's downgrade removes at-rest protection (§5, SEC-005) |
+| B6 | Credentials at rest | SEC-06: `enc:v1:` MultiFernet. A multi-user start refuses with no key and refuses the all-zero test key outside pytest. Ciphertext-shaped input is never stored verbatim. Export never returns credentials | Since SEC-005 the calendar tokens and the TOTP seed are ciphertext too (`EncryptedText`); since SEC-013 the OAuth sign-in tokens are not stored at all, and since SEC-014 the Telegram pairing code is a SHA-256 digest; a value that cannot be decrypted reads as `None` and is never written back. Rotation is manual (`encrypt-user-secrets`, which exits 2 while any value is unreadable). The key lives in the same `.env` as every other secret, so it does not protect against a host compromise, only against a leaked dump or backup. The migration's downgrade removes at-rest protection (§5, SEC-005) |
 | B7 | Billing webhook | Stripe signature, dedupe by event id (unique claim in `stripe_webhook_events`, same transaction as the effect), per-customer ordering under a per-customer advisory lock, customer-scoped mutation (BILL-01, SEC-008, floor-1 pins) | Since M34-S2-SEC-008 the state is in Postgres and kept indefinitely, so a Redis flush no longer reopens replay or reordering. Events in the same second are not ordered. An event with no `id` is applied without a claim row, so it is neither deduped nor a watermark (Stripe always sends one) |
 | B8 | Cost | Per-user quota, global daily ceilings and metering on upload, batch, retry, reclassify, merge, review-resolve, CourseOps, chat, Q&A, concepts and, since `421dfa9`, the instance-provider path of `POST /api/settings/test-ai` (QUOTA-01/COST-01, M32 G1). Every ADR 0003 request-time site's route checks the caller's quota before the spend and records against the caller (`test_floor3_request_time_ai_quota.py`) | Own-credential test-ai is rate limited (5/min) but not quota-checked, by design: it spends the user's money. Concepts records only a successful call; a failed provider call there is not metered |
 | B9 | CI/CD → prod | Images by SHA from GHCR. `deploy.sh` refuses without the encryption key (exit 68) or without a good pre-migration dump (exit 67), and migrates in a one-off container before start (R-028). `dependency-audit` CI job (pip-audit on the lock, npm audit high/critical; allowlist empty) | The key check tests presence, not validity: a malformed or test key passes the guard, then crash-loops after migrating. `pip-audit` is installed unpinned in CI. The host's `deploy.sh` is a manually installed copy and can drift from the repo |
@@ -374,3 +376,41 @@ Stripe dedupe and ordering in Postgres; case-insensitive course lookup on card/q
    pseudonymous identifier, not a credential; recommended for `backend`: drop it from those lines, or log a
    hash. The advisory-lock key is a bound parameter carrying the customer id; the request
    engine's `hide_parameters=True` (C6, `app/core/database.py`) keeps it out of error text.
+
+### 2026-10-16, M34 S2 (M34-S2-SEC-013, M34-S2-SEC-014)
+
+OAuth sign-in tokens are no longer stored (`models.secrets-at-rest v2`); Telegram pairing codes are stored as
+SHA-256 digests (`models.telegram-pairing-code v1`). Revision `c3e5a7b9d1f2`. Review:
+`docs/gates/M34/sec013-014-safety.md`. Verdict: APPROVE.
+
+1. **OAuth tokens (contracts-safety R1).** The callback uses the provider's token once, to fetch the userinfo,
+   and discards it. `create_or_link_oauth` takes no token; the link branch stores none; the known-identity
+   branch writes `None`, which sweeps a value the previous release wrote during the deploy window. Google is
+   no longer asked for `access_type=offline`. The upgrade nulls both columns on every row with one Core
+   `UPDATE`; no row is deleted and the identity link (`user_id`, `provider`, `provider_user_id`) is unchanged,
+   so sign-in works as before.
+2. **Columns kept one release.** `deploy.sh` migrates while the old api still serves and relies on migrations
+   being backwards-compatible for one release; the old api's ORM `SELECT` on `oauth_accounts` would fail on a
+   dropped column. So the columns stay, always NULL and still `EncryptedText` (a straggler write is
+   ciphertext), and stay in `MUST_ENCRYPT` and `RAW_SECRET_COLUMNS`. `models.secrets-at-rest v3` drops them.
+3. **Downgrade (OAuth).** It changes nothing: the nulled tokens **cannot be restored**. Nothing in `app/` ever
+   read them after login, so no older release needs them. The last copies are ciphertext in the pre-deploy dump.
+4. **Pairing code.** `generate_link_token` stores only `hash_magic_link_token(code)` and returns the plaintext
+   once to its own user. `verify_link` looks up by digest in SQL; presenting the stored digest is a miss, so a
+   database dump no longer lets anyone pair a chat with an account. Neither the code nor its digest is logged.
+   The upgrade nulls every pending code (unused codes stop working, per the user's 2026-10-16 decision) and
+   keeps every linked chat.
+5. **Downgrade (Telegram).** It nulls every digest too: the older code compares plaintext, so a stored digest
+   presented as a code would match. Pending codes are lost on rollback; users click "Link Telegram" again.
+6. **Floor 4.** Provider tokens and pending pairing codes are credentials, not uploads or generated content;
+   the revision deletes no row in either table.
+7. **Residual, accepted.** (a) Already-issued provider tokens stay valid at Google/GitHub until expiry or
+   revocation; their scopes are sign-in only, and nothing revokes them at deploy. (b) Deploy window: the old
+   api may still write ciphertext tokens (swept on that user's next sign-in, or by v3) and plaintext pairing
+   codes (never matched by the new lookup, so inert; the downgrade nulls them); a digest written by the new
+   api could be presented to the old api's plaintext comparison by someone reading the database in that
+   window. (c) Pairing codes still never expire (R-048, open). (d) Pre-existing, outside this change (not floor
+   2 now that a forged `/start` needs the plaintext code): the Telegram webhook's "secret" header is compared
+   against `telegram_webhook_url` itself, a URL derivable from the public host, with `!=` rather than
+   `hmac.compare_digest`. Recommended for `backend`: a random `TELEGRAM_WEBHOOK_SECRET` registered with
+   `setWebhook(secret_token=...)` and compared in constant time.
