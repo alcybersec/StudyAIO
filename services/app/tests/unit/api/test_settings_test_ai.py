@@ -102,3 +102,21 @@ class TestTestAIEndpoint:
         mock_get_agent.assert_called_once_with(user_settings=user_config)
         data = response.json()
         assert data["backend"] == "anthropic_api"
+
+    async def test_unavailable_claude_code_is_422_without_get_agent(self, async_client):
+        """SEC-006 option F: no probe is attempted for a backend that cannot run."""
+        reason = "the Claude Code backend is unavailable: test reason"
+        with (
+            patch(
+                "app.services.settings_service.get_user_agent_config",
+                new_callable=AsyncMock,
+                return_value={"agent_backend": "claude_code"},
+            ),
+            patch("app.agents.claude_code.claude_cli_unavailable_reason", return_value=reason),
+            patch("app.agents.factory.get_agent") as get_agent,
+        ):
+            response = await async_client.post("/api/settings/test-ai")
+
+        assert response.status_code == 422
+        assert response.json()["detail"] == reason
+        get_agent.assert_not_called()
