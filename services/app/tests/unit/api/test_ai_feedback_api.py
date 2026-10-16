@@ -193,6 +193,8 @@ class TestAdminAggregate:
         assert response.status_code == 200
         assert response.json()["by_rating"] == {"up": 1, "down": 1}
         assert m.await_args.kwargs.get("days") == 7
+
+
 def test_admin_response_model_types_recent_negative():
     """SEC-009 N-3: the recent_negative rows are a typed model, not list[dict]."""
     from app.api.ai_feedback import AdminAIFeedbackResponse, RecentNegativeItem

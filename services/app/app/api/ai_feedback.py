@@ -51,6 +51,16 @@ class VoteListResponse(BaseModel):
     items: list[VoteResponse]
 
 
+class RecentNegativeItem(BaseModel):
+    """One recent thumbs-down comment as the admin view shows it. No user identifier."""
+
+    target_type: str
+    reason: str | None
+    comment: str | None
+    course_id: str | None
+    created_at: str | None
+
+
 class AdminAIFeedbackResponse(BaseModel):
     """Aggregates over everyone's votes. Carries no user identifiers."""
 
@@ -58,7 +68,7 @@ class AdminAIFeedbackResponse(BaseModel):
     by_target_type: dict[str, dict[str, int]]
     by_reason: dict[str, int]
     by_rating: dict[str, int]
-    recent_negative: list[dict]
+    recent_negative: list[RecentNegativeItem]
 
 
 def _vote_response(vote: AIFeedback) -> VoteResponse:

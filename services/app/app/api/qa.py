@@ -130,7 +130,7 @@ async def ask_question(
         ) from None
     except Exception as e:
         safe_error = await settings_service.redacted_error(session, user.id, e)
-        logger.error("qa_agent_error", error=safe_error, question=body.question[:100])
+        logger.error("qa_agent_error", error=safe_error, question_chars=len(body.question))
         raise HTTPException(
             status_code=500, detail=f"Failed to generate answer: {safe_error}"
         ) from None

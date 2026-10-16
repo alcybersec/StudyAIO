@@ -307,6 +307,8 @@ class TestVerifyEmailEmail:
         with patch("app.services.email_service._smtp_configured", return_value=False):
             result = await send_email_verification("to@test.com", "https://x.test/v?token=t")
             assert result is False
+
+
 class TestEmailLogsCarryNoSubject:
     """SEC-009 N-5: subjects can name a file, course or exam; logs carry the template."""
 

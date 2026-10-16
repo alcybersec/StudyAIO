@@ -258,6 +258,8 @@ class TestIndexArtifactChunks:
 
         # embed_texts called exactly once (batched)
         mock_provider.embed_texts.assert_called_once()
+
+
 class TestEmbedStoreSplit:
     """AI-010: embedding is pure (no session); storing is a separate step."""
 
@@ -280,9 +282,7 @@ class TestEmbedStoreSplit:
         from app.services import index_service
 
         provider = _provider_mock()
-        embedded = index_service.embed_artifact_chunks(
-            [{"page_number": 1, "text": ""}], provider
-        )
+        embedded = index_service.embed_artifact_chunks([{"page_number": 1, "text": ""}], provider)
         assert not embedded.chunks and not embedded.vectors
         provider.embed_texts.assert_not_called()
 

@@ -107,13 +107,17 @@ def render_template(template_name: str, **kwargs: object) -> str:
     return template.render(**kwargs)
 
 
-async def send_email(to_email: str, subject: str, html_body: str) -> bool:
+async def send_email(
+    to_email: str, subject: str, html_body: str, *, template: str = "inline"
+) -> bool:
     """Send an email via SMTP. Best-effort: returns False on failure.
 
     Args:
         to_email: Recipient email address.
         subject: Email subject line.
         html_body: HTML email body.
+        template: Template name, the only identifier of the mail that is logged.
+            The subject never is: it can carry a file name, course code or exam title.
 
     Returns:
         True if sent successfully, False otherwise.
@@ -161,7 +165,7 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
             start_tls=start_tls,
         )
 
-        logger.info("email_sent", subject=subject)
+        logger.info("email_sent", template=template)
         return True
 
     except Exception as exc:
@@ -176,7 +180,7 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
             )
         logger.warning(
             "email_send_failed",
-            subject=subject,
+            template=template,
             hint=hint,
             exc_info=True,
         )
@@ -198,7 +202,7 @@ async def send_templated_email(
         True if sent successfully, False otherwise.
     """
     html_body = render_template(template_name, **kwargs)
-    return await send_email(to_email, subject, html_body)
+    return await send_email(to_email, subject, html_body, template=template_name)
 
 
 async def send_pipeline_complete(
