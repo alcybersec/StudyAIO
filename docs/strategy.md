@@ -94,7 +94,7 @@ note without a pasted run is not evidence and the Orchestrator re-runs the tests
 | M31 | Maintenance | closed 2026-10-08 (CONDITIONAL; C1–C6 → M32) |
 | M32 | Safe to grow (audit S1 + security/money/integrity S2) | closed 2026-10-11 (CONDITIONAL accepted; G4 → M33) |
 | M33 | Trust and retention + weak-spot engine | closed 2026-10-15 (CONDITIONAL accepted; C1–C4 → M34) |
-| M34 | Prove retention, close carried debt (draft) | draft — scope awaiting the user |
+| M34 | Prove retention, close carried debt | open (2026-10-16) |
 
 ## 11. Task graph
 
@@ -257,16 +257,16 @@ non-regression threshold; summary and Q&A citations grounded and pinned; per-fea
 with a D7/D30 readout; weak-spot engine live: plans generated for active users, targeted items cite slides, D7/D30
 of users with a plan reported against those without; `safety` APPROVE.
 
-### M34 — Prove retention, close carried debt (DRAFT, scope awaiting the user)
+### M34 — Prove retention, close carried debt
 
 Theme: read the retention signal M33 was built to produce, and close the security and maintenance notes that have
-stayed open since M32. **Open question for the user:** the strategic bet. With three users, D7/D30 cannot say
-whether the weak-spot engine works, so the binding constraint is the number of active students, not features.
+stayed open since M32. **Scope confirmed by the user 2026-10-16: hardening and debt only, no strategic bet** — the
+bet is chosen at the M34 gate. With three users, the D7/D30 readouts are descriptive.
 
 **Entry conditions**
 
 - [x] M33 gate accepted by the user (2026-10-15, CONDITIONAL; C1–C4 carried).
-- [ ] Scope and strategic bet confirmed by the user.
+- [x] Scope confirmed by the user (2026-10-16): hardening and debt, as drafted; bet deferred to the M34 gate.
 
 *S1 — carried M33 conditions*
 
