@@ -260,6 +260,40 @@ Mutation-checked, all caught: the factory dropping `user_supplied_url` for zai a
 
 Mutation-checked in SAFETY-026, all caught: cwd not passed; cwd not removed; `model or …` restored; `--system-prompt` dropped; a flag after `--tools ""`; host copy read back (`not host`/`credentials` guards removed); copy dir not removed; uid not passed to spawn.
 
+Since SEC-006 (M34-S2) the pins above name their deployment through `conftest.py`: the uid mode runs on
+`cli_root_worker` (euid pinned to 0, no opt-in: the AGENT-01 drop), every other spawn pin here, in
+`test_floor2_claude_oauth_token.py`, `test_floor2_no_secrets.py` (GL#8 retry, container login, worker
+provider errors) and `test_floor2_operator_only_ai_settings.py` runs on `cli_shared_uid_opt_in` (euid pinned
+to 999, `CLAUDE_CLI_SHARED_UID_ACCEPTED=true`). Pinning the euid makes the tier mean the same as root (CI)
+and as a developer. `test_floor2_sentry_event_for_a_cli_failure_carries_no_credential` also asserts the CLI was
+spawned: a refusal is an `AgentError` with no credential and passed it vacuously.
+
+### Non-root AI pools and the shared-uid refusal (SEC-006 option F; devops `fef057f`, ai `36ebc83`)
+
+Review: `docs/gates/M34/sec006-safety.md` §5. Compose pins run over five stacks: `docker-compose.yml` alone and
+merged with `prod`, `production`, `selfhosted`, and `selfhosted`+`production`, anchors and `<<` resolved,
+`!reset`/`!override` honoured, `tmpfs` unioned as compose does (cross-checked against `docker compose config`).
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_cli_shared_uid_refusal.py::test_floor2_nonroot_multi_user_refuses_before_any_login_is_read_or_spawned[…]` | On a non-root, multi-user worker with no opt-in (unset, empty, `false`, `0`, `no`, `off`, any other word), for the setup token, the host login and per-user credentials: the CLI is spawned, a `oauth-token`/`.credentials.json` is opened, a temp dir is made or anything chowned, the error is not `ClaudeCliUnavailableError` or is transient, the refusal is not counted, a credential is in the error, its chain or the logs, or the message names no remedy. |
+| `…::test_floor2_refusal_is_logged_once_and_counted_every_time` | `claude_cli_spawn_refused` is logged more than once per reason, carries a field beyond the reason, or a refusal is not counted. |
+| `…::test_floor2_refusal_holds_through_get_agent[…]`, `…::test_floor2_refusal_fails_a_real_stage_once_without_a_retry_or_a_spawn` | The factory's instance or per-user `claude_code` adapter spawns; `classify` spawns, records more than one failed run, fails for another reason, or stores a credential. |
+| `…::test_floor2_cli_uid_on_a_nonroot_worker_is_refused_in_every_mode[…]` | `CLAUDE_CLI_UID` on a non-root worker is not refused with the configuration error (with the opt-in, with `SINGLE_USER_MODE`, or both), or a temp dir/spawn happens first. |
+| `…::test_floor2_operator_opt_in_spawns_at_the_worker_uid[…]`, `…::test_floor2_single_user_mode_spawns_without_the_opt_in[…]`, `…::test_floor2_root_worker_is_unchanged_without_the_opt_in[…]`, `…::test_floor2_root_worker_still_drops_to_the_cli_uid[…]` | Controls: the opt-in (`true`/`TRUE`/`1`/`yes`/` on `) or single-user mode does not spawn, a non-root spawn tries to drop, a root worker is refused, or a root worker with `CLAUDE_CLI_UID` does not drop to it with `extra_groups=[]` and a private `HOME`. |
+| `…::test_floor2_every_cli_spawn_in_the_adapter_is_preceded_by_the_guard`, `…::test_floor2_refusal_error_is_a_plain_agent_error` | A function in `claude_code.py` that spawns does not call `ensure_claude_cli_spawnable()` as its first statement; the refusal error stops being a plain `AgentError`. |
+| `test_floor2_worker_pools_nonroot.py::test_floor2_app_image_services_never_run_as_root[<stack>]`, `…::test_floor2_dockerfile_final_user_is_studyaio`, `…::test_floor2_image_user_uid_is_the_one_the_pins_assume` | A worker pool, `api` or `beat` has an effective `user` with uid or gid `0`/`root`, or none while the Dockerfile does not end `USER studyaio`; `studyaio` is not uid 999 (explicit `-u 999`, or the image's first `useradd -r`). |
+| `…::test_floor2_no_app_image_service_configures_a_cli_uid_drop[<stack>]`, `…::test_floor2_cli_uid_is_not_set_in_env_example`, `…::test_floor2_shared_uid_opt_in_is_never_defaulted_on` | `CLAUDE_CLI_UID`/`GID` reach an app-image service or a live `.env.example` line; a compose file or `.env.example` sets `CLAUDE_CLI_SHARED_UID_ACCEPTED` to anything but empty, off or a pass-through defaulting off. |
+| `…::test_floor2_ai_pool_home_is_a_private_tmpfs[<stack>]`, `…::test_floor2_home_detector_rejects[…]` | An AI pool's `HOME` is unset, `/`, `/root`, `/app`, under `/app/data`, `/run/claude-host`, `/root/.claude` or any mount, or has no tmpfs at exactly that path with the pool's uid and mode `0700`. |
+| `…::test_floor2_login_scripts_never_suggest_a_widening_chmod`, `…::test_floor2_chmod_detector[…]` | `preflight-check.sh` or `setup-claude-login.sh` names a `chmod` that grants group/other or special bits, or a mode the detector cannot read. |
+| `…::test_floor2_compose_merge_honours_reset_override_and_tmpfs_union`, `…::test_floor2_every_stack_has_the_app_image_services`, `…::test_floor2_nonroot_pin_catches_a_root_pool` | Guards the guard: the merge misreads `!reset`/`!override`/`tmpfs`, a stack loses a service, or a root pool passes. |
+
+Mutation-checked in M34-S2 on a scratch copy, all red: the guard call deleted from `_run_once` (30 pins red);
+the guard returning early for non-root; the `CLAUDE_CLI_UID` check moved after the opt-in; `user: "0:0"` on
+`x-worker-common`; `user: root` on `worker-ondemand` in `prod.yml`; `CLAUDE_CLI_UID` back in `selfhosted.yml`;
+the opt-in defaulted `true` in `prod.yml`; `HOME: /root`; the HOME tmpfs at `0755`; `chmod 750` in the
+preflight hint; `USER root` appended to the Dockerfile.
+
 ### Metrics labels (M32 G3)
 
 Both `/metrics` endpoints are unauthenticated: the worker's on `127.0.0.1:9101` and the
@@ -269,9 +303,10 @@ multiprocess tmpfs. The policy is the one in `app/pipeline/metrics.py`.
 | Test | Fails when |
 |---|---|
 | `test_floor2_metrics_labels.py::test_floor2_metric_label_names_are_the_allowed_enums` | A `prometheus_client` metric anywhere under `app/**` declares a label other than `stage`, `outcome` or `error_class`, or declares its labels non-literally. |
-| `…::test_floor2_metric_label_values_are_never_identifiers_or_messages` | A `.labels(...)` call passes a positional value, an unlisted label, a value that is not a string literal or the local `stage`/`outcome`, or an `error_class` that is anything but `type(<x>).__name__` (so never `str(exc)` or an f-string with the message). |
+| `…::test_floor2_metric_label_values_are_never_identifiers_or_messages` | A `.labels(...)` call passes a positional value, an unlisted label, a value that is not a string literal or the local `stage`/`outcome`, or an `error_class` that is anything but `type(<x>).__name__` or, at a `CLASS_NAME_LOCAL_SITES` site only, a local bound from `<Class>.__name__` (so never `str(exc)` or an f-string with the message). |
 | `…::test_floor2_api_instrumentator_keeps_route_templates` | `Instrumentator(...)` is given `should_group_untemplated=False` or opaque `**kwargs`. |
 | `…::test_floor1_api_metrics_name_route_templates_not_raw_paths` | With the defaults `main.py` uses, a course code, an email or an unmatched raw path reaches the scrape, or the `handler` label is not the route template. This pins the library's behaviour across upgrades. |
+| `…::test_floor2_reviewed_class_name_sites_are_not_stale`, `…::test_floor2_reviewed_class_name_site_detector[…]` | `CLASS_NAME_LOCAL_SITES` names a metric no longer labelled in that module; or the reviewed spelling (`error_class=<local>`) is accepted outside a listed site, when the local is bound from anything but `<Class>.__name__` of a class in the same module, when it is rebound, or when it is unbound. One site since SEC-006: `CLI_SPAWN_REFUSALS` in `agents/claude_code.py`. |
 | `…::test_floor2_metric_policy_is_not_vacuous`, `…::test_floor2_label_*_detector[…]`, `…::test_floor2_instrumentator_detector[…]` | The checks stop seeing the worker metrics (8 or more, 10 or more `.labels` sites) or the api Instrumentator, or the detectors misjudge synthetic source. |
 
 Mutation-checked in SAFETY-005, all red: a `user_id` label on `STAGE_FAILURES`; `error_class` carrying
