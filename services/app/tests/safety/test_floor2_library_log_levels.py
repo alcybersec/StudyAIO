@@ -82,14 +82,6 @@ def test_floor2_url_logging_library_capped_at_warning(stream, name):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "F2 (SEC-015 follow-up): at DEBUG requests_oauthlib logs the Google token body and "
-        "refresh token, botocore the X-Amz-Security-Token header, urllib3 request paths. "
-        "RED until configure_logging caps requests_oauthlib, oauthlib, botocore, boto3, urllib3."
-    ),
-)
 def test_floor2_credential_logging_libraries_capped_at_warning(stream):
     low = [n for n in F2_UNCAPPED if logging.getLogger(n).getEffectiveLevel() < logging.WARNING]
     assert not low, f"credential-bearing DEBUG loggers not capped: {low}"

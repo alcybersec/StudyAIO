@@ -85,7 +85,21 @@ class EmailRedactingFilter(logging.Filter):
 
 #: Libraries whose own INFO lines print full request URLs. httpx embeds the
 #: Telegram bot token (`/bot<token>/...`); googleapiclient prints query strings.
-_URL_LOGGING_LIBRARIES = ("httpx", "httpcore", "googleapiclient", "stripe")
+#: At DEBUG (an operator setting) requests_oauthlib/oauthlib log the Google token
+#: request body and refresh token, botocore/boto3 the signed headers (incl.
+#: X-Amz-Security-Token), urllib3 request paths (Web Push endpoint paths are bearer
+#: credentials). All are capped at WARNING whatever LOG_LEVEL says.
+_URL_LOGGING_LIBRARIES = (
+    "httpx",
+    "httpcore",
+    "googleapiclient",
+    "stripe",
+    "requests_oauthlib",
+    "oauthlib",
+    "botocore",
+    "boto3",
+    "urllib3",
+)
 
 
 def _should_use_json() -> bool:

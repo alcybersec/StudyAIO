@@ -239,7 +239,7 @@ class Settings(BaseSettings):
     #: Unset means the link endpoint refuses with a clear 400.
     telegram_bot_username: str = ""
     #: Shared secret Telegram echoes in `X-Telegram-Bot-Api-Secret-Token` on every
-    #: webhook call (SEC-015). Random, 1-256 chars of [A-Za-z0-9_-]; never the URL.
+    #: webhook call (SEC-015). Random, 32-256 chars of [A-Za-z0-9_-]; never the URL.
     #: Unset in multi-user mode means the webhook rejects every call.
     telegram_webhook_secret: SecretStr = SecretStr("")
     smtp_host: str = ""

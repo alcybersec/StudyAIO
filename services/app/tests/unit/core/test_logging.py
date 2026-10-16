@@ -59,7 +59,17 @@ class TestUrlLoggersCapped:
     def test_configure_logging_caps_url_logging_libraries(self):
         import logging
 
-        names = ("httpx", "httpcore", "googleapiclient", "stripe")
+        names = (
+            "httpx",
+            "httpcore",
+            "googleapiclient",
+            "stripe",
+            "requests_oauthlib",
+            "oauthlib",
+            "botocore",
+            "boto3",
+            "urllib3",
+        )
         saved = {n: logging.getLogger(n).level for n in names}
         root = logging.getLogger()
         root_level = root.level
