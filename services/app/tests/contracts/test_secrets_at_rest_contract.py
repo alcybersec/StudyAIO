@@ -1,4 +1,4 @@
-"""Contract test for `models.secrets-at-rest v1` (docs/CONTRACTS.md, M34-S2-SEC-005).
+"""Contract test for `models.secrets-at-rest` v1 rules (docs/CONTRACTS.md, M34-S2-SEC-005).
 
 OAuth and Google Calendar tokens and the TOTP seed (``users.mfa_secret``) are
 encrypted at rest with the scheme the per-user AI credentials already use
@@ -61,7 +61,7 @@ from tests.contracts._weakspot_docs import (
     top_level,
 )
 
-HEADING = "### models.secrets-at-rest v1"
+HEADING = "### models.secrets-at-rest v2"
 TOKEN_FIELD_NAMES = {"access_token", "refresh_token", "sync_token", "mfa_secret"}
 SECRET = "ya29.contract-test-token-value"
 
