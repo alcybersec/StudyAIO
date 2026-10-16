@@ -83,16 +83,21 @@ RUN set -eux; \
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
-# Create non-root user
-RUN groupadd -r studyaio && useradd -r -g studyaio -d /app -s /sbin/nologin studyaio
+# Create non-root user. The uid/gid are pinned to 999 on purpose: the compose
+# files (tmpfs uid=999 for the AI pools' private HOME), the safety pins and the
+# host ownership of data/ and the Claude login dir all assume 999, and it must
+# not depend on system-account allocation order.
+RUN groupadd -g 999 studyaio && useradd -u 999 -g 999 -d /app -s /sbin/nologin studyaio
 
 # Unprivileged identity for the Claude CLI child (GL#12 / AGENT-01, R-030). The
-# adapter drops the child to CLAUDE_CLI_UID/GID when that is set AND the worker
-# can setuid/chown (i.e. runs as root). The AI pools now run as `studyaio`
-# (SEC-006) and leave it unset, so this user is only used by a root worker, such
-# as a single-container setup. Fixed numeric ids, a group of its own, no home, no
-# login shell, and deliberately NOT a member of `studyaio`: group membership
-# would reopen the data dir below.
+# adapter drops the child to CLAUDE_CLI_UID/GID only when that is set AND the
+# worker can setuid/chown (i.e. runs as root). The AI pools run as `studyaio`
+# (SEC-006 option F), cannot drop, and leave it unset; there the adapter refuses
+# the claude_code backend on a multi-user stack unless
+# CLAUDE_CLI_SHARED_UID_ACCEPTED=true (or SINGLE_USER_MODE). This user is used
+# only by a root worker, such as a single-container setup. Fixed numeric ids, a
+# group of its own, no home, no login shell, and deliberately NOT a member of
+# `studyaio`: group membership would reopen the data dir below.
 RUN groupadd -g 10001 claudecli \
     && useradd -u 10001 -g claudecli -M -d /nonexistent -s /usr/sbin/nologin claudecli
 
