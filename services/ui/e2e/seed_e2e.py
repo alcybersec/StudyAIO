@@ -18,7 +18,12 @@ e2e-tests job already exports it.
     python3 e2e/seed_e2e.py weakspots CODE
     python3 e2e/seed_e2e.py studyitems CODE
 
-Both are idempotent. `course` seeds for the owner a self-hosted API resolves
+Guard (GL SEC-009): the script resets passwords, grants admin and mints sessions,
+so it refuses to run unless STUDYAIO_E2E_SEED=1 is set (the Playwright `seedDb`
+fixture sets it for the process it spawns) AND the database host is local or the
+CI service alias. It exits 2 before opening a connection.
+
+All are idempotent. `course` seeds for the owner a self-hosted API resolves
 requests to (the default admin, created here if no API request has made it yet).
 """
 
@@ -33,6 +38,7 @@ APP_DIR = Path(__file__).resolve().parents[2] / "app"
 sys.path.insert(0, str(APP_DIR))
 
 from sqlalchemy import create_engine, select  # noqa: E402
+from sqlalchemy.engine import make_url  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 import app.models  # noqa: E402,F401  (registers every mapper)
@@ -323,7 +329,29 @@ def session_cookies(session: Session, email: str) -> dict[str, str]:
     }
 
 
+E2E_MARKER = "STUDYAIO_E2E_SEED"
+# Loopback, plus the `postgres` service alias the CI e2e-tests job uses.
+ALLOWED_DB_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres"})
+
+
+def refuse_unless_e2e(url: str) -> None:
+    """Exit non-zero unless this is an explicit e2e run against a test database."""
+    if os.environ.get(E2E_MARKER) != "1":
+        sys.exit(
+            f"seed_e2e.py: refusing to run: {E2E_MARKER}=1 is not set. This script "
+            "resets passwords and mints sessions; it is for the e2e database only."
+        )
+    host = make_url(url).host or ""
+    if host not in ALLOWED_DB_HOSTS:
+        sys.exit(
+            f"seed_e2e.py: refusing to run: database host {host!r} is not one of "
+            f"{sorted(ALLOWED_DB_HOSTS)}."
+        )
+
+
 def main() -> None:
+    url = os.environ.get("DATABASE_URL_SYNC") or settings.database_url_sync
+    refuse_unless_e2e(url)
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("course")
@@ -344,7 +372,6 @@ def main() -> None:
     ss.add_argument("password")
     args = parser.parse_args()
 
-    url = os.environ.get("DATABASE_URL_SYNC") or settings.database_url_sync
     engine = create_engine(url)
     with Session(engine) as session:
         if args.cmd == "course":

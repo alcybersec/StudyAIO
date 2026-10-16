@@ -148,7 +148,8 @@ export function seedDb(...args: string[]): string {
   try {
     return execFileSync(process.env.E2E_PYTHON || 'python3', [script, ...args], {
       stdio: 'pipe',
-      env: process.env,
+      // The script refuses to run without this marker (SEC-009); set only here.
+      env: { ...process.env, STUDYAIO_E2E_SEED: '1' },
     }).toString()
   } catch (err) {
     const e = err as { stderr?: Buffer; message: string }
