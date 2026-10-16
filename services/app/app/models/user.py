@@ -47,6 +47,11 @@ class User(Base):
     invite_code_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("invite_codes.id", ondelete="SET NULL"), nullable=True
     )
+    # Dashboard first-run checklist: auto | dismissed | pinned. The only stored
+    # onboarding state; everything else is derived on read.
+    onboarding_checklist: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="auto", server_default="auto"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
