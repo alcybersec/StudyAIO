@@ -53,21 +53,28 @@ GET_EMBEDDING_PROVIDER_CALL_SITES = {
     ("app/main.py", "warn_if_embedding_provider_unavailable"),
 }
 
-#: Callers of `.embed_texts(...)`, or of its async wrapper `aembed_texts(provider, ...)`,
-#: outside app/agents/** and app/pipeline/**. `aembed_texts` lives in app/agents/**, so
-#: its own `provider.embed_texts` is out of scan; without counting its callers a new
-#: request-side `await aembed_texts(...)` would embed past this pin unseen.
+#: Callers of `.embed_texts(...)` outside app/agents/** and app/pipeline/**.
 EMBED_TEXTS_CALL_SITES = {
     ("app/api/qa.py", "ask_question"),
     ("app/services/chat_service.py", "send_message"),
     ("app/services/chat_service.py", "stream_message"),
     ("app/services/concept_service.py", "_embed_concepts"),
-    ("app/services/index_service.py", "embed_artifact_chunks"),
+    (
+        "app/services/index_service.py",
+        "embed_artifact_chunks",
+    ),  # was index_artifact_chunks (amended 2026-10-16)
+}
+
+#: Callers of `aembed_texts(...)` outside app/agents/** and app/pipeline/** (added 2026-10-16).
+#: `aembed_texts` lives in app/agents/**, so its own `provider.embed_texts` is out of scan;
+#: without this list a new request-side `await aembed_texts(...)` would embed unseen.
+AEMBED_TEXTS_CALL_SITES = {
     ("app/services/index_service.py", "aembed_artifact_chunks"),
 }
 
-#: The names that embed: the provider method and the agents-side async wrapper.
-EMBED_NAMES = frozenset({"embed_texts", "aembed_texts"})
+#: The provider method (ADR 0005 item 2) and its agents-side async wrapper (amendment 2026-10-16).
+EMBED_TEXTS_NAME = "embed_texts"
+AEMBED_TEXTS_NAME = "aembed_texts"
 
 #: Startup-only sites: may call `get_embedding_provider` and `.preload()`, never `.embed_texts`.
 STARTUP_ONLY_EMBEDDING_SITES = {
@@ -360,14 +367,12 @@ def request_side_get_embedding_provider_sites() -> set[tuple[str, str]]:
     return {s.key() for s in get_embedding_provider_sites(exclude=(AGENTS, PIPELINE))}
 
 
-def embed_texts_sites(*, exclude: tuple[str, ...] = (AGENTS, PIPELINE)) -> list[Site]:
-    """ADR 0005 item 2: every reference to an embed name, and the names as strings.
+def _embed_name_sites(names: frozenset[str], exclude: tuple[str, ...]) -> list[Site]:
+    """Every reference to one of ``names`` (attribute, bare name, or string) outside ``exclude``.
 
-    ``.embed_texts`` as an attribute, not only a call: ``fn = provider.embed_texts``
-    then ``fn(x)`` embeds as surely as ``provider.embed_texts(x)``. ``aembed_texts``
-    as a name or attribute: it embeds with the provider it is handed, from inside
-    app/agents/** where the scan does not look. A string catches ``getattr``.
-    Import statements bind names; they are not sites.
+    An attribute, not only a call: ``fn = provider.embed_texts`` then ``fn(x)`` embeds
+    as surely as ``provider.embed_texts(x)``. A string catches ``getattr``. Import
+    statements bind names; they are not sites.
     """
     sites = []
     for path in app_modules(exclude=exclude):
@@ -375,16 +380,26 @@ def embed_texts_sites(*, exclude: tuple[str, ...] = (AGENTS, PIPELINE)) -> list[
         docs = docstring_nodes(tree)
         for node, scope in walk_with_scope(tree):
             if (
-                (isinstance(node, ast.Attribute) and node.attr in EMBED_NAMES)
-                or (isinstance(node, ast.Name) and node.id == "aembed_texts")
-                or (
-                    isinstance(node, ast.Constant)
-                    and node.value in EMBED_NAMES
-                    and id(node) not in docs
-                )
+                (isinstance(node, ast.Attribute) and node.attr in names)
+                or (isinstance(node, ast.Name) and node.id in names)
+                or (isinstance(node, ast.Constant) and node.value in names and id(node) not in docs)
             ):
                 sites.append(Site(rel(path), scope, node.lineno, ast.unparse(node)[:80]))
     return sites
+
+
+def embed_texts_sites(*, exclude: tuple[str, ...] = (AGENTS, PIPELINE)) -> list[Site]:
+    """ADR 0005 item 2: every reference to ``.embed_texts``, checked against EMBED_TEXTS_CALL_SITES."""
+    return _embed_name_sites(frozenset({EMBED_TEXTS_NAME}), exclude)
+
+
+def aembed_texts_sites(*, exclude: tuple[str, ...] = (AGENTS, PIPELINE)) -> list[Site]:
+    """ADR 0005 amendment 2026-10-16: every reference to ``aembed_texts`` (AEMBED_TEXTS_CALL_SITES).
+
+    It embeds with the provider it is handed, from inside app/agents/** where the
+    scan does not look, so its callers are where the embedding happens.
+    """
+    return _embed_name_sites(frozenset({AEMBED_TEXTS_NAME}), exclude)
 
 
 def references_to(module_name: str, function: str) -> set[tuple[str, str]]:
@@ -549,9 +564,18 @@ def test_floor3_embed_texts_sites_equal_adr_0005_allowlist():
     _exact({s.key() for s in embed_texts_sites()}, EMBED_TEXTS_CALL_SITES, "embed_texts sites")
 
 
+def test_floor3_aembed_texts_sites_equal_adr_0005_allowlist():
+    """Amendment 2026-10-16: aembed_texts outside agents/ and pipeline/ is exactly the ADR's list."""
+    _exact({s.key() for s in aembed_texts_sites()}, AEMBED_TEXTS_CALL_SITES, "aembed_texts sites")
+
+
 def test_floor3_startup_embedding_sites_never_embed():
     """Item 3: the startup probe may build and preload the provider, never embed."""
-    sites = [s for s in embed_texts_sites() if s.key() in STARTUP_ONLY_EMBEDDING_SITES]
+    sites = [
+        s
+        for s in [*embed_texts_sites(), *aembed_texts_sites()]
+        if s.key() in STARTUP_ONLY_EMBEDDING_SITES
+    ]
     assert not sites, "Floor 3: a startup-only embedding site calls embed_texts:\n" + "\n".join(
         f"  {s}" for s in sites
     )
@@ -638,5 +662,5 @@ def test_floor3_embedding_detectors_are_not_vacuous():
         n.name for n in ast.walk(embeddings) if isinstance(n, ast.AsyncFunctionDef)
     }
     assert ("app/services/index_service.py", "aembed_artifact_chunks") in {
-        s.key() for s in embed_texts_sites()
+        s.key() for s in aembed_texts_sites()
     }
