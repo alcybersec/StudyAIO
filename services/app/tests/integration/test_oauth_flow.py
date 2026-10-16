@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 import pyotp
 import pytest
 from pydantic import SecretStr
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core import oauth as oauth_core
 from app.core.auth import ACCESS_TOKEN_COOKIE, MFA_PENDING_COOKIE
@@ -223,6 +223,47 @@ class TestAccountDecisions:
         assert link.provider_user_id == "g-9"
 
 
+class TestTokensNotStored:
+    """SEC-013: the provider's tokens are never persisted; sign-in only needs the identity."""
+
+    async def _tokens(self, db_session, user_id):
+        row = (
+            await db_session.execute(
+                text(
+                    "SELECT access_token, refresh_token FROM oauth_accounts WHERE user_id = :u"
+                ),
+                {"u": user_id},
+            )
+        ).one()
+        return row.access_token, row.refresh_token
+
+    async def test_new_link_leaves_tokens_null(self, client_factory, providers, db_session):
+        client = client_factory()
+        resp = await _callback(client, await _begin(client))
+        assert resp.status_code == 302
+        user = (
+            await db_session.execute(select(User).where(User.email == "new.person@example.com"))
+        ).scalar_one()
+        assert await self._tokens(db_session, user.id) == (None, None)
+
+    async def test_returning_identity_clears_previously_stored_tokens(
+        self, client_factory, providers, db_session
+    ):
+        client = client_factory()
+        await _callback(client, await _begin(client))
+        link = (await db_session.execute(select(OAuthAccount))).scalars().all()[-1]
+        link.access_token = "legacy-access"
+        link.refresh_token = "legacy-refresh"
+        await db_session.flush()
+        raw = await self._tokens(db_session, link.user_id)
+        assert raw[0] is not None and raw[1] is not None  # precondition: row holds tokens
+
+        client = client_factory()
+        resp = await _callback(client, await _begin(client))
+        assert resp.status_code == 302 and ACCESS_TOKEN_COOKIE in resp.cookies
+        assert await self._tokens(db_session, link.user_id) == (None, None)
+
+
 class TestMfaChallenge:
     async def test_mfa_account_gets_a_pending_token_not_a_session(
         self, client_factory, make_user, providers, db_session
@@ -253,11 +294,8 @@ class TestMfaChallenge:
 class TestProviderPlumbing:
     async def test_authorize_url_carries_state_scopes_and_callback(self, providers):
         google = oauth_core.build_authorize_url("google", "STATE")
-        assert (
-            "state=STATE" in google
-            and "access_type=offline" in google
-            and "client_id=gid" in google
-        )
+        assert "state=STATE" in google and "client_id=gid" in google
+        assert "access_type" not in google
         github = oauth_core.build_authorize_url("github", "STATE")
         assert "github.com/login/oauth/authorize" in github and "access_type" not in github
         with pytest.raises(ValueError):
