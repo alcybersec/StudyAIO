@@ -10,6 +10,7 @@ import { useAuth } from '../../../hooks/useAuth'
 import { useSettings, useUpdateSettings } from '../../../hooks/useApi'
 import { settingsApi } from '../../../api/endpoints'
 import { toastMutationError } from '../../../lib/toast'
+import { ValidationError } from '../../../api/errors'
 import {
   AGENT_BACKENDS,
   aiProviderSettingsSchema,
@@ -18,6 +19,17 @@ import {
 import type { Settings, SettingsUpdate } from '../../../types'
 
 type AgentBackend = (typeof AGENT_BACKENDS)[number]
+
+/**
+ * A 422 from save or test-ai carries a sentence the server wrote for the user
+ * (e.g. why Claude Code cannot be used here); it is shown verbatim, not
+ * replaced by the generic "request was invalid".
+ */
+function serverReason(err: unknown): string | null {
+  return err instanceof ValidationError && err.status === 422 && typeof err.detail === 'string'
+    ? err.detail
+    : null
+}
 
 interface ProviderMeta {
   id: AgentBackend
@@ -234,6 +246,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
   const [test, setTest] = useState<{ state: 'idle' | 'testing' | 'ok' | 'error'; message?: string }>(
     { state: 'idle' },
   )
+  const [saveRefusal, setSaveRefusal] = useState<string | null>(null)
 
   const {
     register,
@@ -252,9 +265,16 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
   const backend = watch('agent_backend')
 
   const saveValue = (field: keyof AiProviderSettingsFormData, value: unknown) => {
+    setSaveRefusal(null)
     updateMutation.mutate({ [field]: value } as SettingsUpdate, {
       onSuccess: () => markSaved(field),
-      onError: (err) => toastMutationError(err),
+      onError: (err) => {
+        // The server refused the choice: show why, and put the selector back.
+        if (field === 'agent_backend') setValue('agent_backend', toFormValues(settings).agent_backend)
+        const reason = serverReason(err)
+        if (reason) setSaveRefusal(reason)
+        else toastMutationError(err)
+      },
     })
   }
 
@@ -306,7 +326,7 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
     } catch (err) {
       setTest({
         state: 'error',
-        message: err instanceof Error ? err.message : t('Connection test failed'),
+        message: serverReason(err) ?? (err instanceof Error ? err.message : t('Connection test failed')),
       })
     }
   }
@@ -321,18 +341,29 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
         {t('One provider handles everything — summaries, flashcards, Q&A. Switch anytime; nothing already generated is lost.')}
       </p>
 
+      {saveRefusal && (
+        <p role="alert" className="mb-3 text-xs text-red-fg">
+          {saveRefusal}
+        </p>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {PROVIDERS.map((provider) => {
           const Icon = provider.icon
           const selected = backend === provider.id
           const status = provider.status(settings)
-          const unavailable = provider.id === 'ollama' && !isSelfHosted
+          const claudeBlocked = provider.id === 'claude_code' && !settings.claude_code_available
+          const unavailable = (provider.id === 'ollama' && !isSelfHosted) || (claudeBlocked && !selected)
+          const reasonId = `provider-${provider.id}-reason`
+          const claudeReason =
+            settings.claude_code_unavailable_reason ?? t('Claude Code is not available on this server')
           return (
             <button
               key={provider.id}
               type="button"
               onClick={() => selectProvider(provider.id)}
               aria-pressed={selected}
+              aria-describedby={claudeBlocked ? reasonId : undefined}
               disabled={unavailable}
               className={`text-left rounded-xl border p-3 transition-colors ${
                 unavailable ? 'opacity-50 cursor-not-allowed ' : 'cursor-pointer '
@@ -347,14 +378,25 @@ function AiProvidersForm({ settings }: { settings: Settings }) {
                   <Icon size={14} className={selected ? 'text-sage-fg' : 'text-text-faint'} aria-hidden />
                   {provider.name}
                 </span>
-                {selected && <Badge variant="success">{t('active')}</Badge>}
+                {selected && (
+                  <Badge variant={claudeBlocked ? 'warning' : 'success'}>
+                    {claudeBlocked ? t('unavailable') : t('active')}
+                  </Badge>
+                )}
               </span>
               <span className="block text-xs text-text-muted mt-1.5">{t(provider.desc)}</span>
-              <span
-                className={`block text-[11px] font-mono mt-2 ${status.ok && !unavailable ? 'text-sage-fg' : 'text-text-faint'}`}
-              >
-                {unavailable ? t('Not available on this server — it needs an endpoint only the operator can set') : t(status.text)}
-              </span>
+              {claudeBlocked ? (
+                <span id={reasonId} className="block text-[11px] mt-2 text-red-fg">
+                  {claudeReason}
+                  {selected && ` ${t('Pick another provider to keep using the AI.')}`}
+                </span>
+              ) : (
+                <span
+                  className={`block text-[11px] font-mono mt-2 ${status.ok && !unavailable ? 'text-sage-fg' : 'text-text-faint'}`}
+                >
+                  {unavailable ? t('Not available on this server — it needs an endpoint only the operator can set') : t(status.text)}
+                </span>
+              )}
             </button>
           )
         })}

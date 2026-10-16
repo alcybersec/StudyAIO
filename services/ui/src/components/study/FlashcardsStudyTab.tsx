@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { useStudyDue, useRecordReview, useExamDetail } from '../../hooks/useApi'
@@ -9,6 +9,8 @@ import { StudySetup } from './StudySetup'
 import { StudyCard } from './StudyCard'
 import { RatingButtons } from './RatingButtons'
 import { SessionSummary } from './SessionSummary'
+import { AiFeedbackControl } from '../ui/AiFeedbackControl'
+import { isFromAiFeedback } from '../../lib/aiFeedbackTarget'
 
 type Phase = 'setup' | 'studying' | 'done'
 
@@ -39,6 +41,7 @@ export function FlashcardsStudyTab() {
 
   const cards = dueCards ?? []
   const currentCard = cards[currentIndex]
+  const cardIds = useMemo(() => (dueCards ?? []).map((c) => c.id), [dueCards])
 
   const handleStart = useCallback(() => {
     if (cards.length > 0) {
@@ -107,6 +110,7 @@ export function FlashcardsStudyTab() {
 
     function handleKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
+      if (isFromAiFeedback(e.target)) return
 
       if ((e.key === ' ' || e.key === 'Enter') && !flipped) {
         e.preventDefault()
@@ -166,6 +170,9 @@ export function FlashcardsStudyTab() {
         {t('Card {{number}} of {{total}}', { number: currentIndex + 1, total: cards.length })}
       </p>
       <StudyCard card={currentCard} onFlip={handleFlip} flipped={flipped} />
+      <div className="flex justify-center">
+        <AiFeedbackControl key={currentCard.id} targetType="flashcard" targetId={currentCard.id} batchIds={cardIds} />
+      </div>
       {flipped && (
         <RatingButtons onRate={handleRate} disabled={reviewMutation.isPending} />
       )}

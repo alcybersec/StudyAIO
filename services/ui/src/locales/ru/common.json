@@ -1485,5 +1485,11 @@
   "Couldn't save that. Try again.": "Не удалось сохранить. Попробуйте ещё раз.",
   "Choose a course, or let StudyAIO decide": "Выберите курс или доверьтесь StudyAIO",
   "Course codes are at most {{max}} characters": "Код курса — не более {{max}} символов",
-  "Enter a week from {{min}} to {{max}}": "Введите неделю от {{min}} до {{max}}"
+  "Enter a week from {{min}} to {{max}}": "Введите неделю от {{min}} до {{max}}",
+  "Couldn't load your getting-started checklist": "Не удалось загрузить список для начала работы",
+  "Couldn't update the checklist": "Не удалось обновить список",
+  "Claude Code is not available on this server": "Claude Code недоступен на этом сервере",
+  "unavailable": "недоступно",
+  "Pick another provider to keep using the AI.": "Выберите другого провайдера, чтобы продолжить пользоваться ИИ.",
+  "This item was archived, so it can no longer be rated.": "Этот элемент в архиве, поэтому оценить его уже нельзя."
 }

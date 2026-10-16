@@ -7,79 +7,38 @@ import { FirstRunChecklist } from './FirstRunChecklist'
 import { AuthContext, type AuthContextValue } from '../../contexts/AuthContext'
 import { ConsentContext } from '../../contexts/consentContext'
 import { PipelineEventsContext, type PipelineEventsValue } from '../../contexts/pipelineProgress'
-import { onboardingKey, resetOnboardingMemory } from '../../hooks/useOnboardingState'
-import { coursesApi, dashboardApi } from '../../api/endpoints'
+import { legacyOnboardingKey } from '../../hooks/useOnboarding'
+import { onboardingApi } from '../../api/onboarding'
 import { weakSpotsApi } from '../../api/weakSpots'
-import type { AuthUser, CourseDetail, CourseListItem, DashboardData, WeakSpotsResponse } from '../../types'
+import { AppApiError } from '../../api/errors'
+import type { AuthUser, OnboardingStatus } from '../../types'
 
-vi.mock('../../api/endpoints', async (orig) => ({
-  ...(await orig<typeof import('../../api/endpoints')>()),
-  dashboardApi: { get: vi.fn() },
-  coursesApi: { detail: vi.fn() },
+vi.mock('../../api/onboarding', () => ({
+  onboardingApi: { get: vi.fn(), setChecklist: vi.fn() },
 }))
 vi.mock('../../api/weakSpots', () => ({
-  weakSpotsApi: { list: vi.fn(), diagnostic: vi.fn() },
+  weakSpotsApi: { diagnostic: vi.fn() },
 }))
 
-const dashboardGet = vi.mocked(dashboardApi.get)
-const courseDetail = vi.mocked(coursesApi.detail)
-const spotsList = vi.mocked(weakSpotsApi.list)
+const onboardingGet = vi.mocked(onboardingApi.get)
+const setChecklist = vi.mocked(onboardingApi.setChecklist)
 const diagnostic = vi.mocked(weakSpotsApi.diagnostic)
 
 const USER = { id: 'u1', ai_consent_required: false } as AuthUser
 
-const COURSE: CourseListItem = {
-  id: 'c1',
-  code: 'CSIT302',
-  name: 'Databases',
-  term: null,
-  created_at: '',
-  updated_at: '',
-  weeks_covered: 1,
-  total_artifacts: 1,
-  last_updated: null,
-}
-
-const dashboard = (over: Partial<DashboardData> = {}): DashboardData =>
-  ({
-    pending_review_count: 0,
-    recent_activity: [],
-    courses: [],
-    study_stats: null,
-    active_exams: [],
-    streak: null,
-    upcoming_deadlines: [],
-    gamification: null,
-    ...over,
-  }) as DashboardData
-
-const detailWithSummary = (summaryId: string | null): CourseDetail => ({
-  course: COURSE,
-  weeks: [
-    { week: 2, titles: [], artifact_count: 1, summary_status: 'done', summary_id: summaryId, flashcard_count: 0, quiz_count: 0 },
-  ],
+const status = (over: Partial<OnboardingStatus> = {}): OnboardingStatus => ({
+  phase: 'new',
+  steps: { upload: 'active', summary: 'locked', check_in: 'locked' },
+  summary_target: null,
+  checklist: 'auto',
+  visible: true,
+  ...over,
 })
 
-const spots = (quizAttempts: number): WeakSpotsResponse => ({
-  local_date: '2026-10-15',
-  courses: [
-    {
-      course_id: 'c1',
-      course_code: 'CSIT302',
-      weeks: [
-        {
-          week: 2,
-          status: 'unknown',
-          weakness: null,
-          confidence: 0,
-          urgency: 0,
-          priority: 0,
-          evidence: { quiz_attempts: quizAttempts, quiz_accuracy: null, cards_reviewed: 0, avg_ease: null, lapsed_cards: 0, overdue_cards: 0 },
-          next_exam: null,
-        },
-      ],
-    },
-  ],
+const WITH_SUMMARY = status({
+  phase: 'has_summary',
+  steps: { upload: 'done', summary: 'active', check_in: 'active' },
+  summary_target: { course_id: 'c1', course_code: 'CSIT302', week: 2 },
 })
 
 const pipeline = (over: Partial<PipelineEventsValue> = {}): PipelineEventsValue => ({
@@ -122,14 +81,11 @@ function renderChecklist(opts: { user?: AuthUser; pipe?: PipelineEventsValue } =
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
-  resetOnboardingMemory()
-  spotsList.mockResolvedValue(spots(0))
-  courseDetail.mockResolvedValue(detailWithSummary(null))
+  onboardingGet.mockResolvedValue(status())
 })
 
-describe('visibility by state', () => {
+describe('steps come from the server', () => {
   it('new user: upload is the active step, the rest are locked', async () => {
-    dashboardGet.mockResolvedValue(dashboard())
     renderChecklist()
     const list = await screen.findByRole('list')
     const items = within(list).getAllByRole('listitem')
@@ -140,10 +96,13 @@ describe('visibility by state', () => {
     expect(screen.getByRole('link', { name: 'Upload a lecture' })).toHaveAttribute('href', '/upload')
     expect(screen.queryByRole('link', { name: 'Open summary' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Start the check-in' })).not.toBeInTheDocument()
+    expect(onboardingGet).toHaveBeenCalledTimes(1)
   })
 
   it('processing: upload is done, shows live pipeline progress, summary still locked', async () => {
-    dashboardGet.mockResolvedValue(dashboard({ courses: [COURSE] }))
+    onboardingGet.mockResolvedValue(
+      status({ phase: 'processing', steps: { upload: 'done', summary: 'locked', check_in: 'locked' } }),
+    )
     renderChecklist({
       pipe: pipeline({
         activeCount: 1,
@@ -157,9 +116,8 @@ describe('visibility by state', () => {
     expect(items[1]).toHaveAttribute('data-status', 'locked')
   })
 
-  it('has a summary: links to it and enables the check-in', async () => {
-    dashboardGet.mockResolvedValue(dashboard({ courses: [COURSE] }))
-    courseDetail.mockResolvedValue(detailWithSummary('s1'))
+  it('has a summary: links to the server-provided target and enables the check-in', async () => {
+    onboardingGet.mockResolvedValue(WITH_SUMMARY)
     renderChecklist()
     const link = await screen.findByRole('link', { name: 'Open summary' })
     expect(link).toHaveAttribute('href', '/courses/CSIT302/weeks/2')
@@ -167,29 +125,48 @@ describe('visibility by state', () => {
     expect(screen.getAllByRole('listitem')[0]).toHaveAttribute('data-status', 'done')
   })
 
-  it('done: renders nothing once a check-in has been answered', async () => {
-    dashboardGet.mockResolvedValue(dashboard({ courses: [COURSE] }))
-    courseDetail.mockResolvedValue(detailWithSummary('s1'))
-    spotsList.mockResolvedValue(spots(3))
+  it('renders nothing when the server says it is not visible', async () => {
+    onboardingGet.mockResolvedValue(status({ phase: 'done', visible: false }))
     renderChecklist()
-    await waitFor(() => expect(spotsList).toHaveBeenCalled())
+    await waitFor(() => expect(onboardingGet).toHaveBeenCalled())
     await new Promise((r) => setTimeout(r, 20))
     expect(screen.queryByRole('list')).not.toBeInTheDocument()
   })
 
-  it('reading the summary marks step 2 done', async () => {
-    dashboardGet.mockResolvedValue(dashboard({ courses: [COURSE] }))
-    courseDetail.mockResolvedValue(detailWithSummary('s1'))
+  it('renders a finished checklist when the server keeps it visible (pinned)', async () => {
+    onboardingGet.mockResolvedValue(
+      status({
+        phase: 'done',
+        checklist: 'pinned',
+        steps: { upload: 'done', summary: 'done', check_in: 'done' },
+        summary_target: { course_id: 'c1', course_code: 'CSIT302', week: 2 },
+      }),
+    )
     renderChecklist()
-    await userEvent.click(await screen.findByRole('link', { name: 'Open summary' }))
-    expect(JSON.parse(localStorage.getItem(onboardingKey('u1')) ?? '{}').summaryRead).toBe(true)
+    const items = await screen.findAllByRole('listitem')
+    expect(items.every((li) => li.getAttribute('data-status') === 'done')).toBe(true)
+  })
+
+  it('renders nothing while loading', () => {
+    onboardingGet.mockReturnValue(new Promise(() => {}))
+    renderChecklist()
+    expect(screen.queryByRole('list')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows an error with a retry when the status cannot be loaded', async () => {
+    onboardingGet.mockRejectedValueOnce(new AppApiError('boom', 500))
+    renderChecklist()
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    onboardingGet.mockResolvedValue(status())
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('list')).toBeInTheDocument()
   })
 })
 
 describe('check-in step', () => {
   it('starts the diagnostic for the summarised week and hands it to the study runner', async () => {
-    dashboardGet.mockResolvedValue(dashboard({ courses: [COURSE] }))
-    courseDetail.mockResolvedValue(detailWithSummary('s1'))
+    onboardingGet.mockResolvedValue(WITH_SUMMARY)
     diagnostic.mockResolvedValue({ course_id: 'c1', week: 2, question_ids: ['q1', 'q2'], needs_generation: false })
     renderChecklist()
     await userEvent.click(await screen.findByRole('button', { name: 'Start the check-in' }))
@@ -200,8 +177,7 @@ describe('check-in step', () => {
   })
 
   it('says so when the week has no questions yet instead of navigating', async () => {
-    dashboardGet.mockResolvedValue(dashboard({ courses: [COURSE] }))
-    courseDetail.mockResolvedValue(detailWithSummary('s1'))
+    onboardingGet.mockResolvedValue(WITH_SUMMARY)
     diagnostic.mockResolvedValue({ course_id: 'c1', week: 2, question_ids: [], needs_generation: true })
     renderChecklist()
     await userEvent.click(await screen.findByRole('button', { name: 'Start the check-in' }))
@@ -211,60 +187,73 @@ describe('check-in step', () => {
 })
 
 describe('dismissal', () => {
-  it('hides the checklist and persists per user', async () => {
-    dashboardGet.mockResolvedValue(dashboard())
+  it('PATCHes dismissed and hides the checklist from the response', async () => {
+    setChecklist.mockResolvedValue(status({ checklist: 'dismissed', visible: false }))
     renderChecklist()
     await userEvent.click(await screen.findByRole('button', { name: 'Hide this checklist' }))
+    expect(setChecklist).toHaveBeenCalledWith('dismissed')
+    await waitFor(() => expect(screen.queryByRole('list')).not.toBeInTheDocument())
+  })
+
+  it('keeps the checklist and says so when the PATCH fails', async () => {
+    setChecklist.mockRejectedValue(new AppApiError('boom', 500))
+    renderChecklist()
+    await userEvent.click(await screen.findByRole('button', { name: 'Hide this checklist' }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.getByRole('list')).toBeInTheDocument()
+  })
+
+  it('is reachable by keyboard', async () => {
+    setChecklist.mockResolvedValue(status({ checklist: 'dismissed', visible: false }))
+    renderChecklist()
+    const hide = await screen.findByRole('button', { name: 'Hide this checklist' })
+    hide.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(setChecklist).toHaveBeenCalledWith('dismissed')
+  })
+})
+
+describe('legacy localStorage migration', () => {
+  it('sends one dismissed PATCH, clears the key and does not show the checklist', async () => {
+    localStorage.setItem(legacyOnboardingKey('u1'), JSON.stringify({ dismissed: true, summaryRead: true }))
+    setChecklist.mockResolvedValue(status({ checklist: 'dismissed', visible: false }))
+    renderChecklist()
+    await waitFor(() => expect(localStorage.getItem(legacyOnboardingKey('u1'))).toBeNull())
+    expect(setChecklist).toHaveBeenCalledTimes(1)
+    expect(setChecklist).toHaveBeenCalledWith('dismissed')
+    expect(onboardingGet).not.toHaveBeenCalled()
     expect(screen.queryByRole('list')).not.toBeInTheDocument()
-    expect(JSON.parse(localStorage.getItem(onboardingKey('u1')) ?? '{}').dismissed).toBe(true)
-    expect(localStorage.getItem(onboardingKey('u2'))).toBeNull()
   })
 
-  it('stays hidden on the next load for the same user but not for another', async () => {
-    localStorage.setItem(onboardingKey('u1'), JSON.stringify({ dismissed: true }))
-    dashboardGet.mockResolvedValue(dashboard())
-    const first = renderChecklist()
-    await waitFor(() => expect(dashboardGet).toHaveBeenCalled())
-    await new Promise((r) => setTimeout(r, 20))
-    expect(screen.queryByRole('list')).not.toBeInTheDocument()
-    first.unmount()
-    renderChecklist({ user: { id: 'u2', ai_consent_required: false } as AuthUser })
-    expect(await screen.findByRole('list')).toBeInTheDocument()
+  it('keeps the key when the PATCH fails, so it is retried', async () => {
+    localStorage.setItem(legacyOnboardingKey('u1'), JSON.stringify({ dismissed: true }))
+    setChecklist.mockRejectedValue(new AppApiError('boom', 500))
+    renderChecklist()
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(localStorage.getItem(legacyOnboardingKey('u1'))).not.toBeNull()
   })
 
-  it('still works for the session when localStorage throws', async () => {
-    dashboardGet.mockResolvedValue(dashboard())
-    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('denied')
-    })
-    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('quota')
-    })
-    try {
-      renderChecklist()
-      await userEvent.click(await screen.findByRole('button', { name: 'Hide this checklist' }))
-      expect(screen.queryByRole('list')).not.toBeInTheDocument()
-    } finally {
-      get.mockRestore()
-      set.mockRestore()
-    }
-  })
-
-  it('a stored value that is not JSON is ignored', async () => {
-    localStorage.setItem(onboardingKey('u1'), '{nope')
-    dashboardGet.mockResolvedValue(dashboard())
+  it('a legacy entry without a dismissal is cleared without a PATCH', async () => {
+    localStorage.setItem(legacyOnboardingKey('u1'), JSON.stringify({ reopened: true }))
     renderChecklist()
     expect(await screen.findByRole('list')).toBeInTheDocument()
+    expect(setChecklist).not.toHaveBeenCalled()
+    expect(localStorage.getItem(legacyOnboardingKey('u1'))).toBeNull()
   })
 
-  it('shows a finished checklist again when re-opened from settings', async () => {
-    localStorage.setItem(onboardingKey('u1'), JSON.stringify({ reopened: true }))
-    dashboardGet.mockResolvedValue(dashboard({ courses: [COURSE] }))
-    courseDetail.mockResolvedValue(detailWithSummary('s1'))
-    spotsList.mockResolvedValue(spots(3))
+  it('another user’s legacy dismissal is left alone', async () => {
+    localStorage.setItem(legacyOnboardingKey('u2'), JSON.stringify({ dismissed: true }))
     renderChecklist()
-    const items = await screen.findAllByRole('listitem')
-    expect(items.every((li) => li.getAttribute('data-status') === 'done')).toBe(true)
+    expect(await screen.findByRole('list')).toBeInTheDocument()
+    expect(setChecklist).not.toHaveBeenCalled()
+    expect(localStorage.getItem(legacyOnboardingKey('u2'))).not.toBeNull()
+  })
+
+  it('a corrupt legacy value is ignored and cleared', async () => {
+    localStorage.setItem(legacyOnboardingKey('u1'), '{nope')
+    renderChecklist()
+    expect(await screen.findByRole('list')).toBeInTheDocument()
+    expect(setChecklist).not.toHaveBeenCalled()
   })
 })
 
@@ -272,18 +261,16 @@ describe('AI consent', () => {
   const NEEDS = { id: 'u1', ai_consent_required: true } as AuthUser
 
   it('explains consent and opens the existing dialog before upload, then continues', async () => {
-    dashboardGet.mockResolvedValue(dashboard())
     requestConsent.mockResolvedValue(true)
     renderChecklist({ user: NEEDS })
     expect(await screen.findByText(/your lecture text is sent to it/i)).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Upload a lecture' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Review and agree' }))
     expect(requestConsent).toHaveBeenCalledTimes(1)
-    expect((JSON.parse((await screen.findByTestId('loc')).textContent ?? '{}')).path).toBe('/upload')
+    expect(JSON.parse((await screen.findByTestId('loc')).textContent ?? '{}').path).toBe('/upload')
   })
 
   it('stays on the dashboard when consent is declined', async () => {
-    dashboardGet.mockResolvedValue(dashboard())
     requestConsent.mockResolvedValue(false)
     renderChecklist({ user: NEEDS })
     await userEvent.click(await screen.findByRole('button', { name: 'Review and agree' }))

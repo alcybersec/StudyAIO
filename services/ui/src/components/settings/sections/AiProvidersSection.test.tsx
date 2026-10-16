@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AiProvidersSection } from './AiProvidersSection'
 import { useSettings, useUpdateSettings } from '../../../hooks/useApi'
 import { useAuth } from '../../../hooks/useAuth'
+import { settingsApi } from '../../../api/endpoints'
+import { ValidationError } from '../../../api/errors'
 import type { Settings } from '../../../types'
 
 vi.mock('../../../hooks/useApi', () => ({
@@ -30,6 +32,8 @@ function settings(overrides: Partial<Settings> = {}): Settings {
     claude_code_path: 'claude',
     claude_model: 'sonnet',
     agent_backend: 'studyaio',
+    claude_code_available: true,
+    claude_code_unavailable_reason: null,
     anthropic_api_key_configured: false,
     claude_cli_credentials_configured: false,
     openai_api_key_configured: false,
@@ -159,5 +163,60 @@ describe('AiProvidersSection', () => {
     asHosted(true)
     render(<AiProvidersSection />)
     expect(screen.getByRole('textbox', { name: 'Endpoint' })).toBeInTheDocument()
+  })
+})
+
+describe('Claude Code availability', () => {
+  const REASON = 'the Claude Code backend is unavailable: test reason'
+  const unavailable = { claude_code_available: false, claude_code_unavailable_reason: REASON }
+
+  it('disables the option and shows the reason when unavailable', async () => {
+    const user = userEvent.setup()
+    withSettings(unavailable)
+    render(<AiProvidersSection />)
+
+    const option = screen.getByRole('button', { name: /Claude Code CLI/ })
+    expect(option).toBeDisabled()
+    expect(option).toHaveAccessibleDescription(REASON)
+    expect(screen.getByText(REASON)).toBeInTheDocument()
+    await user.click(option)
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('leaves the option enabled and quiet when available', () => {
+    render(<AiProvidersSection />)
+    expect(screen.getByRole('button', { name: /Claude Code CLI/ })).toBeEnabled()
+    expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps a saved claude_code backend selected but marks it unavailable and asks for another', () => {
+    withSettings({ ...unavailable, agent_backend: 'claude_code' })
+    render(<AiProvidersSection />)
+
+    const option = screen.getByRole('button', { name: /Claude Code CLI/ })
+    expect(option).toHaveAttribute('aria-pressed', 'true')
+    expect(option).toHaveTextContent('unavailable')
+    expect(option).not.toHaveTextContent('active')
+    expect(option).toHaveTextContent(REASON)
+    expect(option).toHaveTextContent(/pick another provider/i)
+  })
+
+  it('shows a 422 detail from save as-is and puts the selection back', async () => {
+    const user = userEvent.setup()
+    mutate.mockImplementation((_u, opts) => opts.onError(new ValidationError('x', 422, REASON)))
+    render(<AiProvidersSection />)
+
+    await user.click(screen.getByRole('button', { name: /Claude Code CLI/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(REASON)
+    expect(screen.getByRole('button', { name: /StudyAIO provided/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('shows a 422 detail from test-ai as-is', async () => {
+    const user = userEvent.setup()
+    vi.mocked(settingsApi.testAi).mockRejectedValue(new ValidationError('x', 422, REASON))
+    render(<AiProvidersSection />)
+
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+    expect(await screen.findByText(REASON)).toBeInTheDocument()
   })
 })

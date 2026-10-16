@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { Card, Button, ErrorState, Input, Skeleton } from '../ui'
@@ -7,6 +7,8 @@ import { useTimedPlan, useRecordReview } from '../../hooks/useApi'
 import { studyApi, examsApi, assetsApi } from '../../api/endpoints'
 import { CitationChip } from '../week/CitationChip'
 import { OriginBadge } from '../week/OriginBadge'
+import { AiFeedbackControl } from '../ui/AiFeedbackControl'
+import { isFromAiFeedback } from '../../lib/aiFeedbackTarget'
 import type { PlanRunState } from '../../lib/planRun'
 import { writeQueue } from '../../lib/writeQueue'
 import type { Flashcard, QuizQuestion, TimedSessionPlan } from '../../types'
@@ -78,6 +80,9 @@ export function TimedStudyTab() {
   const [cardsReviewed, setCardsReviewed] = useState(0)
   const [quizAnswered, setQuizAnswered] = useState(0)
   const [quizCorrect, setQuizCorrect] = useState(0)
+
+  const cardIds = useMemo(() => cards.map((c) => c.id), [cards])
+  const quizIds = useMemo(() => quizzes.map((q) => q.id), [quizzes])
 
   const currentItem = items[currentIndex]
   const currentCard = currentItem?.type === 'card'
@@ -200,6 +205,7 @@ export function TimedStudyTab() {
   useEffect(() => {
     if (phase !== 'studying') return
     const handler = (e: KeyboardEvent) => {
+      if (isFromAiFeedback(e.target)) return
       if (currentItem?.type === 'card') {
         if (e.key === ' ' || e.key === 'Enter') {
           e.preventDefault()
@@ -383,6 +389,9 @@ export function TimedStudyTab() {
                   </div>
                 </div>
               )}
+              <div className="mt-4 flex justify-center">
+                <AiFeedbackControl key={`feedback-${currentCard.id}`} targetType="flashcard" targetId={currentCard.id} batchIds={cardIds} />
+              </div>
             </div>
           </Card>
         )}
@@ -450,6 +459,9 @@ export function TimedStudyTab() {
                   <Button onClick={advanceItem}>{t('Next')}</Button>
                 </div>
               )}
+              <div className="mt-4">
+                <AiFeedbackControl key={`feedback-${currentQuiz.id}`} targetType="quiz_question" targetId={currentQuiz.id} batchIds={quizIds} />
+              </div>
             </div>
           </Card>
         )}

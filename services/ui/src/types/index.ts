@@ -181,6 +181,10 @@ export interface Settings {
   claude_code_path: string
   claude_model: string
   agent_backend: string
+  /** False when this server cannot run the Claude Code CLI backend (M34-S2-SEC-006). */
+  claude_code_available: boolean
+  /** Why it is unavailable; server-written, shown as-is. Null when available. */
+  claude_code_unavailable_reason: string | null
   anthropic_api_key_configured: boolean
   claude_cli_credentials_configured: boolean
   openai_api_key_configured: boolean
@@ -1585,4 +1589,18 @@ export interface TonightPlan {
   items: TonightItem[]
   focus: TonightFocus[]
   diagnostic: { course_id: string; course_code: string; week: number } | null
+}
+
+// ── Onboarding (api.onboarding v1) ──
+
+export type OnboardingPhase = 'new' | 'processing' | 'has_summary' | 'done'
+export type OnboardingStepStatus = 'done' | 'active' | 'locked'
+export type OnboardingChecklist = 'auto' | 'dismissed' | 'pinned'
+
+export interface OnboardingStatus {
+  phase: OnboardingPhase
+  steps: { upload: OnboardingStepStatus; summary: OnboardingStepStatus; check_in: OnboardingStepStatus }
+  summary_target: { course_id: string; course_code: string; week: number } | null
+  checklist: OnboardingChecklist
+  visible: boolean
 }

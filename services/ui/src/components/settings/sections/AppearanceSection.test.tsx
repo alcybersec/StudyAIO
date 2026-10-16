@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppearanceSection } from './AppearanceSection'
+import { AuthContext, type AuthContextValue } from '../../../contexts/AuthContext'
 import { useSettings, useUpdateSettings } from '../../../hooks/useApi'
 import type { Settings } from '../../../types'
 import i18n from '../../../i18n'
@@ -9,6 +10,11 @@ import i18n from '../../../i18n'
 vi.mock('../../../hooks/useApi', () => ({
   useSettings: vi.fn(),
   useUpdateSettings: vi.fn(),
+}))
+
+const pin = vi.fn()
+vi.mock('../../../hooks/useOnboarding', () => ({
+  useSetChecklist: () => ({ mutate: pin, isPending: false, isError: false, error: null }),
 }))
 
 const mockSettings = vi.mocked(useSettings)
@@ -21,6 +27,8 @@ function settings(overrides: Partial<Settings> = {}): Settings {
     claude_code_path: 'claude',
     claude_model: 'sonnet',
     agent_backend: 'studyaio',
+    claude_code_available: true,
+    claude_code_unavailable_reason: null,
     anthropic_api_key_configured: false,
     claude_cli_credentials_configured: false,
     openai_api_key_configured: false,
@@ -136,5 +144,26 @@ describe('AppearanceSection language control', () => {
 
       expect(toggle()).not.toBeChecked()
     })
+  })
+})
+
+describe('getting-started checklist', () => {
+  const signedIn = { user: { id: 'u1' } } as unknown as AuthContextValue
+
+  it('pins the checklist on the server and confirms once that succeeded', async () => {
+    pin.mockImplementation((_v, opts) => opts.onSuccess())
+    render(
+      <AuthContext.Provider value={signedIn}>
+        <AppearanceSection />
+      </AuthContext.Provider>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Show checklist on Home' }))
+    expect(pin).toHaveBeenCalledWith('pinned', expect.anything())
+    expect(screen.getByRole('status')).toHaveTextContent('The checklist is back on your Home page.')
+  })
+
+  it('offers nothing without a signed-in user', () => {
+    render(<AppearanceSection />)
+    expect(screen.queryByRole('button', { name: 'Show checklist on Home' })).not.toBeInTheDocument()
   })
 })
