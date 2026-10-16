@@ -302,4 +302,8 @@ security note older than one milestone left untallied; `safety` APPROVE.
 
 ### Later milestones (outline only, not yet scoped)
 
+- Backlog: `models.secrets-at-rest v3` — drop the always-NULL `oauth_accounts.access_token`/`refresh_token` columns one release after SEC-013 (with their rotation and pin entries; downgrade re-adds them empty).
+- Backlog: expiry for Telegram pairing codes (R-048).
+- Backlog: Claude CLI sidecar (SEC-006 option B) — lifts the option-F refusal.
+
 _none yet_
