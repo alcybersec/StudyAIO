@@ -288,6 +288,7 @@ bet is chosen at the M34 gate. With three users, the D7/D30 readouts are descrip
 | M34-S2-SEC-009 | `qa`, `backend`, `architect` | N-1 `seed_e2e.py` has no guard; N-3 untyped admin feedback view; N-4 ADR 0003 line drift; N-5 `email_sent` logs a file name/course/exam title; empty `proof.py` | Seed refuses without an explicit e2e marker; typed response model; ADR 0003 table refreshed; email logs carry the template name only; `proof.py` removed |
 | M34-S2-SEC-013 | `backend`, `data`, `architect` | Safety R1: OAuth sign-in tokens stored but never read | Sign-in no longer writes them; a migration nulls existing values; secrets-at-rest entry bumped to drop the two columns |
 | M34-S2-SEC-014 | `backend`, `data` | Safety R3: Telegram pairing codes stored in plain text | Stored as SHA-256 digests, compared by digest; unused codes invalidated at deploy, noted in release notes |
+| M34-S2-SEC-015 | `backend`, `devops` | R-052: Telegram webhook compares its secret header against the public webhook URL with `!=` | Random `TELEGRAM_WEBHOOK_SECRET` registered via `setWebhook(secret_token=…)`, compared with `hmac.compare_digest`; forged calls rejected (pinned) |
 
 *S3 — debt*
 
