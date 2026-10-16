@@ -35,6 +35,30 @@ from ._support import BACKEND_SETTINGS, Transport, install_transport, sample_ext
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
+#: The AI pools' uid since SEC-006 (`studyaio` in services/app/Dockerfile).
+NON_ROOT_POOL_UID = 999
+
+
+@pytest.fixture(autouse=True)
+def _opted_in_non_root_deployment(monkeypatch):
+    """Run the adapter contract in the deployment that still spawns the CLI.
+
+    These tests are about the adapter contract, not the uid policy: a non-root
+    multi-user pool whose operator set CLAUDE_CLI_SHARED_UID_ACCEPTED. Fixing
+    the euid makes the result identical as root in CI and non-root locally. The
+    refusal itself is pinned in tests/safety, not here.
+    """
+    import os
+
+    from app.agents import claude_code
+
+    monkeypatch.setattr(os, "geteuid", lambda: NON_ROOT_POOL_UID)
+    monkeypatch.setattr(claude_code.settings, "single_user_mode", False)
+    monkeypatch.setenv("CLAUDE_CLI_SHARED_UID_ACCEPTED", "true")
+    monkeypatch.delenv("CLAUDE_CLI_UID", raising=False)
+    monkeypatch.delenv("CLAUDE_CLI_GID", raising=False)
+
+
 BACKENDS = list(BACKEND_SETTINGS)
 # The Claude Code CLI reports no token usage, so only the call is counted.
 REPORTS_TOKENS = {"anthropic_api", "openai", "zai", "ollama"}
