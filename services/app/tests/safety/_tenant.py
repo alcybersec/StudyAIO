@@ -24,8 +24,15 @@ from sqlalchemy.sql.elements import (
     UnaryExpression,
 )
 
-#: Shared catalogues and the accounts table itself.
-UNOWNED_TABLES = frozenset({"users", "invite_codes", "achievements", "daily_challenges"})
+#: Shared catalogues and the accounts table itself, plus
+#: ``stripe_webhook_events`` (``models.stripe-webhook-events v1``, M34-S2-SEC-008):
+#: Stripe's event ids and our applied/stale decision, keyed on Stripe's customer
+#: id, with no ``user_id`` by contract. No route reads it; the webhook is
+#: signature-verified and system-scoped. Account deletion nulls its customer id
+#: (never deletes the row), pinned in ``test_floor1_worker_jobs.py``.
+UNOWNED_TABLES = frozenset(
+    {"users", "invite_codes", "achievements", "daily_challenges", "stripe_webhook_events"}
+)
 
 #: Owned, but with no foreign key a closure over the schema could follow.
 POLYMORPHIC_OWNED = frozenset({"review_items"})

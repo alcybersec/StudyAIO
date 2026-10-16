@@ -11,7 +11,9 @@ M32-S4-SAFETY-027. Two pieces of wave-2 code read every user's rows on purpose:
   Stripe webhook that finds the subscription by Stripe's customer id. These
   tests pin that the mutation lands only on the row of the customer named in the
   event and on that row's own user, and that a replayed or stale event mutates
-  nothing.
+  nothing. Since M34-S2-SEC-008 the dedupe and ordering state is the
+  ``stripe_webhook_events`` table, not Redis; account deletion nulls its
+  customer id and never deletes a row (R4).
 """
 
 from __future__ import annotations
@@ -164,6 +166,16 @@ async def test_floor4_recovery_never_deletes():
 
 
 # ── Stripe webhook ─────────────────────────────────────────────────────
+#
+# M34-S2-SEC-008 moved dedupe and ordering from Redis into Postgres
+# (``models.stripe-webhook-events v1``): the event id is claimed with an
+# insert-or-skip on its unique index, the ordering watermark is read from the
+# customer's applied rows under a per-customer advisory lock, and claim and
+# effect commit or roll back together. ``_WebhookDb`` models exactly that. The
+# ``stripe_webhook_events`` rows live in a ``MiniDB``, so the watermark read is
+# answered by evaluating its real WHERE clause and a dropped customer filter
+# changes the answer; the claim honours the unique index; ``rollback`` restores
+# the rows as they were at the last ``commit``.
 
 
 def _compiled(statement) -> tuple[str, dict]:
@@ -171,10 +183,16 @@ def _compiled(statement) -> tuple[str, dict]:
     return str(c), dict(c.params)
 
 
+def _ts(seconds: int) -> datetime:
+    return datetime.fromtimestamp(seconds, tz=UTC)
+
+
 class _WebhookDb:
-    """Session holding two users' subscriptions, answering by customer id."""
+    """Two users' subscriptions answered by customer id, plus a modelled event table."""
 
     def __init__(self) -> None:
+        from tests.safety._minidb import MiniDB
+
         self.subs = {
             "cus_A": MagicMock(user_id="user-a", stripe_subscription_id="sub_A", plan="free"),
             "cus_B": MagicMock(user_id="user-b", stripe_subscription_id="sub_B", plan="pro"),
@@ -183,16 +201,82 @@ class _WebhookDb:
             "user-a": MagicMock(id="user-a", tier="free"),
             "user-b": MagicMock(id="user-b", tier="pro"),
         }
+        self.events = MiniDB()
+        self._committed: list = []
         self.statements: list[tuple[str, dict]] = []
+        self.locks: list[str] = []
+        self.commits = 0
+        self.rollbacks = 0
+        self.fail_on_subscriptions = False
         self.session = AsyncMock()
         self.session.execute.side_effect = self._execute
+        self.session.commit.side_effect = self._commit
+        self.session.rollback.side_effect = self._rollback
+
+    # ── state ──────────────────────────────────────────────────────────
+
+    def seed(self, event_id: str, customer: str | None, created: int) -> None:
+        """A committed, applied event."""
+        from app.models.stripe_webhook_event import StripeWebhookEvent
+
+        self.events.add(
+            StripeWebhookEvent(
+                id=f"row-{event_id}",
+                stripe_event_id=event_id,
+                event_type="customer.subscription.updated",
+                stripe_customer_id=customer,
+                stripe_created=_ts(created),
+                outcome="applied",
+            )
+        )
+        self._committed = list(self.events.rows["stripe_webhook_events"])
+
+    def event(self, event_id: str):
+        rows = self.events.rows["stripe_webhook_events"]
+        return next((r for r in rows if r.stripe_event_id == event_id), None)
+
+    async def _commit(self) -> None:
+        self.commits += 1
+        self._committed = list(self.events.rows["stripe_webhook_events"])
+
+    async def _rollback(self) -> None:
+        self.rollbacks += 1
+        self.events.rows["stripe_webhook_events"] = list(self._committed)
+
+    # ── statements ─────────────────────────────────────────────────────
+
+    def touched(self, table: str) -> list[tuple[str, dict]]:
+        """Statements that read or write ``table``."""
+        return [
+            (q, p)
+            for q, p in self.statements
+            if f"FROM {table}" in q or f"UPDATE {table}" in q or f"INTO {table}" in q
+        ]
 
     async def _execute(self, statement, *_a, **_k):
+        from sqlalchemy.sql.dml import Insert
+
+        from tests.safety._minidb import Result
+        from tests.safety._tenant import tables_in
+
         sql, params = _compiled(statement)
         self.statements.append((sql, params))
+        if "pg_advisory_xact_lock" in sql:
+            self.locks.extend(v for v in params.values() if isinstance(v, str))
+            return Result([(None,)])
+        if "stripe_webhook_events" in tables_in(statement):
+            if isinstance(statement, Insert):
+                assert "ON CONFLICT (stripe_event_id) DO NOTHING" in sql, sql
+                if self.event(params["stripe_event_id"]) is not None:
+                    return Result([])
+                self.events.execute(statement)
+                return Result([(params["id"],)])
+            return self.events.execute(statement)
         values = set(params.values())
         result = MagicMock()
         if "FROM subscriptions" in sql:
+            if self.fail_on_subscriptions:
+                raise RuntimeError("database went away mid-effect")
             hits = [s for c, s in self.subs.items() if c in values]
         elif "FROM users" in sql:
             hits = [u for i, u in self.users.items() if i in values]
@@ -202,20 +286,10 @@ class _WebhookDb:
         return result
 
 
-def _redis(*, fresh: bool = True, last_created: int | None = None) -> MagicMock:
-    client = MagicMock()
-    client.set = AsyncMock(return_value=True if fresh else None)
-    client.get = AsyncMock(return_value=None if last_created is None else str(last_created))
-    client.delete = AsyncMock()
-    return client
-
-
-async def _webhook(db: _WebhookDb, event_type: str, obj: dict, client: MagicMock, **kw):
-    from app.core import redis as redis_mod
+async def _webhook(db: _WebhookDb, event_type: str, obj: dict, **kw) -> None:
     from app.services import billing_service
 
-    with patch.object(redis_mod, "redis_client", client):
-        await billing_service.handle_webhook_event(db.session, event_type, {"object": obj}, **kw)
+    await billing_service.handle_webhook_event(db.session, event_type, {"object": obj}, **kw)
 
 
 @pytest.mark.parametrize(
@@ -233,11 +307,12 @@ async def test_floor1_webhook_mutates_only_the_named_customers_row(event_type, o
 
     Every lookup is keyed on a value from the signed event (the customer id) or
     on the ``user_id`` of the row that lookup returned, never on anything else.
+    The claim row records that same customer, and claim and effect commit once.
     """
     db = _WebhookDb()
     plans = {c: s.plan for c, s in db.subs.items()}
     tiers = {i: u.tier for i, u in db.users.items()}
-    await _webhook(db, event_type, obj, _redis(), event_id="evt_1", created=100)
+    await _webhook(db, event_type, obj, event_id="evt_1", created=100)
 
     target = obj["customer"]
     owner = db.subs[target].user_id
@@ -248,31 +323,83 @@ async def test_floor1_webhook_mutates_only_the_named_customers_row(event_type, o
         if uid != owner:
             assert db.users[uid].tier == tier, f"webhook for {target} changed user {uid}"
 
-    for sql, params in db.statements:
-        if "FROM subscriptions" in sql:
-            assert "stripe_customer_id" in sql and target in params.values(), sql
-        if "FROM users" in sql:
-            assert set(params.values()) == {owner}, f"user lookup not keyed on the owner: {sql}"
+    assert db.touched("subscriptions"), "the effect never ran: the pin would be vacuous"
+    for sql, params in db.touched("subscriptions"):
+        assert "stripe_customer_id" in sql and target in params.values(), sql
+    for sql, params in db.touched("users"):
+        assert set(params.values()) == {owner}, f"user lookup not keyed on the owner: {sql}"
     assert db.users[owner].tier == ("pro" if event_type.endswith("updated") else "free")
+
+    claim = db.event("evt_1")
+    assert claim is not None and claim.stripe_customer_id == target
+    assert claim.outcome == "applied"
+    assert (db.commits, db.rollbacks) == (1, 0)
 
 
 async def test_floor1_webhook_replayed_or_stale_event_mutates_nothing():
-    """A replayed event id, or an event older than the last applied, runs no query."""
+    """A replayed event id, or an event older than one applied, never reaches a row.
+
+    No statement touches ``subscriptions`` or ``users``. The replay adds no row,
+    and the stale event is committed as ``stale`` so its own replay is a no-op.
+    """
     db = _WebhookDb()
+    db.seed("evt_1", "cus_B", created=5)
+    db.seed("evt_0", "cus_B", created=10)
     obj = {"customer": "cus_B", "id": "sub_B", "status": "canceled"}
-    await _webhook(
-        db, "customer.subscription.updated", obj, _redis(fresh=False), event_id="evt_1", created=5
-    )
-    await _webhook(
-        db,
-        "customer.subscription.updated",
-        obj,
-        _redis(last_created=10),
-        event_id="evt_2",
-        created=5,
-    )
-    assert db.statements == []
+
+    await _webhook(db, "customer.subscription.updated", obj, event_id="evt_1", created=5)
+    assert len(db.events.rows["stripe_webhook_events"]) == 2
+    assert db.event("evt_1").outcome == "applied"
+
+    await _webhook(db, "customer.subscription.updated", obj, event_id="evt_2", created=5)
+    assert db.event("evt_2").outcome == "stale"
+    assert db.commits == 1, "the stale decision is not committed: Stripe's retry would re-run it"
+
+    await _webhook(db, "customer.subscription.updated", obj, event_id="evt_2", created=5)
+
+    assert db.touched("subscriptions") == [] and db.touched("users") == []
     assert db.subs["cus_B"].plan == "pro"
+    assert db.users["user-b"].tier == "pro"
+
+
+async def test_floor1_webhook_ordering_is_per_customer():
+    """Another customer's newer event is not this customer's watermark (R2).
+
+    The watermark read is answered by evaluating its WHERE clause, so dropping
+    the customer filter makes this event stale and its owner is never upgraded.
+    The advisory lock is the named customer's and is taken before the read.
+    """
+    db = _WebhookDb()
+    db.seed("evt_other", "cus_B", created=500)
+    obj = {"customer": "cus_A", "id": "sub_A", "status": "active"}
+    await _webhook(db, "customer.subscription.updated", obj, event_id="evt_9", created=100)
+
+    assert db.event("evt_9").outcome == "applied"
+    assert db.subs["cus_A"].plan == "pro" and db.users["user-a"].tier == "pro"
+    assert db.subs["cus_B"].plan == "pro" and db.users["user-b"].tier == "pro"
+
+    assert db.locks and all("cus_A" in k for k in db.locks), db.locks
+    order = [q for q, _p in db.statements]
+    lock_at = next(i for i, q in enumerate(order) if "pg_advisory_xact_lock" in q)
+    read_at = next(
+        i for i, q in enumerate(order) if q.startswith("SELECT") and "stripe_webhook_events" in q
+    )
+    assert lock_at < read_at, "watermark read before the per-customer lock"
+
+
+async def test_floor4_webhook_failed_effect_releases_the_claim():
+    """If the effect fails, the claim rolls back with it, so Stripe's retry applies."""
+    db = _WebhookDb()
+    db.fail_on_subscriptions = True
+    obj = {"customer": "cus_A", "id": "sub_A", "status": "active"}
+    with pytest.raises(RuntimeError):
+        await _webhook(db, "customer.subscription.updated", obj, event_id="evt_5", created=100)
+    assert db.event("evt_5") is None and db.rollbacks == 1
+
+    db.fail_on_subscriptions = False
+    await _webhook(db, "customer.subscription.updated", obj, event_id="evt_5", created=100)
+    assert db.event("evt_5").outcome == "applied"
+    assert db.users["user-a"].tier == "pro"
 
 
 async def test_floor1_webhook_old_subscription_delete_keeps_the_current_one():
@@ -282,9 +409,85 @@ async def test_floor1_webhook_old_subscription_delete_keeps_the_current_one():
         db,
         "customer.subscription.deleted",
         {"customer": "cus_B", "id": "sub_OLD"},
-        _redis(),
         event_id="evt_3",
         created=100,
     )
     assert db.subs["cus_B"].plan == "pro"
     assert db.users["user-b"].tier == "pro"
+
+
+# ── account deletion unlinks Stripe events (R4) ─────────────────────────
+
+
+async def test_floor1_floor4_account_deletion_nulls_stripe_customer_with_update_never_delete():
+    """Deleting an account nulls its customer id on webhook rows; no row is deleted.
+
+    Run over ``MiniDB`` with two users' subscriptions and events: only the
+    deleted user's customer is unlinked, every event row survives (floor 4,
+    ruling 3: kept indefinitely), the other customer's link is untouched
+    (floor 1), and the statement that touches ``stripe_webhook_events`` is an
+    ``UPDATE``, never a ``DELETE``.
+    """
+    from sqlalchemy.sql.dml import Delete, Update
+
+    from app.models.stripe_webhook_event import StripeWebhookEvent
+    from app.models.subscription import Subscription
+    from app.services import account_service
+    from tests.safety._minidb import MiniDB, MiniSession
+    from tests.safety._tenant import tables_in
+
+    db = MiniDB()
+    for uid, cus in (("user-a", "cus_A"), ("user-b", "cus_B")):
+        db.add(Subscription(id=f"sub-{uid}", user_id=uid, stripe_customer_id=cus, plan="pro"))
+        for n in range(2):
+            db.add(
+                StripeWebhookEvent(
+                    id=f"row-{cus}-{n}",
+                    stripe_event_id=f"evt_{cus}_{n}",
+                    event_type="customer.subscription.updated",
+                    stripe_customer_id=cus,
+                    stripe_created=_ts(100 + n),
+                    outcome="applied",
+                )
+            )
+    seen: list = []
+
+    class _Spy(MiniSession):
+        async def execute(self, statement, *a, **k):
+            if "stripe_webhook_events" in tables_in(statement):
+                seen.append(statement)
+            return await super().execute(statement, *a, **k)
+
+    unlinked = await account_service._unlink_stripe_events(_Spy(db), "user-a")  # noqa: SLF001
+
+    rows = db.rows["stripe_webhook_events"]
+    assert len(rows) == 4, "an event row was deleted"
+    assert unlinked == 2
+    assert {r.id for r in rows if r.stripe_customer_id is None} == {
+        "row-cus_A-0",
+        "row-cus_A-1",
+    }
+    assert {r.stripe_customer_id for r in rows if r.id.startswith("row-cus_B")} == {"cus_B"}
+    assert {r.stripe_event_id for r in rows} == {
+        f"evt_{c}_{n}" for c in ("cus_A", "cus_B") for n in range(2)
+    }
+    assert seen and all(isinstance(s, Update) for s in seen), seen
+    assert not any(isinstance(s, Delete) for s in seen)
+
+
+def test_floor4_account_deletion_unlinks_stripe_events_before_deleting_subscriptions():
+    """``delete_user_account`` unlinks first and never sweeps the event table.
+
+    ``_unlink_stripe_events`` reads the customer ids from ``subscriptions``, so
+    it must run before that table's rows go; and ``stripe_webhook_events`` stays
+    in ``GLOBAL_TABLES`` so the per-table delete loop skips it.
+    """
+    import inspect
+
+    from app.services import account_service
+
+    assert "stripe_webhook_events" in account_service.GLOBAL_TABLES
+    src = inspect.getsource(account_service.delete_user_account)
+    unlink = src.find("_unlink_stripe_events(")
+    loop = src.find("for table in reversed(_ordered_tables())")
+    assert unlink != -1 and loop != -1 and unlink < loop, "unlink must precede the delete loop"

@@ -8,7 +8,8 @@ label is also written to the worker's multiprocess tmpfs files.
 
 The policy, from ``app/pipeline/metrics.py``: labels are low-cardinality enums
 only, ``stage``, ``outcome`` and ``error_class``, and ``error_class`` is an
-exception's *class name*, never its message. This pins it for every metric under
+exception's *class name*, never its message. A label in ``ENUM_LABELS`` takes
+only a literal from its closed set (``action``: read, record, clear, limit). This pins it for every metric under
 ``app/**``, so a new metric with a ``user_id`` label, or an ``outcome=str(exc)``,
 fails here rather than at a scrape. The api side is the Instrumentator's
 ``handler`` label: the route *template*, never the raw path with its ids.
@@ -23,7 +24,14 @@ import pytest
 
 from tests.safety._source import app_modules, dotted, parse, rel
 
-ALLOWED_LABELS = frozenset({"stage", "outcome", "error_class"})
+#: Labels whose every value must be a string literal from a closed set, at every
+#: ``.labels(...)`` site. ``action`` is ``core.login-throttle-metrics v1``
+#: (M34-S3-BACKEND-012): which auth-throttle store operation failed. Never the
+#: email, the Redis key or the request path.
+ENUM_LABELS: dict[str, frozenset[str]] = {
+    "action": frozenset({"read", "record", "clear", "limit"}),
+}
+ALLOWED_LABELS = frozenset({"stage", "outcome", "error_class"}) | frozenset(ENUM_LABELS)
 #: Locals a label value may be read from. Each is bound from a constant table or a
 #: literal at every site today; a new name is a review, not a typo fix.
 ALLOWED_VALUE_NAMES = frozenset({"stage", "outcome"})
@@ -84,6 +92,8 @@ def _allowed_value(key: str | None, value: ast.AST) -> bool:
             and len(value.value.args) == 1
             and not value.value.keywords
         )
+    if key in ENUM_LABELS:
+        return isinstance(value, ast.Constant) and value.value in ENUM_LABELS[key]
     if isinstance(value, ast.Constant):
         return isinstance(value.value, str)
     return isinstance(value, ast.Name) and value.id in ALLOWED_VALUE_NAMES
@@ -196,6 +206,21 @@ def test_floor2_reviewed_class_name_sites_are_not_stale() -> None:
     assert not stale, f"stale CLASS_NAME_LOCAL_SITES entries: {stale}"
 
 
+def test_floor2_enum_label_values_are_all_in_use() -> None:
+    """Every enum label value is used somewhere, so the closed set cannot drift wide.
+
+    ``core.login-throttle-metrics v1``: ``read``, ``record``, ``clear`` in
+    ``app/core/login_throttle.py`` and ``limit`` in ``app/core/rate_limit.py``.
+    """
+    used: dict[str, set[str]] = {k: set() for k in ENUM_LABELS}
+    for path in app_modules():
+        for _scope, call in _labels_calls(parse(path)):
+            for k in call.keywords:
+                if k.arg in ENUM_LABELS and isinstance(k.value, ast.Constant):
+                    used[k.arg].add(k.value.value)
+    assert used == {k: set(v) for k, v in ENUM_LABELS.items()}
+
+
 def test_floor2_metric_policy_is_not_vacuous() -> None:
     """The checks see the real worker metrics, so a rename cannot empty them."""
     from app.pipeline import metrics
@@ -274,6 +299,11 @@ def test_floor2_label_name_detector(source, bad) -> None:
         pytest.param("M.labels(user_id=user.id)", True, id="user-label"),
         pytest.param("M.labels('classify')", True, id="positional"),
         pytest.param("M.labels(outcome=1)", True, id="non-string"),
+        pytest.param("M.labels(action='read')", False, id="enum-ok"),
+        pytest.param("M.labels(action='login')", True, id="enum-unknown-literal"),
+        pytest.param("M.labels(action=action)", True, id="enum-from-name"),
+        pytest.param("M.labels(action=email)", True, id="enum-identity"),
+        pytest.param("M.labels(action=f'read:{email}')", True, id="enum-fstring"),
     ],
 )
 def test_floor2_label_value_detector(call, bad) -> None:
