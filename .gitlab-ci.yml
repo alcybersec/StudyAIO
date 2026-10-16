@@ -197,7 +197,9 @@ dependency-audit:
     - apt-get install -y --no-install-recommends python3 python3-pip python3-venv
     - python3 -m venv "$CI_PROJECT_DIR/.venv-audit"
     - export PATH="$CI_PROJECT_DIR/.venv-audit/bin:$PATH"
-    - pip install pip-audit
+    # Exact pin (M32 N-5): an unpinned auditor changes behaviour without a commit.
+    # Bump deliberately, with a green run of this job on the new version.
+    - pip install pip-audit==2.10.1
   script:
     - ./scripts/audit-deps.sh
 
