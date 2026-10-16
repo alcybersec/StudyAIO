@@ -19,7 +19,8 @@ Wave 1 in flight (below). Applied: SEC-008 + BACKEND-012 (`d2f276d`…`8bd9270`:
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
-_none — full local run on the landed set in progress_
+| SEC-005 floor review + docs/security downgrade note (code held on `hold/m34-sec005`: `3614d72`, `4daef70`, `9ecd47a`) | `safety` | 2026-10-16 | isolated |
+| M34 e2e: fix `first-run.spec.ts` for the server-side checklist (CI red on `e2e-tests`, 130 passed); add onboarding, study-card feedback, Claude Code availability cases | `qa` | 2026-10-16 | isolated |
 
 Held branches (not on trunk): `hold/m34-contract-red` (red contract tests for implementers), `hold/m34-sec006` (`b27fc19`), `hold/m34-floor2-pin` (`5fc2de4`, floor-2 secrets-at-rest pin, red until SEC-005), `hold/m34-contract-red` still carries the SEC-005 secrets-at-rest contract tests (the rest landed in `d2f276d`).
 
