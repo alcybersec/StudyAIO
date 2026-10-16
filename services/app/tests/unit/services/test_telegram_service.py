@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.auth import hash_magic_link_token
 from app.core.exceptions import TelegramLinkError
 from app.models.telegram_link import TelegramLink
 from app.services.telegram_service import (
@@ -43,7 +44,7 @@ class TestGenerateLinkToken:
         session = _make_mock_session(link=existing)
         token = await generate_link_token(session, "user-1")
         assert isinstance(token, str)
-        assert existing.link_token == token
+        assert existing.link_token == hash_magic_link_token(token)
         assert existing.verified is False
         assert existing.chat_id is None
         session.add.assert_not_called()
@@ -55,7 +56,9 @@ class TestVerifyLink:
     @pytest.mark.asyncio
     async def test_verify_link_success(self) -> None:
         """verify_link sets chat_id and verified=True."""
-        existing = TelegramLink(id="link-1", user_id="user-1", link_token="valid-token")
+        existing = TelegramLink(
+            id="link-1", user_id="user-1", link_token=hash_magic_link_token("valid-token")
+        )
         session = _make_mock_session(link=existing)
         result = await verify_link(session, "valid-token", 99999, "testuser")
         assert result is True
@@ -127,7 +130,9 @@ class TestHandleTelegramWebhook:
     @pytest.mark.asyncio
     async def test_webhook_start_with_valid_token(self) -> None:
         """handle_telegram_webhook verifies link on /start <token>."""
-        existing = TelegramLink(id="link-1", user_id="user-1", link_token="mytoken")
+        existing = TelegramLink(
+            id="link-1", user_id="user-1", link_token=hash_magic_link_token("mytoken")
+        )
         session = _make_mock_session(link=existing)
 
         update = {
@@ -169,3 +174,35 @@ class TestHandleTelegramWebhook:
         }
         response = await handle_telegram_webhook(session, update)
         assert "/start" in response
+
+
+class TestPairingCodeDigest:
+    """The code is stored and looked up as its SHA-256 digest."""
+
+    @pytest.mark.asyncio
+    async def test_generate_stores_only_digest_of_returned_code(self) -> None:
+        session = _make_mock_session(link=None)
+        code = await generate_link_token(session, "user-1")
+        stored = session.add.call_args.args[0].link_token
+        assert stored == hash_magic_link_token(code)
+        assert len(stored) == 64
+        assert code not in stored
+
+    @pytest.mark.asyncio
+    async def test_verify_queries_by_digest_not_plaintext(self) -> None:
+        link = TelegramLink(id="l", user_id="u", link_token=hash_magic_link_token("c0de"))
+        session = _make_mock_session(link=link)
+        await verify_link(session, "c0de", 1)
+        params = session.execute.await_args.args[0].compile().params
+        assert hash_magic_link_token("c0de") in params.values()
+        assert "c0de" not in params.values()
+
+    @pytest.mark.asyncio
+    async def test_verify_presented_digest_is_hashed_again(self) -> None:
+        digest = hash_magic_link_token("c0de")
+        session = _make_mock_session(link=None)
+        with pytest.raises(TelegramLinkError):
+            await verify_link(session, digest, 1)
+        params = session.execute.await_args.args[0].compile().params
+        assert digest not in params.values()
+        assert hash_magic_link_token(digest) in params.values()

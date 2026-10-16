@@ -723,14 +723,12 @@ async def create_or_link_oauth(
     provider_user_id: str,
     email: str,
     email_verified: bool = False,
-    access_token: str | None = None,
-    refresh_token: str | None = None,
     avatar_url: str | None = None,
 ) -> User:
     """Find or create a user via OAuth, linking the OAuth account.
 
     **Signing in with a known identity** (this provider + provider_user_id has
-    been seen before) only refreshes tokens: the provider's user id is the
+    been seen before) only signs in: the provider's user id is the
     identity, the email plays no part, and nothing about the account changes.
 
     **Everything else is an email-based decision** — creating an account for
@@ -771,8 +769,6 @@ async def create_or_link_oauth(
         email: Email from the provider.
         email_verified: Whether the provider states it verified that address.
             Defaults to False so a caller that does not pass it fails closed.
-        access_token: Provider access token.
-        refresh_token: Provider refresh token.
         avatar_url: Profile picture URL from the provider.
 
     Returns:
@@ -803,9 +799,10 @@ async def create_or_link_oauth(
     existing_oauth = result.scalar_one_or_none()
 
     if existing_oauth:
-        # Update tokens
-        existing_oauth.access_token = access_token
-        existing_oauth.refresh_token = refresh_token
+        # Provider tokens are not stored. Writing None sweeps a value the
+        # previous release wrote during the deploy window.
+        existing_oauth.access_token = None
+        existing_oauth.refresh_token = None
         user = await get_user_by_id(session, existing_oauth.user_id)
         if user:
             user.last_login_at = datetime.now(UTC)
@@ -879,8 +876,6 @@ async def create_or_link_oauth(
         user_id=user.id,
         provider=provider,
         provider_user_id=provider_user_id,
-        access_token=access_token,
-        refresh_token=refresh_token,
     )
     session.add(oauth_account)
     user.last_login_at = datetime.now(UTC)

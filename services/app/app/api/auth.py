@@ -634,8 +634,6 @@ async def oauth_callback(
             provider_user_id=userinfo.provider_user_id,
             email=userinfo.email,
             email_verified=userinfo.email_verified,
-            access_token=token.get("access_token"),
-            refresh_token=token.get("refresh_token"),
             avatar_url=userinfo.avatar_url,
         )
         await session.commit()

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.auth import hash_magic_link_token
 from app.core.exceptions import TelegramLinkError
 from app.core.utils import generate_id
 from app.models.telegram_link import TelegramLink
@@ -22,7 +23,8 @@ def _telegram_configured() -> bool:
 async def generate_link_token(session: AsyncSession, user_id: str) -> str:
     """Generate a deep-link token for Telegram account linking.
 
-    Creates or updates a TelegramLink record with a fresh token.
+    Creates or updates a TelegramLink record with a fresh token. Only the
+    SHA-256 digest of the token is stored; the plaintext is returned once.
 
     Args:
         session: Database session.
@@ -37,7 +39,7 @@ async def generate_link_token(session: AsyncSession, user_id: str) -> str:
     token = secrets.token_urlsafe(32)
 
     if link:
-        link.link_token = token
+        link.link_token = hash_magic_link_token(token)
         link.verified = False
         link.chat_id = None
         link.username = None
@@ -45,7 +47,7 @@ async def generate_link_token(session: AsyncSession, user_id: str) -> str:
         link = TelegramLink(
             id=generate_id(),
             user_id=user_id,
-            link_token=token,
+            link_token=hash_magic_link_token(token),
         )
         session.add(link)
 
@@ -71,7 +73,9 @@ async def verify_link(
     Raises:
         TelegramLinkError: If token is invalid or expired.
     """
-    result = await session.execute(select(TelegramLink).where(TelegramLink.link_token == token))
+    result = await session.execute(
+        select(TelegramLink).where(TelegramLink.link_token == hash_magic_link_token(token))
+    )
     link = result.scalar_one_or_none()
 
     if not link:
