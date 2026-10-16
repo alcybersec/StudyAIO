@@ -13,14 +13,13 @@ Orchestrator updates here.
 
 ## Next task
 
-Wave 1 in flight (below). Applied: contracts (`4371b29`, amended `a2accb0`: models.secrets-at-rest v1 incl. `users.mfa_secret`, models.stripe-webhook-events v1, api.ai_feedback stays v1, api.onboarding v1, core.login-throttle-metrics v1, api.study-items v2) with red tests held on `hold/m34-contract-red` (`5d542b1`, `1437546`) for the implementers; ADR 0003 refresh (`110f84b`); FRONTEND-011 (`1eb41a5`: Sentry chunk 482 → 87 KB by importing only the used functions; QuickCaptureModal test deterministic, 20/20 under load), SEC-007 devops part (`8c64d1c`: pip-audit pinned, deploy key check round-trips the key — host deploy.sh reinstall needed at next deploy). Then: SEC-005 + SEC-008 implementation (`data`, `backend`) against the architect's red contract tests; BACKEND-012; AI-010 ai half (drop `_Precomputed`); SEC-007 fastapi cap lift (`backend`); safety review. Time-bound: M34-OPS-001 D7 readout from 2026-10-22, M34-OPS-002 D30 from 2026-11-14, M34-OPS-004 on first prod targeted generation.
+Wave 1 in flight (below). Applied: SEC-009 N-1 (`seed_e2e.py` refuses without `STUDYAIO_E2E_SEED=1` set by its fixture, and on a non-local database host; CI host `postgres` allowed); contracts (`4371b29`, amended `a2accb0`: models.secrets-at-rest v1 incl. `users.mfa_secret`, models.stripe-webhook-events v1, api.ai_feedback stays v1, api.onboarding v1, core.login-throttle-metrics v1, api.study-items v2) with red tests held on `hold/m34-contract-red` (`5d542b1`, `1437546`) for the implementers; ADR 0003 refresh (`110f84b`); FRONTEND-011 (`1eb41a5`: Sentry chunk 482 → 87 KB by importing only the used functions; QuickCaptureModal test deterministic, 20/20 under load), SEC-007 devops part (`8c64d1c`: pip-audit pinned, deploy key check round-trips the key — host deploy.sh reinstall needed at next deploy). Then: SEC-005 + SEC-008 implementation (`data`, `backend`) against the architect's red contract tests; BACKEND-012; AI-010 ai half (drop `_Precomputed`); SEC-007 fastapi cap lift (`backend`); safety review. Time-bound: M34-OPS-001 D7 readout from 2026-10-22, M34-OPS-002 D30 from 2026-11-14, M34-OPS-004 on first prod targeted generation.
 
 ## Active
 
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
 | Review-before-build of SEC-005 / SEC-008 contracts + floor-2 red pin | `safety` | 2026-10-16 | isolated |
-| SEC-009 qa bit (`seed_e2e.py` refuses without an e2e marker) | `qa` | 2026-10-16 | isolated |
 | AI-010 ai half: `pipeline/index.py` on `aembed_artifact_chunks` + `store_artifact_chunks`, drop `_Precomputed`; `parsing.py` stops logging model text | `ai` | 2026-10-16 | isolated |
 | AI-010 pins: floor 1/3/4 pins repointed to the split functions | `safety` | 2026-10-16 | isolated |
 | AI-010: ADR 0005 allowlist amended to the split functions | `architect` | 2026-10-16 | isolated |
