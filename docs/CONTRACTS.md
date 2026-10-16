@@ -298,7 +298,7 @@ AI-processing disclosure and consent (SEC-08, GL#38). Provider: `backend` —
   `app.core.logging.redact_emails` and the stdlib `EmailRedactingFilter` redact any address-shaped
   value as defence in depth.
 
-### api.ai_feedback v2
+### api.ai_feedback v1
 
 Per-item thumbs up/down on AI output (M33-S1-BACKEND-015, GL#36). Provider: `backend` —
 `services/app/app/api/ai_feedback.py`, `services/app/app/services/ai_feedback_service.py`. Consumer:
@@ -321,37 +321,16 @@ client. The admin route lives at `/admin/ai-feedback` because `/admin/feedback` 
 inbox. `answer` resolves to an assistant `chat_message`. Account deletion removes the rows
 (`user_id` column).
 
-**v2 (M34-S3-BACKEND-012, recorded before implementation; additive):** a sixth target type,
-`qa_answer`, so a `POST /api/qa/ask` answer can be rated. In v1 those answers were not persisted and
-carried no id.
+**Study cards (M34-S3-BACKEND-012; no interface change, so no version bump).** The study surfaces
+(Study hub review, timed and plan runs) rate a card with `flashcard` and a question with
+`quiz_question`, the card's or question's own id, exactly as the week tabs do. That is `frontend`
+work; the backend already serves it. The owner-scoped getters skip archived rows, so a vote on a
+card or question archived after it was shown (`api.study-items`) is `404`; the control treats that
+as "item gone", not as an error to retry.
 
-- `AI_FEEDBACK_TARGET_TYPES` = `("summary", "answer", "flashcard", "quiz_question",
-  "chat_message", "qa_answer")`, in that order. Still a plain string column, so no migration on
-  `ai_feedback`.
-- `QAResponse` gains `answer_id: str | None`. It is the id of a new `qa_answers` row when the
-  answer came from the agent; it is `None` for the deterministic "nothing relevant" reply, which
-  makes no AI call and is not AI output.
-- `qa_answers` stores **no question or answer text**, only enough to scope and aggregate:
-
-  | Table | Column | Type | Null | Notes |
-  |---|---|---|---|---|
-  | `qa_answers` | `user_id` | `String(36)` FK `users.id` | no | index `(user_id, created_at)` |
-  | `qa_answers` | `course_id` | `String(36)` FK `courses.id` | yes | `ondelete SET NULL`; set when the question named a course |
-  | `qa_answers` | `week` | `Integer` | yes | |
-  | `qa_answers` | `citation_count` | `Integer` | no | `len(citations)` of the response |
-
-  Plus `id` (`String(36)`, `generate_id`) and `created_at`. Written in the same request, after the
-  agent returned and before the response is built; committed with the usage record. Account
-  deletion removes the rows (`user_id` column); nothing else deletes them (floor 4).
-- `qa_answer` resolves owner-scoped: `qa_answers.id == target_id AND qa_answers.user_id ==
-  caller`; a miss or a foreign id is `404`, as for every other type. `course_id` comes from the
-  row.
-- **Study cards need no new type.** The study surfaces (Study hub review, timed and plan runs)
-  rate a card with `flashcard` and a question with `quiz_question`, the card's or question's own
-  id, exactly as the week tabs do. That half of BACKEND-012 is `frontend` work; the backend
-  already serves it. Unchanged from v1: the owner-scoped getters skip archived rows, so a vote on
-  a card or question archived after it was shown (`api.study-items`) is `404`; the control treats
-  that as "item gone", not as an error to retry.
+`POST /api/qa/ask` answers are **not** rateable, by decision (2026-10-16): no UI calls that route,
+so there is no `qa_answer` target type, no `qa_answers` table and no `answer_id` on `QAResponse`.
+`AI_FEEDBACK_TARGET_TYPES` stays the five v1 types. Revisit only if a QA surface ships.
 
 ### services.usage v1
 
@@ -615,16 +594,20 @@ Optional explicit placement on upload (GL#49, audit PROD-07).
 * Failure to resolve the course (quota) fails before anything is stored. In batch it fails the
   request with the quota error (placement is a single choice for all files).
 
-### models.third-party-tokens v1
+### models.secrets-at-rest v1
 
-OAuth and Google Calendar tokens encrypted at rest (M34-S2-SEC-005, R-017, M32 N-7). Provider:
-`backend` — `services/app/app/core/secret_box.py` (`EncryptedText`) and `app/cli.py` (rotation);
-`data` — `app/models/oauth_account.py`, `app/models/calendar_sync.py`, one Alembic revision.
-Consumers: `backend` (`user_service`, `gcal_service`, `account_service`), `safety` (floor-2 pin).
-The scheme is the one per-user AI credentials already use (SEC-06): `secret_box`, Fernet under
-`SETTINGS_ENCRYPTION_KEY`, stored as `enc:v1:<token>`. No second key and no second format.
+Third-party tokens and the TOTP seed encrypted at rest (M34-S2-SEC-005, R-017, M32 N-7; the seed
+added by user decision 2026-10-16). Recorded first as `models.third-party-tokens v1`; renamed
+before any implementation, because the TOTP seed is ours, not a third party's. Provider: `backend`
+— `services/app/app/core/secret_box.py` (`EncryptedText`), `app/cli.py` (rotation),
+`app/services/user_service.py` and `app/api/auth.py` (the unreadable-seed rules below); `data` —
+`app/models/oauth_account.py`, `app/models/calendar_sync.py`, `app/models/user.py`, one Alembic
+revision. Consumers: `backend` (`user_service`, `gcal_service`, `account_service`), `safety`
+(floor-2 pin). The scheme is the one per-user AI credentials already use (SEC-06): `secret_box`,
+Fernet under `SETTINGS_ENCRYPTION_KEY`, stored as `enc:v1:<token>`. No second key and no second
+format.
 
-**Columns.** These four, and only these, hold a third-party credential:
+**Columns.** These five, and only these, hold a secret this contract covers:
 
 | Table | Column | Type | Null | Notes |
 |---|---|---|---|---|
@@ -632,13 +615,13 @@ The scheme is the one per-user AI credentials already use (SEC-06): `secret_box`
 | `oauth_accounts` | `refresh_token` | `EncryptedText` | yes | was `String(1000)` |
 | `calendar_syncs` | `access_token` | `EncryptedText` | no | was `Text` |
 | `calendar_syncs` | `refresh_token` | `EncryptedText` | yes | was `Text` |
+| `users` | `mfa_secret` | `EncryptedText` | yes | was `String(64)`; widened, a 32-character base32 seed encrypts to well over 64 |
 
 Looked at and **not** in scope: `calendar_syncs.sync_token` is Google's incremental-sync cursor, not
-a credential (it authorises nothing without the access token); `magic_links.token_hash` and
-`invite_codes.token_hash` are already SHA-256 hashes; `push_subscriptions.p256dh` and `.auth` are the
-browser's push-encryption keys, which the push sender needs in the clear; `users.mfa_secret` is a
-TOTP seed, ours rather than a third party's, stored in plaintext today — an open question for the
-user, not part of this contract.
+a credential (it authorises nothing without the access token); `magic_links.token_hash`,
+`invite_codes.token_hash` and `users.backup_codes` are already digests (the backup codes as
+`hash_backup_codes` output); `push_subscriptions.p256dh` and `.auth` are the browser's
+push-encryption keys, which the push sender needs in the clear.
 
 **Accessor.** Encryption is a column type, so no call site can forget it:
 
@@ -659,36 +642,81 @@ class EncryptedText(TypeDecorator):
 - Read: `None` stays `None`; legacy plaintext (no prefix) is returned as is, so rows written
   before the migration still work; ciphertext is decrypted. Ciphertext that fails authentication
   (tampered, or written under a key no longer configured) reads as **`None`**, logs
-  `third_party_token_undecryptable` with no value in it, and never raises: loading a user, linking
-  an account or deleting one must not fail on one bad token. A `None` calendar access token takes
-  the existing "reconnect needed" path in `gcal_service`.
+  `secret_at_rest_undecryptable` with no value in it, and never raises: loading a user, linking
+  an account or deleting one must not fail on one bad secret. A `None` calendar access token takes
+  the existing "reconnect needed" path in `gcal_service`. A `None` TOTP seed on an account with
+  MFA on is **not** "no MFA": see the next block.
 - ORM attributes hold plaintext in memory, so `user_service` and `gcal_service` need no change to
   read or write them.
-- **Never logged, never returned (floor 2).** No log call passes a token value; no API response
-  model has a field named `access_token`, `refresh_token` or `sync_token`.
-  `account_service.EXPORT_EXCLUDED_COLUMNS` keeps excluding `access_token` and `refresh_token` from
-  the data export.
+- **An ORM read is not a safe source for a write-back.** An undecryptable value loads as `None`;
+  writing that `None` back would destroy the only copy of a value that a restored key could still
+  read. So nothing reads one of these attributes in order to re-save it: the rotation command and
+  the migration work on the raw column values (Core statements over the table with a plain `Text`
+  column, not the ORM attribute), and `users.mfa_secret` is assigned only by
+  `user_service.enable_mfa`, `disable_mfa` and `clear_mfa`, each of which sets it from a fresh
+  value or to `None` on purpose.
+- **Never logged, never returned (floor 2).** No log call passes a token or seed value; no API
+  response model has a field named `access_token`, `refresh_token`, `sync_token` or `mfa_secret`.
+  `account_service.EXPORT_EXCLUDED_COLUMNS` keeps excluding `access_token`, `refresh_token`,
+  `mfa_secret` and `backup_codes` from the data export. `MFASetupResponse.secret` is not an
+  exception: it is a freshly generated seed shown to its own user once at enrolment, before
+  anything is stored.
+
+**Unreadable TOTP seed: MFA fails closed.** The state is `users.mfa_enabled` true with
+`users.mfa_secret` reading `None`. `enable_mfa` sets both and `disable_mfa`/`clear_mfa` clear both,
+so on sound data the pair never occurs; when it does, the seed was undecryptable (or the row was
+damaged). Rules:
+
+1. `mfa_enabled` is the only switch for whether a second factor is demanded. No code path treats
+   a `None` seed as "MFA off", and nothing writes `mfa_enabled = False` because the seed is
+   unreadable.
+2. **Sign-in** (`POST /api/auth/login`, `POST /api/auth/oauth/mfa`). A `totp_code` is refused
+   with the same `AuthorizationError("Invalid MFA code")` as a wrong code (no oracle on the
+   account's state), counts as a failed attempt (`login_throttle.record_failure`), and sets no
+   cookie. The route logs `mfa_secret_unavailable` at warning with `user_id` and nothing else. A
+   missing code is still `"MFA code required"`. The password-less OAuth callback still issues the
+   pending-MFA cookie and never full cookies.
+3. **Backup codes are the user's way in.** They are hashed in their own column and do not depend
+   on the key, so `backup_code` sign-in works unchanged, each code once.
+4. **Turning MFA off** (`POST /api/auth/mfa/disable`, `user_service.disable_mfa`) is refused and
+   changes nothing (`mfa_enabled`, `mfa_secret`, `backup_codes` and `tokens_valid_from` keep their
+   values): `disable_mfa` raises `ValueError("MFA secret unavailable; sign in with a backup code
+   and ask an administrator to reset MFA")`, the route answers `400` with that detail, and the
+   service logs `mfa_secret_unavailable` with `user_id`. Today it says "MFA is not enabled", which
+   is false and is what this rule replaces. Re-enrolment (`POST /api/auth/mfa/verify`) stays
+   refused while `mfa_enabled` is true, so a session cannot swap in a seed of its own.
+5. **Recovery.** For one account: the user signs in with a backup code, and an administrator,
+   after verifying identity out of band, runs `POST /api/admin/users/{id}/mfa-reset`
+   (`clear_mfa`), after which the user enrols afresh. A user with no backup codes left goes
+   straight to the administrator. For many accounts at once (a key dropped before rotation
+   finished): put the old key back at the end of `SETTINGS_ENCRYPTION_KEY`; every seed reads again
+   and nothing was lost, because rule 1 and the write-back rule kept the ciphertext in place.
+   Deliberately not offered: disabling MFA with a backup code, or any reset reachable by the
+   account holder alone (the reasoning in `clear_mfa`'s docstring).
 
 **Key rotation.** Same stance as SEC-06: `SETTINGS_ENCRYPTION_KEY` is a comma-separated list, the
 first key encrypts and every key decrypts. `python -m app.cli encrypt-user-secrets --apply`
-re-encrypts these four columns as well as the `user_settings` credentials, under the first key, and
-reports counts only. Rotation is therefore: prepend the new key, run the command, drop the old key.
-A token unreadable under every configured key is counted and left as is.
+re-encrypts these five columns as well as the `user_settings` credentials, under the first key,
+reading and writing raw column values, and reports counts only. Rotation is therefore: prepend the
+new key, run the command, drop the old key only once the command reports `unreadable: 0`. A value
+unreadable under every configured key is counted and left exactly as stored.
 
 **Migration.** One Alembic revision, after the current head:
 
-- `upgrade`: widen `oauth_accounts.access_token`/`refresh_token` to `Text`; then, for every row of
-  both tables, encrypt each non-NULL value of the four columns that is not already `enc:v1:`.
-  Idempotent: a second run changes nothing. Without a key (single-user) it leaves the values as
-  they are and says so in its output.
-- `downgrade`: decrypt every `enc:v1:` value of the four columns back to plaintext, then narrow the
-  two `oauth_accounts` columns to `String(1000)`. A value that cannot be decrypted aborts the
-  downgrade (nothing is narrowed or lost) rather than being dropped.
+- `upgrade`: widen `oauth_accounts.access_token`/`refresh_token` and `users.mfa_secret` to `Text`;
+  then, for every row of the three tables, encrypt each non-NULL value of the five columns that is
+  not already `enc:v1:`. Idempotent: a second run changes nothing. Without a key (single-user) it
+  leaves the values as they are and says so in its output.
+- `downgrade`: decrypt every `enc:v1:` value of the five columns back to plaintext, then narrow the
+  two `oauth_accounts` columns to `String(1000)` and `users.mfa_secret` to `String(64)`. A value
+  that cannot be decrypted aborts the downgrade (nothing is narrowed or lost) rather than being
+  dropped.
 - Neither direction prints or logs a value.
 
-`services/app/tests/contracts/test_third_party_tokens_contract.py` checks the column types, the
-accessor's behaviour under the test key, the migration and CLI coverage, and the API response
-models.
+`services/app/tests/contracts/test_secrets_at_rest_contract.py` checks the column types, the
+accessor's behaviour under the test key, the migration and CLI coverage, the API response models
+and the export exclusions, and drives the unreadable-seed rules through `disable_mfa` and the two
+sign-in routes.
 
 ### models.stripe-webhook-events v1
 
@@ -729,9 +757,11 @@ the second `INSERT` waits for the first transaction. If the first commits, the s
 and is a replay (step 1). If the first rolls back, the second claims and applies. The effect is
 applied exactly once either way, with no lock beyond the index.
 
-**Retention.** Rows are kept. Volume is a handful per subscriber per month, the table is the only
-record of which Stripe events changed a plan, and the ordering watermark is read from it. No beat
-task prunes it in v1. The table has no `user_id`, so account deletion leaves it; it holds only
+**Retention: kept indefinitely, by decision (user, 2026-10-16).** No beat task, CLI command or
+migration deletes rows from this table, and that is the design, not a gap to fill later. Volume is a
+handful per subscriber per month, the table is the only record of which Stripe events changed a
+plan, and the ordering watermark is read from it, so pruning would also weaken the stale-event
+check. Changing this needs a new version of this entry. The table has no `user_id`, so account deletion leaves it; it holds only
 Stripe's opaque ids. `account_service` lists it among the tables that belong to nobody.
 
 Required behaviour tests (`backend` unit, `qa` integration on Postgres): replay of an applied event
@@ -886,3 +916,6 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-16 | core.login-throttle-metrics | v1 | New contract, recorded before implementation: `studyaio_login_throttle_unavailable_total{action}`, `read`/`record`/`clear` (fail open) and `limit` (fail closed). Contract test written red. | M34-S3-BACKEND-012 |
 | 2026-10-16 | api.onboarding | v1 | New contract, recorded before implementation: `GET`/`PATCH /api/onboarding`, `users.onboarding_checklist`, pure `derive_status` with worked examples. Contract test written red. | M34-S3-BACKEND-012 |
 | 2026-10-16 | api.ai_feedback | v2 | Additive: `qa_answer` target type, `qa_answers` table (no text), `answer_id` on `QAResponse`; study cards use the existing `flashcard`/`quiz_question` types. Contract test written red. | M34-S3-BACKEND-012 |
+| 2026-10-16 | models.secrets-at-rest | v1 | Renamed from `models.third-party-tokens` before implementation and widened by user decision: `users.mfa_secret` (TOTP seed) joins the four token columns under the same `EncryptedText`, migration and rotation. An unreadable seed fails closed (refused like a wrong code, throttled, valueless `mfa_secret_unavailable` log, disable refused, recovery by backup code plus admin reset or by restoring the key). No ORM write-back of an unreadable value. Undecryptable log event renamed `secret_at_rest_undecryptable`. Contract test renamed and extended, red. | M34-S2-SEC-005 |
+| 2026-10-16 | api.ai_feedback | v1 | The v2 recorded earlier today is withdrawn before implementation, by user decision: no `qa_answer` target type, no `qa_answers` table, no `QAResponse.answer_id` (no UI calls `/api/qa/ask`). Nothing in the interface changes, so the entry returns to v1 with a note that study cards use the existing `flashcard`/`quiz_question` types. Contract test reduced to green pins. | M34-S3-BACKEND-012 |
+| 2026-10-16 | models.stripe-webhook-events | v1 | Retention made an explicit decision (user): rows are kept indefinitely; nothing prunes the table. No interface change. | M34-S2-SEC-008 |
