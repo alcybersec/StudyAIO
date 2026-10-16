@@ -193,3 +193,28 @@ class TestAdminAggregate:
         assert response.status_code == 200
         assert response.json()["by_rating"] == {"up": 1, "down": 1}
         assert m.await_args.kwargs.get("days") == 7
+def test_admin_response_model_types_recent_negative():
+    """SEC-009 N-3: the recent_negative rows are a typed model, not list[dict]."""
+    from app.api.ai_feedback import AdminAIFeedbackResponse, RecentNegativeItem
+
+    assert set(RecentNegativeItem.model_fields) == {
+        "target_type",
+        "reason",
+        "comment",
+        "course_id",
+        "created_at",
+    }
+    ann = AdminAIFeedbackResponse.model_fields["recent_negative"].annotation
+    assert ann == list[RecentNegativeItem]
+    row = {
+        "target_type": "summary",
+        "reason": None,
+        "comment": "c",
+        "course_id": None,
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "user_id": "must-not-leak",
+    }
+    out = AdminAIFeedbackResponse(
+        total=1, by_target_type={}, by_reason={}, by_rating={}, recent_negative=[row]
+    ).model_dump()
+    assert "user_id" not in out["recent_negative"][0]

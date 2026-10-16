@@ -258,3 +258,78 @@ class TestIndexArtifactChunks:
 
         # embed_texts called exactly once (batched)
         mock_provider.embed_texts.assert_called_once()
+class TestEmbedStoreSplit:
+    """AI-010: embedding is pure (no session); storing is a separate step."""
+
+    def test_embed_step_takes_no_session_and_returns_chunks_with_vectors(self):
+        import inspect
+
+        from app.services import index_service
+
+        sig = inspect.signature(index_service.embed_artifact_chunks)
+        assert "session" not in sig.parameters
+        provider = _provider_mock(dimensions=2)
+        provider.embed_texts.return_value = [[0.1, 0.2]]
+        embedded = index_service.embed_artifact_chunks(
+            [{"page_number": 1, "text": "Test content"}], provider
+        )
+        assert [c["text"] for c in embedded.chunks] == ["Test content"]
+        assert embedded.vectors == [[0.1, 0.2]]
+
+    def test_embed_step_with_no_text_never_touches_the_provider(self):
+        from app.services import index_service
+
+        provider = _provider_mock()
+        embedded = index_service.embed_artifact_chunks(
+            [{"page_number": 1, "text": ""}], provider
+        )
+        assert not embedded.chunks and not embedded.vectors
+        provider.embed_texts.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_async_embed_step_returns_same_shape(self):
+        from app.services import index_service
+
+        provider = _provider_mock(dimensions=2)
+        provider.embed_texts.return_value = [[0.5, 0.5]]
+        embedded = await index_service.aembed_artifact_chunks(
+            [{"page_number": 1, "text": "Test content"}], provider
+        )
+        assert embedded.vectors == [[0.5, 0.5]]
+        assert embedded.chunks[0]["page_ref"] == 1
+
+    @pytest.mark.asyncio
+    async def test_store_step_replaces_chunks_with_stable_ids_and_never_embeds(self):
+        from app.services import index_service
+        from app.services.index_service import EmbeddedChunks
+
+        session = AsyncMock()
+        session.add = MagicMock()
+        embedded = EmbeddedChunks(
+            chunks=[
+                {"text": "a", "page_ref": 1, "slide_title": None, "chunk_idx": 0},
+                {"text": "b", "page_ref": 2, "slide_title": "S", "chunk_idx": 1},
+            ],
+            vectors=[[0.1], [0.2]],
+        )
+        stored = await index_service.store_artifact_chunks(session, "art-9", embedded)
+        assert [c.stable_id for c in stored] == ["art-9_p1_c0", "art-9_p2_c1"]
+        assert [c.embedding for c in stored] == [[0.1], [0.2]]
+        assert session.execute.await_count == 1  # the delete of the old chunks
+        assert session.add.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_store_step_with_nothing_to_store_leaves_existing_chunks(self):
+        from app.services import index_service
+        from app.services.index_service import EmbeddedChunks
+
+        session = AsyncMock()
+        empty = EmbeddedChunks(chunks=[], vectors=[])
+        assert await index_service.store_artifact_chunks(session, "art-9", empty) == []
+        session.execute.assert_not_called()
+
+    def test_mismatched_vectors_are_refused(self):
+        from app.services.index_service import EmbeddedChunks
+
+        with pytest.raises(ValueError):
+            EmbeddedChunks(chunks=[{"text": "a"}], vectors=[])

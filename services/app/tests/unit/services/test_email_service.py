@@ -307,3 +307,62 @@ class TestVerifyEmailEmail:
         with patch("app.services.email_service._smtp_configured", return_value=False):
             result = await send_email_verification("to@test.com", "https://x.test/v?token=t")
             assert result is False
+class TestEmailLogsCarryNoSubject:
+    """SEC-009 N-5: subjects can name a file, course or exam; logs carry the template."""
+
+    SUBJECT = "StudyAIO: secret-notes.pdf processed for CSIT999"
+
+    @staticmethod
+    def _smtp(s) -> None:
+        s.smtp_host = "smtp.test.invalid"
+        s.smtp_port = 587
+        s.smtp_username = "u"
+        s.smtp_password.get_secret_value.return_value = "p"
+        s.smtp_from_email = "noreply@mail.test"
+        s.smtp_from_name = "S"
+        s.smtp_use_tls = True
+        s.app_base_url = "https://app.test"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fail", [False, True])
+    async def test_log_has_template_not_subject(self, fail) -> None:
+        from structlog.testing import capture_logs
+
+        from app.services import email_service
+
+        with (
+            patch("app.services.email_service.settings") as s,
+            patch(
+                "aiosmtplib.send",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("boom") if fail else None,
+            ),
+            capture_logs() as logs,
+        ):
+            self._smtp(s)
+            await email_service.send_templated_email(
+                "a@b.test", self.SUBJECT, "cards_due.html", due_count=1
+            )
+        events = [e for e in logs if e["event"] in ("email_sent", "email_send_failed")]
+        assert len(events) == 1
+        assert events[0]["event"] == ("email_send_failed" if fail else "email_sent")
+        assert events[0]["template"] == "cards_due.html"
+        assert "subject" not in events[0]
+        assert "secret-notes" not in str(events) and "CSIT999" not in str(events)
+
+    @pytest.mark.asyncio
+    async def test_inline_send_logs_a_stable_placeholder(self) -> None:
+        from structlog.testing import capture_logs
+
+        from app.services import email_service
+
+        with (
+            patch("app.services.email_service.settings") as s,
+            patch("aiosmtplib.send", new_callable=AsyncMock),
+            capture_logs() as logs,
+        ):
+            self._smtp(s)
+            await email_service.send_email("a@b.test", self.SUBJECT, "<p>x</p>")
+        sent = next(e for e in logs if e["event"] == "email_sent")
+        assert sent["template"] == "inline"
+        assert "subject" not in sent
