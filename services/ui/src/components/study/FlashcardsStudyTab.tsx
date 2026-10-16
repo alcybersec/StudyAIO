@@ -9,6 +9,7 @@ import { StudySetup } from './StudySetup'
 import { StudyCard } from './StudyCard'
 import { RatingButtons } from './RatingButtons'
 import { SessionSummary } from './SessionSummary'
+import type { Flashcard } from '../../types'
 import { AiFeedbackControl } from '../ui/AiFeedbackControl'
 import { isFromAiFeedback } from '../../lib/aiFeedbackTarget'
 
@@ -39,19 +40,27 @@ export function FlashcardsStudyTab() {
   )
   const reviewMutation = useRecordReview()
 
-  const cards = dueCards ?? []
+  // Rating a card invalidates the due query, so the live list shrinks by the card
+  // just rated. Walk a snapshot taken when the run starts instead, or the index
+  // would step over every other card.
+  const [deck, setDeck] = useState<Flashcard[] | null>(null)
+  if (phase === 'studying' && deck === null && dueCards && dueCards.length > 0) {
+    setDeck(dueCards)
+  }
+  const cards = useMemo(() => deck ?? dueCards ?? [], [deck, dueCards])
   const currentCard = cards[currentIndex]
-  const cardIds = useMemo(() => (dueCards ?? []).map((c) => c.id), [dueCards])
+  const cardIds = useMemo(() => cards.map((c) => c.id), [cards])
 
   const handleStart = useCallback(() => {
-    if (cards.length > 0) {
+    if ((dueCards?.length ?? 0) > 0) {
+      setDeck(dueCards ?? null)
       setCurrentIndex(0)
       setFlipped(false)
       setSessionRatings({})
       setTotalReviewed(0)
       setPhase('studying')
     }
-  }, [cards.length])
+  }, [dueCards])
 
   const handleFlip = useCallback(() => {
     setFlipped((f) => !f)
@@ -99,6 +108,7 @@ export function FlashcardsStudyTab() {
 
   const handleRestart = useCallback(() => {
     refetch()
+    setDeck(null)
     setPhase('setup')
     setCurrentIndex(0)
     setFlipped(false)
