@@ -20,6 +20,12 @@ pins hold them:
 
 ``os.chown`` is stubbed so the uid mode runs without root; the spawn arguments
 are what is pinned. Whether the image has the uid is devops' (DEVOPS-022).
+
+SEC-006 (option F): the AI pools now run as uid 999 and cannot drop. The uid
+mode is the *root-worker* path (``cli_root_worker``, euid pinned to 0); every
+other pin here runs as a non-root pool whose operator opted in to the shared
+uid (``cli_shared_uid_opt_in``), the one F deployment that still spawns. Both
+fixtures pin the euid, so the tier means the same as root and as a developer.
 """
 
 from __future__ import annotations
@@ -94,8 +100,12 @@ class _Cli:
 
 
 @pytest.fixture
-def isolated_env(tmp_path, monkeypatch):
-    """No developer login, no token file, operator path/model, private TMPDIR."""
+def isolated_env(tmp_path, monkeypatch, cli_shared_uid_opt_in):
+    """No developer login, no token file, operator path/model, private TMPDIR.
+
+    Runs as the SEC-006 F deployment that spawns (non-root pool, operator
+    opt-in), so the pins hold identically as root (CI) and as a developer.
+    """
     home = tmp_path / "home"
     home.mkdir()
     tmp = tmp_path / "tmp"
@@ -124,8 +134,13 @@ def isolated_env(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def unprivileged(monkeypatch):
-    """``CLAUDE_CLI_UID`` set; ``os.chown`` recorded instead of performed."""
+def unprivileged(monkeypatch, cli_root_worker):
+    """``CLAUDE_CLI_UID`` set on a root worker; ``os.chown`` recorded, not performed.
+
+    The drop needs root: on a non-root worker SEC-006 refuses ``CLAUDE_CLI_UID``
+    outright (``test_floor2_cli_shared_uid_refusal``). ``cli_root_worker`` pins
+    the euid to 0 and removes the opt-in, so this is the AGENT-01 path alone.
+    """
     monkeypatch.setenv("CLAUDE_CLI_UID", str(CLI_UID))
     chowned: list[tuple[str, int, int]] = []
     monkeypatch.setattr(os, "chown", lambda p, u, g: chowned.append((str(p), u, g)))

@@ -96,8 +96,13 @@ WORKER_SECRETS = {
 
 
 @pytest.fixture
-def clean_home(tmp_path, monkeypatch):
-    """No developer ``~/.claude`` login is read into the adapter's redaction set."""
+def clean_home(tmp_path, monkeypatch, cli_shared_uid_opt_in):
+    """No developer ``~/.claude`` login is read into the adapter's redaction set.
+
+    Every spawn pin in this module runs as the SEC-006 F deployment that still
+    spawns: a non-root AI pool whose operator accepted the shared uid. That is
+    the path prod reaches, and pinning the euid keeps CI (root) and dev alike.
+    """
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
@@ -588,6 +593,9 @@ async def test_floor2_sentry_event_for_a_cli_failure_carries_no_credential(
     cli = _Cli(returncode=1, out="error: overloaded")
     with pytest.raises(AgentError) as info:
         await _run_mode(mode, tmp_path, monkeypatch, cli)
+    # A refusal before the spawn (SEC-006) is an AgentError too, and carries no
+    # credential, so without this the pin passes with the CLI never reached.
+    assert cli.calls, f"{mode}: the CLI was never spawned, so this test proves nothing"
     sentry_sdk.capture_exception(info.value)
     sentry_sdk.flush()
 

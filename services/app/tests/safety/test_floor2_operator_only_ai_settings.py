@@ -72,8 +72,12 @@ def _legacy_overrides(backend: str = "claude_code") -> dict:
 
 
 @pytest.fixture
-def operator_cli(monkeypatch):
-    """The operator's ``CLAUDE_CODE_PATH`` / ``CLAUDE_MODEL``."""
+def operator_cli(monkeypatch, cli_shared_uid_opt_in):
+    """The operator's ``CLAUDE_CODE_PATH`` / ``CLAUDE_MODEL``.
+
+    On the SEC-006 F deployment that spawns (non-root pool, operator opt-in),
+    so argv is reached whatever uid runs the suite.
+    """
     from app.config import settings
 
     monkeypatch.setattr(settings, "claude_code_path", OPERATOR_CLI)
