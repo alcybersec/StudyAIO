@@ -43,7 +43,7 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | B4 | Worker → `claude -p` child | `--tools ""`, `--strict-mcp-config`, an allowlisted env, a fresh empty cwd per call, operator-only binary and model (SEC-01), a fixed system prompt, and the host-login copy redacted and removed. Since SEC-006 (option F) every worker pool runs as uid 999, so no pool can drop the child to 10001; instead the adapter **refuses** the CLI before reading any login or spawning (`ClaudeCliUnavailableError`, counted on `studyaio_claude_cli_spawn_refusals_total`) on a non-root multi-user worker, unless the operator sets `CLAUDE_CLI_SHARED_UID_ACCEPTED` or runs `SINGLE_USER_MODE`. `CLAUDE_CLI_UID` on a non-root worker is refused outright. A root worker keeps the AGENT-01 drop to `CLAUDE_CLI_UID` with `extra_groups=[]`. The CLI's `HOME` is a uid-999 `0700` tmpfs (`test_floor2_cli_shared_uid_refusal.py`, `test_floor2_worker_pools_nonroot.py`) | With the opt-in (or single-user) the child runs **at the worker's uid**: it can read `/proc/<worker>/environ` (JWT key, DB URL, `SETTINGS_ENCRYPTION_KEY`), the login mount and every tenant's `data/`. Its only containment then is `--tools ""` and the env allowlist. Prod users who chose `claude_code` lose it until the CLI sidecar (option B) lands. The refusal is a runtime error, not a startup one: the API still offers `claude_code` in settings (backend owes an availability surface) |
 | B5 | App → storage (`data/`, DB) | Floor 4: every blob delete is classified against ADR 0004. Re-summarize and regeneration keep versions and history. The account purge sweeps every summary blob, including deleted courses' (C5 ledger, id-shaped segments only) | Courses deleted before `a3ab6ce` are unattributable (R-020 residual) |
 | B6 | Credentials at rest | SEC-06: `enc:v1:` MultiFernet. A multi-user start refuses with no key and refuses the all-zero test key outside pytest. Ciphertext-shaped input is never stored verbatim. Export never returns credentials | OAuth and calendar tokens are plaintext (R-017). Rotation is manual (`encrypt-user-secrets`). The key lives in the same `.env` as every other secret |
-| B7 | Billing webhook | Stripe signature, dedupe by event id (`SET NX`), per-customer ordering, customer-scoped mutation (BILL-01, floor-1 pins) | Dedupe and ordering state lives in Redis with a TTL. Redis is ephemeral by policy, so a flush reopens replay and reordering for old events. Events in the same second are not ordered |
+| B7 | Billing webhook | Stripe signature, dedupe by event id (unique claim in `stripe_webhook_events`, same transaction as the effect), per-customer ordering under a per-customer advisory lock, customer-scoped mutation (BILL-01, SEC-008, floor-1 pins) | Since M34-S2-SEC-008 the state is in Postgres and kept indefinitely, so a Redis flush no longer reopens replay or reordering. Events in the same second are not ordered. An event with no `id` is applied without a claim row, so it is neither deduped nor a watermark (Stripe always sends one) |
 | B8 | Cost | Per-user quota, global daily ceilings and metering on upload, batch, retry, reclassify, merge, review-resolve, CourseOps, chat, Q&A, concepts and, since `421dfa9`, the instance-provider path of `POST /api/settings/test-ai` (QUOTA-01/COST-01, M32 G1). Every ADR 0003 request-time site's route checks the caller's quota before the spend and records against the caller (`test_floor3_request_time_ai_quota.py`) | Own-credential test-ai is rate limited (5/min) but not quota-checked, by design: it spends the user's money. Concepts records only a successful call; a failed provider call there is not metered |
 | B9 | CI/CD → prod | Images by SHA from GHCR. `deploy.sh` refuses without the encryption key (exit 68) or without a good pre-migration dump (exit 67), and migrates in a one-off container before start (R-028). `dependency-audit` CI job (pip-audit on the lock, npm audit high/critical; allowlist empty) | The key check tests presence, not validity: a malformed or test key passes the guard, then crash-loops after migrating. `pip-audit` is installed unpinned in CI. The host's `deploy.sh` is a manually installed copy and can drift from the repo |
 
@@ -307,3 +307,31 @@ Verdict: APPROVE (option F, with the §5 pins in this change).
    it spawns) or `cli_root_worker` (the AGENT-01 drop). Both pin `os.geteuid`, so the tier means the same as
    root (CI) and as a developer, and the Sentry pin asserts the CLI was reached.
 
+### 2026-10-16, M34 S2/S3 (M34-S2-SEC-008, M34-S3-BACKEND-012)
+
+Stripe dedupe and ordering in Postgres; case-insensitive course lookup on card/quiz add; the
+`LOGIN_THROTTLE_UNAVAILABLE{action}` counter; `GET`/`PATCH /api/onboarding`. Review:
+`docs/gates/M34/sec008-012-safety.md`. Verdict: APPROVE.
+
+1. **B7 hardened.** Claim (insert-or-skip on the unique event id) and effect share one transaction: a failed
+   effect rolls the claim back, so Stripe's retry applies, and a crash can no longer leave a dedupe mark
+   without its effect. The watermark is read under `pg_advisory_xact_lock` on the customer (contracts-safety
+   R2), and an event naming no customer skips ordering. A stale event is committed as `stale`, so its replay
+   is a no-op.
+2. **`stripe_webhook_events` belongs to nobody.** It holds Stripe's event id, type, customer id, `created` and
+   our decision: no `user_id`, payload or email. No route reads it. It is in `GLOBAL_TABLES` (the account
+   delete loop skips it) and `_tenant.UNOWNED_TABLES` (the floor-1 sweep classifies it).
+3. **Account deletion unlinks, never deletes (R4).** `_unlink_stripe_events` nulls `stripe_customer_id` with an
+   `UPDATE` on the deleted user's customers, read from `subscriptions` before that table's rows go. The event
+   rows and their dedupe survive (ruling 3, floor 4); the pseudonymous link to the person does not.
+4. **Onboarding (floor 1).** Every statement binds the caller. `quiz_attempts` has no `user_id`, so its branch
+   joins `quiz_questions` to `courses` and filters on `courses.user_id`. `PATCH` updates `users` keyed on
+   `users.id == caller`; the body forbids extra fields, so it cannot name a target.
+5. **`LOGIN_THROTTLE_UNAVAILABLE{action}` (floor 2).** One label, values `read`, `record`, `clear`, `limit`,
+   all literals. Closes the M33-S1-SAFETY-050 residual (a sustained fail-open is now visible on a scrape).
+   `ENUM_LABELS` in `test_floor2_metrics_labels.py` holds the closed set.
+6. **Residual (pre-existing, not floor 2).** `billing_service` logs Stripe customer ids
+   (`subscription_created`, `checkout_completed`, `webhook_subscription_not_found`). A customer id is a
+   pseudonymous identifier, not a credential; recommended for `backend`: drop it from those lines, or log a
+   hash. The advisory-lock key is a bound parameter carrying the customer id; the request
+   engine's `hide_parameters=True` (C6, `app/core/database.py`) keeps it out of error text.
