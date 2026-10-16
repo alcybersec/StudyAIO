@@ -1,6 +1,6 @@
 # StudyAIO threat model
 
-**Owner:** `safety` · **First written:** 2026-10-11 (M32 gate) · **Last delta:** 2026-10-15 (M33 gate, tree `58c4e91`)
+**Owner:** `safety` · **First written:** 2026-10-11 (M32 gate) · **Last delta:** 2026-10-16 (M34-S2, SEC-006 option F)
 
 This is a living document. Every gate's Floors file links to it and adds a dated delta (§5).
 The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
@@ -28,7 +28,7 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 - **Anonymous internet caller.** Reaches the reverse proxy, then `ui` and `api`. On prod, registration is invite-only.
 - **Authenticated user (tenant).** Can be malicious toward other tenants (floor 1) or toward the operator's budget.
 - **Uploaded content.** This is attacker-controlled text that reaches the AI (prompt injection) and the parsers
-  (PDF, DOCX and PPTX parsing in the root worker).
+  (PDF, DOCX and PPTX parsing in the worker pools, non-root uid 999 since SEC-006).
 - **AI provider.** Its error text can echo credentials back (R-012). Its output is untrusted (citations, JSON).
 - **Operator.** Trusted. Holds the env and the host.
 - **Supply chain.** Python and npm dependencies, base images, and GitLab CI.
@@ -40,7 +40,7 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | B1 | Internet → API | JWT cookie auth on every user route (unit `test_endpoint_authn_guard.py`). Since SEC-05, `SELF_HOSTED` is authenticated, and anonymous-as-admin needs `SINGLE_USER_MODE` (`test_floor1_anonymous_caller.py`). Startup refuses the committed JWT key whenever login is on (`test_floor2_jwt_default_secret.py`). Redis-backed rate limits fail closed on `/api/auth/*` (SEC-10) | Rate limits key on `request.client.host` and depend on `FORWARDED_ALLOW_IPS` (issue #39; startup warns only). `BIND_HOST` is declared by the operator, not observed, so a mis-declared loopback bind with a published port passes the single-user guard |
 | B2 | Tenant → tenant | Floor-1 route sweep (115 method+path pairs, 99 reaching owned tables at M32), function-level unscoped-query and optional-caller detectors (C6), owner-routed SSE events, worker-job pins (recovery, nudges, webhook) | R-010: `review_items` and `quiz_attempts` have no `user_id` and are scoped by join. Opted-in leaderboard rows are visible by the user's own choice |
 | B3 | API/worker → AI provider | Floor 3: `get_agent` and `get_embedding_provider` only at the ADR 0003 and ADR 0005 sites. Adapter-boundary redaction with `from None`. Global `AgentError` handler withholds the text (C4). User base URLs are public-only, re-checked at use, with no redirects (SEC-03) | DNS rebinding is narrowed (checked when the config is built and again before connecting), not closed by pinning |
-| B4 | Worker → `claude -p` child | `--tools ""`, `--strict-mcp-config`, an allowlisted env, a fresh empty cwd per call, operator-only binary and model (SEC-01), a fixed system prompt, a uid drop to 10001 with `extra_groups=[]` (AGENT-01), and the host-login copy redacted and removed | The uid drop is configured only by `CLAUDE_CLI_UID` in compose. If it is unset, the child stays root with only a log line. The two AI pools (`worker`, `worker-ondemand`) run as root (`user: "0:0"`) for the login mounts, and `worker` parses untrusted documents. `worker-maintenance` runs as the image user and holds no login (M33) |
+| B4 | Worker → `claude -p` child | `--tools ""`, `--strict-mcp-config`, an allowlisted env, a fresh empty cwd per call, operator-only binary and model (SEC-01), a fixed system prompt, and the host-login copy redacted and removed. Since SEC-006 (option F) every worker pool runs as uid 999, so no pool can drop the child to 10001; instead the adapter **refuses** the CLI before reading any login or spawning (`ClaudeCliUnavailableError`, counted on `studyaio_claude_cli_spawn_refusals_total`) on a non-root multi-user worker, unless the operator sets `CLAUDE_CLI_SHARED_UID_ACCEPTED` or runs `SINGLE_USER_MODE`. `CLAUDE_CLI_UID` on a non-root worker is refused outright. A root worker keeps the AGENT-01 drop to `CLAUDE_CLI_UID` with `extra_groups=[]`. The CLI's `HOME` is a uid-999 `0700` tmpfs (`test_floor2_cli_shared_uid_refusal.py`, `test_floor2_worker_pools_nonroot.py`) | With the opt-in (or single-user) the child runs **at the worker's uid**: it can read `/proc/<worker>/environ` (JWT key, DB URL, `SETTINGS_ENCRYPTION_KEY`), the login mount and every tenant's `data/`. Its only containment then is `--tools ""` and the env allowlist. Prod users who chose `claude_code` lose it until the CLI sidecar (option B) lands. The refusal is a runtime error, not a startup one: the API still offers `claude_code` in settings (backend owes an availability surface) |
 | B5 | App → storage (`data/`, DB) | Floor 4: every blob delete is classified against ADR 0004. Re-summarize and regeneration keep versions and history. The account purge sweeps every summary blob, including deleted courses' (C5 ledger, id-shaped segments only) | Courses deleted before `a3ab6ce` are unattributable (R-020 residual) |
 | B6 | Credentials at rest | SEC-06: `enc:v1:` MultiFernet. A multi-user start refuses with no key and refuses the all-zero test key outside pytest. Ciphertext-shaped input is never stored verbatim. Export never returns credentials | OAuth and calendar tokens are plaintext (R-017). Rotation is manual (`encrypt-user-secrets`). The key lives in the same `.env` as every other secret |
 | B7 | Billing webhook | Stripe signature, dedupe by event id (`SET NX`), per-customer ordering, customer-scoped mutation (BILL-01, floor-1 pins) | Dedupe and ordering state lives in Redis with a TTL. Redis is ephemeral by policy, so a flush reopens replay and reordering for old events. Events in the same second are not ordered |
@@ -258,3 +258,52 @@ QA-064) reviewed for the first time. Detail and the mutation table are in `docs/
 8. **Floor-1 sweep growth.** 169 `/api` routes, 133 swept pairs and 111 owned-reaching, against
    149, 115 and 99 at M32. The only violation is still the ruled opt-in leaderboard. No dependency
    moved in M33, so the R-040 lift rule did not apply.
+
+### 2026-10-16, M34 S2 (M34-S2-SEC-006, option F)
+
+The AI pools run non-root; the CLI's lost uid drop becomes a refusal. Review and options:
+`docs/gates/M34/sec006-safety.md`. Code: devops `fef057f` (cherry of `b27fc19`), ai `36ebc83`.
+Verdict: APPROVE (option F, with the §5 pins in this change).
+
+1. **Parsing is no longer root.** `worker`, `worker-ondemand` and `worker-maintenance` (and `api`, `beat`
+   through the image's `USER studyaio`) run as uid 999 in every stack: base, `prod`, `production`,
+   `selfhosted` and `selfhosted`+`production`, merged with `!reset`/`!override` honoured. A parser RCE on an
+   upload still reads every tenant's data and the worker env (it did at root too) but no longer gets root's
+   persistence in `/usr/local`/`/app`, root-owned writes into bind mounts, or the default capability set.
+   M32 N-3 is met.
+2. **The CLI is refused, not contained.** A uid-999 process cannot `setuid`/`chown`, so the AGENT-01 drop to
+   10001 (R-030) is impossible on these pools. `ensure_claude_cli_spawnable()` is the first statement of
+   `ClaudeCodeAdapter._run_once`: non-root + multi-user + no opt-in raises `ClaudeCliUnavailableError`
+   (a plain, non-retryable `AgentError`) before the setup token, the host login or the user's credentials
+   are opened, before any temp dir, chown or spawn. The stage fails once, and its `pipeline_runs` row names
+   the remedy and no credential. This holds for the instance login and per-user `claude_code` alike,
+   directly, through `get_agent` and through `classify`. Mutation-checked in a scratch copy: deleting the
+   guard call turns 30 pins red, and so do a guard that allows non-root and a guard that checks the
+   opt-in before `CLAUDE_CLI_UID`.
+3. **R-030 under F.** The control R-030 closed (child at 10001, denied on `/app/data` and
+   `/run/claude-host`, verified on the prod host 2026-10-10) no longer exists on the AI pools. What replaces
+   it: on prod, multi-user and without the opt-in, the CLI never runs, so there is no child to contain. If an
+   operator sets `CLAUDE_CLI_SHARED_UID_ACCEPTED=true`, the child runs at 999 and R-030's isolation is gone
+   by that operator's explicit choice. Compose and `.env.example` must never default the opt-in on (pinned).
+   R-030 should be annotated "superseded by SEC-006 F: refused, not isolated; re-closed by option B".
+4. **The 2026-10-10 `data/` `750` decision.** `750` with owner 999 kept uid 10001 out of tenants' files. Under
+   F it protects **nothing** against the CLI: a spawned child is uid 999, the owner. It still protects
+   against other host and container uids, so keep it. Against the CLI, the protection is the refusal: only
+   while the opt-in is off. Under option B the sidecar has no `data/` mount and the point is moot.
+5. **HOME and the login dir.** The CLI's `HOME` on each AI pool is `/tmp/claude-home`, a tmpfs with
+   `uid=999` and `mode=0700`, never `/`, `/root`, `/app`, `data/` or the login mount. The host login dir is
+   owned by 999 at `0700`/`0600`; the preflight and setup scripts never suggest a wider `chmod` (pinned).
+   Residual: the single-file mounts at `/root/.claude/*` are now unreachable (uid 999 cannot enter `/root`),
+   so the host-login fallback reads `CLAUDE_HOST_CREDENTIALS_FILE` under `/run/claude-host` only. That is an
+   availability point, not a floor one.
+6. **Pins assume uid 999 for `studyaio`.** The Dockerfile allocates it with `useradd -r` (first system
+   account on python:3.12-slim, observed 999). A pin holds that it stays the first system account; pinning
+   `-u 999 -g 999` explicitly is recommended (`devops`).
+7. **Metrics.** `studyaio_claude_cli_spawn_refusals_total{stage,outcome,error_class}` carries only literals and
+   a class name; it is the one reviewed `error_class=<local>` site in `test_floor2_metrics_labels.py`.
+8. **Floor-tier repair.** Twenty-seven spawn pins and ten more (37 in all) hit the guard on a non-root
+   developer run, and the Sentry pin passed *vacuously* (a refusal is an `AgentError` too). Each now names
+   the deployment it is about: `cli_shared_uid_opt_in` (non-root pool, opt-in; the path prod reaches when
+   it spawns) or `cli_root_worker` (the AGENT-01 drop). Both pin `os.geteuid`, so the tier means the same as
+   root (CI) and as a developer, and the Sentry pin asserts the CLI was reached.
+
