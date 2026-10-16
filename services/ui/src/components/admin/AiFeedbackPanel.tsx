@@ -3,6 +3,8 @@ import { useAdminAiFeedback } from '../../hooks/useApi'
 import { ErrorState, Skeleton } from '../ui'
 
 const DAYS = 30
+const UP_MARK = '\u25B2'
+const DOWN_MARK = '\u25BC'
 
 /** Counts keyed by a server-side name, largest first. */
 function CountList({ title, counts, label }: { title: string; counts: Record<string, number>; label: (k: string) => string }) {
@@ -16,6 +18,41 @@ function CountList({ title, counts, label }: { title: string; counts: Record<str
           <li key={key} className="flex items-center justify-between gap-3 text-xs">
             <span className="text-text">{label(key)}</span>
             <span className="tabular-nums text-text-muted">{n}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** Up/down vote counts per target type, most-voted first. */
+function VoteSplitList({
+  title,
+  votes,
+  label,
+}: {
+  title: string
+  votes: Record<string, { up: number; down: number }>
+  label: (k: string) => string
+}) {
+  const { t } = useTranslation()
+  const rows = Object.entries(votes).sort((a, b) => b[1].up + b[1].down - (a[1].up + a[1].down))
+  if (rows.length === 0) return null
+  return (
+    <div>
+      <h3 className="text-[11px] font-medium text-text-muted mb-1">{title}</h3>
+      <ul className="space-y-0.5">
+        {rows.map(([key, { up, down }]) => (
+          <li key={key} className="flex items-center justify-between gap-3 text-xs">
+            <span className="text-text">{label(key)}</span>
+            <span className="flex gap-2 tabular-nums text-text-muted">
+              <span aria-label={`${t('Helpful')}: ${up}`}>
+                <span aria-hidden="true">{UP_MARK}</span> {up}
+              </span>
+              <span aria-label={`${t('Not helpful')}: ${down}`}>
+                <span aria-hidden="true">{DOWN_MARK}</span> {down}
+              </span>
+            </span>
           </li>
         ))}
       </ul>
@@ -96,7 +133,7 @@ export function AiFeedbackPanel() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <CountList title={t('Rating')} counts={data.by_rating} label={ratingLabel} />
-            <CountList title={t('By content')} counts={data.by_target_type} label={typeLabel} />
+            <VoteSplitList title={t('By content')} votes={data.by_target_type} label={typeLabel} />
             <CountList title={t('Reasons for thumbs down')} counts={data.by_reason} label={reasonLabel} />
           </div>
           {data.recent_negative.length > 0 && (

@@ -1461,7 +1461,8 @@ export interface AIFeedbackPut {
 
 export interface AIFeedbackSummary {
   total: number
-  by_target_type: Record<string, number>
+  /** Votes per target type, split by direction (AdminAIFeedbackResponse). */
+  by_target_type: Record<string, { up: number; down: number }>
   by_reason: Record<string, number>
   by_rating: Record<string, number>
   recent_negative: {

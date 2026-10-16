@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AiFeedbackPanel } from './AiFeedbackPanel'
@@ -18,7 +18,7 @@ beforeEach(() => vi.clearAllMocks())
 describe('AiFeedbackPanel', () => {
   const data: AIFeedbackSummary = {
     total: 5,
-    by_target_type: { summary: 3, flashcard: 2 },
+    by_target_type: { summary: { up: 2, down: 1 }, flashcard: { up: 0, down: 2 } },
     by_reason: { inaccurate: 2 },
     by_rating: { '1': 3, '-1': 2 },
     recent_negative: [
@@ -53,6 +53,12 @@ describe('AiFeedbackPanel', () => {
     render(<AiFeedbackPanel />)
     expect(screen.getByText('5')).toBeInTheDocument()
     expect(screen.getByText('Summaries')).toBeInTheDocument()
+    // Per-type votes render as up/down counts, not as one number.
+    const summaries = screen.getByText('Summaries').closest('li') as HTMLElement
+    expect(summaries).toHaveTextContent('2')
+    expect(summaries).toHaveTextContent('1')
+    expect(within(summaries).getByLabelText('Helpful: 2')).toBeInTheDocument()
+    expect(within(summaries).getByLabelText('Not helpful: 1')).toBeInTheDocument()
     expect(screen.getByText('Not helpful')).toBeInTheDocument()
     expect(screen.getByText('wrong formula')).toBeInTheDocument()
     expect(vi.mocked(useAdminAiFeedback)).toHaveBeenCalledWith(30)
