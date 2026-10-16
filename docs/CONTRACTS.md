@@ -594,12 +594,18 @@ Optional explicit placement on upload (GL#49, audit PROD-07).
 * Failure to resolve the course (quota) fails before anything is stored. In batch it fails the
   request with the quota error (placement is a single choice for all files).
 
-### models.secrets-at-rest v1
+### models.secrets-at-rest v2
 
 Third-party tokens and the TOTP seed encrypted at rest (M34-S2-SEC-005, R-017, M32 N-7; the seed
 added by user decision 2026-10-16). Recorded first as `models.third-party-tokens v1`; renamed
 before any implementation, because the TOTP seed is ours, not a third party's. Amended before
 implementation with the `safety` review's required changes C3-C7 (`docs/gates/M34/contracts-safety.md`).
+v1 is implemented (`871b0f8`, `05b6acb`, revision `b2d4f6a8c0e1`).
+
+v2 (M34-S2-SEC-013, `safety` R1, user decision 2026-10-16): OAuth sign-in no longer stores the
+provider's tokens. `oauth_accounts.access_token` and `.refresh_token` are never written again, a
+migration nulls the stored values, and the columns stay, always NULL, for one release (see
+"v2: OAuth sign-in tokens are not stored" below). Everything else in v1 is unchanged.
 Provider: `backend` — `services/app/app/core/secret_box.py` (`EncryptedText`), `app/cli.py`
 (rotation), `app/services/user_service.py` and `app/api/auth.py` (the unreadable-seed rules
 below), `app/services/gcal_service.py` (the unreadable calendar-token rules below),
@@ -614,8 +620,8 @@ format.
 
 | Table | Column | Type | Null | Notes |
 |---|---|---|---|---|
-| `oauth_accounts` | `access_token` | `EncryptedText` | yes | was `String(1000)`; widened, since Fernet output is about 1.4x the input plus 57 bytes |
-| `oauth_accounts` | `refresh_token` | `EncryptedText` | yes | was `String(1000)` |
+| `oauth_accounts` | `access_token` | `EncryptedText` | yes | was `String(1000)`; widened, since Fernet output is about 1.4x the input plus 57 bytes. v2: never written, always NULL |
+| `oauth_accounts` | `refresh_token` | `EncryptedText` | yes | was `String(1000)`. v2: never written, always NULL |
 | `calendar_syncs` | `access_token` | `EncryptedText` | no | was `Text` |
 | `calendar_syncs` | `refresh_token` | `EncryptedText` | yes | was `Text` |
 | `users` | `mfa_secret` | `EncryptedText` | yes | was `String(64)`; widened, a 32-character base32 seed encrypts to well over 64 |
@@ -775,6 +781,124 @@ the docstring on downgrade; the `docs/security/` note) and CLI coverage, `hide_p
 engine, the API response models and the export exclusions, drives the unreadable-seed rules
 through `disable_mfa` and the two sign-in routes, and drives the calendar rules through
 `pull_events`, `push_events` and `disconnect_calendar`.
+
+**v2: OAuth sign-in tokens are not stored (M34-S2-SEC-013).** Provider: `backend` —
+`app/services/user_service.py`, `app/api/auth.py`, `app/core/oauth.py`; `data` — one Alembic
+revision. At `711f591` the two columns are written by `user_service.create_or_link_oauth` (the
+known-identity branch assigns both, the link branch passes both to `OAuthAccount(...)`), fed by
+the two keyword arguments in `api/auth.py::oauth_callback`, and read by nothing in `app/`: the
+only other mentions are the rotation list (`app/cli.py::RAW_SECRET_COLUMNS`) and the export
+exclusion. Sign-in needs the provider token once, inside the callback, to fetch the userinfo.
+Not storing it is stronger than encrypting it.
+
+1. **Signature.** `create_or_link_oauth(session, provider, provider_user_id, email,
+   email_verified=False, avatar_url=None) -> User`: the `access_token` and `refresh_token`
+   parameters are removed, so no caller can hand it one. `oauth_callback` passes neither. The
+   token dict from `exchange_code_for_token` stays a local of the callback, goes to
+   `fetch_userinfo` and nowhere else, and is never logged.
+2. **Writes.** The link branch constructs `OAuthAccount` without token keywords, so both are
+   NULL. The known-identity branch sets both to `None`: that sweeps a value the previous release
+   wrote during the deploy window (see Migration). Nothing else in `app/` assigns or reads
+   `OAuthAccount.access_token` or `.refresh_token`.
+3. **Do not ask for what is discarded.** `core.oauth.build_authorize_url` no longer sends
+   `access_type=offline` to Google: it requested a refresh token that is thrown away. `prompt=
+   select_account` stays. The scopes are unchanged.
+4. **The columns stay for one release, nullable, `EncryptedText`, always NULL.** They remain in the
+   column table above, in `RAW_SECRET_COLUMNS` and in `safety`'s floor-2 pin until they are
+   dropped: an always-NULL column costs nothing to rotate, and a value the previous release
+   writes during the deploy window is still ciphertext. Why not drop them now:
+   `infra/deploy/deploy.sh` runs the new image's migration while the old api keeps serving and
+   "relies on migrations being additive/backwards-compatible for one release". With the columns
+   dropped, the old api's `SELECT` on `oauth_accounts`, made by every OAuth sign-in in that
+   window, fails on an undefined column. The drop is `models.secrets-at-rest v3`, a later
+   task: remove the two mapped columns, the two `RAW_SECRET_COLUMNS` entries and the two
+   `MUST_ENCRYPT` entries of `test_floor2_tokens_at_rest.py` together, with a revision whose
+   downgrade re-adds both columns nullable and empty.
+5. **Migration.** One Alembic revision after the head of the day (`b2d4f6a8c0e1` at `711f591`):
+   - `upgrade` sets `access_token` and `refresh_token` to NULL on every `oauth_accounts` row where
+     either is non-NULL, with one Core `UPDATE` (over `sa.table`, not the ORM, so nothing decrypts).
+     It deletes no row and changes no other column: `user_id`, `provider` and `provider_user_id`
+     are the identity link and sign-in keeps working unchanged. It needs no key and prints the
+     number of rows changed, nothing else. A second run changes nothing.
+   - `downgrade` changes nothing. The nulled values **cannot be restored**, and the revision's
+     docstring says so in those words. The last copies are in the pre-deploy dump that
+     `deploy.sh` takes, as ciphertext; no code needs them.
+6. **Other references.** `account_service.EXPORT_EXCLUDED_COLUMNS` keeps both names (still needed
+   for `calendar_syncs`). Account deletion and the admin's delete remove `oauth_accounts` rows by
+   `user_id` without reading the tokens. The admin user detail selects `provider` only. The
+   `b2d4f6a8c0e1` downgrade handles NULL. Floor 4 covers uploads and generated content, not
+   provider tokens, so nulling them loses no user data (`safety` R1).
+7. **Residual, accepted.** Tokens already issued stay valid at the provider until they expire or
+   the user revokes the grant (GitHub OAuth-app tokens do not expire; a Google refresh token lasts
+   until revoked or unused for six months). Their scopes are sign-in only (`openid email profile`,
+   `read:user user:email`). Nothing revokes them at deploy: the copies we held are gone, and a
+   migration that calls providers is not acceptable.
+
+`services/app/tests/contracts/test_oauth_tokens_not_stored_contract.py` pins the v2 rules: the
+signature, the callback's call, both write branches, the authorize URL, and the revision run on a
+scratch SQLite database (rows kept, other columns unchanged, idempotent, downgrade a no-op with
+the docstring).
+
+### models.telegram-pairing-code v1
+
+Telegram pairing codes stored as SHA-256 digests (M34-S2-SEC-014, `safety` R3, user decision
+2026-10-16). Provider: `backend` — `app/services/telegram_service.py`; `data` —
+`app/models/telegram_link.py` (docstring only, no type change), one Alembic revision. Consumers:
+`backend` (`api/notifications.py`), `safety` (`test_floor2_tokens_at_rest.py` classifies the
+column). Today `generate_link_token` stores `secrets.token_urlsafe(32)` (43 characters) in
+`telegram_links.link_token` and `verify_link` looks it up as plaintext, so anyone who reads the
+database (dump, backup, replica, SQL injection) can pair their own Telegram chat with any account
+holding an unused code and receive that user's notifications. The codes never expire. Magic-link
+and invite tokens are already stored as digests; this does the same.
+
+**Column.** Unchanged in name and type: `telegram_links.link_token`, `String(64)`, nullable,
+unique, indexed. From this version it holds `hash_magic_link_token(code)`, the lowercase hex
+SHA-256 of the code (exactly 64 characters), or NULL once consumed. Keeping the name keeps the
+previous release's api working during the deploy window (the rule in `models.secrets-at-rest v2`
+item 4); the model's docstring says the column holds a digest.
+
+**Hash.** `app.core.auth.hash_magic_link_token`, reused as `invite_service` reuses it: SHA-256,
+not a slow KDF, because the code is a 256-bit random value with nothing to brute-force. No second
+digest function.
+
+**Rules.**
+
+1. `generate_link_token(session, user_id) -> str` still returns the plaintext code, generated as
+   today (`secrets.token_urlsafe(32)`), and stores only its digest. The plaintext exists in the
+   return value and in `TelegramLinkResponse.link_token` / `deep_link`, shown once to its own user
+   (like `MFASetupResponse.secret`), and nowhere else.
+2. `verify_link(session, token, chat_id, username=None) -> bool` looks the row up by
+   `TelegramLink.link_token == hash_magic_link_token(token)` in SQL, as magic links and invites
+   do. Nothing compares the presented code, or a digest, as a Python string; if a later change
+   must compare in Python it uses `hmac.compare_digest`. On a match it consumes the code
+   (`link_token = None`) as today; on a miss it raises
+   `TelegramLinkError("Invalid or expired link token")` as today. Presenting the stored digest
+   itself is a miss.
+3. **Never logged.** No log call in `telegram_service` or `api/notifications.py` carries the code
+   or its digest, on success or failure; `handle_telegram_webhook` does not log the `/start` text.
+   Events keep their current fields (`user_id`, `chat_id`).
+
+**Migration.** One Alembic revision (it may be the same revision as `models.secrets-at-rest v2`'s
+or its own):
+
+- `upgrade` sets `link_token` to NULL on every row where it is non-NULL (every unused code).
+  Rows are not deleted, and `verified`, `chat_id` and `username` are unchanged, so every linked
+  chat stays linked: a consumed code is already NULL. Prints the count only. Idempotent.
+- **Why invalidate rather than hash in place.** Hashing the stored plaintext would keep pending
+  codes working, but those codes never expire and their plaintext is already in every backup and
+  pre-deploy dump up to this one; hashing in place would leave each of them usable by whoever
+  holds such a dump. Invalidating costs a user with a pending code one click on "Link Telegram"
+  (most pending codes are abandoned: a used code is NULL already). This matches the user's
+  decision of 2026-10-16 ("unused codes at deploy time stop working"), which goes in the release
+  notes. A code generated by the previous release during the deploy window is stored as
+  plaintext and simply never matches; the user generates a new one.
+- `downgrade` also sets every non-NULL `link_token` to NULL: the previous code compares plaintext,
+  and a stored digest presented as a code would match. The docstring says so.
+- Both directions use a Core `UPDATE` over `sa.table` and need no key.
+
+`services/app/tests/contracts/test_telegram_pairing_code_contract.py` drives
+`generate_link_token`, `verify_link` and `handle_telegram_webhook` with a mock session and
+captured logs, and runs the revision on a scratch SQLite database.
 
 ### models.stripe-webhook-events v1
 
@@ -1018,3 +1142,5 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-16 | models.secrets-at-rest | v1 | Amended before implementation with `safety`'s required changes (`docs/gates/M34/contracts-safety.md` C3-C7); no version bump, nothing is implemented. C3: `EncryptedText(*, column)` and a `column` field (no value) on `secret_at_rest_undecryptable`. C4: `upgrade` calls `secret_box.check_startup()` first and aborts on a multi-user instance with no key; single-user prints counts and the CLI instruction. C5: `downgrade` decrypts and narrows in one transaction, aborts with no key, on an undecryptable value or on a value longer than its narrowed width (1000 / 64), prints counts only; the revision docstring and `docs/security/` state it removes at-rest protection. C6: `hide_parameters=True` on every engine (`app/core/database.py`, `alembic/env.py`) is a precondition. C7: calendar rules named (refresh and persist on a `None` access token; both `None` raise `CalendarSyncError("reconnect required")`, logged with `sync_id` only; disconnect skips revoke on `None`; revoke sends `data=`). Contract test extended, red. | M34-S2-SEC-005 |
 | 2026-10-16 | models.stripe-webhook-events | v1 | Amended before implementation with `safety`'s R2 and R4; no interface change. R2: per-customer `pg_advisory_xact_lock` before the watermark read; an event with no customer skips ordering. R4: account deletion nulls `stripe_customer_id` on that customer's rows, deleting none. Contract test extended, red. | M34-S2-SEC-008 |
 | 2026-10-16 | api.onboarding | v1 | Amended before implementation per `safety`'s review: the `quiz_attempts` branch of `check_in_done` is scoped through `courses.user_id` (`quiz_attempts` has no `user_id`); `set_checklist` is one `update(User)` keyed on `users.id == caller`, with a wiring assertion required. No interface change. Contract test extended, red. | M34-S3-BACKEND-012 |
+| 2026-10-16 | models.secrets-at-rest | v2 | OAuth sign-in tokens are not stored (`safety` R1): `create_or_link_oauth` loses its `access_token`/`refresh_token` parameters, the link branch writes NULL and the known-identity branch writes `None`, Google's authorize URL drops `access_type=offline`; one revision nulls both columns (no row deleted, no other column changed; downgrade cannot restore them). The columns stay, `EncryptedText` and always NULL, for one release because `deploy.sh` migrates while the old api serves; v3 drops them with the rotation and floor-2 entries. Contract test written red. | M34-S2-SEC-013 |
+| 2026-10-16 | models.telegram-pairing-code | v1 | New contract, recorded before implementation (`safety` R3): `telegram_links.link_token` holds `hash_magic_link_token(code)` (64 hex, same column), looked up by digest in SQL, never logged; the revision invalidates every unused code (NULL) in both directions rather than hashing in place, since the codes never expire and their plaintext is in existing dumps. Contract test written red. | M34-S2-SEC-014 |
