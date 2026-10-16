@@ -1,5 +1,6 @@
 """Billing service for Stripe subscription management."""
 
+import hashlib
 from datetime import UTC, datetime
 
 import structlog
@@ -15,6 +16,20 @@ from app.models.subscription import Subscription
 from app.models.usage_record import UsageRecord
 
 logger = structlog.get_logger()
+
+
+def customer_fingerprint(stripe_customer_id: str | None) -> str | None:
+    """Short non-reversible tag for correlating log lines; never the raw id.
+
+    Args:
+        stripe_customer_id: The Stripe customer id, or None.
+
+    Returns:
+        First 8 hex chars of its SHA-256, or None when there is no id.
+    """
+    if not stripe_customer_id:
+        return None
+    return hashlib.sha256(stripe_customer_id.encode()).hexdigest()[:8]
 
 
 async def get_subscription(session: AsyncSession, user_id: str) -> Subscription | None:
@@ -57,7 +72,11 @@ async def get_or_create_subscription(
     )
     session.add(sub)
     await session.flush()
-    logger.info("subscription_created", user_id=user_id, stripe_customer_id=stripe_customer_id)
+    logger.info(
+        "subscription_created",
+        user_id=user_id,
+        customer_fp=customer_fingerprint(stripe_customer_id),
+    )
     return sub
 
 
@@ -175,7 +194,7 @@ async def handle_webhook_event(
     obj = data.get("object", {})
     if event_type not in _SUBSCRIPTION_EVENTS:
         if event_type == "checkout.session.completed":
-            logger.info("checkout_completed", customer=obj.get("customer"))
+            logger.info("checkout_completed", customer_fp=customer_fingerprint(obj.get("customer")))
         else:
             logger.debug("webhook_event_ignored", event_type=event_type)
         return
@@ -261,7 +280,9 @@ async def _handle_subscription_update(session: AsyncSession, sub_obj: dict) -> N
     )
     sub = result.scalar_one_or_none()
     if not sub:
-        logger.warning("webhook_subscription_not_found", customer_id=customer_id)
+        logger.warning(
+            "webhook_subscription_not_found", customer_fp=customer_fingerprint(customer_id)
+        )
         return
 
     sub.stripe_subscription_id = stripe_sub_id
@@ -307,7 +328,9 @@ async def _handle_subscription_deleted(session: AsyncSession, sub_obj: dict) -> 
     )
     sub = result.scalar_one_or_none()
     if not sub:
-        logger.warning("webhook_subscription_not_found", customer_id=customer_id)
+        logger.warning(
+            "webhook_subscription_not_found", customer_fp=customer_fingerprint(customer_id)
+        )
         return
 
     deleted_id = sub_obj.get("id")

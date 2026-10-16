@@ -359,20 +359,21 @@ class TestNoStripeCustomerIdInLogs:
 
     @pytest.mark.asyncio
     async def test_logs_carry_no_customer_id(self, mock_session):
-        import structlog
-
         none_result = MagicMock()
         none_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = none_result
         mock_session.add = MagicMock()
-        with structlog.testing.capture_logs() as logs:
+        # A patched logger, not capture_logs: other tests leave structlog's cached
+        # loggers configured, which capture_logs cannot intercept.
+        with patch.object(billing_service, "logger") as log:
             await billing_service.get_or_create_subscription(mock_session, "u1", self.CUS)
             await billing_service.handle_webhook_event(
                 mock_session, "checkout.session.completed", {"object": {"customer": self.CUS}}
             )
             await billing_service._handle_subscription_update(mock_session, {"customer": self.CUS})
             await billing_service._handle_subscription_deleted(mock_session, {"customer": self.CUS})
-        events = [entry["event"] for entry in logs]
+        logs = log.method_calls
+        events = [call.args[0] for call in logs]
         assert "subscription_created" in events
         assert "checkout_completed" in events
         assert events.count("webhook_subscription_not_found") == 2

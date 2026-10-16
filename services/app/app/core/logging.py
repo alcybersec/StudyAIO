@@ -16,7 +16,16 @@ REDACTED_EMAIL = "[redacted-email]"
 #: SQLAlchemy's `[parameters: ...]` section echoes bound values (tokens, emails,
 #: ciphertext). Engines hide it; this is the backstop. Runs to the "(Background on
 #: this error" trailer, or end of text, since the value may itself contain `]`.
-_PARAMS_RE = re.compile(r"\[parameters:.*?(?=\n\(Background on this error|\Z)", re.DOTALL)
+#: Skips an already-redacted section (the filter re-scrubs rendered lines) and, on
+#: a rendered JSON line, also stops at the end of the JSON string (an unescaped
+#: quote that opens the next key or closes the object) or at an escaped newline
+#: before the trailer, so the event/level/timestamp after it survive.
+_PARAMS_RE = re.compile(
+    r"\[parameters:(?! redacted\]).*?"
+    r"(?=\n\(Background on this error|\\n\(Background on this error"
+    r'|(?<!\\)"\s*(?:,\s*"[A-Za-z_]+"\s*:|\})|\Z)',
+    re.DOTALL,
+)
 REDACTED_PARAMS = "[parameters: redacted]"
 
 
