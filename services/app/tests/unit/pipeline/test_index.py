@@ -88,7 +88,8 @@ class TestIndexStage:
 
         # Mock index service
         chunk_record = MagicMock()
-        mock_index_svc.index_artifact_chunks = AsyncMock(return_value=[chunk_record])
+        mock_index_svc.aembed_artifact_chunks = AsyncMock(return_value=MagicMock())
+        mock_index_svc.store_artifact_chunks = AsyncMock(return_value=[chunk_record])
 
         result = await _index("art-001")
 

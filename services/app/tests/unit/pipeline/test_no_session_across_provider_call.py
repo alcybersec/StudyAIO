@@ -392,22 +392,58 @@ async def test_index_releases_the_session_before_embedding():
         return [[0.0, 0.0, 0.0] for _ in texts]
 
     provider.embed_texts = embed
-    chunks = [{"text": "Content", "page_ref": 1, "chunk_idx": 0}]
     store = AsyncMock(return_value=[MagicMock()])
     with (
         patch.object(index, "async_session_factory", h.factory()),
         patch.object(index, "get_embedding_provider", return_value=provider),
-        patch.object(index.index_service, "chunk_pages", return_value=chunks),
-        patch.object(index.index_service, "index_artifact_chunks", store),
+        patch.object(
+            index.index_service,
+            "chunk_pages",
+            return_value=[{"text": "Content", "page_ref": 1, "chunk_idx": 0}],
+        ),
+        patch.object(index.index_service, "store_artifact_chunks", store),
     ):
         result = await index._index("art-1")
 
     assert result["status"] == "indexed"
     h.assert_clean()
     # The vectors computed off-session are the ones that get stored.
-    assert store.await_args.kwargs["embedding_provider"].embed_texts(["Content"]) == [
-        [0.0, 0.0, 0.0]
-    ]
+    assert store.await_args.args[2].vectors == [[0.0, 0.0, 0.0]]
+
+
+@pytest.mark.asyncio
+async def test_reembed_refresh_releases_the_session_before_embedding():
+    """The refresh path reads the stored chunks, so a transaction really is open."""
+    from app.pipeline import index
+
+    h = Harness(
+        {
+            "lecture_artifacts": _artifact(status="indexed"),
+            "extractions": _extraction(),
+            "chunks": "w " * 40,
+        }
+    )
+    provider = MagicMock()
+    provider.dimensions = 3
+    provider._input_window.return_value = 20
+    provider._word_tokens.side_effect = lambda words: [1 for _ in words]
+
+    def embed(texts):
+        h._enter("embed_texts")
+        return [[0.0, 0.0, 0.0] for _ in texts]
+
+    provider.embed_texts = embed
+    store = AsyncMock(return_value=[MagicMock()])
+    with (
+        patch.object(index, "async_session_factory", h.factory()),
+        patch.object(index, "get_embedding_provider", return_value=provider),
+        patch.object(index.index_service, "store_artifact_chunks", store),
+    ):
+        result = await index._index("art-1", refresh="apply")
+
+    assert result["status"] == "reembedded"
+    assert "embed_texts" in h.calls
+    h.assert_clean()
 
 
 @pytest.mark.asyncio
