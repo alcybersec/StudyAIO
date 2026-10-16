@@ -70,7 +70,7 @@ class TestIsolation:
     async def test_user_group_set_when_configured(self, monkeypatch):
         monkeypatch.setenv("CLAUDE_CLI_UID", "10001")
         monkeypatch.setenv("CLAUDE_CLI_GID", "10002")
-        with patch("os.chown"):
+        with patch("os.chown"), patch("os.geteuid", return_value=0):  # root worker
             kw = (await _run())["kwargs"]
         assert kw["user"] == 10001 and kw["group"] == 10002
         assert kw["env"]["HOME"] == kw["cwd"]
@@ -78,6 +78,6 @@ class TestIsolation:
     async def test_gid_defaults_to_uid(self, monkeypatch):
         monkeypatch.setenv("CLAUDE_CLI_UID", "10001")
         monkeypatch.delenv("CLAUDE_CLI_GID", raising=False)
-        with patch("os.chown"):
+        with patch("os.chown"), patch("os.geteuid", return_value=0):  # root worker
             kw = (await _run())["kwargs"]
         assert kw["group"] == 10001
