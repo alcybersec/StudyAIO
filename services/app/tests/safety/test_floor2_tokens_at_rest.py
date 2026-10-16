@@ -26,6 +26,24 @@ Pins:
 * the call-time ``structlog.get_logger()`` sites still pass the redaction
   chain, and the calendar revoke keeps the token out of the URL (C7).
 
+M34-S2-SEC-013 (``models.secrets-at-rest v2``) stops storing the OAuth sign-in
+tokens; M34-S2-SEC-014 (``models.telegram-pairing-code v1``) stores the Telegram
+pairing code as a SHA-256 digest. Review: ``docs/gates/M34/sec013-014-safety.md``.
+The two ``oauth_accounts`` columns stay in ``MUST_ENCRYPT`` until they are dropped
+(``models.secrets-at-rest v3``): a value the previous release writes during the
+deploy window is still ciphertext. Further pins:
+
+* no code path writes a non-``None`` OAuth token: ``create_or_link_oauth`` takes
+  none, no ``app/`` code assigns or inserts one, both branches leave the row with
+  ``None``, and the callback hands the provider's token dict to ``fetch_userinfo``
+  only and never logs it; Google is not asked for a refresh token;
+* the pairing code is never stored or logged in plaintext (nor its digest logged),
+  is looked up by digest in SQL, and presenting the stored digest is a miss;
+* revision ``c3e5a7b9d1f2`` deletes no row and touches no identity or link column
+  (floor 4), its downgrade restores nothing for OAuth and nulls every digest.
+
+Not pinned: pairing codes still never expire (R-048, open).
+
 The plaintext test key is the root conftest's public all-zero key.
 """
 
@@ -55,8 +73,8 @@ MUST_ENCRYPT = {
 NOT_ENCRYPTED_REVIEWED = {
     ("calendar_syncs", "sync_token"): "Google's incremental-sync cursor; authorises nothing alone",
     ("telegram_links", "link_token"): (
-        "our own one-time pairing code, not a third-party credential; hashing it is "
-        "a separate follow-up (contracts-safety.md R3)"
+        "SHA-256 digest of our own one-time pairing code (models.telegram-pairing-code v1, "
+        "SEC-014); the plaintext is never stored, so encrypting the digest adds nothing"
     ),
 }
 
@@ -604,3 +622,529 @@ def test_floor2_downgrade_abort_paths_change_nothing(monkeypatch, case):
         module.downgrade()
     assert op.altered == [], "the downgrade narrowed a column before aborting"
     assert _stored(conn, tables) == before, "the downgrade wrote values before aborting"
+
+
+# ── SEC-013: OAuth sign-in tokens are never stored ─────────────────────────
+
+REFRESH_SENTINEL = "1//FLOOR2-SENTINEL-refresh-token-0123456789"
+_OAUTH_TOKEN_ATTRS = {"access_token", "refresh_token"}
+
+
+def test_floor2_create_or_link_oauth_accepts_no_provider_token():
+    """No caller can hand the service a token: no named parameter, no ``**kwargs``."""
+    import inspect
+
+    from app.services.user_service import create_or_link_oauth
+
+    params = inspect.signature(create_or_link_oauth).parameters
+    assert not _OAUTH_TOKEN_ATTRS & set(params), sorted(params)
+    assert not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()), sorted(params)
+
+
+def _is_none(node) -> bool:
+    import ast
+
+    return isinstance(node, ast.Constant) and node.value is None
+
+
+def test_floor2_no_app_code_writes_a_non_none_oauth_token():
+    """Static: in every module that touches ``OAuthAccount``, a token write is ``None`` or nothing.
+
+    Covers the constructor keyword, attribute assignment (``acct.access_token = …``),
+    ``setattr(acct, "access_token", …)`` and Core ``.values(access_token=…)``.
+    """
+    import ast
+
+    from tests.safety._source import app_modules, parse, rel
+
+    offences: list[str] = []
+    none_writes = 0
+    scanned: list[str] = []
+    for path in app_modules(exclude=("app/models/",)):
+        src = path.read_text(encoding="utf-8")
+        if "OAuthAccount" not in src and "oauth_account" not in src:
+            continue
+        scanned.append(rel(path))
+        for node in ast.walk(parse(path)):
+            if isinstance(node, ast.Assign | ast.AnnAssign | ast.AugAssign):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for t in targets:
+                    if isinstance(t, ast.Attribute) and t.attr in _OAUTH_TOKEN_ATTRS:
+                        if isinstance(node, ast.AugAssign) or not _is_none(node.value):
+                            offences.append(f"{rel(path)}:{node.lineno} {ast.unparse(node)}")
+                        else:
+                            none_writes += 1
+            elif isinstance(node, ast.Call):
+                fn = node.func
+                name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
+                if name == "OAuthAccount" and any(
+                    kw.arg in _OAUTH_TOKEN_ATTRS or kw.arg is None for kw in node.keywords
+                ):
+                    offences.append(f"{rel(path)}:{node.lineno} {ast.unparse(node)}")
+                if name == "values" and any(
+                    kw.arg in _OAUTH_TOKEN_ATTRS and not _is_none(kw.value) for kw in node.keywords
+                ):
+                    offences.append(f"{rel(path)}:{node.lineno} {ast.unparse(node)}")
+                if (
+                    name == "setattr"
+                    and len(node.args) >= 3
+                    and isinstance(node.args[1], ast.Constant)
+                    and node.args[1].value in _OAUTH_TOKEN_ATTRS
+                    and not _is_none(node.args[2])
+                ):
+                    offences.append(f"{rel(path)}:{node.lineno} {ast.unparse(node)}")
+    assert "app/services/user_service.py" in scanned, scanned
+    # The known-identity branch sweeps both columns to None: proof the scan sees writes.
+    assert none_writes >= 2, f"scan saw {none_writes} None writes; vacuous over {scanned}"
+    assert not offences, "OAuth provider token written (SEC-013: never stored):\n" + "\n".join(
+        offences
+    )
+
+
+class _RecSession:
+    """MiniSession over MiniDB that records statements and answers commit/rollback."""
+
+    def __init__(self, db) -> None:
+        from tests.safety._minidb import MiniSession
+
+        self._inner = MiniSession(db)
+        self.statements: list = []
+
+    async def execute(self, statement, *a, **k):
+        self.statements.append(statement)
+        return await self._inner.execute(statement, *a, **k)
+
+    async def scalar(self, statement, *a, **k):
+        self.statements.append(statement)
+        return await self._inner.scalar(statement, *a, **k)
+
+    def add(self, obj, *a, **k) -> None:
+        self._inner.add(obj)
+
+    async def delete(self, obj) -> None:
+        await self._inner.delete(obj)
+
+    async def flush(self, *a, **k) -> None:
+        return None
+
+    async def commit(self) -> None:
+        return None
+
+    async def rollback(self) -> None:
+        return None
+
+
+def _oauth_db(*, existing_link: bool):
+    from app.models.oauth_account import OAuthAccount
+    from app.models.user import User
+    from tests.safety._minidb import MiniDB
+
+    db = MiniDB()
+    db.add(
+        User(
+            id="floor2-oauth-user",
+            email="floor2-oauth@example.com",
+            username="floor2oauth",
+            hashed_password=None,
+            role="user",
+            tier="free",
+            is_active=True,
+            email_verified=True,
+            mfa_enabled=False,
+        )
+    )
+    if existing_link:
+        # A value the previous release wrote during the deploy window.
+        db.add(
+            OAuthAccount(
+                id="floor2-oauth-acct",
+                user_id="floor2-oauth-user",
+                provider="google",
+                provider_user_id="goog-floor2",
+                access_token=SENTINEL,
+                refresh_token=REFRESH_SENTINEL,
+            )
+        )
+    return db
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing_link", [True, False], ids=["known_identity", "link"])
+async def test_floor2_both_oauth_branches_leave_the_row_without_tokens(existing_link):
+    """Real service over MiniDB: the account row exists, is the user's, and holds no token."""
+    from app.services import user_service
+
+    db = _oauth_db(existing_link=existing_link)
+    user = await user_service.create_or_link_oauth(
+        _RecSession(db),
+        "google",
+        "goog-floor2",
+        "floor2-oauth@example.com",
+        email_verified=True,
+    )
+    assert user is not None and user.id == "floor2-oauth-user"
+    [acct] = db.rows["oauth_accounts"]
+    assert (acct.user_id, acct.provider, acct.provider_user_id) == (
+        "floor2-oauth-user",
+        "google",
+        "goog-floor2",
+    ), "the identity link changed"
+    assert (acct.access_token, acct.refresh_token) == (None, None), "a provider token was stored"
+
+
+def _callback_userinfo():
+    from app.core.oauth import OAuthUserInfo
+
+    return OAuthUserInfo(
+        provider_user_id="goog-floor2",
+        email="floor2-oauth@example.com",
+        name="Floor Two",
+        avatar_url=None,
+        email_verified=True,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["success", "service_error"])
+async def test_floor2_oauth_callback_uses_the_token_for_userinfo_only_and_never_logs_it(
+    async_client, log_stream, outcome
+):
+    """The token dict reaches ``fetch_userinfo`` (positive control) and nothing else."""
+    from app.core.oauth import OAUTH_STATE_COOKIE
+
+    token = {"access_token": SENTINEL, "refresh_token": REFRESH_SENTINEL, "id_token": SENTINEL}
+    user = _mfa_user("unused")
+    user.mfa_enabled = False
+    service = AsyncMock(return_value=user)
+    if outcome == "service_error":
+        service.side_effect = RuntimeError("flush failed")
+    fetch = AsyncMock(return_value=_callback_userinfo())
+    async_client.cookies.set(OAUTH_STATE_COOKIE, "floor2-state")
+    try:
+        with (
+            patch("app.api.auth.validate_oauth_state", new_callable=AsyncMock, return_value=True),
+            patch(
+                "app.api.auth.exchange_code_for_token", new_callable=AsyncMock, return_value=token
+            ),
+            patch("app.api.auth.fetch_userinfo", fetch),
+            patch("app.api.auth.user_service.create_or_link_oauth", service),
+        ):
+            response = await async_client.get(
+                "/api/auth/oauth/google/callback?code=abc&state=floor2-state",
+                follow_redirects=False,
+            )
+    finally:
+        async_client.cookies.clear()
+    assert response.status_code == 302, response.text
+    fetch.assert_awaited_once()
+    assert token in fetch.await_args.args, "fetch_userinfo no longer gets the token (vacuous)"
+    service.assert_awaited_once()
+    passed = repr(service.await_args)
+    assert SENTINEL not in passed and REFRESH_SENTINEL not in passed, passed
+    assert not _OAUTH_TOKEN_ATTRS & set(service.await_args.kwargs)
+    text = log_stream.getvalue()
+    assert "oauth_" in text, "no callback log line reached the handler (vacuous)"
+    assert SENTINEL not in text and REFRESH_SENTINEL not in text, text
+    assert SENTINEL not in response.headers.get("location", "")
+
+
+def test_floor2_google_authorize_url_does_not_ask_for_a_refresh_token():
+    """``access_type=offline`` requested a refresh token that is then discarded."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from app.core.oauth import build_authorize_url
+
+    config = {
+        "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "client_id": "floor2-client",
+        "scope": "openid email profile",
+    }
+    with patch("app.core.oauth.get_provider_config", return_value=config):
+        url = build_authorize_url("google", "floor2-state")
+    query = parse_qs(urlsplit(url).query)
+    assert query.get("state") == ["floor2-state"], url  # the URL was really built
+    assert "access_type" not in query and "offline" not in url, url
+    assert query.get("scope") == ["openid email profile"], "scopes changed"
+
+
+# ── SEC-014: the Telegram pairing code is a digest at rest ─────────────────
+
+
+def _digest(code: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(code.encode()).hexdigest()
+
+
+def _telegram_db():
+    """User A with no link yet; user B with a pending code (stored as its digest)."""
+    from app.models.telegram_link import TelegramLink
+    from tests.safety._minidb import MiniDB
+
+    db = MiniDB()
+    db.add(
+        TelegramLink(
+            id="tl-b",
+            user_id="floor2-tg-b",
+            link_token=_digest("code-of-user-b"),
+            verified=False,
+        )
+    )
+    return db
+
+
+def _stored_values(db) -> list[str]:
+    return [
+        str(v)
+        for bucket in db.rows.values()
+        for obj in bucket
+        for v in db.row(obj).values()
+        if v is not None
+    ]
+
+
+def _bound_values(statement) -> list:
+    from sqlalchemy.dialects import postgresql
+
+    return list(statement.compile(dialect=postgresql.dialect()).params.values())
+
+
+@pytest.mark.asyncio
+async def test_floor2_pairing_code_is_stored_and_looked_up_only_as_its_digest(log_stream):
+    from app.core.exceptions import TelegramLinkError
+    from app.services import telegram_service
+
+    db = _telegram_db()
+    session = _RecSession(db)
+
+    code = await telegram_service.generate_link_token(session, "floor2-tg-a")
+    digest = _digest(code)
+    [link_a] = [o for o in db.rows["telegram_links"] if o.user_id == "floor2-tg-a"]
+    assert link_a.link_token == digest and len(digest) == 64
+    assert not any(code in v for v in _stored_values(db)), "the plaintext code was stored"
+
+    # Regenerating replaces the digest; the old code stops matching.
+    code2 = await telegram_service.generate_link_token(session, "floor2-tg-a")
+    assert link_a.link_token == _digest(code2) and code2 != code
+    assert not any(code2 in v for v in _stored_values(db))
+    with pytest.raises(TelegramLinkError):
+        await telegram_service.verify_link(session, code, 4242)
+
+    # Presenting the stored digest is a miss: someone with a dump cannot pair.
+    with pytest.raises(TelegramLinkError):
+        await telegram_service.verify_link(session, _digest(code2), 4242)
+    assert link_a.verified is False and link_a.chat_id is None
+
+    # The real code pairs A, by digest in SQL, and leaves B's pending row alone.
+    session.statements.clear()
+    assert await telegram_service.verify_link(session, code2, 4242, "floor2") is True
+    [lookup] = session.statements
+    bound = _bound_values(lookup)
+    assert _digest(code2) in bound and code2 not in bound, bound
+    assert (link_a.verified, link_a.chat_id, link_a.link_token) == (True, 4242, None)
+    [link_b] = [o for o in db.rows["telegram_links"] if o.user_id == "floor2-tg-b"]
+    assert (link_b.verified, link_b.chat_id, link_b.link_token) == (
+        False,
+        None,
+        _digest("code-of-user-b"),
+    )
+
+    text = log_stream.getvalue()
+    assert "telegram_link_token_generated" in text and "telegram_link_verified" in text, text
+    for secret in (code, code2, _digest(code), _digest(code2)):
+        assert secret not in text, "a pairing code or its digest was logged"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("which", ["valid", "digest", "unknown"])
+async def test_floor2_webhook_start_never_logs_the_code(log_stream, which):
+    from app.services import telegram_service
+
+    db = _telegram_db()
+    presented = {
+        "valid": "code-of-user-b",
+        "digest": _digest("code-of-user-b"),
+        "unknown": "floor2-no-such-code",
+    }[which]
+    update = {
+        "message": {
+            "text": f"/start {presented}",
+            "chat": {"id": 777},
+            "from": {"username": "floor2"},
+        }
+    }
+    reply = await telegram_service.handle_telegram_webhook(_RecSession(db), update)
+    [link_b] = db.rows["telegram_links"]
+    assert link_b.verified is (which == "valid"), reply
+    text = log_stream.getvalue()
+    for secret in ("code-of-user-b", _digest("code-of-user-b"), presented):
+        assert secret not in text, f"{which}: pairing code or digest logged"
+
+
+def test_floor2_no_telegram_log_call_carries_a_code():
+    """Static: log calls in the two Telegram modules never pass the code, its digest or /start text."""
+    import ast
+
+    from tests.safety._source import APP_ROOT, parse
+
+    banned = {"token", "code", "link_token", "deep_link", "text", "update", "message", "body"}
+    offences, seen = [], 0
+    for rel_path in ("services/telegram_service.py", "api/notifications.py"):
+        path = APP_ROOT / rel_path
+        for node in ast.walk(parse(path)):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "logger"
+            ):
+                continue
+            seen += 1
+            for arg in [*node.args[1:], *(kw.value for kw in node.keywords)]:
+                names = {n.id for n in ast.walk(arg) if isinstance(n, ast.Name)}
+                names |= {n.attr for n in ast.walk(arg) if isinstance(n, ast.Attribute)}
+                if names & banned:
+                    offences.append(f"{rel_path}:{node.lineno} {ast.unparse(node)}")
+    assert seen >= 3, "no log calls found (vacuous)"
+    assert not offences, "\n".join(offences)
+
+
+# ── revision c3e5a7b9d1f2: nothing lost, downgrade semantics ───────────────
+
+SEC013_REVISION = "c3e5a7b9d1f2"
+
+
+def _sec013_db():
+    import sqlalchemy as sa
+
+    engine = sa.create_engine("sqlite://")
+    md = sa.MetaData()
+    oauth = sa.Table(
+        "oauth_accounts",
+        md,
+        sa.Column("id", sa.Text, primary_key=True),
+        sa.Column("user_id", sa.Text),
+        sa.Column("provider", sa.Text),
+        sa.Column("provider_user_id", sa.Text),
+        sa.Column("access_token", sa.Text),
+        sa.Column("refresh_token", sa.Text),
+    )
+    tg = sa.Table(
+        "telegram_links",
+        md,
+        sa.Column("id", sa.Text, primary_key=True),
+        sa.Column("user_id", sa.Text),
+        sa.Column("chat_id", sa.Integer),
+        sa.Column("username", sa.Text),
+        sa.Column("verified", sa.Boolean),
+        sa.Column("link_token", sa.Text),
+    )
+    md.create_all(engine)
+    conn = engine.connect()
+    conn.execute(
+        oauth.insert(),
+        [
+            {
+                "id": "o1",
+                "user_id": "u1",
+                "provider": "google",
+                "provider_user_id": "g1",
+                "access_token": "enc:v1:" + SENTINEL,
+                "refresh_token": "enc:v1:" + REFRESH_SENTINEL,
+            },
+            {
+                "id": "o2",
+                "user_id": "u2",
+                "provider": "github",
+                "provider_user_id": "h2",
+                "access_token": None,
+                "refresh_token": None,
+            },
+        ],
+    )
+    conn.execute(
+        tg.insert(),
+        [
+            {
+                "id": "t1",
+                "user_id": "u1",
+                "chat_id": 11,
+                "username": "a",
+                "verified": True,
+                "link_token": None,
+            },
+            {
+                "id": "t2",
+                "user_id": "u2",
+                "chat_id": None,
+                "username": None,
+                "verified": False,
+                "link_token": "plaintext-pending-code-0123456789",
+            },
+        ],
+    )
+    return conn, oauth, tg
+
+
+def _rows(conn, table) -> dict[str, dict]:
+    return {r["id"]: dict(r) for r in conn.execute(table.select()).mappings()}
+
+
+def _sec013_revision(monkeypatch, conn):
+    import importlib.util
+
+    from tests.safety._source import APP_ROOT
+
+    [path] = (APP_ROOT.parent / "alembic" / "versions").glob(f"{SEC013_REVISION}_*.py")
+    spec = importlib.util.spec_from_file_location(f"_floor2_rev_{SEC013_REVISION}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "op", _Op(conn))
+    return module
+
+
+def test_floor2_floor4_sec013_upgrade_nulls_only_the_secrets_and_keeps_every_row(
+    monkeypatch, capsys
+):
+    conn, oauth, tg = _sec013_db()
+    before_o, before_t = _rows(conn, oauth), _rows(conn, tg)
+    module = _sec013_revision(monkeypatch, conn)
+    module.upgrade()
+    after_o, after_t = _rows(conn, oauth), _rows(conn, tg)
+
+    assert after_o.keys() == before_o.keys() and after_t.keys() == before_t.keys(), "rows lost"
+    for rid, row in after_o.items():
+        assert (row["access_token"], row["refresh_token"]) == (None, None)
+        keep = ("user_id", "provider", "provider_user_id")
+        assert {k: row[k] for k in keep} == {k: before_o[rid][k] for k in keep}
+    for rid, row in after_t.items():
+        assert row["link_token"] is None
+        keep = ("user_id", "chat_id", "username", "verified")
+        assert {k: row[k] for k in keep} == {k: before_t[rid][k] for k in keep}, "a link changed"
+    out = capsys.readouterr().out
+    assert SENTINEL not in out and "plaintext-pending-code" not in out, out
+
+    module.upgrade()  # idempotent
+    assert (_rows(conn, oauth), _rows(conn, tg)) == (after_o, after_t)
+
+
+def test_floor2_sec013_downgrade_restores_no_token_and_nulls_every_digest(monkeypatch, capsys):
+    """OAuth: nothing to restore, nothing touched. Telegram: a digest would match as a code."""
+    conn, oauth, tg = _sec013_db()
+    module = _sec013_revision(monkeypatch, conn)
+    module.upgrade()
+    # The new release wrote a digest; a straggler old api wrote a ciphertext token.
+    conn.execute(tg.update().where(tg.c.id == "t2").values(link_token=_digest("fresh")))
+    conn.execute(oauth.update().where(oauth.c.id == "o2").values(access_token="enc:v1:straggler"))
+    before_o, before_t = _rows(conn, oauth), _rows(conn, tg)
+    capsys.readouterr()
+    module.downgrade()
+    assert _rows(conn, oauth) == before_o, "the downgrade changed oauth_accounts"
+    after_t = _rows(conn, tg)
+    assert after_t.keys() == before_t.keys()
+    assert all(r["link_token"] is None for r in after_t.values()), "a digest survived downgrade"
+    assert after_t["t1"]["verified"] is True and after_t["t1"]["chat_id"] == 11
+    out = capsys.readouterr().out
+    assert _digest("fresh") not in out and "straggler" not in out, out
+    doc = module.__doc__ or ""
+    assert "cannot be restored" in doc, "the docstring must say the tokens cannot be restored"

@@ -320,7 +320,7 @@ below are the floor tier's own.
 | Test | Fails when |
 |---|---|
 | `test_floor2_tokens_at_rest.py::test_floor2_credential_column_scan_is_not_vacuous` | The name scan (`*token`, `*secret`, `*password`, `*api_key`) stops finding the five columns, or a reviewed exclusion has gone stale. |
-| `…::test_floor2_every_credential_column_is_encrypted_or_reviewed` | A credential-named column is neither encrypted nor classified in `NOT_ENCRYPTED_REVIEWED` with a reason (`calendar_syncs.sync_token`, `telegram_links.link_token` today). |
+| `…::test_floor2_every_credential_column_is_encrypted_or_reviewed` | A credential-named column is neither encrypted nor classified in `NOT_ENCRYPTED_REVIEWED` with a reason (`calendar_syncs.sync_token`; `telegram_links.link_token`, a SHA-256 digest since SEC-014). |
 | `…::test_floor2_credential_reaches_the_driver_as_ciphertext[5]` | Binding a sentinel through the column type for Postgres yields anything but `enc:v1:` ciphertext without the sentinel, or the value does not read back. |
 | `…::test_floor2_failed_insert_error_text_carries_no_plaintext[5]` | The text of a failed INSERT's `DBAPIError`, as `logger.exception` renders it, carries the sentinel. |
 | `…::test_floor2_engine_hides_bound_parameters_from_error_text` | The request engine's `hide_parameters` is off (C6). |
@@ -341,6 +341,34 @@ the undecryptable log carrying the stored value; revoke via `params=`; `hide_par
 without `check_startup()`; the downgrade not aborting on an undecryptable value; a backup code refused on a
 `None` seed; `mfa_secret` back to `String(64)`. Revoke attempted with a `None` token (availability, not floor)
 is caught only by the contract test.
+
+### OAuth sign-in tokens not stored; Telegram pairing code as a digest (SEC-013, SEC-014)
+
+`models.secrets-at-rest v2` and `models.telegram-pairing-code v1`; revision `c3e5a7b9d1f2`. Review:
+`docs/gates/M34/sec013-014-safety.md`; threat model §5, SEC-013/014. `telegram_links.link_token` is now classified
+in `NOT_ENCRYPTED_REVIEWED` as a SHA-256 digest. The two `oauth_accounts` columns stay in `MUST_ENCRYPT` until
+`models.secrets-at-rest v3` drops them (a deploy-window write by the previous release is still ciphertext). Not
+pinned: pairing codes never expire (R-048, open).
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_tokens_at_rest.py::test_floor2_create_or_link_oauth_accepts_no_provider_token` | `create_or_link_oauth` gains an `access_token`/`refresh_token` parameter or `**kwargs`. |
+| `…::test_floor2_no_app_code_writes_a_non_none_oauth_token` | Any `app/` module that names `OAuthAccount`/`oauth_account(s)` passes a token keyword (or `**`) to `OAuthAccount(...)`, assigns a non-`None` value to `.access_token`/`.refresh_token`, `setattr`s one, or `.values(...)` one non-`None`; or the scan stops seeing the two `None` sweeps (vacuous). |
+| `…::test_floor2_both_oauth_branches_leave_the_row_without_tokens[known_identity\|link]` | The real service over MiniDB leaves a token on the row (a deploy-window value on the known-identity branch, or a fresh link), or changes the identity link. |
+| `…::test_floor2_oauth_callback_uses_the_token_for_userinfo_only_and_never_logs_it[success\|service_error]` | The callback hands the provider's token dict to anything but `fetch_userinfo` (positive control: it does reach it), passes a token keyword to the service, or a token reaches the logs (real `configure_logging`) or the redirect, on success or on a service failure. |
+| `…::test_floor2_google_authorize_url_does_not_ask_for_a_refresh_token` | Google's authorize URL carries `access_type`/`offline`, or the scopes change. |
+| `…::test_floor2_pairing_code_is_stored_and_looked_up_only_as_its_digest` | Over MiniDB: the code (first or regenerated) is stored anywhere in plaintext; the stored value is not its SHA-256; an old code or the stored digest pairs; the lookup binds the code rather than its digest; a successful pairing does not consume the code or touches another user's pending row; or the code or digest is logged. |
+| `…::test_floor2_webhook_start_never_logs_the_code[valid\|digest\|unknown]` | `/start <code>` logs the code or its digest on a hit or a miss, or the digest pairs. |
+| `…::test_floor2_no_telegram_log_call_carries_a_code` | A `logger.*` call in `telegram_service` or `api/notifications.py` passes an expression naming `token`, `code`, `link_token`, `deep_link`, `text`, `update`, `message` or `body`. |
+| `…::test_floor2_floor4_sec013_upgrade_nulls_only_the_secrets_and_keeps_every_row` | Revision `c3e5a7b9d1f2` upgrade on SQLite deletes a row, changes an identity or link column (`user_id`, `provider`, `provider_user_id`, `chat_id`, `username`, `verified`), leaves a token or pending code, prints a value, or is not idempotent. |
+| `…::test_floor2_sec013_downgrade_restores_no_token_and_nulls_every_digest` | The downgrade touches `oauth_accounts`, leaves a digest that the old plaintext comparison would accept, changes a linked chat, prints a value, or its docstring stops saying the tokens cannot be restored. |
+
+Mutation-checked in the SEC-013/014 review on a scratch copy of `services/app` outside the worktree, these pins
+only: 21/21 red (the deploy-window sweep removed; a token written on either branch; the parameter back and passed
+by the callback; `**kwargs`; the callback logging the token on success or failure; `access_type=offline`;
+plaintext stored on create or regenerate; plaintext lookup; lookup also accepting the digest; the code logged on
+generate or `/start`; the code not consumed; the upgrade deleting OAuth rows or pending Telegram rows, leaving
+codes, or printing a token; the downgrade leaving digests; the docstring warning removed).
 
 ### Metrics labels (M32 G3)
 
