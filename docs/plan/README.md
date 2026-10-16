@@ -20,9 +20,13 @@ Wave 1 in flight (below). Applied: contracts (`4371b29`, amended `a2accb0`: mode
 | Task | Owner | Dispatched | Worktree |
 |---|---|---|---|
 | Review-before-build of SEC-005 / SEC-008 contracts + floor-2 red pin | `safety` | 2026-10-16 | isolated |
-| M34-S2-SEC-006 isolation trade-off: non-root AI pools (`b27fc19`, held on `hold/m34-sec006`) lose the CLI child's separate uid — safety to recommend | `safety` | 2026-10-16 | isolated |
-| M34-S3-AI-010 backend half (index embed/store split) + SEC-009 backend bits (typed admin feedback view, template name in email logs, remove `proof.py`) | `backend` | 2026-10-16 | isolated |
 | SEC-009 qa bit (`seed_e2e.py` refuses without an e2e marker) | `qa` | 2026-10-16 | isolated |
+| AI-010 ai half: `pipeline/index.py` on `aembed_artifact_chunks` + `store_artifact_chunks`, drop `_Precomputed`; `parsing.py` stops logging model text | `ai` | 2026-10-16 | isolated |
+| AI-010 pins: floor 1/3/4 pins repointed to the split functions | `safety` | 2026-10-16 | isolated |
+| AI-010: ADR 0005 allowlist amended to the split functions | `architect` | 2026-10-16 | isolated |
+| SEC-006 option F: `b27fc19` + fail-closed adapter guard (claude_code refused on a non-root multi-user worker) | `ai` | 2026-10-16 | isolated |
+
+Held branches (not on trunk): `hold/m34-contract-red` (red contract tests for implementers), `hold/m34-sec006` (`b27fc19`), `hold/m34-index-split` (`bff51f8`, `e8967c3`: backend index split, template-only email logs, typed admin feedback view, no question text in qa log, `proof.py` removed) — lands with the safety pins and the ai switch.
 
 ## Completed
 
