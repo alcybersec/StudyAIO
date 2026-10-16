@@ -640,8 +640,19 @@ async def disable_mfa(
     if not user:
         raise ValueError("User not found")
 
-    if not user.mfa_enabled or not user.mfa_secret:
+    if not user.mfa_enabled:
         raise ValueError("MFA is not enabled")
+
+    if not user.mfa_secret:
+        # Enabled but the seed reads back as None (undecryptable): refuse and
+        # change nothing. Never treat this as "MFA off".
+        # Fresh proxy on purpose: a module logger is cached on first use and then
+        # ignores structlog.testing.capture_logs, which the contract tests rely on.
+        structlog.get_logger().warning("mfa_secret_unavailable", user_id=user_id)
+        raise ValueError(
+            "MFA secret unavailable; sign in with a backup code and ask an administrator "
+            "to reset MFA"
+        )
 
     if not verify_totp(user.mfa_secret, totp_code):
         raise AuthorizationError("Invalid TOTP code")

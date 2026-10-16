@@ -208,8 +208,71 @@ async def _backfill_courseops_keys(dry_run: bool, keep_legacy: bool) -> int:
     return 0
 
 
+#: Columns holding a third-party token or the TOTP seed (``models.secrets-at-rest v1``).
+#: Rotation reads and writes them as raw stored strings, never through
+#: ``EncryptedText``: an undecryptable value loads as ``None`` there, and writing
+#: that back would destroy the only copy a restored key could still read.
+RAW_SECRET_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("oauth_accounts", "access_token"),
+    ("oauth_accounts", "refresh_token"),
+    ("calendar_syncs", "access_token"),
+    ("calendar_syncs", "refresh_token"),
+    ("users", "mfa_secret"),
+)
+
+
+async def _rekey_raw_columns(session, apply: bool) -> tuple[int, int, int]:
+    """Encrypt / re-key the five secret columns on their raw stored values.
+
+    Args:
+        session: Open session; the caller commits or rolls back.
+        apply: Issue the ``UPDATE`` statements.
+
+    Returns:
+        ``(encrypted, rotated, unreadable)`` counts. An unreadable value is
+        reported by table, column and row id (never the value) and left
+        byte-for-byte as stored.
+    """
+    import sqlalchemy as sa
+
+    from app.core import secret_box
+
+    encrypted = rotated = unreadable = 0
+    for table_name, column_name in RAW_SECRET_COLUMNS:
+        table = sa.table(table_name, sa.column("id", sa.Text), sa.column(column_name, sa.Text))
+        col = table.c[column_name]
+        rows = (await session.execute(sa.select(table.c.id, col))).all()
+        for row_id, stored in rows:
+            if not stored:
+                continue
+            if not secret_box.is_encrypted(stored):
+                new = secret_box.encrypt(stored)
+                encrypted += 1
+            elif secret_box.needs_rotation(stored):
+                try:
+                    new = secret_box.encrypt(secret_box.decrypt(stored))
+                except secret_box.SecretDecryptError:
+                    unreadable += 1
+                    print(
+                        f"warning: {table_name}.{column_name} row {row_id}: cannot decrypt; left as is"
+                    )
+                    continue
+                rotated += 1
+            else:
+                continue
+            if apply:
+                await session.execute(
+                    sa.update(table).where(table.c.id == row_id).values({column_name: new})
+                )
+    return encrypted, rotated, unreadable
+
+
 async def _encrypt_user_secrets(apply: bool) -> int:
     """Encrypt plaintext (or retired-key) per-user credentials at rest (SEC-06, GL#20).
+
+    Covers the ``user_settings`` credentials and the five token / TOTP-seed
+    columns of ``models.secrets-at-rest v1``. Exits non-zero while any value is
+    unreadable, so a script can gate dropping the old key on a clean run.
 
     Idempotent: values already under the current key are left alone. A dry run
     (the default) reports counts only and never prints a value.
@@ -256,6 +319,10 @@ async def _encrypt_user_secrets(apply: bool) -> int:
                             print(f"warning: user {row.user_id} {key}: cannot decrypt; left as is")
                 if apply and updated != stored:
                     row.settings_json = updated
+            col_encrypted, col_rotated, col_unreadable = await _rekey_raw_columns(session, apply)
+            encrypted += col_encrypted
+            rotated += col_rotated
+            skipped += col_unreadable
             if apply:
                 await session.commit()
             else:
@@ -269,6 +336,15 @@ async def _encrypt_user_secrets(apply: bool) -> int:
     )
     if not apply:
         print("Dry run: nothing was written. Re-run with --apply.")
+    if skipped:
+        print(
+            f"{skipped} value(s) are unreadable under every configured key and were left as "
+            "stored. Do NOT drop the old key; restore it to the end of "
+            f"{secret_box.ENV_VAR} to read them again.",
+            file=sys.stderr,
+        )
+        return 2
+    print("unreadable: 0 -- the old key can be dropped once a dry run reports re-keyed: 0.")
     return 0
 
 
