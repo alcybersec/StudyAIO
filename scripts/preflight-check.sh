@@ -274,6 +274,13 @@ check_claude_login_dir() {
     else
         ok "Claude login dir $dir exists (mode $mode) and is dedicated"
     fi
+    # SEC-006: the AI pools run as uid 999, so the login dir is owned by it
+    # (0700) and the deploy user cannot look inside. Not an error: that is the
+    # intended state. Inspect as that uid: sudo -u '#999' ls -l "$dir".
+    if [[ ! -x "$dir" ]] && [[ "$(stat -c '%u' "$dir")" == "999" ]]; then
+        ok "Claude login dir $dir is owned by uid 999 (the AI worker pools); contents not inspectable from this user"
+        return
+    fi
     if [[ -s "$dir/oauth-token" ]]; then
         ok "Claude login: oauth-token present"
         local tmode

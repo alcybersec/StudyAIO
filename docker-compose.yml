@@ -8,7 +8,9 @@ x-worker-common: &worker-common
   build:
     context: ./services/app
     dockerfile: Dockerfile
-  user: "0:0"  # Root required for the Claude credential mounts
+  # Non-root (SEC-006). Login files are owned by uid 999 on the host; see
+  # docs/deployment.md "AI pool user". HOME for the CLI: x-claude-environment.
+  user: "studyaio:studyaio"
   depends_on:
     db:
       condition: service_healthy
@@ -27,10 +29,16 @@ x-claude-environment: &claude-environment
   # Preferred login: a long-lived token (`claude setup-token`) stored as
   # <dir>/oauth-token (0600). The adapter reads it from this file and hands
   # it only to the CLI subprocess. .credentials.json stays as the fallback.
-  # Unprivileged uid/gid the adapter drops the CLI child to (GL#12, R-030);
-  # matches `claudecli` in services/app/Dockerfile. AI pools only.
-  CLAUDE_CLI_UID: "10001"
-  CLAUDE_CLI_GID: "10001"
+  # Not root (SEC-006 / M32 N-3). The pools run as the image's `studyaio`, so
+  # parsing untrusted PDF/DOCX/PPTX no longer happens as root. Consequence:
+  # without CAP_SETUID/CAP_CHOWN the adapter cannot drop the CLI child to
+  # another uid, so CLAUDE_CLI_UID/GID are deliberately NOT set here (unset =
+  # the child keeps the worker's uid; the adapter's other containment -- empty
+  # private cwd, env allowlist, --tools "" -- still applies). The login files
+  # must be owned by uid 999 (docs/deployment.md, "AI pool user").
+  # HOME is what the CLI child inherits; the image's own HOME (/app) is not
+  # writable, so it points at a per-container tmpfs the CLI may write state to.
+  HOME: /tmp/claude-home
   CLAUDE_HOST_OAUTH_TOKEN_FILE: /run/claude-host/oauth-token
   CLAUDE_HOST_CREDENTIALS_FILE: /run/claude-host/.credentials.json
 
@@ -115,6 +123,8 @@ services:
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}:/run/claude-host:ro
     environment:
       <<: [*worker-environment, *claude-environment]
+    tmpfs:
+      - /tmp/claude-home:uid=999,gid=999,mode=0700
     command: celery -A app.worker:celery_app worker --loglevel=info -Q pipeline,celery -n pipeline@%h --concurrency=2
     healthcheck:
       # -d targets this node only: an un-targeted ping is answered by ANY worker
@@ -155,6 +165,8 @@ services:
       - ${STUDYAIO_CLAUDE_LOGIN_DIR:-/opt/studyaio/claude-login}:/run/claude-host:ro
     environment:
       <<: [*worker-environment, *claude-environment]
+    tmpfs:
+      - /tmp/claude-home:uid=999,gid=999,mode=0700
     command: celery -A app.worker:celery_app worker --loglevel=info -Q ai_ondemand -n ondemand@%h --concurrency=2
     healthcheck:
       # -d targets this node only: an un-targeted ping is answered by ANY worker
@@ -169,11 +181,8 @@ services:
     # Maintenance pool: beat jobs, backups, re-embedding. No Claude login (it
     # still gets .env, so instance AI keys and SETTINGS_ENCRYPTION_KEY).
     <<: *worker-common
-    # Not root: the root in x-worker-common exists for the Claude credential
-    # mounts, which this pool does not have. The image's own unprivileged user;
-    # the overlays inherit this. It needs ./backups writable and ./data
+    # Non-root like every pool (x-worker-common). It needs ./backups writable and ./data
     # readable by that uid (docs/deployment.md "Maintenance pool user").
-    user: "studyaio:studyaio"
     volumes:
       - ./services/app/app:/app/app
       - ./services/app/prompts:/app/prompts

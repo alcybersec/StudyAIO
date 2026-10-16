@@ -31,10 +31,16 @@ x-claude-environment: &claude-environment
   # Preferred login: a long-lived token (`claude setup-token`) stored as
   # <dir>/oauth-token (0600). The adapter reads it from this file and hands
   # it only to the CLI subprocess. .credentials.json stays as the fallback.
-  # Unprivileged uid/gid the adapter drops the CLI child to (GL#12, R-030);
-  # matches `claudecli` in services/app/Dockerfile. AI pools only.
-  CLAUDE_CLI_UID: "10001"
-  CLAUDE_CLI_GID: "10001"
+  # Not root (SEC-006 / M32 N-3). The pools run as the image's `studyaio`, so
+  # parsing untrusted PDF/DOCX/PPTX no longer happens as root. Consequence:
+  # without CAP_SETUID/CAP_CHOWN the adapter cannot drop the CLI child to
+  # another uid, so CLAUDE_CLI_UID/GID are deliberately NOT set here (unset =
+  # the child keeps the worker's uid; the adapter's other containment -- empty
+  # private cwd, env allowlist, --tools "" -- still applies). The login files
+  # must be owned by uid 999 (docs/deployment.md, "AI pool user").
+  # HOME is what the CLI child inherits; the image's own HOME (/app) is not
+  # writable, so it points at a per-container tmpfs the CLI may write state to.
+  HOME: /tmp/claude-home
   CLAUDE_HOST_OAUTH_TOKEN_FILE: /run/claude-host/oauth-token
 
 services:

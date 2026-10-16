@@ -30,9 +30,6 @@ services:
       # default -- the api and worker refuse to start without it unless
       # SINGLE_USER_MODE=true. See docs/deployment.md.
       SETTINGS_ENCRYPTION_KEY:
-      # GL#12 / R-030: uid/gid of `claudecli` in the image (worker only).
-      CLAUDE_CLI_UID: "10001"
-      CLAUDE_CLI_GID: "10001"
 
   # TECH-09: the queue-split pools (see docker-compose.yml) run the same image.
   worker-ondemand:
@@ -40,8 +37,6 @@ services:
     build: !reset null
     environment:
       SETTINGS_ENCRYPTION_KEY:
-      CLAUDE_CLI_UID: "10001"
-      CLAUDE_CLI_GID: "10001"
 
   worker-maintenance:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
