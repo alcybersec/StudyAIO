@@ -177,3 +177,91 @@ merging), not on `3f5e3ac`.
    register-telegram-webhook`. Rotating the secret is the same two steps, and updates in between are refused
    (Telegram retries).
 5. **Pairing codes still never expire** (R-048, open).
+
+## 7. Follow-up review: `backend` `b69f8a5` (red), `8285ca4` (fix)
+
+### Verdict: **APPROVE**
+
+Reviewed on `kit/retrofit` (`548aef5`) with both commits cherry-picked. Floors 1, 3 and 4 are untouched; floor 2
+improves. One new non-blocking finding (F2), pinned as a strict `xfail`.
+
+### What changed
+
+- **F1 fixed.** `configure_logging` caps `httpx`, `httpcore`, `googleapiclient` and `stripe` at `WARNING`
+  whatever the root level. The strict `xfail` on `test_floor2_register_webhook_logs_no_bot_token_at_info` is
+  gone and the test passes for the right reason: on a scratch copy with the `httpx`/`httpcore` cap removed it
+  fails on `assert value not in text` for the bot token, not on the setup line.
+- **Residual 2 fixed.** `TELEGRAM_BOT_USERNAME` builds the deep link. Unset, the endpoint returns 400 before a
+  link token is issued, and the response never carries the bot token. Not a floor issue.
+- **Residual 3 fixed.** `TELEGRAM_WEBHOOK_SECRET` must be 32-256 characters of `[A-Za-z0-9_-]`; unset is
+  still allowed and fails closed. The validator's message names the rule, never the value.
+- **`hide_input_in_errors: True` on the whole `Settings` model.** Endorsed. Without it a pydantic
+  `ValidationError` prints `input_value=<the raw value>` for any field, and a startup crash goes to the
+  container log. That covers every `SecretStr` setting and also plain-`str` settings that carry credentials
+  (`DATABASE_URL`, `REDIS_URL`). Two limits: it governs `str()`/`repr()` only (`exc.errors()` still carries
+  `input`, and nothing in `app/` calls it on a settings error), and a validator that interpolates the value
+  into its own message bypasses it (`_validate_registration_mode` does, harmlessly, since the value is not a
+  secret). A future validator on a secret must not do that. The new pins cover the validator path for the
+  webhook secret.
+
+### Other libraries checked
+
+Grepped each library's own log calls and probed the ones the app imports, with the root logger at `DEBUG`:
+
+| Library | At `INFO` | At `DEBUG` | Action |
+|---|---|---|---|
+| `aiogram` | Dispatcher/event lines only (bot id, the token's public half); the app uses `Bot` for sending only | same | none |
+| `aiohttp` (client) | nothing | nothing | none |
+| `authlib` (client) | nothing; requests go through `httpx`, capped | server-grant lines only, unused | none |
+| `google-auth` | nothing | `request_log` prints raw headers (`Authorization: Bearer …`), but the `google` base logger is set to `propagate=False` unless configured, so nothing reaches the root handler | none; do **not** configure the `google` logger below `WARNING` |
+| `requests_oauthlib` (Calendar `Flow.fetch_token`) | nothing | the token request body (client secret, auth code) and `Obtained token …` (the user's refresh token) | **F2** |
+| `botocore` / `boto3` | nothing | `Sending http request` with signed headers; probe showed `X-Amz-Security-Token` and the access key id in the log | **F2** |
+| `urllib3` (`requests`: Web Push, Google token refresh) | nothing | request line with path; a Web Push endpoint path is a bearer capability | **F2** |
+| `openai`, `anthropic` | `Retrying request to <path>` only | request options (no auth header), response headers | none; pinned below |
+
+### Finding F2 (not blocking): credential-bearing loggers are uncapped at `DEBUG`
+
+At the default `LOG_LEVEL=INFO` nothing leaks. `LOG_LEVEL` is a documented operator knob, though, and at `DEBUG`
+the three libraries above write a user's Google refresh token, the Google client secret, STS session tokens and
+Web Push capability paths to the log. F1 was capped "whatever the root level", and these should be treated the
+same way. **Owed by `backend`:** add `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` and `urllib3` to
+`_URL_LOGGING_LIBRARIES`. Verified on a scratch copy: with those five capped, the probe prints none of the
+session token, the access key id or the push path, and the strict `xfail` fails as it should, so the marker
+comes off with the fix.
+
+### Pins added: `tests/safety/test_floor2_library_log_levels.py`
+
+- The four capped libraries stay at `WARNING` or above after `configure_logging("DEBUG")`, starting from
+  `NOTSET`, so a pass is `configure_logging`'s doing.
+- F2 as a strict `xfail`.
+- A per-user key handed to the OpenAI and Anthropic adapters never reaches the log at `DEBUG`, on a 200 or a
+  401. Each test also asserts that the key reached the transport, so it cannot pass vacuously.
+- No `Settings` `ValidationError` echoes the value of any `SecretStr` field (14 today, discovered from the
+  model, with a guard against an empty list), and a malformed `TELEGRAM_WEBHOOK_SECRET` read from the
+  environment is not echoed either.
+
+Mutation check on a scratch copy, new file only (baseline 24 passed, 1 xfailed). Cap removed: 2 red. Plus
+`hide_input_in_errors` removed: 15 red. Key logged in each adapter: 4 red. F2 set capped: the `xfail` fails.
+The first settings run passed with `hide_input_in_errors` removed. The cause was that pydantic elides the
+middle of a long `input_value`, so a 38-character probe never appeared whole. The probe is now 8
+characters, and a comment says why. `backend`'s own `test_telegram_settings.py` does not have this problem,
+because it also asserts that `input_value` is absent.
+
+### Residuals from this round
+
+1. **F2**: owed by `backend`, strict `xfail` until then.
+2. **Deploy: the secret minimum is stricter than before.** The new validator refuses a secret shorter than 32
+   characters, so the app **will not start**. That is loud, and it fails closed, but a deployment whose
+   current secret is shorter goes down on deploy. The Orchestrator should confirm the production secret's
+   length (the user's secret store, not the server's `.env`) before this ships. `token_urlsafe(32)`, the
+   documented generator, gives 43 characters.
+3. **Docs drift (not a floor issue).** `.env.example`, `docs/deployment.md` § Telegram webhook secret and the
+   `config.py` comment still say "1-256 chars". `TELEGRAM_BOT_USERNAME` is not in `.env.example` or the
+   deployment guide, so telegram linking returns 400 until an operator finds it. Owners: `backend`
+   (`config.py`), `devops`/docs.
+
+### Test run
+
+`cd services/app && .venv/bin/python -m pytest tests/safety -q --cov=tests/safety --cov-fail-under=95` gave
+`805 passed, 1 skipped, 1 xfailed`, total coverage 97.79%. The `xfail` is F2. `backend`'s
+`test_logging.py`, `test_telegram_settings.py` and `test_notifications.py`: 31 passed.
