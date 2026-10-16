@@ -1,6 +1,6 @@
 # StudyAIO threat model
 
-**Owner:** `safety` · **First written:** 2026-10-11 (M32 gate) · **Last delta:** 2026-10-16 (M34-S2, SEC-005 secrets at rest)
+**Owner:** `safety` · **First written:** 2026-10-11 (M32 gate) · **Last delta:** 2026-10-16 (M34-S2, SEC-015 Telegram webhook authenticity)
 
 This is a living document. Every gate's Floors file links to it and adds a dated delta (§5).
 The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
@@ -22,6 +22,7 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | Usage events (GL#37) | `usage_events` | Owned by the actor. Event name from a fixed list, scalar properties under an allowlist, no content; read cross-user only as admin aggregates with no user id |
 | Weak-spot state (ADR 0007) | `study_plans`, `targeted_generations`, item provenance on `flashcards`/`quiz_questions` | Owned by the learner; derived from their study history. A generation row names the course and week it targets, so a cross-user read would leak what someone is struggling with |
 | User-authored and edited study items (GL#48) | `flashcards`/`quiz_questions` with `origin="user"`; originals kept with `archived_at` | Floor 4: an edit or delete must never destroy the generated original or its review and attempt history |
+| Telegram bot token, webhook secret | env (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, both `SecretStr`). The token is in every Bot API URL (`/bot<token>/…`); the secret is registered with `setWebhook` by `python -m app.cli register-telegram-webhook` | The token is full control of the bot: read its updates and message every paired chat as StudyAIO. The secret is what tells Telegram's webhook calls from anyone else's (SEC-015) |
 | Outgoing mail | SMTP, never stored | Reset, verification and invite links are bearer tokens. Since GL#53 each one appears in both the HTML and the plain-text part |
 | Database dumps | the deploy directory's `backups/` (predeploy + nightly), readable only by the deploy user and the DB container | They hold everything above except the env secrets. AI credentials in them are ciphertext |
 
@@ -48,6 +49,7 @@ The floors are quoted in `docs/strategy.md` §6. The floor-to-test map is
 | B7 | Billing webhook | Stripe signature, dedupe by event id (unique claim in `stripe_webhook_events`, same transaction as the effect), per-customer ordering under a per-customer advisory lock, customer-scoped mutation (BILL-01, SEC-008, floor-1 pins) | Since M34-S2-SEC-008 the state is in Postgres and kept indefinitely, so a Redis flush no longer reopens replay or reordering. Events in the same second are not ordered. An event with no `id` is applied without a claim row, so it is neither deduped nor a watermark (Stripe always sends one) |
 | B8 | Cost | Per-user quota, global daily ceilings and metering on upload, batch, retry, reclassify, merge, review-resolve, CourseOps, chat, Q&A, concepts and, since `421dfa9`, the instance-provider path of `POST /api/settings/test-ai` (QUOTA-01/COST-01, M32 G1). Every ADR 0003 request-time site's route checks the caller's quota before the spend and records against the caller (`test_floor3_request_time_ai_quota.py`) | Own-credential test-ai is rate limited (5/min) but not quota-checked, by design: it spends the user's money. Concepts records only a successful call; a failed provider call there is not metered |
 | B9 | CI/CD → prod | Images by SHA from GHCR. `deploy.sh` refuses without the encryption key (exit 68) or without a good pre-migration dump (exit 67), and migrates in a one-off container before start (R-028). `dependency-audit` CI job (pip-audit on the lock, npm audit high/critical; allowlist empty) | The key check tests presence, not validity: a malformed or test key passes the guard, then crash-loops after migrating. `pip-audit` is installed unpinned in CI. The host's `deploy.sh` is a manually installed copy and can drift from the repo |
+| B10 | Telegram → bot webhook | Since SEC-015, `X-Telegram-Bot-Api-Secret-Token` is checked with `hmac.compare_digest` against `TELEGRAM_WEBHOOK_SECRET` before anything runs. Unset on a multi-user instance means every call is refused. An authentic update can only pair its chat with the row whose digest matches a `/start` code (SEC-014). Pinned in `test_floor2_telegram_webhook_secret.py` | Single-user with no secret accepts (ruled acceptable, SEC-015 §3). httpx logs the bot-token URL at INFO, unreachable while only the WARNING-level CLI calls `setWebhook` (F1, strict `xfail`, owed by `backend`). The secret's strength is not validated. Pairing codes never expire (R-048) |
 
 ## 4. Out of scope or accepted
 
@@ -413,4 +415,31 @@ SHA-256 digests (`models.telegram-pairing-code v1`). Revision `c3e5a7b9d1f2`. Re
    2 now that a forged `/start` needs the plaintext code): the Telegram webhook's "secret" header is compared
    against `telegram_webhook_url` itself, a URL derivable from the public host, with `!=` rather than
    `hmac.compare_digest`. Recommended for `backend`: a random `TELEGRAM_WEBHOOK_SECRET` registered with
-   `setWebhook(secret_token=...)` and compared in constant time.
+   `setWebhook(secret_token=...)` and compared in constant time. Done in SEC-015, next delta.
+
+### 2026-10-16, M34 S2 (M34-S2-SEC-015, R-052)
+
+The Telegram webhook is authenticated by a dedicated secret (new boundary B10). Review:
+`docs/gates/M34/sec015-safety.md`. Verdict: APPROVE.
+
+1. **Check.** `TELEGRAM_WEBHOOK_SECRET` (`SecretStr`) is compared with `hmac.compare_digest` against the header,
+   before the body is parsed or the handler runs. A wrong or missing header gets the same 403 as before. The
+   webhook URL is no longer the secret: it was derivable from the public host, and the link endpoint returns
+   its last segment to every user.
+2. **Fail closed.** On a multi-user instance (`SELF_HOSTED` included), an unset secret means every call is
+   refused, with one valueless warning per process. Telegram pairing stops until the operator sets the secret
+   and runs `python -m app.cli register-telegram-webhook`.
+3. **Single-user ruling.** With no secret, single-user mode accepts. That instance has one tenant, and anyone
+   who reaches it is already its admin (`check_single_user_mode`). A set secret is still enforced there.
+4. **What an authentic update can do (floor 1).** Only `/start <code>`, which pairs the sending chat with the one
+   row whose digest matches. A forged update carrying a valid code is now refused before any statement.
+5. **Secrets out of output (floor 2).** The secret and the bot token are read only at reviewed sites, never
+   returned, never logged by app code. The CLI prints only an httpx error's type name, never its text (which
+   can name the bot-token URL). Pinned in a fresh process across success, connect error, timeout, rejection
+   and non-JSON reply. The send path's `exc_info` on a refused connection carries no token.
+6. **Finding F1, not blocking.** httpx's own INFO line prints the `setWebhook` URL, bot token included.
+   It is unreachable: the only caller is the CLI, which logs at WARNING, and both facts are pinned. It is a
+   strict `xfail` until `backend` caps the `httpx`/`httpcore` loggers in `configure_logging`.
+7. **Residual.** `bot_username` is derived from the webhook URL (functional bug, not a floor). The secret's
+   strength is not validated (Telegram enforces 1-256 `[A-Za-z0-9_-]` at registration only). A secret rotation
+   refuses updates until re-registration. Pairing codes never expire (R-048).
