@@ -29,11 +29,20 @@ import hashlib
 import hmac
 
 import structlog
+from prometheus_client import Counter
 
 from app.config import settings
 from app.core.utils import normalize_email
 
 logger = structlog.get_logger()
+
+#: Throttle store unreachable, by operation (`core.login-throttle-metrics v1`).
+#: ``action`` is one of read, record, clear (here) or limit (``rate_limit``).
+LOGIN_THROTTLE_UNAVAILABLE = Counter(
+    "studyaio_login_throttle_unavailable_total",
+    "Auth throttle store unreachable, by operation.",
+    ["action"],
+)
 
 #: Redis key prefix for per-account failure counters.
 _KEY_PREFIX = "login_fail:"
@@ -107,6 +116,7 @@ async def apply_delay(email: str) -> float:
     try:
         raw = await redis_client.get(_key(email))
     except Exception:
+        LOGIN_THROTTLE_UNAVAILABLE.labels(action="read").inc()
         logger.warning("login_throttle_unavailable", action="read", exc_info=True)
         return 0.0
 
@@ -135,6 +145,7 @@ async def record_failure(email: str) -> int:
         failures = await redis_client.incr(key)
         await redis_client.expire(key, settings.login_throttle_window_seconds)
     except Exception:
+        LOGIN_THROTTLE_UNAVAILABLE.labels(action="record").inc()
         logger.warning("login_throttle_unavailable", action="record", exc_info=True)
         return 0
 
@@ -155,4 +166,5 @@ async def clear(email: str) -> None:
     try:
         await redis_client.delete(_key(email))
     except Exception:
+        LOGIN_THROTTLE_UNAVAILABLE.labels(action="clear").inc()
         logger.warning("login_throttle_unavailable", action="clear", exc_info=True)
