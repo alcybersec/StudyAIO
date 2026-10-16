@@ -11,7 +11,7 @@ empty. The 2026-10-04 rulings emptied every one of them. The tier holds no `xfai
 the SAFETY-027 veto marker on the JWT default-secret check (floor 2) XPASSed on
 `8356b15` and was removed in SAFETY-028. SAFETY-033 added two **strict** `xfail`s on the
 email-redaction *backstop* (SEC-08), findings F1 and F2; both fixes landed (`06c4fcb`, `344ce7e`) and
-SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free. At M34-S2 SEC-015 added one strict `xfail`, finding F1 (`test_floor2_register_webhook_logs_no_bot_token_at_info`, httpx's INFO request line carries the bot token); `backend` capped the `httpx`/`httpcore` loggers in `configure_logging` and the marker was removed, so the tier is `xfail`-free.
+SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free. At M34-S2 SEC-015 added one strict `xfail`, finding F1 (`test_floor2_register_webhook_logs_no_bot_token_at_info`, httpx's INFO request line carries the bot token); `backend` capped the `httpx`/`httpcore` loggers in `configure_logging` and the marker was removed. The follow-up review added one strict `xfail`, finding F2 (`test_floor2_credential_logging_libraries_capped_at_warning`: at `DEBUG` only, `requests_oauthlib`, `botocore` and `urllib3` log credentials or capability URLs); it is not blocking because none of them logs at the default `INFO`, and it is **RED until** `backend` adds `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` and `urllib3` to the capped set in `configure_logging`.
 
 Run:
 
@@ -403,6 +403,26 @@ before the check; the response echoing the secret; the CLI printing httpx error 
 `register_webhook` logging the request URL; printing Telegram's reply; an import of `register_webhook` in
 `main.py`; the send path logging the token; the link endpoint returning the token). The F1 marker was checked to
 XPASS with the httpx logger capped.
+
+#### Third-party loggers and settings errors (SEC-015 follow-up; backend `8285ca4`)
+
+`test_floor2_library_log_levels.py`. Run with the root logger at `DEBUG`, because `LOG_LEVEL` is an operator
+knob. Review: `docs/gates/M34/sec015-safety.md` §7.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_url_logging_library_capped_at_warning[httpx\|httpcore\|googleapiclient\|stripe]` | After `configure_logging("DEBUG")`, a library that logs full request URLs has an effective level below `WARNING`. |
+| `test_floor2_credential_logging_libraries_capped_at_warning` | **Strict `xfail`, finding F2.** XPASSes, and so fails, once `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` and `urllib3` are capped; then remove the marker. |
+| `test_floor2_openai_adapter_logs_no_user_key_at_debug[ok\|rejected]` | A per-user OpenAI key reaches the log stream at `DEBUG`, on success or on a 401. |
+| `test_floor2_anthropic_adapter_logs_no_user_key_at_debug[ok\|rejected]` | The same for the Anthropic adapter. |
+| `test_floor2_settings_has_secret_fields` | The `SecretStr` field discovery below collects nothing, which would empty the parametrisation. |
+| `test_floor2_settings_error_never_echoes_a_secret_value[<every SecretStr setting>]` | A `Settings` `ValidationError` (`str` or `repr`) contains the rejected value of a secret setting. The probe is short on purpose: pydantic elides the middle of a long `input_value`. |
+| `test_floor2_settings_error_from_env_never_echoes_the_webhook_secret` | A malformed `TELEGRAM_WEBHOOK_SECRET` read from the environment is echoed in the error. |
+
+Mutation-checked on a scratch copy: removing the `httpx`/`httpcore` cap fails the two cap pins and
+`test_floor2_register_webhook_logs_no_bot_token_at_info` on the token assertion; removing
+`hide_input_in_errors` fails all 15 settings pins; a debug log of the key in each adapter fails all 4 adapter
+pins; capping the F2 set makes the strict `xfail` fail.
 
 ### Metrics labels (M32 G3)
 
