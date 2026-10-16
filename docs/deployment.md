@@ -796,7 +796,8 @@ The Telegram webhook only accepts calls that carry the shared secret Telegram
 echoes in its `X-Telegram-Bot-Api-Secret-Token` header. In multi-user mode,
 with `TELEGRAM_WEBHOOK_SECRET` unset, every call is rejected (fail closed).
 
-1. Generate a secret (1-256 characters of `A-Za-z0-9_-`):
+1. Generate a secret (32-256 characters of `A-Za-z0-9_-`; a shorter or
+   otherwise malformed value makes the app refuse to start):
    `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
 2. Put it in the server's secret store as `TELEGRAM_WEBHOOK_SECRET`.
 3. Deploy so the api container sees it.
@@ -806,6 +807,10 @@ with `TELEGRAM_WEBHOOK_SECRET` unset, every call is rejected (fail closed).
 
 Until the webhook is re-registered, Telegram updates are rejected. Rotate by
 repeating the steps with a new value.
+
+To let users link their Telegram account, also set `TELEGRAM_BOT_USERNAME` (the
+bot handle without the `@`). The link endpoint builds the `t.me` deep link from
+it and returns 400 until it is set.
 
 ---
 
@@ -827,6 +832,8 @@ repeating the steps with a new value.
 | `SINGLE_USER_MODE` | `false` | Opt-in no-login mode (one default admin). Requires `BIND_HOST` loopback or `I_UNDERSTAND_NO_AUTH=true` |
 | `JWT_SECRET_KEY` | (insecure default) | **Change in production** |
 | `SETTINGS_ENCRYPTION_KEY` | | **Required** unless `SINGLE_USER_MODE=true`. Fernet key (or comma-separated list for rotation) that encrypts per-user AI credentials at rest. See [SETTINGS_ENCRYPTION_KEY](#settings_encryption_key). |
+| `TELEGRAM_WEBHOOK_SECRET` | | 32-256 chars of `A-Za-z0-9_-`; the app refuses to start on any other value. Required in multi-user mode, else the webhook rejects every call. See [Telegram webhook secret](#telegram-webhook-secret). |
+| `TELEGRAM_BOT_USERNAME` | | Bot handle without `@`. Required for Telegram linking: the link endpoint returns 400 until set. |
 | `CORS_ORIGINS` | `http://localhost:3001` | Comma-separated origins |
 | `MAX_UPLOAD_SIZE_MB` | `100` | Max upload file size (compressed bytes on the wire) |
 | `MAX_ARCHIVE_DECOMPRESSED_MB` | `500` | Most a DOCX/PPTX archive may expand to in the worker. Checked before parsing; over it, that artifact fails |
