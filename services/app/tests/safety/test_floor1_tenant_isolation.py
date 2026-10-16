@@ -124,12 +124,12 @@ ADMIN_PREFIX = "/api/admin"
 #: reaches 98.
 MIN_ROUTES_WITH_OWNED_QUERIES = 90
 
-#: Floors for route *enumeration*, below the sweep. ``fastapi`` is capped
-#: ``<0.137`` in requirements.txt because 0.137 makes ``include_router`` lazy:
-#: ``app.routes`` then holds ``_IncludedRouter`` placeholders, not ``APIRoute``s,
-#: and every guard that walks ``app.routes`` (this sweep, and
-#: tests/unit/api/test_endpoint_authn_guard.py) iterates nothing and passes. At M32-S4 the app
-#: mounts 149 ``/api`` APIRoutes and the sweep calls 115 method+path pairs.
+#: Floors for route *enumeration*, below the sweep. From fastapi 0.137
+#: ``include_router`` is lazy: ``app.routes`` holds ``_IncludedRouter`` wrappers,
+#: not ``APIRoute``s, and a guard that walks it directly iterates nothing and
+#: passes (R-040). Every guard walks ``tests._routes.api_routes`` instead
+#: (M34-S2-SEC-007). At that lift the app mounts 171 ``/api`` APIRoutes and the
+#: sweep calls 135 method+path pairs, the same on fastapi 0.136.3 and 0.143.2.
 MIN_API_ROUTES = 130
 MIN_SWEPT_ROUTES = 100
 
@@ -165,13 +165,14 @@ def _sweep_routes() -> list[tuple[str, str, APIRoute]]:
 
 
 def test_floor1_route_enumeration_is_not_vacuous():
-    """Walking ``app.routes`` still yields the app's real routes.
+    """The route walker still yields every route the app serves.
 
     Every route-walking guard trusts this enumeration. If a framework upgrade
     hides routes behind a lazy wrapper, the guards see an empty app and pass;
-    this fails instead. Lifting the fastapi cap means teaching ``_sweep_routes``
-    to expand the wrapper first, then lifting these numbers only if routes were
-    really removed.
+    this fails instead. The count floors catch a walker that sees nothing; the
+    OpenAPI cross-check catches one that drops a single router. That the walked
+    route carries the include prefix and include-level dependencies is pinned in
+    test_floor1_route_walker.py.
     """
     from app.main import app
 
