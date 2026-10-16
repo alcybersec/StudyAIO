@@ -53,23 +53,42 @@ GET_EMBEDDING_PROVIDER_CALL_SITES = {
     ("app/main.py", "warn_if_embedding_provider_unavailable"),
 }
 
-#: Callers of `.embed_texts(...)` outside app/agents/** and app/pipeline/**.
+#: Callers of `.embed_texts(...)`, or of its async wrapper `aembed_texts(provider, ...)`,
+#: outside app/agents/** and app/pipeline/**. `aembed_texts` lives in app/agents/**, so
+#: its own `provider.embed_texts` is out of scan; without counting its callers a new
+#: request-side `await aembed_texts(...)` would embed past this pin unseen.
 EMBED_TEXTS_CALL_SITES = {
     ("app/api/qa.py", "ask_question"),
     ("app/services/chat_service.py", "send_message"),
     ("app/services/chat_service.py", "stream_message"),
     ("app/services/concept_service.py", "_embed_concepts"),
-    ("app/services/index_service.py", "index_artifact_chunks"),
+    ("app/services/index_service.py", "embed_artifact_chunks"),
+    ("app/services/index_service.py", "aembed_artifact_chunks"),
 }
+
+#: The names that embed: the provider method and the agents-side async wrapper.
+EMBED_NAMES = frozenset({"embed_texts", "aembed_texts"})
 
 #: Startup-only sites: may call `get_embedding_provider` and `.preload()`, never `.embed_texts`.
 STARTUP_ONLY_EMBEDDING_SITES = {
     ("app/main.py", "warn_if_embedding_provider_unavailable"),
 }
 
-#: A site that embeds with an injected provider must have exactly these callers, all worker-side.
+#: A function that embeds with an injected provider -> the only callers it may have.
+#: Every allowed caller is under app/pipeline/** or is itself a key here, so each
+#: chain of injected-provider calls ends in the worker. Subset, not equality: a
+#: caller going away is safe; a new one is the breach. (M34-S3-AI-010 split
+#: `index_artifact_chunks` into embed + store; the wrapper stays until the stage
+#: moves to `aembed_artifact_chunks` + `store_artifact_chunks`.)
 INJECTED_PROVIDER_CALLERS = {
     ("app/services/index_service.py", "index_artifact_chunks"): {
+        ("app/pipeline/index.py", "_index"),
+    },
+    ("app/services/index_service.py", "embed_artifact_chunks"): {
+        ("app/services/index_service.py", "index_artifact_chunks"),
+        ("app/pipeline/index.py", "_index"),
+    },
+    ("app/services/index_service.py", "aembed_artifact_chunks"): {
         ("app/pipeline/index.py", "_index"),
     },
 }
@@ -342,21 +361,27 @@ def request_side_get_embedding_provider_sites() -> set[tuple[str, str]]:
 
 
 def embed_texts_sites(*, exclude: tuple[str, ...] = (AGENTS, PIPELINE)) -> list[Site]:
-    """ADR 0005 item 2: every ``.embed_texts`` reference, and ``"embed_texts"`` strings.
+    """ADR 0005 item 2: every reference to an embed name, and the names as strings.
 
-    An attribute, not only a call: ``fn = provider.embed_texts`` then ``fn(x)``
-    embeds as surely as ``provider.embed_texts(x)``. A string catches
-    ``getattr(provider, "embed_texts")``.
+    ``.embed_texts`` as an attribute, not only a call: ``fn = provider.embed_texts``
+    then ``fn(x)`` embeds as surely as ``provider.embed_texts(x)``. ``aembed_texts``
+    as a name or attribute: it embeds with the provider it is handed, from inside
+    app/agents/** where the scan does not look. A string catches ``getattr``.
+    Import statements bind names; they are not sites.
     """
     sites = []
     for path in app_modules(exclude=exclude):
         tree = parse(path)
         docs = docstring_nodes(tree)
         for node, scope in walk_with_scope(tree):
-            if (isinstance(node, ast.Attribute) and node.attr == "embed_texts") or (
-                isinstance(node, ast.Constant)
-                and node.value == "embed_texts"
-                and id(node) not in docs
+            if (
+                (isinstance(node, ast.Attribute) and node.attr in EMBED_NAMES)
+                or (isinstance(node, ast.Name) and node.id == "aembed_texts")
+                or (
+                    isinstance(node, ast.Constant)
+                    and node.value in EMBED_NAMES
+                    and id(node) not in docs
+                )
             ):
                 sites.append(Site(rel(path), scope, node.lineno, ast.unparse(node)[:80]))
     return sites
@@ -534,14 +559,31 @@ def test_floor3_startup_embedding_sites_never_embed():
 
 def test_floor3_injected_provider_sites_have_only_worker_callers():
     """Item 4: a function that embeds with a handed-in provider is reached only from the worker."""
+    from tests.safety._source import APP_ROOT
+
     for (module, function), callers in INJECTED_PROVIDER_CALLERS.items():
+        # A renamed function would have no references and pass vacuously.
+        tree = parse(APP_ROOT.parent / module)
+        defined = {
+            n.name for n in tree.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+        }
+        assert function in defined, f"Floor 3: pinned {module}:{function} no longer exists"
         found = references_to(module, function)
-        assert found == callers, (
+        unlisted = sorted(found - callers)
+        assert not unlisted, (
             f"Floor 3: {module}:{function} embeds with an injected provider, so every "
             f"caller must be listed in ADR 0005 (INJECTED_PROVIDER_CALLERS).\n"
-            f"  found:  {sorted(found)}\n  listed: {sorted(callers)}"
+            f"  unlisted: {unlisted}\n  listed:   {sorted(callers)}"
         )
-        assert all(m.startswith(PIPELINE) for m, _f in callers)
+        for caller in callers:
+            assert caller[0].startswith(PIPELINE) or caller in INJECTED_PROVIDER_CALLERS, (
+                f"Floor 3: {caller} may call {function} but is neither worker-side nor "
+                "itself pinned, so the chain need not end in the worker"
+            )
+    # Today's wiring: the worker reaches the embedder through the pinned chain.
+    assert ("app/pipeline/index.py", "_index") in set().union(
+        *(references_to(m, f) for m, f in INJECTED_PROVIDER_CALLERS)
+    )
 
 
 def test_floor3_pipeline_get_embedding_provider_only_in_celery_task_modules():
@@ -591,3 +633,10 @@ def test_floor3_embedding_detectors_are_not_vacuous():
     assert "get_embedding_provider" in defined
     assert "embed_texts" in defined
     assert ("app/api/qa.py", "ask_question") in {s.key() for s in embed_texts_sites()}
+    # aembed_texts is seen: the index service's async embed reaches it by name.
+    assert "aembed_texts" in {
+        n.name for n in ast.walk(embeddings) if isinstance(n, ast.AsyncFunctionDef)
+    }
+    assert ("app/services/index_service.py", "aembed_artifact_chunks") in {
+        s.key() for s in embed_texts_sites()
+    }

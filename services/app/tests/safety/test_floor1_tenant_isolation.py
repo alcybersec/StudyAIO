@@ -1012,6 +1012,45 @@ def test_floor1_pipeline_only_fetch_is_pipeline_only():
     assert not outside, f"process_course_document called outside the worker: {outside}"
 
 
+#: Unscoped chunk writers (delete + insert by a bare artifact_id) -> the callers they
+#: may have outside app/pipeline/**. A request-side caller handing in a foreign
+#: artifact id would wipe and rewrite another user's search index.
+CHUNK_STORE_FUNCTIONS = {
+    "store_artifact_chunks": {("app/services/index_service.py", "index_artifact_chunks")},
+    "index_artifact_chunks": set(),
+}
+
+
+def _references(function: str) -> set[tuple[str, str]]:
+    """(module, enclosing function) of every name/attribute reference to ``function``."""
+    found = set()
+    for path in app_modules():
+        for node, scope in walk_with_scope(parse(path)):
+            if (isinstance(node, ast.Name) and node.id == function) or (
+                isinstance(node, ast.Attribute) and node.attr == function
+            ):
+                found.add((rel(path), scope))
+    return found
+
+
+def test_floor1_chunk_store_is_worker_only():
+    """``store_artifact_chunks`` and its wrapper are reached only from the worker.
+
+    An allowed non-worker caller must itself be pinned here, so every chain ends
+    in app/pipeline/**.
+    """
+    reached_from_worker = False
+    for function, allowed in CHUNK_STORE_FUNCTIONS.items():
+        callers = _references(function)
+        reached_from_worker |= any(m.startswith("app/pipeline/") for m, _f in callers)
+        outside = sorted(
+            c for c in callers if not c[0].startswith("app/pipeline/") and c not in allowed
+        )
+        assert not outside, f"{function} reached outside the worker: {outside}"
+        assert all(f in CHUNK_STORE_FUNCTIONS for _m, f in allowed)
+    assert reached_from_worker, "detector found no worker caller at all — it has gone blind"
+
+
 # ── layer 2b: functions that query owned rows with no caller to scope by ──
 #
 # The route sweep reaches only what an HTTP handler reaches, and only against
@@ -1106,8 +1145,10 @@ UNSCOPED_FUNCTION_ALLOWED = {
     ("app/services/gcal_service.py", "handle_gcal_webhook"): (
         "Google push webhook: the sync row is found by the channel/resource ids Google holds"
     ),
-    ("app/services/index_service.py", "index_artifact_chunks"): (
-        "pipeline index stage, with the worker's own artifact id"
+    ("app/services/index_service.py", "store_artifact_chunks"): (
+        "pipeline index stage, with the worker's own artifact id (split out of "
+        "index_artifact_chunks, M34-S3-AI-010); callers pinned worker-side by "
+        "test_floor1_chunk_store_is_worker_only"
     ),
     ("app/services/pipeline_service.py", "get_artifact_pipeline_runs"): (
         "FK traversal: api/uploads.py resolves the artifact with user_id first (comment at "

@@ -237,8 +237,10 @@ CONTENT_MODELS = frozenset(
 #: the type is not knowable statically, so every one is classified by hand.
 DB_SANCTIONED = {
     **{site: _ADR_0004_ITEM[site] for site in USER_ITEM_DB_DELETE_SITES},
-    ("app/services/index_service.py", "index_artifact_chunks"): (
-        "chunks are a derived search index, rebuilt from the stored extraction"
+    ("app/services/index_service.py", "store_artifact_chunks"): (
+        "chunks are a derived search index, rebuilt from the stored extraction; "
+        "since M34-S3-AI-010 the vectors are computed before this delete runs, so a "
+        "failed embed leaves the old chunks in place"
     ),
     ("app/services/gcal_service.py", "disconnect_calendar"): (
         "session.delete(cal_sync): a calendar connection, not content"
