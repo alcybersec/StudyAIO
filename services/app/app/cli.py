@@ -17,13 +17,14 @@ import pathlib
 import sys
 from urllib.parse import quote_plus
 
+import httpx
 from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app.config import settings
 from app.core.database import async_session_factory, engine
 from app.core.exceptions import StudyAIOError
 from app.core.logging import configure_logging
-from app.services import admin_service
+from app.services import admin_service, telegram_service
 from app.services.user_service import ACCOUNT_SETUP_TOKEN_HOURS
 
 
@@ -391,6 +392,21 @@ async def _run_evals(only: str | None, no_judge: bool, out: str | None, n: int) 
     return 0 if report.passed == len(report.cases) else 1
 
 
+async def _register_telegram_webhook() -> int:
+    """Register the Telegram webhook with its secret token (SEC-015)."""
+    try:
+        ok = await telegram_service.register_webhook()
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except httpx.HTTPError as exc:
+        # Type name only: the exception text can carry the request URL (bot token).
+        print(f"error: could not reach Telegram ({type(exc).__name__})", file=sys.stderr)
+        return 1
+    print("telegram webhook registered" if ok else "error: Telegram rejected setWebhook")
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and dispatch. Returns a process exit code."""
     configure_logging("WARNING")
@@ -480,7 +496,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
 
+    sub.add_parser(
+        "register-telegram-webhook",
+        help="Register TELEGRAM_WEBHOOK_URL with Telegram, with TELEGRAM_WEBHOOK_SECRET (SEC-015)",
+    )
+
     args = parser.parse_args(argv)
+
+    if args.command == "register-telegram-webhook":
+        return asyncio.run(_register_telegram_webhook())
 
     if args.command == "ensure-admin":
         try:

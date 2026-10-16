@@ -2,6 +2,7 @@
 
 import secrets
 
+import httpx
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -125,6 +126,36 @@ async def get_link(session: AsyncSession, user_id: str) -> TelegramLink | None:
     """
     result = await session.execute(select(TelegramLink).where(TelegramLink.user_id == user_id))
     return result.scalar_one_or_none()
+
+
+async def register_webhook() -> bool:
+    """Register the webhook URL with Telegram, including the shared secret token.
+
+    Telegram then sends the secret in `X-Telegram-Bot-Api-Secret-Token` on every
+    update, which the webhook endpoint checks in constant time (SEC-015).
+
+    Returns:
+        True if Telegram accepted the registration.
+
+    Raises:
+        ValueError: If the bot token, webhook URL or webhook secret is unset.
+    """
+    token = settings.telegram_bot_token.get_secret_value()
+    secret = settings.telegram_webhook_secret.get_secret_value()
+    if not token or not settings.telegram_webhook_url or not secret:
+        raise ValueError(
+            "TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_URL and TELEGRAM_WEBHOOK_SECRET must all be set"
+        )
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"https://api.telegram.org/bot{token}/setWebhook",
+            json={"url": settings.telegram_webhook_url, "secret_token": secret},
+        )
+    ok = resp.status_code == 200 and bool(resp.json().get("ok"))
+    # Never log the request: its URL carries the bot token, its body the secret.
+    logger.info("telegram_webhook_registered" if ok else "telegram_webhook_register_failed")
+    return ok
 
 
 async def send_telegram_message(chat_id: int, text: str) -> bool:

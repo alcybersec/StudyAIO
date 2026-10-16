@@ -1,5 +1,7 @@
 """Notification API endpoints for preferences and Telegram linking."""
 
+import hmac
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +26,10 @@ from app.models.user import User
 from app.services import notification_service, push_service, telegram_service
 
 logger = structlog.get_logger()
+
+#: Set once the "secret unset" warning has been logged, so a flood of forged
+#: calls cannot flood the log.
+_unset_secret_warned = False
 
 router = APIRouter(prefix="/notifications")
 
@@ -123,12 +129,18 @@ async def telegram_webhook(
     Verifies X-Telegram-Bot-Api-Secret-Token header for security.
     No user auth required (Telegram sends updates directly).
     """
-    # Verify webhook secret
-    expected_secret = settings.telegram_webhook_url
-    received_secret = request.headers.get("x-telegram-bot-api-secret-token", "")
+    global _unset_secret_warned
+    expected = settings.telegram_webhook_secret.get_secret_value()
+    received = request.headers.get("x-telegram-bot-api-secret-token", "")
 
-    # If a webhook URL is configured, use it as a simple shared secret check
-    if expected_secret and received_secret != expected_secret:
+    if not expected:
+        if not settings.single_user_mode:
+            # Fail closed: without a secret there is no way to tell Telegram from anyone else.
+            if not _unset_secret_warned:
+                _unset_secret_warned = True
+                logger.warning("telegram_webhook_secret_unset_rejecting_all")
+            raise HTTPException(status_code=403, detail="Invalid webhook secret")
+    elif not hmac.compare_digest(received.encode(), expected.encode()):
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
     body = await request.json()

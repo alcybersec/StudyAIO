@@ -231,6 +231,10 @@ class Settings(BaseSettings):
     notifications_enabled: bool = True
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_webhook_url: str = ""
+    #: Shared secret Telegram echoes in `X-Telegram-Bot-Api-Secret-Token` on every
+    #: webhook call (SEC-015). Random, 1-256 chars of [A-Za-z0-9_-]; never the URL.
+    #: Unset in multi-user mode means the webhook rejects every call.
+    telegram_webhook_secret: SecretStr = SecretStr("")
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""
