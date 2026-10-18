@@ -21,8 +21,8 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-from fastapi.routing import APIRoute
 
+from tests._routes import api_routes
 from tests.safety.test_floor1_tenant_isolation import _requires_user
 
 #: Placeholder for every path parameter. "1" parses as an int and as a string;
@@ -40,8 +40,8 @@ def _user_routes() -> list[tuple[str, str]]:
     from app.main import app
 
     out = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or not _requires_user(route):
+    for route in api_routes(app):
+        if not _requires_user(route):
             continue
         path = re.sub(r"\{[^}]+\}", _PATH_VALUE, route.path)
         for method in sorted(route.methods - {"HEAD", "OPTIONS"}):

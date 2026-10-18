@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.api.deps import get_current_user_or_default, require_ai_consent
+from tests._routes import route_contexts
 
 #: (method, path under /api) of every route that spends AI or enqueues AI work.
 GATED_ROUTES = [
@@ -43,7 +44,7 @@ def _dep_calls(route) -> set:
 def test_every_listed_route_carries_the_consent_dependency():
     from app.main import app
 
-    index = {(m, r.path): r for r in app.routes if hasattr(r, "methods") for m in r.methods}
+    index = {(m, r.path): r for r in route_contexts(app) if r.methods for m in r.methods}
     missing = []
     unmatched = []
     for method, path in GATED_ROUTES:
@@ -150,7 +151,7 @@ class TestConsentEndpoint:
     def test_route_requires_a_caller(self):
         from app.main import app
 
-        route = next(r for r in app.routes if getattr(r, "path", "") == "/api/auth/consent")
+        route = next(r for r in route_contexts(app) if r.path == "/api/auth/consent")
         assert get_current_user_or_default in _dep_calls(route)
 
 

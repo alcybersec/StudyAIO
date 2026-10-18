@@ -45,6 +45,14 @@ def _build_gcal_service(calendar_sync: CalendarSync):
     Raises:
         CalendarSyncError: If Google API client cannot be built.
     """
+    if calendar_sync.access_token is None and calendar_sync.refresh_token is None:
+        # Both unreadable (or never stored): no Google call, and nothing is
+        # written -- the ciphertext must stay for a restored key.
+        # Fresh proxy on purpose: a module logger is cached on first use and then
+        # ignores structlog.testing.capture_logs, which the contract tests rely on.
+        structlog.get_logger().warning("calendar_reconnect_required", sync_id=calendar_sync.id)
+        raise CalendarSyncError("reconnect required")
+
     try:
         from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
@@ -69,6 +77,29 @@ def _build_gcal_service(calendar_sync: CalendarSync):
         raise CalendarSyncError(f"Failed to build Google Calendar service: {e}") from e
 
     return service, creds
+
+
+async def _refresh_if_needed(session: AsyncSession, cal_sync: CalendarSync, creds) -> None:
+    """Refresh the access token when it is missing or expired, and persist it.
+
+    A ``None`` access token (unreadable at rest) with a readable refresh token is
+    refreshed before the first Google call.
+
+    Raises:
+        CalendarSyncError: The refresh failed.
+    """
+    if not creds.refresh_token:
+        return
+    if not (cal_sync.access_token is None or creds.expired):
+        return
+    try:
+        from google.auth.transport.requests import Request
+
+        creds.refresh(Request())
+        cal_sync.access_token = creds.token
+        await session.flush()
+    except Exception as e:
+        raise CalendarSyncError(f"Token refresh failed: {e}") from e
 
 
 async def connect_google_calendar(
@@ -176,16 +207,19 @@ async def disconnect_calendar(
     if not cal_sync:
         return False
 
-    # Best-effort token revocation
-    try:
-        import httpx
+    # Best-effort token revocation. Nothing to revoke with when the token is
+    # unreadable; the user still asked to disconnect, so the row goes anyway.
+    if cal_sync.access_token is not None:
+        try:
+            import httpx
 
-        await httpx.AsyncClient().post(
-            "https://oauth2.googleapis.com/revoke",
-            params={"token": cal_sync.access_token},
-        )
-    except Exception:
-        logger.warning("google_token_revoke_failed", sync_id=sync_id)
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    "https://oauth2.googleapis.com/revoke",
+                    data={"token": cal_sync.access_token},
+                )
+        except Exception:
+            logger.warning("google_token_revoke_failed", sync_id=sync_id)
 
     await session.delete(cal_sync)
     await session.flush()
@@ -262,16 +296,7 @@ async def push_events(
 
     service, creds = _build_gcal_service(cal_sync)
 
-    # Refresh token if needed
-    if creds.expired and creds.refresh_token:
-        try:
-            from google.auth.transport.requests import Request
-
-            creds.refresh(Request())
-            cal_sync.access_token = creds.token
-            await session.flush()
-        except Exception as e:
-            raise CalendarSyncError(f"Token refresh failed: {e}") from e
+    await _refresh_if_needed(session, cal_sync, creds)
 
     # Get existing event mappings
     result = await session.execute(
@@ -434,16 +459,7 @@ async def pull_events(
 
     service, creds = _build_gcal_service(cal_sync)
 
-    # Refresh token if needed
-    if creds.expired and creds.refresh_token:
-        try:
-            from google.auth.transport.requests import Request
-
-            creds.refresh(Request())
-            cal_sync.access_token = creds.token
-            await session.flush()
-        except Exception as e:
-            raise CalendarSyncError(f"Token refresh failed: {e}") from e
+    await _refresh_if_needed(session, cal_sync, creds)
 
     try:
         kwargs = {"calendarId": cal_sync.google_calendar_id}

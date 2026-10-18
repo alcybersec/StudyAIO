@@ -141,6 +141,21 @@ def _oauth_failure_redirect(reason: str) -> RedirectResponse:
     return redirect
 
 
+def _totp_matches(user: User, code: str) -> bool:
+    """Check a TOTP code, failing closed when the seed is unreadable.
+
+    ``mfa_enabled`` is the only switch for demanding a second factor. A ``None``
+    seed on such an account (undecryptable at rest) is a refused code, never
+    "MFA off"; the caller counts it as a failed attempt.
+    """
+    if not user.mfa_secret:
+        # Fresh proxy on purpose: a module logger is cached on first use and then
+        # ignores structlog.testing.capture_logs, which the contract tests rely on.
+        structlog.get_logger().warning("mfa_secret_unavailable", user_id=user.id)
+        return False
+    return verify_totp(user.mfa_secret, code)
+
+
 def _set_mfa_pending_cookie(response: Response, user: User) -> None:
     """Hand the browser a half-finished sign-in awaiting its second factor."""
     response.set_cookie(
@@ -252,7 +267,7 @@ async def login(
         # around the first factor.
         if user.mfa_enabled:
             if body.totp_code:
-                if not user.mfa_secret or not verify_totp(user.mfa_secret, body.totp_code):
+                if not _totp_matches(user, body.totp_code):
                     raise AuthorizationError("Invalid MFA code")
             elif body.backup_code:
                 backup_codes_remaining = await user_service.consume_backup_code(
@@ -619,8 +634,6 @@ async def oauth_callback(
             provider_user_id=userinfo.provider_user_id,
             email=userinfo.email,
             email_verified=userinfo.email_verified,
-            access_token=token.get("access_token"),
-            refresh_token=token.get("refresh_token"),
             avatar_url=userinfo.avatar_url,
         )
         await session.commit()
@@ -708,7 +721,7 @@ async def oauth_mfa_complete(
     backup_codes_remaining: int | None = None
     try:
         if body.totp_code:
-            if not user.mfa_secret or not verify_totp(user.mfa_secret, body.totp_code):
+            if not _totp_matches(user, body.totp_code):
                 raise AuthorizationError("Invalid MFA code")
         elif body.backup_code:
             backup_codes_remaining = await user_service.consume_backup_code(

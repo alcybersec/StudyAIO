@@ -11,7 +11,7 @@ empty. The 2026-10-04 rulings emptied every one of them. The tier holds no `xfai
 the SAFETY-027 veto marker on the JWT default-secret check (floor 2) XPASSed on
 `8356b15` and was removed in SAFETY-028. SAFETY-033 added two **strict** `xfail`s on the
 email-redaction *backstop* (SEC-08), findings F1 and F2; both fixes landed (`06c4fcb`, `344ce7e`) and
-SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free.
+SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free. At M34-S2 SEC-015 added one strict `xfail`, finding F1 (`test_floor2_register_webhook_logs_no_bot_token_at_info`, httpx's INFO request line carries the bot token); `backend` capped the `httpx`/`httpcore` loggers in `configure_logging` and the marker was removed. The follow-up review added one strict `xfail`, finding F2 (`test_floor2_credential_logging_libraries_capped_at_warning`: at `DEBUG` only, `requests_oauthlib`, `botocore` and `urllib3` log credentials or capability URLs); it was not blocking because none of them logs at the default `INFO`. `backend` added `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` and `urllib3` to the capped set in `configure_logging` and the marker was removed, so the tier is `xfail`-free again.
 
 Run:
 
@@ -29,7 +29,9 @@ cd services/app && .venv/bin/python -m pytest tests/safety -v
 | `test_floor1_tenant_isolation.py::test_floor1_route_sweep_every_owned_query_filters_on_caller` | Any authenticated, non-admin route (every method), called with a type-valid request that carries a foreign value in every path parameter, every required query parameter and every JSON body field (`_payload.py` builds it from the route's own types; upload routes get a real PDF file part, `_upload_files`), runs a statement on a user-owned table that does not compare `user_id` to the caller's id. It also fails if `session.get()` is called on an owned model. It also fails if the sweep reaches fewer than 90 routes that query an owned table (74 at the M31 gate, 98 at M32-S4), because below that the check proves nothing. A request the harness cannot build now fails the test; until M32-S4 it was caught as if the handler had crashed, and 27 routes with a query parameter went unswept that way on fastapi 0.136 (`ModelField.required` removed). A handler that opens its own session (`async_session_factory`, the upload XP award) is given the recording mock too. Green since M31-S2-BACKEND-013 fixed R-015 (`qa/ask`, `study/review`, `study/quiz-attempt`, `study/timed-plan`, `gamification/achievements/mark-notified`). |
 | `…::test_floor1_route_sweep_owned_parent_never_unlocks_foreign_rows` | Same sweep, but every lookup that is scoped to the caller finds a row the caller owns, so handlers get past their ownership check. Fails when a later statement on an owned table is keyed on request input alone: it binds a planted value that no caller-scoped primary-key lookup has vetted, binds no id of the caller's own row, and has no `user_id` filter. A course *code* is never vetted, because it is unique per user, not globally. Green since BACKEND-013 (R-015: `GET /courses/{code}/weeks/{n}`, plus the five routes above). |
 | `…::test_floor1_route_sweep_reaches_every_handler` | A swept route is still rejected by FastAPI's request validation (a 422 with a field-error list), so its handler never runs and the sweep cannot see it. `SWEEP_UNREACHED_BY_DESIGN` is empty since M32-S4: the four multipart upload routes are sent a file part and swept. It also fails if any route in `SWEEP_MUST_QUERY_OWNED` (those four) stops reaching a query on an owned table, or if a listed route starts reaching its handler. Mutation-checked in SAFETY-029: dropping `Course.user_id` from `_get_course_owned` flags `POST …/assessments/{id}/documents`; unscoping `get_course_by_code` in `upload_course_document` flags `POST /courseops/documents`. |
-| `…::test_floor1_route_enumeration_is_not_vacuous` | `app.routes` yields fewer than 130 `/api` `APIRoute`s (149 at M32-S4) or the sweep enumerates fewer than 100 method+path pairs (115). **`fastapi` is capped `<0.137` in `requirements.txt` for this reason**: 0.137 makes `include_router` lazy, so `app.routes` holds `_IncludedRouter` placeholders, and every guard that walks it (this sweep and `tests/unit/api/test_endpoint_authn_guard.py`; the scoping guard reads source, not routes) iterates nothing and passes. Lifting the cap means expanding those placeholders in `_sweep_routes` and the authn guard first. Mutation-checked: replacing the `/api` routes with an `_IncludedRouter` stand-in fails here. |
+| `…::test_floor1_route_enumeration_is_not_vacuous` | The route walker (`tests/_routes.api_routes`, which expands fastapi's lazy `_IncludedRouter` wrappers through `iter_route_contexts`) yields fewer than 130 `/api` routes (171 at M34-S2-SEC-007) or the sweep enumerates fewer than 100 method+path pairs (135); or an operation in `app.openapi()` is not an enumerated (method, path) pair. The count floors catch a walker that sees nothing; the OpenAPI cross-check catches one that drops a single router. From fastapi 0.137 `app.routes` holds the wrappers, so a guard that walks it directly iterates nothing and passes (R-040); the cap was lifted to 0.143 in SEC-007 once every walker went through `api_routes`. Mutation-checked in the SEC-007 review: skipping the onboarding (2 operations), feedback (3) or courses router fails the cross-check; returning the bare `original_route`, or the pre-SEC-007 `app.routes` walk, fails the count floor. |
+| `test_floor1_route_walker.py::test_floor1_route_walker_returns_the_effective_route` | On a synthetic app with a nested include (`/api` → `/outer` → `/inner`, `dependencies=[Depends(get_current_user)]` at the inner include), the walked route does not carry the full prefixed path, its own `response_model`, or the include-level `get_current_user` in its dependant (`_requires_user` false). The live app passes no include-level dependency, so without this pin a walker that dropped them would leave such a route out of the tenant sweep, the anonymous-caller pin and the consent gate, with every live count unchanged. Mutation-checked in SEC-007: dropping the include-level dependencies from the effective dependant passes the enumeration guard and fails here. |
+| `…::test_floor1_route_walker_dependency_is_the_one_the_request_runs` | The include-level dependency the walker reports is not what a real request runs: with `get_current_user` refusing, the synthetic route answers anything but 401, or with it satisfied, the handler does not run. |
 | `…::test_floor1_payload_builder_plants_type_valid_foreign_values` | The request builder (`_payload.py`) stops producing a body that validates for a declared type (bounds, enums, literals, dates, UUIDs, nested models, a model-level "one of" rule), or stops planting a recognisable foreign value. The sweep is only as wide as this builder. |
 | `…::test_floor1_every_table_is_classified` | A table is neither user-owned (it has `user_id`, a FK to an owned table, or is polymorphic) nor listed in `UNOWNED_TABLES`. |
 | `…::test_floor1_no_unscoped_session_get_on_owned_model` | An `api/` or `services/` function calls `session.get(OwnedModel, <its own parameter>)` and the call is not classified. It also fails on a stale classification. SAFETY-013 removed `_get_course_owned` (its `user_id=None` branch went in BACKEND-006) and mutation-checked that restoring the branch fails here. |
@@ -42,13 +44,17 @@ cd services/app && .venv/bin/python -m pytest tests/safety -v
 | `…::test_floor1_caller_filter_detector_rejects_widened_predicates` | `_tenant.filters_on_user` reads `user_id = :caller OR …`, `NOT (user_id = :caller)`, `user_id != :caller` or `user_id IN (:caller, :victim)` as caller-scoped, or stops accepting `= :caller`, `IN (:caller)` or an OR whose every branch is caller-scoped. Closed SAFETY-021 blind spot 1 in SAFETY-025; every sweep test runs on this helper. |
 | `…::test_floor1_insert_detector_accepts_only_caller_owned_writes` | `_tenant.inserts_for_caller` accepts an INSERT for another user, a multi-row VALUES with one foreign row, an `INSERT … SELECT`, an upsert whose conflict key lacks `user_id` or carries an update `WHERE`; or rejects the caller's plain insert or `(user_id, record_date)` upsert. Added in SAFETY-026 when GL#19 (`f5960c8`) made `record_usage` an atomic `INSERT … ON CONFLICT (uq_usage_user_date) DO UPDATE` and the sweep flagged it (an INSERT has no WHERE). The sweep now accepts a statement that passes this helper. Mutation-checked: `record_usage` writing another `user_id`, or conflicting on `record_date` alone, turns the route sweep red. |
 | `…::test_floor1_pipeline_only_fetch_is_pipeline_only` | The one allowlisted worker-only unscoped fetch gains a caller outside `app/pipeline/`. |
+| `…::test_floor1_chunk_store_is_worker_only` | `index_service.store_artifact_chunks` (deletes and rewrites an artifact's chunks by a bare `artifact_id`) is referenced outside `app/pipeline/` other than from its wrapper `index_artifact_chunks`, or the wrapper is referenced outside `app/pipeline/` at all; or neither is referenced from the worker (blind detector). A request-side caller with a foreign artifact id would wipe another user's search index. Added in M34-S3-SAFETY when AI-010 split the index service. Mutation-checked: a reference from `app/services/chat_service.py` fails it. |
 | `test_floor1_anonymous_caller.py::test_floor1_self_hosted_anonymous_caller_is_401_on_every_user_route` | SEC-05 (GL#25, R-035). On a `SELF_HOSTED`, multi-user instance (`SINGLE_USER_MODE` off), any route that requires a user, admin routes included, answers a request with no session cookie with anything but 401, or the default admin is resolved at all. Fails if fewer than 120 user-requiring method+path pairs are enumerated. Added at the M32 gate because the unit tier alone (`tests/unit/test_single_user_mode.py`) pinned the dependency. Mutation-checked: `get_current_user_or_default` falling back to the default admin on `self_hosted` alone resolves it 103 times and fails here. |
 | `…::test_floor1_single_user_mode_control_reaches_the_default_admin` | Control: with `SINGLE_USER_MODE` on, the same anonymous harness never reaches the default-admin fallback, so the 401 pin above could not tell a fixed dependency from a broken harness. |
 | `test_floor1_worker_jobs.py::test_floor1_recovery_job_is_worker_only` | TECH-04 (GL#22, `b011c3d`). A module other than `app/pipeline/recovery.py` and `app/worker.py` imports the recovery job, calls `_recover`/`recover_stuck_artifacts`, or names the task in a (non-docstring) string such as `send_task(...)`. The job reads every user's in-progress artifacts; `_recover` is classified in `UNSCOPED_FUNCTION_ALLOWED` on this condition (SAFETY-027). |
 | `…::test_floor1_recovery_requeues_each_artifact_as_its_own_owner` | One batch with two users' stuck artifacts resumes either with anything but that artifact row's own `user_id`. Mutation-checked: reusing the first row's owner fails here. |
 | `…::test_floor4_recovery_never_deletes` | Requeue or give-up issues a `session.delete`, an executed `DELETE`, or `recovery.py` calls any `delete`/`remove`/`unlink`/`rmtree`. Giving up only sets `failed`. |
-| `…::test_floor1_webhook_mutates_only_the_named_customers_row[…]` | BILL-01 (GL#21, `b7974d1`). A Stripe `subscription.updated`/`deleted` event changes a subscription or user tier other than the named customer's and that row's own `user_id`, or a lookup is keyed on anything else. Mutation-checked: keying the user lookup on a constant fails here. |
-| `…::test_floor1_webhook_replayed_or_stale_event_mutates_nothing`, `…::test_floor1_webhook_old_subscription_delete_keeps_the_current_one` | A replayed event id or an event older than the customer's last applied one runs any query, or a superseded subscription's delete downgrades the customer. Mutation-checked: disabling the `SET NX` dedupe fails here. |
+| `…::test_floor1_webhook_mutates_only_the_named_customers_row[…]` | BILL-01 (GL#21, `b7974d1`). A Stripe `subscription.updated`/`deleted` event changes a subscription or user tier other than the named customer's and that row's own `user_id`, or a lookup is keyed on anything else; or (SEC-008) the claim row in `stripe_webhook_events` does not record that customer, or claim and effect do not commit exactly once. Mutation-checked: keying the user lookup on a constant fails here. |
+| `…::test_floor1_webhook_replayed_or_stale_event_mutates_nothing`, `…::test_floor1_webhook_old_subscription_delete_keeps_the_current_one` | A replayed event id or an event older than an applied one for that customer touches `subscriptions` or `users`, the replay adds a row, or the stale event is not committed as `stale` (so its retry would re-run); or a superseded subscription's delete downgrades the customer. Since M34-S2-SEC-008 the state is the Postgres table (`models.stripe-webhook-events v1`), modelled in `_WebhookDb` over MiniDB with a unique claim and commit/rollback. |
+| `…::test_floor1_webhook_ordering_is_per_customer` | Another customer's newer applied event suppresses this customer's event (the watermark read lost its customer filter; MiniDB evaluates the real WHERE), or the advisory lock is not the named customer's or is not taken before the watermark read (R2). |
+| `…::test_floor4_webhook_failed_effect_releases_the_claim` | A failing effect leaves the claim row behind (so Stripe's retry would be swallowed as a replay), or the retry does not apply. |
+| `…::test_floor1_floor4_account_deletion_nulls_stripe_customer_with_update_never_delete`, `…::test_floor4_account_deletion_unlinks_stripe_events_before_deleting_subscriptions` | R4. Account deletion deletes a `stripe_webhook_events` row, touches it with anything but `UPDATE`, unlinks another customer's rows, or leaves the deleted user's customer id in place; or the unlink runs after the per-table delete loop (when `subscriptions`, its source of customer ids, is gone), or the table leaves `GLOBAL_TABLES`. |
 | `…::test_floor1_cannot_attach_document_to_another_users_assessment` | `attach_assessment_document` lets user B attach a document to user A's assessment. The fake session answers like a database: only a lookup filtered on the caller's `user_id` comes back empty, so an unscoped `select` fails too, and a control call as the owner must find the row. Fixed in M31-S1-BACKEND-008 (`a2cd687`). |
 | `…::test_floor1_no_cross_user_route_awaits_a_ruling` | `SWEEP_PENDING_RULING` is not empty: some route reads across users and the user has not ruled on it. Empty since the 2026-10-04 rulings; the leaderboard moved to `SWEEP_OPT_IN_CROSS_USER`. |
 | `…::test_floor1_leaderboard_lists_only_opted_in_users` | `GET /api/gamification/leaderboard` runs a `user_xp` statement that, evaluated row by row (`_predicate.admits`), keeps another user who opted out or has no `user_settings` row, or drops one who opted in. The caller's own row is unconstrained. It also fails if the route runs no `user_xp` query, or uses SQL the evaluator does not model. The leaderboard is exempt from the sweep (`SWEEP_OPT_IN_CROSS_USER`) because the sweep asks whether `user_id` is compared to the caller, which cannot judge an opt-in filter. Ruled 2026-10-04 (R-007): opt-in, hidden by default. Green since M31-S2-BACKEND-019 (`leaderboard_opt_in`). |
@@ -100,6 +106,18 @@ Mutation-checked in SAFETY-033, all red: chat-target owner predicate dropped; `A
 predicates dropped; usage record with another user's id; the foreign-course check removed;
 `require_role("admin")` swapped for a plain caller on the retention route; `admin_summary` called from
 `GET /feedback/mine`.
+
+### First-run onboarding (`api.onboarding v1`, M34-S3-BACKEND-012)
+
+`test_floor1_onboarding.py`, real `GET`/`PATCH /api/onboarding` over MiniDB, the caller beside a
+second user who has done every step.
+
+| Test | Fails when |
+|---|---|
+| `…::test_floor1_onboarding_get_ignores_another_users_activity` | The caller with no rows is not `new`, or reads the other user's checklist preference. |
+| `…::test_floor1_onboarding_each_fact_is_the_callers_own[<fact>]`, `…::test_floor1_onboarding_fact_cases_cover_every_fact` | Another user's artifact, summary, `summary_viewed` event, flashcard review or quiz attempt moves the caller's status; or the caller's own fact does not (positive control, so the pin cannot pass on a fact never read). |
+| `…::test_floor1_onboarding_every_statement_carries_the_caller` | A statement `GET` runs does not bind the caller's id or binds another user's, or the `quiz_attempts` branch (no `user_id` column) is not scoped through `courses.user_id`. |
+| `…::test_floor1_onboarding_patch_writes_only_the_callers_row[…]`, `…::test_floor1_onboarding_patch_rejects_a_named_target[…]` | `PATCH` changes another user's `onboarding_checklist`, issues other than one `UPDATE users … WHERE users.id = <caller>`, or accepts a body naming a user. |
 
 ### User-authored study items and upload placement (GL#48, GL#49; backend `3c1ef9c`, SAFETY-059)
 
@@ -210,10 +228,12 @@ an enqueue, not an edge).
 | `…::test_floor2_pool_call_graph_is_not_blind` | The graph stops seeing `get_agent` from any known AI task (classify, summarize, assets, courseops, targeted, concepts), `get_embedding_provider` from `reembed_user_chunks`, or recovery's function-local `resume_pipeline` import; or it starts treating `reembed_all_chunks`'s `.delay()` fan-out as a call. |
 | `…::test_floor2_maintenance_tasks_never_reach_the_agent` | A task routed to `maintenance` reaches `get_agent`. `worker-maintenance` has no Claude login. |
 | `…::test_floor2_claude_login_only_where_the_agent_is_called` | An allowlisted pool consumes no queue with an AI task (a login with no purpose), or a pool outside the allowlist consumes one (a worker without `-Q` counts as consuming every queue). |
+| `…::test_floor2_an_ai_task_message_reaches_only_a_pool_with_the_login[send_task\|declared-address]` | A task that reaches `get_agent`, published on an in-memory broker either through `celery_app.send_task` or to its routed queue's declared exchange and routing key, is delivered to any other queue, or to a queue that a pool outside the allowlist consumes. The static pins above assume delivery follows the routing. Before AI-067 (`2bed33a`, R-044), bare `Queue(name)` shared one binding, so a message sent to an AI queue's declared address also reached `maintenance`. Added at the M33 gate. |
 
 Revert-checked in SAFETY-059: the login dir mount plus `*claude-environment` added to
 `worker-maintenance` (mount and token-path pins red); `worker-maintenance` added to the allowlist
 (pool, parser and pairing pins red); `extract_concepts` routed to `maintenance` (both routing pins red).
+Mutation-checked at the M33 gate: `app/worker.py` back to bare `Queue(name)` (the delivery pin red).
 
 ### Operator-only AI settings (SEC-01, SEC-03; backend `a5f3255`)
 
@@ -257,6 +277,153 @@ Mutation-checked, all caught: the factory dropping `user_supplied_url` for zai a
 
 Mutation-checked in SAFETY-026, all caught: cwd not passed; cwd not removed; `model or …` restored; `--system-prompt` dropped; a flag after `--tools ""`; host copy read back (`not host`/`credentials` guards removed); copy dir not removed; uid not passed to spawn.
 
+Since SEC-006 (M34-S2) the pins above name their deployment through `conftest.py`: the uid mode runs on
+`cli_root_worker` (euid pinned to 0, no opt-in: the AGENT-01 drop), every other spawn pin here, in
+`test_floor2_claude_oauth_token.py`, `test_floor2_no_secrets.py` (GL#8 retry, container login, worker
+provider errors) and `test_floor2_operator_only_ai_settings.py` runs on `cli_shared_uid_opt_in` (euid pinned
+to 999, `CLAUDE_CLI_SHARED_UID_ACCEPTED=true`). Pinning the euid makes the tier mean the same as root (CI)
+and as a developer. `test_floor2_sentry_event_for_a_cli_failure_carries_no_credential` also asserts the CLI was
+spawned: a refusal is an `AgentError` with no credential and passed it vacuously.
+
+### Non-root AI pools and the shared-uid refusal (SEC-006 option F; devops `fef057f`, ai `36ebc83`)
+
+Review: `docs/gates/M34/sec006-safety.md` §5. Compose pins run over five stacks: `docker-compose.yml` alone and
+merged with `prod`, `production`, `selfhosted`, and `selfhosted`+`production`, anchors and `<<` resolved,
+`!reset`/`!override` honoured, `tmpfs` unioned as compose does (cross-checked against `docker compose config`).
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_cli_shared_uid_refusal.py::test_floor2_nonroot_multi_user_refuses_before_any_login_is_read_or_spawned[…]` | On a non-root, multi-user worker with no opt-in (unset, empty, `false`, `0`, `no`, `off`, any other word), for the setup token, the host login and per-user credentials: the CLI is spawned, a `oauth-token`/`.credentials.json` is opened, a temp dir is made or anything chowned, the error is not `ClaudeCliUnavailableError` or is transient, the refusal is not counted, a credential is in the error, its chain or the logs, or the message names no remedy. |
+| `…::test_floor2_refusal_is_logged_once_and_counted_every_time` | `claude_cli_spawn_refused` is logged more than once per reason, carries a field beyond the reason, or a refusal is not counted. |
+| `…::test_floor2_refusal_holds_through_get_agent[…]`, `…::test_floor2_refusal_fails_a_real_stage_once_without_a_retry_or_a_spawn` | The factory's instance or per-user `claude_code` adapter spawns; `classify` spawns, records more than one failed run, fails for another reason, or stores a credential. |
+| `…::test_floor2_cli_uid_on_a_nonroot_worker_is_refused_in_every_mode[…]` | `CLAUDE_CLI_UID` on a non-root worker is not refused with the configuration error (with the opt-in, with `SINGLE_USER_MODE`, or both), or a temp dir/spawn happens first. |
+| `…::test_floor2_operator_opt_in_spawns_at_the_worker_uid[…]`, `…::test_floor2_single_user_mode_spawns_without_the_opt_in[…]`, `…::test_floor2_root_worker_is_unchanged_without_the_opt_in[…]`, `…::test_floor2_root_worker_still_drops_to_the_cli_uid[…]` | Controls: the opt-in (`true`/`TRUE`/`1`/`yes`/` on `) or single-user mode does not spawn, a non-root spawn tries to drop, a root worker is refused, or a root worker with `CLAUDE_CLI_UID` does not drop to it with `extra_groups=[]` and a private `HOME`. |
+| `…::test_floor2_every_cli_spawn_in_the_adapter_is_preceded_by_the_guard`, `…::test_floor2_refusal_error_is_a_plain_agent_error` | A function in `claude_code.py` that spawns does not call `ensure_claude_cli_spawnable()` as its first statement; the refusal error stops being a plain `AgentError`. |
+| `test_floor2_worker_pools_nonroot.py::test_floor2_app_image_services_never_run_as_root[<stack>]`, `…::test_floor2_dockerfile_final_user_is_studyaio`, `…::test_floor2_image_user_uid_is_the_one_the_pins_assume` | A worker pool, `api` or `beat` has an effective `user` with uid or gid `0`/`root`, or none while the Dockerfile does not end `USER studyaio`; `studyaio` is not uid 999 (explicit `-u 999`, or the image's first `useradd -r`). |
+| `…::test_floor2_no_app_image_service_configures_a_cli_uid_drop[<stack>]`, `…::test_floor2_cli_uid_is_not_set_in_env_example`, `…::test_floor2_shared_uid_opt_in_is_never_defaulted_on` | `CLAUDE_CLI_UID`/`GID` reach an app-image service or a live `.env.example` line; a compose file or `.env.example` sets `CLAUDE_CLI_SHARED_UID_ACCEPTED` to anything but empty, off or a pass-through defaulting off. |
+| `…::test_floor2_ai_pool_home_is_a_private_tmpfs[<stack>]`, `…::test_floor2_home_detector_rejects[…]` | An AI pool's `HOME` is unset, `/`, `/root`, `/app`, under `/app/data`, `/run/claude-host`, `/root/.claude` or any mount, or has no tmpfs at exactly that path with the pool's uid and mode `0700`. |
+| `…::test_floor2_login_scripts_never_suggest_a_widening_chmod`, `…::test_floor2_chmod_detector[…]` | `preflight-check.sh` or `setup-claude-login.sh` names a `chmod` that grants group/other or special bits, or a mode the detector cannot read. |
+| `…::test_floor2_compose_merge_honours_reset_override_and_tmpfs_union`, `…::test_floor2_every_stack_has_the_app_image_services`, `…::test_floor2_nonroot_pin_catches_a_root_pool` | Guards the guard: the merge misreads `!reset`/`!override`/`tmpfs`, a stack loses a service, or a root pool passes. |
+
+Mutation-checked in M34-S2 on a scratch copy, all red: the guard call deleted from `_run_once` (30 pins red);
+the guard returning early for non-root; the `CLAUDE_CLI_UID` check moved after the opt-in; `user: "0:0"` on
+`x-worker-common`; `user: root` on `worker-ondemand` in `prod.yml`; `CLAUDE_CLI_UID` back in `selfhosted.yml`;
+the opt-in defaulted `true` in `prod.yml`; `HOME: /root`; the HOME tmpfs at `0755`; `chmod 750` in the
+preflight hint; `USER root` appended to the Dockerfile.
+
+### Third-party tokens and the TOTP seed at rest (SEC-005, `models.secrets-at-rest v1`; backend `4daef70`, data `9ecd47a` on `hold/m34-sec005`)
+
+`oauth_accounts.access_token`/`refresh_token`, `calendar_syncs.access_token`/`refresh_token` and
+`users.mfa_secret` are `secret_box.EncryptedText`. Review: `docs/gates/M34/contracts-safety.md` (C1-C7) and
+`docs/gates/M34/sec005-safety.md`; threat model §5, SEC-005. The architect's contract
+(`tests/contracts/test_secrets_at_rest_contract.py`) pins the same entry from the interface side; the rows
+below are the floor tier's own.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_tokens_at_rest.py::test_floor2_credential_column_scan_is_not_vacuous` | The name scan (`*token`, `*secret`, `*password`, `*api_key`) stops finding the five columns, or a reviewed exclusion has gone stale. |
+| `…::test_floor2_every_credential_column_is_encrypted_or_reviewed` | A credential-named column is neither encrypted nor classified in `NOT_ENCRYPTED_REVIEWED` with a reason (`calendar_syncs.sync_token`; `telegram_links.link_token`, a SHA-256 digest since SEC-014). |
+| `…::test_floor2_credential_reaches_the_driver_as_ciphertext[5]` | Binding a sentinel through the column type for Postgres yields anything but `enc:v1:` ciphertext without the sentinel, or the value does not read back. |
+| `…::test_floor2_failed_insert_error_text_carries_no_plaintext[5]` | The text of a failed INSERT's `DBAPIError`, as `logger.exception` renders it, carries the sentinel. |
+| `…::test_floor2_engine_hides_bound_parameters_from_error_text` | The request engine's `hide_parameters` is off (C6). |
+| `…::test_floor2_unreadable_totp_seed_never_bypasses_mfa[2]`, `…::test_floor2_unreadable_totp_seed_never_bypasses_oauth_mfa` | With `mfa_enabled` and a `None` (unreadable) seed, a password login with or without a TOTP code, or the OAuth pending-MFA step with a code, gets anything but `403` and no session cookies; `verify_totp` is handed `None`; or (OAuth) the failure is not counted by the login throttle (C2.1, C2.2). |
+| `…::test_floor2_backup_code_still_signs_in_when_the_seed_is_unreadable` | A valid backup code is refused because the seed is unreadable (C2.3), or the seed rather than `mfa_enabled` decides whether MFA applies. |
+| `…::test_floor2_disable_mfa_with_unreadable_seed_refuses_and_changes_nothing` | `disable_mfa` with `mfa_enabled` and a `None` seed clears anything, flushes, or answers "MFA is not enabled" (C2.4, C2.5). |
+| `…::test_floor2_rotation_rekeys_stored_strings_and_never_rewrites_an_unreadable_one` | `encrypt-user-secrets`' column pass, run on real SQL (SQLite) over plaintext, current-key, old-key and undecryptable values: a dry run writes; an unreadable or current value is not byte-for-byte as stored; a plaintext or old-key value is not under the first key; or the `(encrypted, rotated, unreadable)` counts that gate the exit code are wrong (C1). |
+| `…::test_floor2_upgrade_without_a_key_on_multi_user_aborts_before_touching_anything`, `…::test_floor2_upgrade_with_a_key_leaves_no_plaintext` | Revision `b2d4f6a8c0e1`, run on SQLite with `op` stood in: a multi-user upgrade with no key alters a column or writes a value instead of raising, or a keyed upgrade leaves a plaintext value (C4). |
+| `…::test_floor2_downgrade_abort_paths_change_nothing[no_key\|undecryptable\|too_long]` | The downgrade, facing ciphertext with no key, an undecryptable value, or a decrypted seed longer than 64, narrows a column or writes any value before raising (C5). |
+| `…::test_floor2_fresh_logger_proxy_is_redacted_like_a_module_logger`, `…::test_floor2_undecryptable_column_log_names_the_column_not_the_value` | Under the real `configure_logging`, a call-time `structlog.get_logger()` line (the SEC-005 log sites use one so `capture_logs` sees them) carries an address or a bound-parameter value, or `secret_at_rest_undecryptable` carries the ciphertext or plaintext instead of only the column. |
+| `…::test_floor2_calendar_revoke_sends_the_token_in_the_body_not_the_url` | `disconnect_calendar` puts the access token in the revoke URL or `params=` rather than the form body (C7). |
+
+Mutation-checked in the SEC-005 review (scratch copy of `services/app`, `scratchpad/mut/muts.py`), each red in
+this file alone: rotation through the ORM attribute; rotation writing `NULL` over an unreadable value;
+rotation not counting it; `_totp_matches` returning `True` on a `None` seed; the login gate keyed on the seed;
+`disable_mfa` clearing MFA, or answering "not enabled", on a `None` seed; `EncryptedText` binding plaintext;
+the undecryptable log carrying the stored value; revoke via `params=`; `hide_parameters=False`; the upgrade
+without `check_startup()`; the downgrade not aborting on an undecryptable value; a backup code refused on a
+`None` seed; `mfa_secret` back to `String(64)`. Revoke attempted with a `None` token (availability, not floor)
+is caught only by the contract test.
+
+### OAuth sign-in tokens not stored; Telegram pairing code as a digest (SEC-013, SEC-014)
+
+`models.secrets-at-rest v2` and `models.telegram-pairing-code v1`; revision `c3e5a7b9d1f2`. Review:
+`docs/gates/M34/sec013-014-safety.md`; threat model §5, SEC-013/014. `telegram_links.link_token` is now classified
+in `NOT_ENCRYPTED_REVIEWED` as a SHA-256 digest. The two `oauth_accounts` columns stay in `MUST_ENCRYPT` until
+`models.secrets-at-rest v3` drops them (a deploy-window write by the previous release is still ciphertext). Not
+pinned: pairing codes never expire (R-048, open).
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_tokens_at_rest.py::test_floor2_create_or_link_oauth_accepts_no_provider_token` | `create_or_link_oauth` gains an `access_token`/`refresh_token` parameter or `**kwargs`. |
+| `…::test_floor2_no_app_code_writes_a_non_none_oauth_token` | Any `app/` module that names `OAuthAccount`/`oauth_account(s)` passes a token keyword (or `**`) to `OAuthAccount(...)`, assigns a non-`None` value to `.access_token`/`.refresh_token`, `setattr`s one, or `.values(...)` one non-`None`; or the scan stops seeing the two `None` sweeps (vacuous). |
+| `…::test_floor2_both_oauth_branches_leave_the_row_without_tokens[known_identity\|link]` | The real service over MiniDB leaves a token on the row (a deploy-window value on the known-identity branch, or a fresh link), or changes the identity link. |
+| `…::test_floor2_oauth_callback_uses_the_token_for_userinfo_only_and_never_logs_it[success\|service_error]` | The callback hands the provider's token dict to anything but `fetch_userinfo` (positive control: it does reach it), passes a token keyword to the service, or a token reaches the logs (real `configure_logging`) or the redirect, on success or on a service failure. |
+| `…::test_floor2_google_authorize_url_does_not_ask_for_a_refresh_token` | Google's authorize URL carries `access_type`/`offline`, or the scopes change. |
+| `…::test_floor2_pairing_code_is_stored_and_looked_up_only_as_its_digest` | Over MiniDB: the code (first or regenerated) is stored anywhere in plaintext; the stored value is not its SHA-256; an old code or the stored digest pairs; the lookup binds the code rather than its digest; a successful pairing does not consume the code or touches another user's pending row; or the code or digest is logged. |
+| `…::test_floor2_webhook_start_never_logs_the_code[valid\|digest\|unknown]` | `/start <code>` logs the code or its digest on a hit or a miss, or the digest pairs. |
+| `…::test_floor2_no_telegram_log_call_carries_a_code` | A `logger.*` call in `telegram_service` or `api/notifications.py` passes an expression naming `token`, `code`, `link_token`, `deep_link`, `text`, `update`, `message` or `body`. |
+| `…::test_floor2_floor4_sec013_upgrade_nulls_only_the_secrets_and_keeps_every_row` | Revision `c3e5a7b9d1f2` upgrade on SQLite deletes a row, changes an identity or link column (`user_id`, `provider`, `provider_user_id`, `chat_id`, `username`, `verified`), leaves a token or pending code, prints a value, or is not idempotent. |
+| `…::test_floor2_sec013_downgrade_restores_no_token_and_nulls_every_digest` | The downgrade touches `oauth_accounts`, leaves a digest that the old plaintext comparison would accept, changes a linked chat, prints a value, or its docstring stops saying the tokens cannot be restored. |
+
+Mutation-checked in the SEC-013/014 review on a scratch copy of `services/app` outside the worktree, these pins
+only: 21/21 red (the deploy-window sweep removed; a token written on either branch; the parameter back and passed
+by the callback; `**kwargs`; the callback logging the token on success or failure; `access_type=offline`;
+plaintext stored on create or regenerate; plaintext lookup; lookup also accepting the digest; the code logged on
+generate or `/start`; the code not consumed; the upgrade deleting OAuth rows or pending Telegram rows, leaving
+codes, or printing a token; the downgrade leaving digests; the docstring warning removed).
+
+### Telegram webhook authenticity (SEC-015, R-052), floors 1 and 2
+
+The webhook takes no user session. Since SEC-015 it compares `X-Telegram-Bot-Api-Secret-Token` in constant time
+with a dedicated `TELEGRAM_WEBHOOK_SECRET` (`SecretStr`) that `python -m app.cli register-telegram-webhook`
+registers with Telegram. An authentic update can only bind its chat to the `telegram_links` row whose digest
+matches a `/start` code. Review: `docs/gates/M34/sec015-safety.md`; threat model §5, SEC-015. Tests are in
+`test_floor2_telegram_webhook_secret.py`.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_webhook_secret_is_compared_only_with_compare_digest` | `telegram_webhook` does not call `hmac.compare_digest` exactly once, compares the header or the secret with `==`/`!=`/`in`, or names `telegram_webhook_url`. |
+| `test_floor2_webhook_compare_digest_sees_the_header_and_the_secret` | The digest compare is not given exactly the presented header and the configured secret. |
+| `test_floor1_forged_update_with_a_valid_pairing_code_pairs_nothing[…]` | With the secret set, a `/start` that carries user B's real pairing code and no header, an empty, wrong, prefix, extended or upper-cased secret, the webhook URL, its last segment or the bot token gets anything but `403 {"detail": "Invalid webhook secret"}`, runs any statement or commit, changes any link, or puts the secret, bot token, code or digest in the log. |
+| `test_floor1_correct_secret_pairs_only_the_row_the_code_names` | Control. The correct secret does not pair B with the sending chat, changes A's verified link (same chat), inserts or deletes anything, touches a table other than `telegram_links`, or returns the secret, bot token or URL; or an unknown code mutates anything. |
+| `test_floor1_unset_secret_on_a_multi_user_instance_rejects_everything[cloud\|self-hosted]` | With the secret unset and `SINGLE_USER_MODE` off, any call (a value, no header, empty, the URL) is accepted or runs a statement, or the warning is not logged exactly once, or it carries the presented value. |
+| `test_floor1_single_user_unset_secret_accepts_by_ruling` | Pins the SEC-015 ruling: single-user with no secret accepts. Flip it deliberately if the ruling changes. |
+| `test_floor1_single_user_still_enforces_a_set_secret` | Single-user mode bypasses a configured secret. |
+| `test_floor2_webhook_secret_and_bot_token_reach_no_response_or_log_call` | Outside `config.py`, `telegram_webhook_secret` or `telegram_bot_token` is read anywhere but the reviewed functions, or the link endpoint uses the token beyond its presence check. |
+| `test_floor2_register_webhook_is_called_only_from_the_cli_at_warning` | `register_webhook` is referenced or imported outside `cli._register_telegram_webhook`, or the CLI's `configure_logging` level is not `WARNING` (F1 below). |
+| `test_floor2_cli_prints_no_bot_token_or_secret[ok\|connect-error\|timeout\|rejected\|not-json]` | In a fresh process (the CLI's own logging in force), `register-telegram-webhook` prints the bot token, its secret half or the webhook secret on success, a connection error or timeout whose text names the request URL, a Telegram rejection whose body names it, or a non-JSON reply; or exits with the wrong code. |
+| `test_floor2_send_path_logs_no_bot_token_on_network_failure` | `send_telegram_message`'s `exc_info` log on a refused connection carries the bot token. |
+| `test_floor2_register_webhook_logs_no_bot_token_at_info` | httpx logs `HTTP Request: POST https://api.telegram.org/bot<token>/setWebhook` at INFO, so the bot token reaches the log. Finding F1; `configure_logging` caps `httpx`/`httpcore` at `WARNING`, and this pin was a strict `xfail` until then. |
+
+Mutation-checked in the SEC-015 review on a scratch copy of `services/app` outside the worktree, these pins only:
+19/19 red (`!=` compare; the URL as the secret; unset accepted in multi-user; unset falling through to the compare
+so an empty header passes; single-user bypassing a set secret; prefix compare; case-insensitive compare; the
+warning logging the presented value; warning on every call; a rejection logging the secret; the handler running
+before the check; the response echoing the secret; the CLI printing httpx error text; the CLI at INFO;
+`register_webhook` logging the request URL; printing Telegram's reply; an import of `register_webhook` in
+`main.py`; the send path logging the token; the link endpoint returning the token). The F1 marker was checked to
+XPASS with the httpx logger capped.
+
+#### Third-party loggers and settings errors (SEC-015 follow-up; backend `8285ca4`)
+
+`test_floor2_library_log_levels.py`. Run with the root logger at `DEBUG`, because `LOG_LEVEL` is an operator
+knob. Review: `docs/gates/M34/sec015-safety.md` §7.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_url_logging_library_capped_at_warning[httpx\|httpcore\|googleapiclient\|stripe]` | After `configure_logging("DEBUG")`, a library that logs full request URLs has an effective level below `WARNING`. |
+| `test_floor2_credential_logging_libraries_capped_at_warning` | **Strict `xfail`, finding F2.** XPASSes, and so fails, once `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` and `urllib3` are capped; then remove the marker. |
+| `test_floor2_openai_adapter_logs_no_user_key_at_debug[ok\|rejected]` | A per-user OpenAI key reaches the log stream at `DEBUG`, on success or on a 401. |
+| `test_floor2_anthropic_adapter_logs_no_user_key_at_debug[ok\|rejected]` | The same for the Anthropic adapter. |
+| `test_floor2_settings_has_secret_fields` | The `SecretStr` field discovery below collects nothing, which would empty the parametrisation. |
+| `test_floor2_settings_error_never_echoes_a_secret_value[<every SecretStr setting>]` | A `Settings` `ValidationError` (`str` or `repr`) contains the rejected value of a secret setting. The probe is short on purpose: pydantic elides the middle of a long `input_value`. |
+| `test_floor2_settings_error_from_env_never_echoes_the_webhook_secret` | A malformed `TELEGRAM_WEBHOOK_SECRET` read from the environment is echoed in the error. |
+
+Mutation-checked on a scratch copy: removing the `httpx`/`httpcore` cap fails the two cap pins and
+`test_floor2_register_webhook_logs_no_bot_token_at_info` on the token assertion; removing
+`hide_input_in_errors` fails all 15 settings pins; a debug log of the key in each adapter fails all 4 adapter
+pins; capping the F2 set makes the strict `xfail` fail.
+
 ### Metrics labels (M32 G3)
 
 Both `/metrics` endpoints are unauthenticated: the worker's on `127.0.0.1:9101` and the
@@ -265,10 +432,12 @@ multiprocess tmpfs. The policy is the one in `app/pipeline/metrics.py`.
 
 | Test | Fails when |
 |---|---|
-| `test_floor2_metrics_labels.py::test_floor2_metric_label_names_are_the_allowed_enums` | A `prometheus_client` metric anywhere under `app/**` declares a label other than `stage`, `outcome` or `error_class`, or declares its labels non-literally. |
-| `…::test_floor2_metric_label_values_are_never_identifiers_or_messages` | A `.labels(...)` call passes a positional value, an unlisted label, a value that is not a string literal or the local `stage`/`outcome`, or an `error_class` that is anything but `type(<x>).__name__` (so never `str(exc)` or an f-string with the message). |
+| `test_floor2_metrics_labels.py::test_floor2_metric_label_names_are_the_allowed_enums` | A `prometheus_client` metric anywhere under `app/**` declares a label other than `stage`, `outcome`, `error_class` or an `ENUM_LABELS` label, or declares its labels non-literally. `ENUM_LABELS` since M34-S3-BACKEND-012: `action` (`core.login-throttle-metrics v1`) with values `read`, `record`, `clear`, `limit`. |
+| `…::test_floor2_enum_label_values_are_all_in_use` | An `ENUM_LABELS` value is no longer used at any `.labels` site under `app/**` (the closed set would drift wider than the code), or one is used that is not listed. |
+| `…::test_floor2_metric_label_values_are_never_identifiers_or_messages` | A `.labels(...)` call passes a positional value, an unlisted label, a value that is not a string literal or the local `stage`/`outcome`, an `ENUM_LABELS` label whose value is not a literal from its set, or an `error_class` that is anything but `type(<x>).__name__` or, at a `CLASS_NAME_LOCAL_SITES` site only, a local bound from `<Class>.__name__` (so never `str(exc)` or an f-string with the message). |
 | `…::test_floor2_api_instrumentator_keeps_route_templates` | `Instrumentator(...)` is given `should_group_untemplated=False` or opaque `**kwargs`. |
 | `…::test_floor1_api_metrics_name_route_templates_not_raw_paths` | With the defaults `main.py` uses, a course code, an email or an unmatched raw path reaches the scrape, or the `handler` label is not the route template. This pins the library's behaviour across upgrades. |
+| `…::test_floor2_reviewed_class_name_sites_are_not_stale`, `…::test_floor2_reviewed_class_name_site_detector[…]` | `CLASS_NAME_LOCAL_SITES` names a metric no longer labelled in that module; or the reviewed spelling (`error_class=<local>`) is accepted outside a listed site, when the local is bound from anything but `<Class>.__name__` of a class in the same module, when it is rebound, or when it is unbound. One site since SEC-006: `CLI_SPAWN_REFUSALS` in `agents/claude_code.py`. |
 | `…::test_floor2_metric_policy_is_not_vacuous`, `…::test_floor2_label_*_detector[…]`, `…::test_floor2_instrumentator_detector[…]` | The checks stop seeing the worker metrics (8 or more, 10 or more `.labels` sites) or the api Instrumentator, or the detectors misjudge synthetic source. |
 
 Mutation-checked in SAFETY-005, all red: a `user_id` label on `STAGE_FAILURES`; `error_class` carrying
@@ -299,6 +468,14 @@ Mutation-checked in SAFETY-040, all red: `app/core/logging.py` reverted to befor
 `app/worker.py` reverted to before `344ce7e` (both worker tests); only the `@setup_logging.connect` decorator
 removed (the signal test, which the AST check alone misses).
 
+Outgoing mail (GL#53, `0be417c`, M33 gate). The text/plain alternative repeats every link as a
+visible URL, so reset, verification and invite tokens appear twice in each message.
+
+| Test | Fails when |
+|---|---|
+| `test_floor2_email_delivery_logs.py::test_floor2_sent_mail_logs_no_address_token_or_body[…]` | Sending a reset, verification or invite mail through the real logging configuration (DEBUG) puts the recipient address, the link token or the body into the handler stream. Not vacuous: the token must be in both MIME alternatives and `email_sent` must be logged. |
+| `…::test_floor2_failed_mail_logs_no_address_or_token[…]` | An SMTP failure (a recipients-refused error, or any exception whose text names the recipient) leaves the address or the token in the `email_send_failed` line or its traceback. |
+
 ## 3. AI only via the adapter (amended by ADR 0003 and ADR 0005)
 
 > every AI call goes through a sanctioned gateway, either AgentAdapter obtained via
@@ -320,9 +497,10 @@ The rest are ADR 0005's "What safety adds", items 1 to 7.
 | `…::test_floor3_pipeline_get_agent_only_in_celery_task_modules` | A `get_agent` call under `app/pipeline/` is in a module that registers no Celery task. |
 | `…::test_floor3_detectors_are_not_vacuous` | The collectors stop finding the known pipeline call sites and SDK imports. |
 | `…::test_floor3_get_embedding_provider_sites_equal_adr_0005_allowlist` | The `(module, enclosing function)` pairs that reference `get_embedding_provider` outside `agents/` and `pipeline/` are not exactly `GET_EMBEDDING_PROVIDER_CALL_SITES`, in either direction. A reference counts, not only a call (`Depends(get_embedding_provider)` reaches the gateway too), and import aliases are followed. |
-| `…::test_floor3_embed_texts_sites_equal_adr_0005_allowlist` | The pairs that reference `.embed_texts`, or the string `"embed_texts"` (a `getattr`), outside `agents/` and `pipeline/` are not exactly `EMBED_TEXTS_CALL_SITES`. |
+| `…::test_floor3_embed_texts_sites_equal_adr_0005_allowlist` | The pairs that reference `.embed_texts` (attribute, or the string, for a `getattr`) outside `agents/` and `pipeline/` are not exactly `EMBED_TEXTS_CALL_SITES` (five, ADR 0005 as amended 2026-10-16: `index_service.embed_artifact_chunks` replaced `index_artifact_chunks`). |
+| `…::test_floor3_aembed_texts_sites_equal_adr_0005_allowlist` | The pairs that reference the agents-side async wrapper `aembed_texts` (name, attribute or string) outside `agents/` and `pipeline/` are not exactly `AEMBED_TEXTS_CALL_SITES` (one: `index_service.aembed_artifact_chunks`, ADR 0005 amendment 2026-10-16). It counts because its own `provider.embed_texts` sits in `agents/`, out of scan, so its callers are where the embedding happens. Mutation-checked: an `aembed_texts` call added to `chat_service` fails here. |
 | `…::test_floor3_startup_embedding_sites_never_embed` | `main.py:warn_if_embedding_provider_unavailable`, the startup probe, calls `embed_texts`. |
-| `…::test_floor3_injected_provider_sites_have_only_worker_callers` | `index_service.index_artifact_chunks`, which embeds with a provider it is handed, is referenced from anywhere but `pipeline/index.py:_index`. |
+| `…::test_floor3_injected_provider_sites_have_only_worker_callers` | A function in `INJECTED_PROVIDER_CALLERS` that embeds with a provider it is handed (`index_service.embed_artifact_chunks`, `aembed_artifact_chunks`, and the wrapper `index_artifact_chunks`) is referenced from a caller not listed for it, or is no longer defined (a rename would pass vacuously), or lists a caller that is neither under `pipeline/` nor itself pinned, or `pipeline/index.py:_index` reaches none of them. Subset, not equality: a caller going away is safe, so the stage moving from the wrapper to `aembed_artifact_chunks` needs no edit here. |
 | `…::test_floor3_pipeline_get_embedding_provider_only_in_celery_task_modules` | A `get_embedding_provider` reference under `app/pipeline/` is in a module that registers no Celery task. |
 | `…::test_floor3_no_embedding_backend_reference_outside_agents` | `SentenceTransformerProvider`, `OpenAIEmbeddingProvider`, `OllamaEmbeddingProvider` or `reset_embedding_provider` is referenced outside `app/agents/**` as a name, attribute, import or exact string (docstrings and comments do not count), or a class there subclasses `EmbeddingProvider`. |
 | `…::test_floor3_embedding_detectors_are_not_vacuous` | The collectors stop finding `pipeline/index.py:_index`, the `openai`, `sentence_transformers` and `ollama` imports in `agents/embeddings.py`, or `qa.ask_question`'s `embed_texts`. It also fails if a banned name is no longer defined in `agents/embeddings.py`, so a rename cannot leave the ban guarding nothing. |
@@ -330,7 +508,7 @@ The rest are ADR 0005's "What safety adds", items 1 to 7.
 The embedding checks were each shown red on an injected violation in a scratch copy
 (M31-S2-SAFETY-021): a new request-side factory call, an aliased factory, a removed
 listed site, a new `embed_texts`, a `getattr` string, the startup probe embedding, a
-request-side caller of `index_artifact_chunks`, a factory call in a non-task pipeline
+request-side caller of `index_artifact_chunks` (since M34: of `embed_artifact_chunks` or `aembed_artifact_chunks`, and a new request-side `aembed_texts`), a factory call in a non-task pipeline
 module, a `sentence_transformers` import, a backend class, `reset_embedding_provider`,
 an `EmbeddingProvider` subclass, and the worker site removed.
 

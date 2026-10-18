@@ -274,6 +274,13 @@ check_claude_login_dir() {
     else
         ok "Claude login dir $dir exists (mode $mode) and is dedicated"
     fi
+    # SEC-006: the AI pools run as uid 999, so the login dir is owned by it
+    # (0700) and the deploy user cannot look inside. Not an error: that is the
+    # intended state. Inspect as that uid: sudo -u '#999' ls -l "$dir".
+    if [[ ! -x "$dir" ]] && [[ "$(stat -c '%u' "$dir")" == "999" ]]; then
+        ok "Claude login dir $dir is owned by uid 999 (the AI worker pools); contents not inspectable from this user"
+        return
+    fi
     if [[ -s "$dir/oauth-token" ]]; then
         ok "Claude login: oauth-token present"
         local tmode
@@ -318,6 +325,16 @@ case "$AGENT_BACKEND" in
     claude_code)
         ok "AGENT_BACKEND=claude_code — login comes from the dedicated service-login dir"
         check_claude_login_dir
+        if [[ "$SINGLE_USER_MODE" != "true" ]]; then
+            case "$(get_val CLAUDE_CLI_SHARED_UID_ACCEPTED | tr '[:upper:]' '[:lower:]')" in
+                true|1|yes|on)
+                    warn "CLAUDE_CLI_SHARED_UID_ACCEPTED=true — the Claude CLI shares the worker's uid and can read data/ and the worker environment (database password, JWT and encryption keys). Planned fix: CLI sidecar."
+                    ;;
+                *)
+                    warn "AGENT_BACKEND=claude_code on a multi-user stack without CLAUDE_CLI_SHARED_UID_ACCEPTED=true — the AI pools run as uid 999, so the worker refuses the Claude CLI and every claude_code job fails. Use another AGENT_BACKEND, or accept the risk (docs/deployment.md, 'AI pool user')."
+                    ;;
+            esac
+        fi
         ;;
     ollama)
         ok "AGENT_BACKEND=ollama — no API key required"

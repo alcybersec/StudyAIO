@@ -1,5 +1,8 @@
 """Index service — chunking and embedding logic for the index pipeline stage."""
 
+import asyncio
+from dataclasses import dataclass
+
 import structlog
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.embeddings import (
     MINILM_MAX_SEQ_LENGTH,
     EmbeddingProvider,
+    aembed_texts,
     count_word_tokens,
     heuristic_word_tokens,
     input_window,
@@ -158,6 +162,124 @@ def chunk_pages(
     return chunks
 
 
+@dataclass(frozen=True)
+class EmbeddedChunks:
+    """Chunks and their vectors, computed with no database session involved.
+
+    Attributes:
+        chunks: Chunk dicts as `chunk_pages` returns them.
+        vectors: One embedding per chunk, in the same order.
+    """
+
+    chunks: list[dict]
+    vectors: list[list[float]]
+
+    def __post_init__(self) -> None:
+        if len(self.chunks) != len(self.vectors):
+            raise ValueError("EmbeddedChunks needs exactly one vector per chunk")
+
+
+def embed_artifact_chunks(
+    pages: list[dict],
+    embedding_provider: EmbeddingProvider,
+    chunk_size_tokens: int | None = None,
+    chunk_overlap_tokens: int | None = None,
+) -> EmbeddedChunks:
+    """Chunk the pages and embed them in one batch. Pure: takes no session.
+
+    Synchronous; async callers use `aembed_artifact_chunks` so the encoder does not
+    run on the event loop.
+
+    Args:
+        pages: Extraction manifest pages.
+        embedding_provider: Provider for generating embeddings.
+        chunk_size_tokens: Optional override for chunk size.
+        chunk_overlap_tokens: Optional override for overlap.
+
+    Returns:
+        The chunks with their vectors; empty when the pages hold no text (the
+        provider is then not called).
+    """
+    raw_chunks = chunk_pages(
+        pages, chunk_size_tokens, chunk_overlap_tokens, provider=embedding_provider
+    )
+    if not raw_chunks:
+        return EmbeddedChunks(chunks=[], vectors=[])
+    vectors = embedding_provider.embed_texts([c["text"] for c in raw_chunks])
+    return EmbeddedChunks(chunks=raw_chunks, vectors=vectors)
+
+
+async def aembed_artifact_chunks(
+    pages: list[dict],
+    embedding_provider: EmbeddingProvider,
+    chunk_size_tokens: int | None = None,
+    chunk_overlap_tokens: int | None = None,
+) -> EmbeddedChunks:
+    """`embed_artifact_chunks` with chunking and encoding off the event loop.
+
+    Takes no session, so the caller can release its connection before awaiting
+    this and hold no transaction across the provider call (GL#50).
+
+    Args:
+        pages: Extraction manifest pages.
+        embedding_provider: Provider for generating embeddings.
+        chunk_size_tokens: Optional override for chunk size.
+        chunk_overlap_tokens: Optional override for overlap.
+
+    Returns:
+        The chunks with their vectors; empty when the pages hold no text.
+    """
+    raw_chunks = await asyncio.to_thread(
+        chunk_pages, pages, chunk_size_tokens, chunk_overlap_tokens, embedding_provider
+    )
+    if not raw_chunks:
+        return EmbeddedChunks(chunks=[], vectors=[])
+    vectors = await aembed_texts(embedding_provider, [c["text"] for c in raw_chunks])
+    return EmbeddedChunks(chunks=raw_chunks, vectors=vectors)
+
+
+async def store_artifact_chunks(
+    session: AsyncSession, artifact_id: str, embedded: EmbeddedChunks
+) -> list[Chunk]:
+    """Replace an artifact's chunks with already-embedded ones. Caller commits.
+
+    Idempotent: deletes the artifact's existing chunks and inserts the new ones
+    with stable ids. With nothing to store, existing chunks are left alone.
+    Never calls the embedding provider.
+
+    Args:
+        session: Async database session.
+        artifact_id: UUID of the artifact; also scopes stable IDs.
+        embedded: Output of `embed_artifact_chunks` / `aembed_artifact_chunks`.
+
+    Returns:
+        The created Chunk records.
+    """
+    if not embedded.chunks:
+        logger.warning("no_chunks_generated", artifact_id=artifact_id)
+        return []
+
+    await session.execute(delete(Chunk).where(Chunk.artifact_id == artifact_id))
+
+    chunk_records = []
+    for raw_chunk, embedding in zip(embedded.chunks, embedded.vectors, strict=True):
+        chunk = Chunk(
+            id=generate_id(),
+            artifact_id=artifact_id,
+            stable_id=_build_stable_id(artifact_id, raw_chunk["page_ref"], raw_chunk["chunk_idx"]),
+            text=raw_chunk["text"],
+            page_ref=raw_chunk["page_ref"],
+            slide_title=raw_chunk.get("slide_title"),
+            embedding=embedding,
+        )
+        session.add(chunk)
+        chunk_records.append(chunk)
+
+    await session.flush()
+    logger.info("chunks_stored", artifact_id=artifact_id, count=len(chunk_records))
+    return chunk_records
+
+
 async def index_artifact_chunks(
     session: AsyncSession,
     artifact_id: str,
@@ -166,9 +288,10 @@ async def index_artifact_chunks(
     chunk_size_tokens: int | None = None,
     chunk_overlap_tokens: int | None = None,
 ) -> list[Chunk]:
-    """Chunk text, generate embeddings, and upsert into the database.
+    """Chunk, embed and store in one call (embeds on the loop, session open).
 
-    Idempotent: deletes existing chunks for this artifact before inserting.
+    Kept for callers that have not moved to the split steps; the pipeline stage
+    should use `aembed_artifact_chunks` then `store_artifact_chunks`.
 
     Args:
         session: Async database session.
@@ -181,60 +304,10 @@ async def index_artifact_chunks(
     Returns:
         List of created Chunk records.
     """
-    # Chunk the text
-    raw_chunks = chunk_pages(
-        pages, chunk_size_tokens, chunk_overlap_tokens, provider=embedding_provider
+    embedded = embed_artifact_chunks(
+        pages, embedding_provider, chunk_size_tokens, chunk_overlap_tokens
     )
-    if not raw_chunks:
-        logger.warning("no_chunks_generated", artifact_id=artifact_id)
-        return []
-
-    logger.info(
-        "chunking_complete",
-        artifact_id=artifact_id,
-        chunk_count=len(raw_chunks),
-    )
-
-    # Generate embeddings in one batch
-    texts = [c["text"] for c in raw_chunks]
-    embeddings = embedding_provider.embed_texts(texts)
-
-    logger.info(
-        "embeddings_generated",
-        artifact_id=artifact_id,
-        count=len(embeddings),
-        dimensions=embedding_provider.dimensions,
-    )
-
-    # Delete existing chunks for this artifact (idempotent upsert)
-    await session.execute(delete(Chunk).where(Chunk.artifact_id == artifact_id))
-
-    # Create chunk records
-    chunk_records = []
-    for raw_chunk, embedding in zip(raw_chunks, embeddings, strict=True):
-        stable_id = _build_stable_id(artifact_id, raw_chunk["page_ref"], raw_chunk["chunk_idx"])
-
-        chunk = Chunk(
-            id=generate_id(),
-            artifact_id=artifact_id,
-            stable_id=stable_id,
-            text=raw_chunk["text"],
-            page_ref=raw_chunk["page_ref"],
-            slide_title=raw_chunk.get("slide_title"),
-            embedding=embedding,
-        )
-        session.add(chunk)
-        chunk_records.append(chunk)
-
-    await session.flush()
-
-    logger.info(
-        "chunks_stored",
-        artifact_id=artifact_id,
-        count=len(chunk_records),
-    )
-
-    return chunk_records
+    return await store_artifact_chunks(session, artifact_id, embedded)
 
 
 def chunk_exceeds_window(provider: EmbeddingProvider, text: str) -> bool:

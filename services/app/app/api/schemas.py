@@ -338,6 +338,10 @@ class SettingsResponse(BaseModel):
     claude_code_path: str
     claude_model: str
     agent_backend: str
+    #: SEC-006 option F: False when this deployment refuses to spawn the Claude
+    #: Code CLI; the UI disables that option and shows the (secret-free) reason.
+    claude_code_available: bool = True
+    claude_code_unavailable_reason: str | None = None
     anthropic_api_key_configured: bool = False
     claude_cli_credentials_configured: bool = False
     openai_api_key_configured: bool = False

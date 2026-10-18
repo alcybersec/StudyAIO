@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, Button } from '../../ui'
 import { useTheme, type Theme } from '../../../hooks/useTheme'
 import { useTour } from '../../../hooks/useTour'
-import { useOnboardingState } from '../../../hooks/useOnboardingState'
+import { AuthContext } from '../../../contexts/AuthContext'
+import { useSetChecklist } from '../../../hooks/useOnboarding'
 import { useLanguage } from '../../../hooks/useLanguage'
+import { userErrorMessage } from '../../../lib/userError'
 import { TimeZoneField } from '../TimeZoneField'
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from '../../../i18n'
 
@@ -22,7 +24,8 @@ export function AppearanceSection() {
   const { theme, setTheme } = useTheme()
   const { language, contentLanguage, setLanguage, setContentLanguage, isSaving } = useLanguage()
   const { replay: replayTour } = useTour()
-  const { ready: onboardingReady, reopen: reopenChecklist } = useOnboardingState()
+  const onboardingReady = !!useContext(AuthContext)?.user
+  const setChecklist = useSetChecklist()
   const [checklistShown, setChecklistShown] = useState(false)
 
   // "Also generate content in English" is the behaviour English already has,
@@ -127,10 +130,10 @@ export function AppearanceSection() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => {
-                reopenChecklist()
-                setChecklistShown(true)
-              }}
+              disabled={setChecklist.isPending}
+              onClick={() =>
+                setChecklist.mutate('pinned', { onSuccess: () => setChecklistShown(true) })
+              }
             >
               {t('Show checklist on Home')}
             </Button>
@@ -139,6 +142,11 @@ export function AppearanceSection() {
                 ? t('The checklist is back on your Home page.')
                 : t('Upload, read a summary, take a check-in: the first-run steps.')}
             </p>
+            {setChecklist.isError && (
+              <p role="alert" className="mt-1 text-xs text-red-fg">
+                {userErrorMessage(setChecklist.error, t("Couldn't update the checklist"))}
+              </p>
+            )}
           </div>
         )}
       </div>

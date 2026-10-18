@@ -48,6 +48,41 @@ class TestGetCourseByCode:
 
 
 @pytest.mark.asyncio
+class TestGetCourseByCodeCi:
+    """Tests for get_course_by_code_ci (api.study-items v2)."""
+
+    async def test_matches_case_insensitively_for_the_owner_only(self, mock_session):
+        from sqlalchemy.dialects import postgresql
+
+        course = MagicMock(code="CSIT302")
+        result = MagicMock()
+        result.scalars.return_value.first.return_value = course
+        mock_session.execute.return_value = result
+
+        found = await course_service.get_course_by_code_ci(
+            mock_session, " csit302 ", user_id="user-1"
+        )
+
+        assert found is course
+        sql = str(
+            mock_session.execute.await_args.args[0].compile(
+                dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+            )
+        )
+        assert "upper(courses.code) = 'CSIT302'" in sql
+        assert "courses.user_id = 'user-1'" in sql  # load-bearing: the owner filter
+        assert "ORDER BY courses.code = 'csit302' DESC, courses.created_at ASC" in sql
+        assert "LIMIT 1" in sql
+
+    async def test_returns_none_when_the_caller_has_no_such_course(self, mock_session):
+        result = MagicMock()
+        result.scalars.return_value.first.return_value = None
+        mock_session.execute.return_value = result
+
+        assert await course_service.get_course_by_code_ci(mock_session, "X1", user_id="u") is None
+
+
+@pytest.mark.asyncio
 class TestGetCourseWeeks:
     """Tests for get_course_weeks."""
 

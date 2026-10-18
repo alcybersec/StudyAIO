@@ -34,6 +34,7 @@ from app.models.push_subscription import PushSubscription
 from app.models.quiz import QuizQuestion
 from app.models.quiz_attempt import QuizAttempt
 from app.models.review_item import ReviewItem
+from app.models.stripe_webhook_event import StripeWebhookEvent
 from app.models.study_plan import StudyPlan
 from app.models.study_session import StudySession
 from app.models.subscription import Subscription
@@ -82,6 +83,7 @@ __all__ = [
     "QuizAttempt",
     "QuizQuestion",
     "ReviewItem",
+    "StripeWebhookEvent",
     "StudyPlan",
     "StudySession",
     "Subscription",

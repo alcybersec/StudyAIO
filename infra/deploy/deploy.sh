@@ -175,6 +175,12 @@ $COMPOSE pull --quiet
 # live secret and is never echoed. --no-deps: no db/redis needed; the one-off
 # publishes no ports and starts no app code beyond this snippet.
 echo "==> Checking SETTINGS_ENCRYPTION_KEY for the new image..."
+# Presence is not enough (M32 N-4): a key that is set but malformed, or the
+# well-known all-zero test key, crash-loops the new api exactly like a missing
+# one. So the one-off runs the image's OWN startup check (secret_box.check_startup,
+# the same call the api makes at boot) and then proves the key actually works with
+# an encrypt/decrypt round trip on a throwaway string. Exit 1 = absent, 2 = set
+# but rejected/unusable. Only the verdict and the (key-free) error text are printed.
 KEY_RC=0
 $COMPOSE run --rm --no-deps -T api python -c '
 import importlib.util, os, sys
@@ -186,12 +192,25 @@ if os.environ.get("SINGLE_USER_MODE", "").strip().lower() == "true":
     sys.exit(0)
 if not os.environ.get("SETTINGS_ENCRYPTION_KEY", "").strip():
     sys.exit(1)
-print("    SETTINGS_ENCRYPTION_KEY is present")
+try:
+    from app.core import secret_box
+    secret_box.check_startup()
+    probe = "deploy-key-probe"
+    if secret_box.decrypt(secret_box.encrypt(probe)) != probe:
+        raise RuntimeError("encrypt/decrypt round trip did not return the input")
+except Exception as exc:
+    print(f"    key rejected: {type(exc).__name__}: {exc}")
+    sys.exit(2)
+print("    SETTINGS_ENCRYPTION_KEY is present and works (startup check + round trip)")
 ' || KEY_RC=$?
 if [ "${KEY_RC}" -eq 1 ]; then
     echo "refusing: this image requires SETTINGS_ENCRYPTION_KEY and the environment has none." >&2
     echo "  The api and worker would crash-loop at startup. Nothing was dumped, migrated or restarted." >&2
     echo "  Add the secret to the secret manager (see docs/deployment.md, SETTINGS_ENCRYPTION_KEY), re-export .env, and redeploy." >&2
+    exit 68
+elif [ "${KEY_RC}" -eq 2 ]; then
+    echo "refusing: SETTINGS_ENCRYPTION_KEY is set but the new image rejects it (malformed, test key, or unusable)." >&2
+    echo "  Nothing was dumped, migrated or restarted. Fix the secret, re-export .env, and redeploy." >&2
     exit 68
 elif [ "${KEY_RC}" -ne 0 ]; then
     echo "refusing: could not run the SETTINGS_ENCRYPTION_KEY check (exit ${KEY_RC}); not continuing blind" >&2

@@ -146,21 +146,26 @@ class TestTelegram:
 
         with (
             patch("app.config.settings.telegram_bot_token", SecretStr("123:abc")),
-            patch("app.config.settings.telegram_webhook_url", ""),
+            patch("app.config.settings.telegram_bot_username", "StudyAIOBot"),
+            patch("app.config.settings.telegram_webhook_secret", SecretStr("s")),
         ):
             link = (await client.post("/api/notifications/telegram/link")).json()
             token = link["link_token"]
-            assert link["deep_link"].endswith(f"?start={token}")
+            assert link["deep_link"] == f"https://t.me/StudyAIOBot?start={token}"
+            assert link["bot_username"] == "StudyAIOBot"
 
             hook = client_factory()
+            hdr = {"x-telegram-bot-api-secret-token": "s"}
             welcome = await hook.post(
                 "/api/notifications/telegram/webhook",
                 json={"message": {"text": "/start", "chat": {"id": 42}}},
+                headers=hdr,
             )
             assert "Welcome" in welcome.json()["response"]
             bad = await hook.post(
                 "/api/notifications/telegram/webhook",
                 json={"message": {"text": "/start bogus", "chat": {"id": 42}}},
+                headers=hdr,
             )
             assert "Invalid or expired" in bad.json()["response"]
             ok = await hook.post(
@@ -172,19 +177,24 @@ class TestTelegram:
                         "from": {"username": "alice_tg"},
                     }
                 },
+                headers=hdr,
             )
             assert "linked" in ok.json()["response"]
             # Token is single use.
             replay = await hook.post(
                 "/api/notifications/telegram/webhook",
                 json={"message": {"text": f"/start {token}", "chat": {"id": 43}}},
+                headers=hdr,
             )
             assert "Invalid or expired" in replay.json()["response"]
-            nochat = await hook.post("/api/notifications/telegram/webhook", json={"message": {}})
+            nochat = await hook.post(
+                "/api/notifications/telegram/webhook", json={"message": {}}, headers=hdr
+            )
             assert nochat.json()["response"] == "No chat ID found"
             other = await hook.post(
                 "/api/notifications/telegram/webhook",
                 json={"message": {"text": "hello", "chat": {"id": 42}}},
+                headers=hdr,
             )
             assert "Send /start" in other.json()["response"]
 
@@ -196,18 +206,62 @@ class TestTelegram:
         assert unlinked["linked"] is False and unlinked["verified"] is False
         assert await telegram_service.get_link(db_session, user.id) is None
 
+    async def test_link_without_bot_username_is_400_and_issues_no_token(
+        self, client_factory, make_user, db_session
+    ):
+        user = await make_user()
+        with (
+            patch("app.config.settings.telegram_bot_token", SecretStr("123:abc")),
+            patch("app.config.settings.telegram_bot_username", ""),
+        ):
+            resp = await client_factory(user).post("/api/notifications/telegram/link")
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Telegram bot username not configured"
+        rows = (
+            (await db_session.execute(select(TelegramLink).where(TelegramLink.user_id == user.id)))
+            .scalars()
+            .all()
+        )
+        assert rows == []
+
     async def test_webhook_secret_is_enforced_when_configured(self, client_factory):
-        with patch("app.config.settings.telegram_webhook_url", "https://example.com/hook-secret"):
-            denied = await client_factory().post(
-                "/api/notifications/telegram/webhook", json={"message": {}}
-            )
-            assert denied.status_code == 403
+        url = "https://example.com/hook-secret"
+        header = "x-telegram-bot-api-secret-token"
+        handler = AsyncMock(return_value="ok")
+        with (
+            patch("app.config.settings.telegram_webhook_secret", SecretStr("real-secret")),
+            patch("app.config.settings.telegram_webhook_url", url),
+            patch.object(telegram_service, "handle_telegram_webhook", handler),
+        ):
+            path = "/api/notifications/telegram/webhook"
+            missing = await client_factory().post(path, json={"message": {}})
+            assert missing.status_code == 403
+            assert missing.json() == {"detail": "Invalid webhook secret"}
+            # The public URL is not the secret.
+            as_url = await client_factory().post(path, json={"message": {}}, headers={header: url})
+            assert as_url.status_code == 403
+            handler.assert_not_awaited()
             allowed = await client_factory().post(
-                "/api/notifications/telegram/webhook",
-                json={"message": {}},
-                headers={"x-telegram-bot-api-secret-token": "https://example.com/hook-secret"},
+                path, json={"message": {}}, headers={header: "real-secret"}
             )
             assert allowed.status_code == 200
+            handler.assert_awaited_once()
+
+    async def test_webhook_unset_secret_fails_closed_in_multi_user(self, client_factory):
+        handler = AsyncMock(return_value="ok")
+        with (
+            patch("app.config.settings.telegram_webhook_secret", SecretStr("")),
+            patch("app.config.settings.single_user_mode", False),
+            patch.object(telegram_service, "handle_telegram_webhook", handler),
+        ):
+            resp = await client_factory().post(
+                "/api/notifications/telegram/webhook",
+                json={"message": {}},
+                headers={"x-telegram-bot-api-secret-token": ""},
+            )
+            assert resp.status_code == 403
+            assert resp.json() == {"detail": "Invalid webhook secret"}
+            handler.assert_not_awaited()
 
     async def test_relinking_resets_a_verified_link(self, make_user, db_session):
         user = await make_user()

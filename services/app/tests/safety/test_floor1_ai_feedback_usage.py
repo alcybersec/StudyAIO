@@ -29,6 +29,7 @@ import pytest
 from sqlalchemy.sql.elements import ColumnClause, Label
 from sqlalchemy.sql.functions import FunctionElement
 
+from tests._routes import api_routes
 from tests.safety._minidb import MiniDB, MiniSession
 from tests.safety._source import APP_ROOT, dotted, parse, rel
 
@@ -366,16 +367,14 @@ def _admin_gated(route) -> bool:
 
 @pytest.mark.parametrize(("target", "handler"), list(ADMIN_AGGREGATES.items()))
 def test_floor1_admin_aggregate_routes_require_the_admin_role(target, handler):
-    from fastapi.routing import APIRoute
 
     from app.main import app
 
     module, name = handler
     routes = [
         r
-        for r in app.routes
-        if isinstance(r, APIRoute)
-        and inspect.unwrap(r.endpoint).__name__ == name
+        for r in api_routes(app)
+        if inspect.unwrap(r.endpoint).__name__ == name
         and inspect.unwrap(r.endpoint).__module__ == module[:-3].replace("/", ".")
     ]
     assert routes, f"no live route for {handler}"

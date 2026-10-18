@@ -36,7 +36,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import Select, delete, select
+from sqlalchemy import Select, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.schema import sort_tables
 
@@ -48,6 +48,8 @@ from app.models.concept import Concept
 from app.models.course import Course
 from app.models.exam import Exam
 from app.models.quiz import QuizQuestion
+from app.models.stripe_webhook_event import StripeWebhookEvent
+from app.models.subscription import Subscription
 from app.models.user import User
 from app.services import (
     course_service,
@@ -73,6 +75,9 @@ GLOBAL_TABLES = frozenset(
         # Invites survive their creator: `created_by` is ON DELETE SET NULL, so
         # revoking access to one tester does not void codes held by others.
         "invite_codes",
+        # Stripe's opaque event ids, kept indefinitely (`models.stripe-webhook-events v1`).
+        # No user_id; deletion unlinks the customer id instead (`_unlink_stripe_events`).
+        "stripe_webhook_events",
     }
 )
 
@@ -355,6 +360,40 @@ async def purge_user_storage(
     return deleted
 
 
+async def _unlink_stripe_events(session: AsyncSession, user_id: str) -> int:
+    """Null the customer id on the user's Stripe webhook rows (never delete them).
+
+    Must run before the user's ``subscriptions`` rows are deleted: those hold
+    the customer ids. The event ids, the dedupe and the retention stay intact;
+    only the link to the deleted person goes.
+
+    Args:
+        session: Database session.
+        user_id: The user being deleted.
+
+    Returns:
+        Rows unlinked.
+    """
+    customers = (
+        (
+            await session.execute(
+                select(Subscription.stripe_customer_id).where(Subscription.user_id == user_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    customers = [c for c in customers if c]
+    if not customers:
+        return 0
+    result = await session.execute(
+        update(StripeWebhookEvent)
+        .where(StripeWebhookEvent.stripe_customer_id.in_(customers))
+        .values(stripe_customer_id=None)
+    )
+    return result.rowcount or 0
+
+
 async def delete_user_account(
     session: AsyncSession, user_id: str, storage: StorageBackend | None = None
 ) -> dict[str, int]:
@@ -379,6 +418,8 @@ async def delete_user_account(
     # Enumerate blobs before the rows they are derived from are gone: the purge
     # reads `lecture_artifacts` and `courses` to build its keys (#97).
     objects_deleted = await purge_user_storage(session, user_id, storage)
+
+    await _unlink_stripe_events(session, user_id)
 
     counts: dict[str, int] = {}
     for table in reversed(_ordered_tables()):

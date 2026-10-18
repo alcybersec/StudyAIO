@@ -55,6 +55,7 @@ from app.config import settings
 from app.core.database import get_session
 from app.core.storage import reset_storage
 from app.main import app
+from tests._routes import api_routes
 
 # The dependencies that establish an identity. `require_role` / `require_plan`
 # are not listed because both take `get_current_user` as a sub-dependency, so
@@ -135,9 +136,7 @@ def _api_routes() -> list[tuple[APIRoute, str]]:
     answered by the CORS middleware before routing.
     """
     pairs = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for route in api_routes(app):
         for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
             pairs.append((route, method))
     return pairs

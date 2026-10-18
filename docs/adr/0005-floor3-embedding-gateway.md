@@ -1,6 +1,6 @@
 # ADR 0005 — Floor 3 covers embeddings through a second gateway, `get_embedding_provider`
 
-**Status** Accepted (2026-10-04, by the user) · **Date** 2026-10-04 · **Kit version** 1.10.3 · **Amends** ADR 0003
+**Status** Accepted (2026-10-04, by the user) · **Date** 2026-10-04 · **Kit version** 1.10.3 · **Amends** ADR 0003 · **Amended** 2026-10-16 (M34-S3-AI-010, index split; see [Amendment 2026-10-16](#amendment-2026-10-16--index-service-split-m34-s3-ai-010))
 
 **Ruling implemented:** `docs/decisions.md` § Rulings, 2026-10-04, "R-004 embeddings: **in scope of
 floor 3** — `EmbeddingProvider` is a second sanctioned gateway with its own enumerated allowlist"
@@ -86,7 +86,12 @@ EMBED_TEXTS_CALL_SITES = {
     ("app/services/chat_service.py", "send_message"),
     ("app/services/chat_service.py", "stream_message"),
     ("app/services/concept_service.py", "_embed_concepts"),
-    ("app/services/index_service.py", "index_artifact_chunks"),
+    ("app/services/index_service.py", "embed_artifact_chunks"),  # was index_artifact_chunks (amended 2026-10-16)
+}
+
+#: Callers of `aembed_texts(...)` outside app/agents/** and app/pipeline/** (added 2026-10-16).
+AEMBED_TEXTS_CALL_SITES = {
+    ("app/services/index_service.py", "aembed_artifact_chunks"),
 }
 
 #: Startup-only sites: may call `get_embedding_provider` and `.preload()`, never `.embed_texts`.
@@ -94,11 +99,17 @@ STARTUP_ONLY_EMBEDDING_SITES = {
     ("app/main.py", "warn_if_embedding_provider_unavailable"),
 }
 
-#: A site that embeds with an injected provider must have exactly these callers, all worker-side.
+#: A site that embeds with an injected provider must have exactly these callers. Each caller is
+#: worker-side (app/pipeline/**) or is itself a key here, so every chain ends in the worker.
+#: Amended 2026-10-16: see "Amendment 2026-10-16" for the pre- and post-switch values.
 INJECTED_PROVIDER_CALLERS = {
+    ("app/services/index_service.py", "embed_artifact_chunks"): {
+        ("app/services/index_service.py", "index_artifact_chunks"),
+    },
     ("app/services/index_service.py", "index_artifact_chunks"): {
         ("app/pipeline/index.py", "_index"),
     },
+    ("app/services/index_service.py", "aembed_artifact_chunks"): set(),  # {_index} after ai switches
 }
 
 #: The gateway's interface and its backends. The contract test pins both against
@@ -164,6 +175,70 @@ ADR 0003 already bans importing `openai` and `ollama` outside `app/agents/**`. T
 - **Request-time load.** Sites 1 to 4 run on the API event loop, as ADR 0003's do. `embed_texts`
   is synchronous, so for `sentence_transformers` it blocks the event loop for the duration of the
   encode. That is accepted, as in ADR 0003, and not solved here.
+
+## Amendment 2026-10-16 — index service split (M34-S3-AI-010)
+
+No status change. This amendment re-keys the allowlists to follow a refactor. It admits no new
+gateway call and no new request-time site.
+
+**What changed in the code** (`backend`, commits `bff51f8` and `e8967c3`).
+`app/services/index_service.py:index_artifact_chunks` is split into three functions, so the
+embedding call no longer happens inside a function that holds a database session (GL#50):
+
+| Function | Kind | Session | Gateway use |
+|---|---|---|---|
+| `embed_artifact_chunks` | sync | none | `.embed_texts` on the injected provider |
+| `aembed_artifact_chunks` | async | none | `aembed_texts(provider, …)` from `app.agents.embeddings`. That runs `.embed_texts` on the module's bounded embedding executor. Chunking runs via `asyncio.to_thread` |
+| `store_artifact_chunks` | async | yes | none: it receives already-embedded chunks and never touches a provider |
+
+`index_artifact_chunks` stays as a thin wrapper, `embed_artifact_chunks` then
+`store_artifact_chunks`, for callers that have not moved yet. It no longer calls `.embed_texts`
+itself. The provider is still injected and never obtained in the service:
+`get_embedding_provider` is still called only at `app/pipeline/index.py:_index`.
+
+**Allowlist changes** (Decision §3 is updated in place, with comments marking the change):
+
+1. `EMBED_TEXTS_CALL_SITES`: `("app/services/index_service.py", "embed_artifact_chunks")`
+   **replaces** `("app/services/index_service.py", "index_artifact_chunks")`. The set still has five
+   entries.
+2. `AEMBED_TEXTS_CALL_SITES` is **new**, with one entry:
+   `("app/services/index_service.py", "aembed_artifact_chunks")`. `aembed_texts` is
+   `.embed_texts` under another name: it reaches the provider without an `.embed_texts` token at the
+   call site, so item 2's detector cannot see it. Without its own pin, a new caller of `aembed_texts`
+   would be an unlisted embedding call. `app/pipeline/index.py:_chunk_and_embed` already calls it,
+   but `app/pipeline/**` is outside the allowlist's scope, as for the other lists.
+3. `INJECTED_PROVIDER_CALLERS` is re-keyed. The rule changes from "all callers are worker-side" to
+   "every caller is worker-side or is itself a key of this map". That way a same-module wrapper
+   chain still has to end in the worker. The values, before and after `ai` moves the stage:
+
+   | Key (`app/services/index_service.py`) | Callers now (`e8967c3`) | Callers after `ai` switches `_index` |
+   |---|---|---|
+   | `embed_artifact_chunks` | `index_service.index_artifact_chunks` | `index_service.index_artifact_chunks` |
+   | `index_artifact_chunks` | `pipeline/index.py:_index` | whatever still calls it under `app/pipeline/**`. If no caller is left, the value is `set()` |
+   | `aembed_artifact_chunks` | none (`set()`) | `pipeline/index.py:_index` |
+
+   The pin is exact, so `ai`'s switch commit and `safety`'s update to this map land together.
+
+**The async path.** After `ai` switches it, the pipeline index stage (`app/pipeline/index.py:_index`)
+calls `aembed_artifact_chunks` with the provider it got from `get_embedding_provider`. It releases
+its session before the await, then calls `store_artifact_chunks`. This replaces the stage's local
+`_chunk_and_embed` and its replay provider. `embed_artifact_chunks` is the synchronous twin, for
+callers with no event loop. Neither function is a request-time site, and neither may become one
+without amending this ADR.
+
+**What `safety` changes** in `services/app/tests/safety/test_floor3_ai_via_adapter.py`. This is a
+request, not an edit; `safety` is making the `EMBED_TEXTS_CALL_SITES` change in parallel, using the
+names above:
+
+- `EMBED_TEXTS_CALL_SITES` as in point 1.
+- Item 2 is extended to `aembed_texts` references outside `app/agents/**` and `app/pipeline/**`,
+  checked against `AEMBED_TEXTS_CALL_SITES`.
+- Item 4 uses the map in point 3. Its last assertion relaxes from "every caller is under
+  `app/pipeline/`" to "every caller is under `app/pipeline/` or is itself a key".
+
+The contract test (`tests/contracts/test_embedding_gateway_contract.py`) is unaffected:
+`aembed_texts` is a module function, not a method on `EmbeddingProvider`, so
+`EMBEDDING_PROVIDER_SURFACE` stays `{"dimensions", "embed_texts", "preload"}`.
 
 ## Alternatives considered
 

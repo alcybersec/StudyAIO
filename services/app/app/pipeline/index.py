@@ -1,18 +1,11 @@
 """Pipeline stage 4: Index — chunk text and generate embeddings."""
 
-import asyncio
 from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
 
-from app.agents.embeddings import (
-    EmbeddingProvider,
-    aembed_texts,
-    count_word_tokens,
-    get_embedding_provider,
-    input_window,
-)
+from app.agents.embeddings import get_embedding_provider
 from app.core.database import async_session_factory, run_async
 from app.core.exceptions import IndexingError
 from app.core.utils import generate_id
@@ -28,49 +21,6 @@ from app.services.event_service import publish_pipeline_event_sync
 from app.worker import celery_app
 
 logger = structlog.get_logger()
-
-
-class _Precomputed:
-    """Serves vectors that were embedded off the event loop and outside any transaction.
-
-    `index_service.index_artifact_chunks` chunks, embeds and stores in one call, so
-    it would embed synchronously on the loop with the caller's transaction open
-    (GL#50). The stage embeds first (`_chunk_and_embed`), then hands the service
-    this stand-in: sizing hooks delegate to the real provider so chunking is the
-    same, and `embed_texts` is a lookup. Chunking is deterministic, so every text
-    the service asks for is present.
-    """
-
-    def __init__(self, provider: EmbeddingProvider, texts: list[str], vectors: list[list[float]]):
-        self._provider = provider
-        self._vectors = dict(zip(texts, vectors, strict=True))
-
-    @property
-    def dimensions(self) -> int:
-        return self._provider.dimensions
-
-    def _input_window(self) -> int:
-        return input_window(self._provider)
-
-    def _word_tokens(self, words: list[str]) -> list[int]:
-        return count_word_tokens(self._provider, words)
-
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        try:
-            return [self._vectors[t] for t in texts]
-        except KeyError as exc:
-            raise IndexingError("Chunking was not reproducible between embed and store") from exc
-
-
-async def _chunk_and_embed(
-    session, pages: list[dict], provider: EmbeddingProvider, *, read_only: bool = False
-) -> _Precomputed:
-    """Chunk and embed on worker threads, with no transaction open (GL#50)."""
-    raw = await asyncio.to_thread(index_service.chunk_pages, pages, provider=provider)
-    texts = [c["text"] for c in raw]
-    await release_connection(session, read_only=read_only)
-    vectors = await aembed_texts(provider, texts)
-    return _Precomputed(provider, texts, vectors)
 
 
 async def _index(
@@ -131,13 +81,9 @@ async def _index(
                 return {"artifact_id": artifact_id, "status": "stale"}
             # Embeds first (off-loop, no transaction open), then deletes + inserts in
             # one fresh transaction, so a failure leaves the old chunks in place (floor 4).
-            embedded = await _chunk_and_embed(session, manifest["pages"], provider, read_only=True)
-            rewritten = await index_service.index_artifact_chunks(
-                session=session,
-                artifact_id=artifact_id,
-                pages=manifest["pages"],
-                embedding_provider=embedded,
-            )
+            await release_connection(session, read_only=True)
+            embedded = await index_service.aembed_artifact_chunks(manifest["pages"], provider)
+            rewritten = await index_service.store_artifact_chunks(session, artifact_id, embedded)
             if not rewritten:
                 await session.rollback()
                 return {"artifact_id": artifact_id, "status": "skipped_no_text"}
@@ -168,13 +114,9 @@ async def _index(
             provider = get_embedding_provider()
 
             # Chunk and embed off the loop with no transaction open, then store.
-            embedded = await _chunk_and_embed(session, manifest["pages"], provider)
-            chunks = await index_service.index_artifact_chunks(
-                session=session,
-                artifact_id=artifact_id,
-                pages=manifest["pages"],
-                embedding_provider=embedded,
-            )
+            await release_connection(session)
+            embedded = await index_service.aembed_artifact_chunks(manifest["pages"], provider)
+            chunks = await index_service.store_artifact_chunks(session, artifact_id, embedded)
 
             # Update artifact status
             artifact.status = "indexed"

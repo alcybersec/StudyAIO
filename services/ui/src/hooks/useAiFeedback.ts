@@ -76,8 +76,13 @@ export function useAiFeedback(targetType: AIFeedbackTargetType, ids: string[]) {
       })
       return { previous }
     },
-    onError: (_err, _vars, context) => {
+    onError: (err, vars, context) => {
       queryClient.setQueryData(key, context?.previous)
+      if (vars.draft !== null && err instanceof NotFoundError) {
+        // Archived or removed since it was shown: retrying cannot help.
+        toast.info(i18n.t('This item was archived, so it can no longer be rated.'))
+        return
+      }
       toast.error(i18n.t("Couldn't save your feedback. Please try again."))
     },
   })

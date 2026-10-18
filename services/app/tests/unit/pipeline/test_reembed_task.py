@@ -42,7 +42,7 @@ def index_env():
     with (
         patch("app.pipeline.index.async_session_factory") as factory,
         patch("app.pipeline.index.get_embedding_provider") as get_provider,
-        patch("app.pipeline.index.index_service.index_artifact_chunks", new=AsyncMock()) as write,
+        patch("app.pipeline.index.index_service.store_artifact_chunks", new=AsyncMock()) as write,
     ):
         factory.return_value.__aenter__ = AsyncMock()
         factory.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -77,12 +77,12 @@ class TestIndexRefreshMode:
         set_stored, write, artifact = index_env
         session = set_stored([" ".join(["w"] * 40)])
         order: list[str] = []
-        write.side_effect = lambda **kw: order.append("write") or [MagicMock(), MagicMock()]
+        write.side_effect = lambda *a, **kw: order.append("write") or [MagicMock(), MagicMock()]
         session.commit.side_effect = lambda: order.append("commit")
         out = await _index("a1", USER, refresh="apply")
         assert out == {"artifact_id": "a1", "status": "reembedded", "chunk_count": 2}
         assert order == ["write", "commit"]  # nothing committed before the new rows exist
-        assert write.await_args.kwargs["artifact_id"] == "a1"
+        assert write.await_args.args[1] == "a1"
 
     async def test_dry_run_writes_nothing(self, index_env):
         from app.pipeline.index import _index

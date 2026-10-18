@@ -270,7 +270,7 @@ def parse_summary_response(text: str) -> tuple[str, list[str]]:
                 meta = json.loads(meta_text)
                 embedded_images = meta.get("embedded_images", [])
             except json.JSONDecodeError:
-                logger.warning("failed_to_parse_summary_meta", meta_text=meta_text[:100])
+                logger.warning("failed_to_parse_summary_meta", meta_chars=len(meta_text))
     else:
         markdown = text.strip()
 

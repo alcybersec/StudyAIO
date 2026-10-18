@@ -51,6 +51,7 @@ import pytest
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
 
+from tests._routes import api_routes
 from tests.safety._payload import (
     FOREIGN_ID,
     FOREIGN_INT,
@@ -123,12 +124,12 @@ ADMIN_PREFIX = "/api/admin"
 #: reaches 98.
 MIN_ROUTES_WITH_OWNED_QUERIES = 90
 
-#: Floors for route *enumeration*, below the sweep. ``fastapi`` is capped
-#: ``<0.137`` in requirements.txt because 0.137 makes ``include_router`` lazy:
-#: ``app.routes`` then holds ``_IncludedRouter`` placeholders, not ``APIRoute``s,
-#: and every guard that walks ``app.routes`` (this sweep, and
-#: tests/unit/api/test_endpoint_authn_guard.py) iterates nothing and passes. At M32-S4 the app
-#: mounts 149 ``/api`` APIRoutes and the sweep calls 115 method+path pairs.
+#: Floors for route *enumeration*, below the sweep. From fastapi 0.137
+#: ``include_router`` is lazy: ``app.routes`` holds ``_IncludedRouter`` wrappers,
+#: not ``APIRoute``s, and a guard that walks it directly iterates nothing and
+#: passes (R-040). Every guard walks ``tests._routes.api_routes`` instead
+#: (M34-S2-SEC-007). At that lift the app mounts 171 ``/api`` APIRoutes and the
+#: sweep calls 135 method+path pairs, the same on fastapi 0.136.3 and 0.143.2.
 MIN_API_ROUTES = 130
 MIN_SWEPT_ROUTES = 100
 
@@ -153,8 +154,8 @@ def _sweep_routes() -> list[tuple[str, str, APIRoute]]:
     from app.main import app
 
     out = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or not _requires_user(route):
+    for route in api_routes(app):
+        if not _requires_user(route):
             continue
         if route.path.startswith(ADMIN_PREFIX) or route.path in SWEEP_EXCLUDED:
             continue
@@ -164,22 +165,40 @@ def _sweep_routes() -> list[tuple[str, str, APIRoute]]:
 
 
 def test_floor1_route_enumeration_is_not_vacuous():
-    """Walking ``app.routes`` still yields the app's real routes.
+    """The route walker still yields every route the app serves.
 
     Every route-walking guard trusts this enumeration. If a framework upgrade
     hides routes behind a lazy wrapper, the guards see an empty app and pass;
-    this fails instead. Lifting the fastapi cap means teaching ``_sweep_routes``
-    to expand the wrapper first, then lifting these numbers only if routes were
-    really removed.
+    this fails instead. The count floors catch a walker that sees nothing; the
+    OpenAPI cross-check catches one that drops a single router. That the walked
+    route carries the include prefix and include-level dependencies is pinned in
+    test_floor1_route_walker.py.
     """
     from app.main import app
 
-    api_routes = [r for r in app.routes if isinstance(r, APIRoute) and r.path.startswith("/api/")]
-    others = sorted({type(r).__name__ for r in app.routes if not isinstance(r, APIRoute)})
-    assert len(api_routes) >= MIN_API_ROUTES, (
-        f"app.routes yields only {len(api_routes)} /api APIRoutes (floor {MIN_API_ROUTES}); "
-        f"non-APIRoute entries: {others}. A lazy include_router (fastapi>=0.137) does this, "
-        "and leaves every route-walking safety guard vacuous."
+    expanded = api_routes(app)
+    served = [r for r in expanded if r.path.startswith("/api/")]
+    top_level = sorted({type(r).__name__ for r in app.routes})
+    assert len(served) >= MIN_API_ROUTES, (
+        f"expanding app.routes yields only {len(served)} /api APIRoutes (floor {MIN_API_ROUTES}); "
+        f"top-level entries: {top_level}. The route-walking safety guards would be vacuous."
+    )
+    # Cross-check against a source that does not go through the walker: every
+    # operation OpenAPI documents must be an enumerated (method, path) pair.
+    enumerated = {
+        (m, re.sub(r":\w+}", "}", r.path))  # OpenAPI drops the {x:path} convertor
+        for r in expanded
+        if r.include_in_schema
+        for m in r.methods - {"HEAD", "OPTIONS"}
+    }
+    documented = {
+        (m.upper(), path)
+        for path, item in app.openapi()["paths"].items()
+        for m in item
+        if m.upper() in {"GET", "POST", "PUT", "PATCH", "DELETE"}
+    }
+    assert documented <= enumerated, (
+        f"OpenAPI documents operations the route walker misses: {sorted(documented - enumerated)}"
     )
     swept = _sweep_routes()
     assert len(swept) >= MIN_SWEPT_ROUTES, (
@@ -1012,6 +1031,45 @@ def test_floor1_pipeline_only_fetch_is_pipeline_only():
     assert not outside, f"process_course_document called outside the worker: {outside}"
 
 
+#: Unscoped chunk writers (delete + insert by a bare artifact_id) -> the callers they
+#: may have outside app/pipeline/**. A request-side caller handing in a foreign
+#: artifact id would wipe and rewrite another user's search index.
+CHUNK_STORE_FUNCTIONS = {
+    "store_artifact_chunks": {("app/services/index_service.py", "index_artifact_chunks")},
+    "index_artifact_chunks": set(),
+}
+
+
+def _references(function: str) -> set[tuple[str, str]]:
+    """(module, enclosing function) of every name/attribute reference to ``function``."""
+    found = set()
+    for path in app_modules():
+        for node, scope in walk_with_scope(parse(path)):
+            if (isinstance(node, ast.Name) and node.id == function) or (
+                isinstance(node, ast.Attribute) and node.attr == function
+            ):
+                found.add((rel(path), scope))
+    return found
+
+
+def test_floor1_chunk_store_is_worker_only():
+    """``store_artifact_chunks`` and its wrapper are reached only from the worker.
+
+    An allowed non-worker caller must itself be pinned here, so every chain ends
+    in app/pipeline/**.
+    """
+    reached_from_worker = False
+    for function, allowed in CHUNK_STORE_FUNCTIONS.items():
+        callers = _references(function)
+        reached_from_worker |= any(m.startswith("app/pipeline/") for m, _f in callers)
+        outside = sorted(
+            c for c in callers if not c[0].startswith("app/pipeline/") and c not in allowed
+        )
+        assert not outside, f"{function} reached outside the worker: {outside}"
+        assert all(f in CHUNK_STORE_FUNCTIONS for _m, f in allowed)
+    assert reached_from_worker, "detector found no worker caller at all — it has gone blind"
+
+
 # ── layer 2b: functions that query owned rows with no caller to scope by ──
 #
 # The route sweep reaches only what an HTTP handler reaches, and only against
@@ -1106,8 +1164,10 @@ UNSCOPED_FUNCTION_ALLOWED = {
     ("app/services/gcal_service.py", "handle_gcal_webhook"): (
         "Google push webhook: the sync row is found by the channel/resource ids Google holds"
     ),
-    ("app/services/index_service.py", "index_artifact_chunks"): (
-        "pipeline index stage, with the worker's own artifact id"
+    ("app/services/index_service.py", "store_artifact_chunks"): (
+        "pipeline index stage, with the worker's own artifact id (split out of "
+        "index_artifact_chunks, M34-S3-AI-010); callers pinned worker-side by "
+        "test_floor1_chunk_store_is_worker_only"
     ),
     ("app/services/pipeline_service.py", "get_artifact_pipeline_runs"): (
         "FK traversal: api/uploads.py resolves the artifact with user_id first (comment at "

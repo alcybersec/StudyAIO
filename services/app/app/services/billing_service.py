@@ -1,19 +1,35 @@
 """Billing service for Stripe subscription management."""
 
+import hashlib
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.clock import utc_today
 from app.core.utils import generate_id
+from app.models.stripe_webhook_event import StripeWebhookEvent
 from app.models.subscription import Subscription
 from app.models.usage_record import UsageRecord
 
 logger = structlog.get_logger()
+
+
+def customer_fingerprint(stripe_customer_id: str | None) -> str | None:
+    """Short non-reversible tag for correlating log lines; never the raw id.
+
+    Args:
+        stripe_customer_id: The Stripe customer id, or None.
+
+    Returns:
+        First 8 hex chars of its SHA-256, or None when there is no id.
+    """
+    if not stripe_customer_id:
+        return None
+    return hashlib.sha256(stripe_customer_id.encode()).hexdigest()[:8]
 
 
 async def get_subscription(session: AsyncSession, user_id: str) -> Subscription | None:
@@ -56,7 +72,11 @@ async def get_or_create_subscription(
     )
     session.add(sub)
     await session.flush()
-    logger.info("subscription_created", user_id=user_id, stripe_customer_id=stripe_customer_id)
+    logger.info(
+        "subscription_created",
+        user_id=user_id,
+        customer_fp=customer_fingerprint(stripe_customer_id),
+    )
     return sub
 
 
@@ -137,8 +157,13 @@ async def create_portal_session(session: AsyncSession, user_id: str) -> str:
 PRO_STATUSES = frozenset({"active", "trialing", "past_due"})
 FREE_STATUSES = frozenset({"canceled", "unpaid", "incomplete_expired", "paused"})
 
-_EVENT_TTL_SECONDS = 60 * 60 * 24 * 30
-_ORDER_TTL_SECONDS = 60 * 60 * 24 * 90
+_SUBSCRIPTION_EVENTS = frozenset(
+    {
+        "customer.subscription.created",
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+    }
+)
 
 
 async def handle_webhook_event(
@@ -149,62 +174,98 @@ async def handle_webhook_event(
     event_id: str | None = None,
     created: int | None = None,
 ) -> None:
-    """Process a Stripe webhook event, idempotently and in order.
+    """Process a Stripe webhook event, idempotently and in order, in Postgres.
 
-    Replays of the same ``event_id`` are no-ops (Redis ``SET NX``). An event
-    whose ``created`` is older than the last one applied for that Stripe
-    customer is ignored, so a late ``updated`` cannot undo a newer state. If
-    processing fails the dedupe mark is released so Stripe's retry applies.
+    ``models.stripe-webhook-events v1``. The event id is claimed with an
+    insert-or-skip on its unique index and the effect is applied in the same
+    transaction, so a replay is a no-op, a concurrent duplicate applies once
+    and a failure rolls the claim back for Stripe's retry. An event whose
+    ``created`` is older than an applied one for the same customer is recorded
+    ``stale`` and ignored; a per-customer advisory lock serialises the ordering
+    read. An event naming no customer skips ordering.
 
     Args:
-        session: Database session.
+        session: Database session (one transaction per delivery).
         event_type: The Stripe event type.
         data: The event data object.
         event_id: The Stripe event id, for dedupe.
         created: The event's ``created`` unix timestamp, for ordering.
     """
-    from app.core import redis as redis_mod
-
     obj = data.get("object", {})
-    if event_type not in (
-        "customer.subscription.created",
-        "customer.subscription.updated",
-        "customer.subscription.deleted",
-    ):
+    if event_type not in _SUBSCRIPTION_EVENTS:
         if event_type == "checkout.session.completed":
-            logger.info("checkout_completed", customer=obj.get("customer"))
+            logger.info("checkout_completed", customer_fp=customer_fingerprint(obj.get("customer")))
         else:
             logger.debug("webhook_event_ignored", event_type=event_type)
         return
 
-    client = redis_mod.redis_client
-    dedupe_key = f"stripe:event:{event_id}" if event_id else None
-    order_key = f"stripe:last_created:{obj.get('customer')}" if created is not None else None
+    customer = obj.get("customer")
+    if not isinstance(customer, str) or not customer:
+        customer = None
+    created_at = datetime.fromtimestamp(created, tz=UTC) if created is not None else None
 
-    if dedupe_key and not await client.set(dedupe_key, "1", nx=True, ex=_EVENT_TTL_SECONDS):
-        logger.info("webhook_replay_ignored", event_id=event_id, event_type=event_type)
-        return
     try:
-        if order_key:
-            last = await client.get(order_key)
-            if last is not None and created < int(last):
+        if event_id:
+            claim = await session.execute(
+                pg_insert(StripeWebhookEvent)
+                .values(
+                    id=generate_id(),
+                    stripe_event_id=event_id,
+                    event_type=event_type,
+                    stripe_customer_id=customer,
+                    stripe_created=created_at,
+                    outcome="applied",
+                    created_at=datetime.now(UTC),
+                )
+                .on_conflict_do_nothing(index_elements=["stripe_event_id"])
+                .returning(StripeWebhookEvent.id)
+            )
+            claim_id = claim.scalar_one_or_none()
+            if claim_id is None:
+                logger.info("webhook_replay_ignored", event_id=event_id, event_type=event_type)
+                await session.rollback()
+                return
+
+        if created_at is not None and customer is not None:
+            await session.execute(
+                select(
+                    func.pg_advisory_xact_lock(
+                        func.hashtextextended(f"stripe:customer:{customer}", 0)
+                    )
+                )
+            )
+            newer = await session.execute(
+                select(StripeWebhookEvent.id)
+                .where(
+                    StripeWebhookEvent.stripe_customer_id == customer,
+                    StripeWebhookEvent.outcome == "applied",
+                    StripeWebhookEvent.stripe_created > created_at,
+                )
+                .limit(1)
+            )
+            if newer.scalar_one_or_none() is not None:
+                if event_id:
+                    await session.execute(
+                        update(StripeWebhookEvent)
+                        .where(StripeWebhookEvent.id == claim_id)
+                        .values(outcome="stale")
+                    )
+                await session.commit()
                 logger.info(
                     "webhook_stale_ignored",
                     event_id=event_id,
                     event_type=event_type,
                     created=created,
-                    last_applied=int(last),
                 )
                 return
+
         if event_type == "customer.subscription.deleted":
             await _handle_subscription_deleted(session, obj)
         else:
             await _handle_subscription_update(session, obj)
-        if order_key:
-            await client.set(order_key, str(created), ex=_ORDER_TTL_SECONDS)
+        await session.commit()
     except Exception:
-        if dedupe_key:
-            await client.delete(dedupe_key)
+        await session.rollback()
         raise
 
 
@@ -219,7 +280,9 @@ async def _handle_subscription_update(session: AsyncSession, sub_obj: dict) -> N
     )
     sub = result.scalar_one_or_none()
     if not sub:
-        logger.warning("webhook_subscription_not_found", customer_id=customer_id)
+        logger.warning(
+            "webhook_subscription_not_found", customer_fp=customer_fingerprint(customer_id)
+        )
         return
 
     sub.stripe_subscription_id = stripe_sub_id
@@ -248,7 +311,6 @@ async def _handle_subscription_update(session: AsyncSession, sub_obj: dict) -> N
     if user:
         user.tier = sub.plan
 
-    await session.commit()
     logger.info(
         "subscription_updated",
         user_id=sub.user_id,
@@ -266,7 +328,9 @@ async def _handle_subscription_deleted(session: AsyncSession, sub_obj: dict) -> 
     )
     sub = result.scalar_one_or_none()
     if not sub:
-        logger.warning("webhook_subscription_not_found", customer_id=customer_id)
+        logger.warning(
+            "webhook_subscription_not_found", customer_fp=customer_fingerprint(customer_id)
+        )
         return
 
     deleted_id = sub_obj.get("id")
@@ -287,7 +351,6 @@ async def _handle_subscription_deleted(session: AsyncSession, sub_obj: dict) -> 
     if user:
         user.tier = "free"
 
-    await session.commit()
     logger.info("subscription_deleted", user_id=sub.user_id)
 
 

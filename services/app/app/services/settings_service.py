@@ -138,6 +138,27 @@ _VALIDATORS: dict[str, tuple[type, Any, Any]] = {
 }
 
 
+def claude_code_availability() -> tuple[bool, str | None]:
+    """Whether the Claude Code backend may be chosen on this deployment.
+
+    Asks the adapter's own `claude_cli_unavailable_reason()`, which reads
+    ``SINGLE_USER_MODE`` (via settings), ``CLAUDE_CLI_SHARED_UID_ACCEPTED``,
+    ``CLAUDE_CLI_UID`` and the process euid. That is the *API* process's view.
+    The worker's refusal (`ensure_claude_cli_spawnable`) stays authoritative; this
+    answer is only right when both read the same inputs, i.e. the API and the AI
+    pool share the same env file and run as the same user (the compose stacks run
+    both as the image's ``studyaio``, uid 999). It never spawns anything and never
+    calls `get_agent`.
+
+    Returns:
+        ``(available, reason)``; ``reason`` is secret-free and None when available.
+    """
+    from app.agents.claude_code import claude_cli_unavailable_reason  # lazy: heavy module
+
+    reason = claude_cli_unavailable_reason()
+    return reason is None, reason
+
+
 def validate_setting(key: str, value: Any) -> Any:
     """Validate a single setting key/value.
 
@@ -483,6 +504,9 @@ async def get_user_settings(session: AsyncSession, user_id: str) -> dict[str, An
     merged = _public_view(user_settings.settings_json or {})
     # Include theme and dashboard_layout
     merged["theme"] = user_settings.theme
+    merged["claude_code_available"], merged["claude_code_unavailable_reason"] = (
+        claude_code_availability()
+    )
     merged["language"] = user_settings.language
     merged["content_language"] = user_settings.content_language
     merged["timezone"] = getattr(user_settings, "timezone", None) or _DEFAULT_TIMEZONE
@@ -541,6 +565,15 @@ async def update_user_settings(
             validated[key] = validate_setting(key, value)
 
     user_settings = await _get_or_create_user_settings(session, user_id)
+
+    # SEC-006 option F: refuse a *new* choice of a backend that cannot run. A
+    # stored claude_code is left alone (re-submitting it is not a change).
+    if validated.get("agent_backend") == "claude_code" and (
+        (user_settings.settings_json or {}).get("agent_backend") != "claude_code"
+    ):
+        available, reason = claude_code_availability()
+        if not available:
+            raise ValueError(reason)
 
     # Credentials are encrypted before they touch the row (SEC-06).
     for key in SECRET_KEYS & validated.keys():

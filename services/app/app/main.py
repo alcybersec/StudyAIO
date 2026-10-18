@@ -37,6 +37,7 @@ from app.api import (
     gamification_router,
     notifications_inbox_router,
     notifications_router,
+    onboarding_router,
     qa_router,
     review_items_router,
     search_router,
@@ -417,6 +418,7 @@ app.include_router(dashboard_router, prefix="/api", tags=["dashboard"])
 app.include_router(feedback_router, prefix="/api", tags=["feedback"])
 app.include_router(ai_feedback_router, prefix="/api", tags=["feedback"])
 app.include_router(usage_router, prefix="/api", tags=["usage"])
+app.include_router(onboarding_router, prefix="/api", tags=["onboarding"])
 app.include_router(courses_router, prefix="/api", tags=["courses"])
 app.include_router(uploads_router, prefix="/api", tags=["uploads"])
 app.include_router(artifacts_router, prefix="/api", tags=["uploads"])

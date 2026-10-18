@@ -12,6 +12,14 @@
 # It copies NO existing credentials. Idempotent; an existing token is kept
 # unless you pass --rotate.
 #
+# Ownership (SEC-006): the AI worker pools run as uid 999 (`studyaio`), so on the
+# deploy host the dir and its files are owned by 999 (modes stay 0700/0600).
+# This script refuses root, so first-time setup and --rotate run AS that uid:
+#   sudo install -d -o 999 -g 999 -m 0700 <DIR>      # once, if the dir is new
+#   sudo -u '#999' env HOME=/nonexistent bash scripts/setup-claude-login.sh [--rotate] <DIR>
+# On a host where the dir already exists under the deploy user:
+#   sudo chown -R 999:999 <DIR>
+#
 # Usage: bash scripts/setup-claude-login.sh [--rotate] [DIR]
 #   DIR defaults to $STUDYAIO_CLAUDE_LOGIN_DIR, then /opt/studyaio/claude-login.
 #   The token is read from the terminal, or from stdin when stdin is not a tty.

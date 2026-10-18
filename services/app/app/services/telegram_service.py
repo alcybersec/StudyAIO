@@ -2,11 +2,13 @@
 
 import secrets
 
+import httpx
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.auth import hash_magic_link_token
 from app.core.exceptions import TelegramLinkError
 from app.core.utils import generate_id
 from app.models.telegram_link import TelegramLink
@@ -22,7 +24,8 @@ def _telegram_configured() -> bool:
 async def generate_link_token(session: AsyncSession, user_id: str) -> str:
     """Generate a deep-link token for Telegram account linking.
 
-    Creates or updates a TelegramLink record with a fresh token.
+    Creates or updates a TelegramLink record with a fresh token. Only the
+    SHA-256 digest of the token is stored; the plaintext is returned once.
 
     Args:
         session: Database session.
@@ -37,7 +40,7 @@ async def generate_link_token(session: AsyncSession, user_id: str) -> str:
     token = secrets.token_urlsafe(32)
 
     if link:
-        link.link_token = token
+        link.link_token = hash_magic_link_token(token)
         link.verified = False
         link.chat_id = None
         link.username = None
@@ -45,7 +48,7 @@ async def generate_link_token(session: AsyncSession, user_id: str) -> str:
         link = TelegramLink(
             id=generate_id(),
             user_id=user_id,
-            link_token=token,
+            link_token=hash_magic_link_token(token),
         )
         session.add(link)
 
@@ -71,7 +74,9 @@ async def verify_link(
     Raises:
         TelegramLinkError: If token is invalid or expired.
     """
-    result = await session.execute(select(TelegramLink).where(TelegramLink.link_token == token))
+    result = await session.execute(
+        select(TelegramLink).where(TelegramLink.link_token == hash_magic_link_token(token))
+    )
     link = result.scalar_one_or_none()
 
     if not link:
@@ -121,6 +126,36 @@ async def get_link(session: AsyncSession, user_id: str) -> TelegramLink | None:
     """
     result = await session.execute(select(TelegramLink).where(TelegramLink.user_id == user_id))
     return result.scalar_one_or_none()
+
+
+async def register_webhook() -> bool:
+    """Register the webhook URL with Telegram, including the shared secret token.
+
+    Telegram then sends the secret in `X-Telegram-Bot-Api-Secret-Token` on every
+    update, which the webhook endpoint checks in constant time (SEC-015).
+
+    Returns:
+        True if Telegram accepted the registration.
+
+    Raises:
+        ValueError: If the bot token, webhook URL or webhook secret is unset.
+    """
+    token = settings.telegram_bot_token.get_secret_value()
+    secret = settings.telegram_webhook_secret.get_secret_value()
+    if not token or not settings.telegram_webhook_url or not secret:
+        raise ValueError(
+            "TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_URL and TELEGRAM_WEBHOOK_SECRET must all be set"
+        )
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"https://api.telegram.org/bot{token}/setWebhook",
+            json={"url": settings.telegram_webhook_url, "secret_token": secret},
+        )
+    ok = resp.status_code == 200 and bool(resp.json().get("ok"))
+    # Never log the request: its URL carries the bot token, its body the secret.
+    logger.info("telegram_webhook_registered" if ok else "telegram_webhook_register_failed")
+    return ok
 
 
 async def send_telegram_message(chat_id: int, text: str) -> bool:

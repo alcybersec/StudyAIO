@@ -1,7 +1,5 @@
 # Web framework
-# <0.137: 0.137+ makes include_router lazy (app.routes is no longer flat), which
-# breaks the route-walking guards in tests/unit/api and tests/safety.
-fastapi>=0.134,<0.137
+fastapi>=0.143,<1.0
 starlette>=1.3.1,<2.0  # SEC-07 / GL#27: floor above the audited advisories
 uvicorn[standard]==0.34.0
 python-multipart>=0.0.31,<1.0

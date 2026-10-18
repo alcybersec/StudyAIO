@@ -829,7 +829,9 @@ WORKER_AI_ERROR_SITES = {
 
 @pytest.mark.parametrize("backend", CREDENTIALED_BACKENDS)
 @pytest.mark.parametrize("site", sorted(WORKER_AI_ERROR_SITES))
-def test_floor2_worker_provider_error_never_stores_or_logs_a_credential(site, backend, caplog):
+def test_floor2_worker_provider_error_never_stores_or_logs_a_credential(
+    site, backend, caplog, cli_shared_uid_opt_in
+):
     """A provider error quoting the user's key reaches no pipeline_runs row and no log.
 
     Covers R-012 and, through the same adapters, ADR 0003 site #5. A fix at
@@ -1187,7 +1189,7 @@ def _host_login_classify(subprocess_fake) -> tuple[BaseException | None, list[st
 
 
 def test_floor2_host_credential_retry_failure_never_stores_or_logs_the_token(
-    tmp_path, monkeypatch, caplog
+    tmp_path, monkeypatch, caplog, cli_shared_uid_opt_in
 ):
     """Revoked container login, then a retry that echoes the re-read host token.
 
@@ -1221,7 +1223,7 @@ def test_floor2_host_credential_retry_failure_never_stores_or_logs_the_token(
 
 @pytest.mark.asyncio
 async def test_floor2_host_credentials_are_never_handed_back_as_the_users_own(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, cli_shared_uid_opt_in
 ):
     """A CLI token refresh during the host-credential retry must not become the user's.
 
@@ -1274,7 +1276,9 @@ CONTAINER_SENTINEL = "floor2-sentinel-container-oauth-token-9b4c"
 
 
 @pytest.mark.asyncio
-async def test_floor2_container_login_token_is_redacted_from_cli_failures(tmp_path, monkeypatch):
+async def test_floor2_container_login_token_is_redacted_from_cli_failures(
+    tmp_path, monkeypatch, cli_shared_uid_opt_in
+):
     """The worker's own ``~/.claude`` login is a credential too (SAFETY-045 residual).
 
     A user on the host login runs the CLI with no ``CLAUDE_CONFIG_DIR``, so it
@@ -1328,7 +1332,7 @@ async def test_floor2_container_login_token_is_redacted_from_cli_failures(tmp_pa
 
 @pytest.mark.asyncio
 async def test_floor2_host_credential_retry_is_not_logged_as_user_credentials(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, cli_shared_uid_opt_in
 ):
     """The retry runs on the operator's login; logs must not attribute it to the user.
 
@@ -1370,7 +1374,9 @@ async def test_floor2_host_credential_retry_is_not_logged_as_user_credentials(
     assert adapter.refreshed_credentials is None
 
 
-def test_floor2_expired_host_login_is_not_spent_and_never_leaks(tmp_path, monkeypatch, caplog):
+def test_floor2_expired_host_login_is_not_spent_and_never_leaks(
+    tmp_path, monkeypatch, caplog, cli_shared_uid_opt_in
+):
     """AI-049: an expired re-read host token gets no second CLI call.
 
     A retry would make the CLI try to refresh (and possibly rotate) the

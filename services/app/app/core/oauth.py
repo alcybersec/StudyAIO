@@ -142,7 +142,6 @@ def build_authorize_url(provider: str, state: str) -> str:
     }
 
     if provider == "google":
-        params["access_type"] = "offline"
         params["prompt"] = "select_account"
 
     return f"{config['authorize_url']}?{urlencode(params)}"

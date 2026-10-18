@@ -20,6 +20,9 @@ import sys
 
 import structlog
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
+from sqlalchemy import Text
+from sqlalchemy.engine import Dialect
+from sqlalchemy.types import TypeDecorator
 
 from app.config import settings
 
@@ -167,3 +170,39 @@ def check_startup() -> None:
             'with: python -c "from cryptography.fernet import Fernet; '
             'print(Fernet.generate_key().decode())"'
         )
+
+
+class EncryptedText(TypeDecorator):
+    """Text column stored as ``enc:v1:`` ciphertext (``models.secrets-at-rest v1``).
+
+    ORM attributes hold plaintext. A value that cannot be decrypted (tampered, or
+    written under a key no longer configured) reads as ``None`` and logs
+    ``secret_at_rest_undecryptable`` with the column name only. Anything that
+    must re-save such a value (rotation, migrations) works on raw column values,
+    never on the mapped attribute.
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def __init__(self, *, column: str) -> None:
+        super().__init__()
+        self.column = column
+
+    def process_bind_param(self, value: str | None, dialect: Dialect) -> str | None:
+        """Encrypt on the way to the driver; ``None`` passes through."""
+        if value is None:
+            return None
+        return encrypt(value)
+
+    def process_result_value(self, value: str | None, dialect: Dialect) -> str | None:
+        """Decrypt on load; legacy plaintext as is; unreadable ciphertext is ``None``."""
+        if value is None:
+            return None
+        try:
+            return decrypt(value)
+        except SecretBoxError:
+            # Fresh proxy on purpose: a module logger is cached on first use and then
+            # ignores structlog.testing.capture_logs, which the contract tests rely on.
+            structlog.get_logger().warning("secret_at_rest_undecryptable", column=self.column)
+            return None

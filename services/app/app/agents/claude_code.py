@@ -10,6 +10,7 @@ import tempfile
 from typing import Any
 
 import structlog
+from prometheus_client import Counter
 
 from app.agents import parsing
 from app.agents.base import (
@@ -27,6 +28,7 @@ from app.agents.base import (
 )
 from app.agents.targeted_prompts import render_targeted_prompt
 from app.agents.transient import TransientAgentError, is_transient_text
+from app.config import settings
 from app.core.ai_settings import get_effective_setting
 from app.core.clock import utc_now
 from app.core.exceptions import AgentError
@@ -108,6 +110,76 @@ def _drop_privileges_ids() -> tuple[int, int] | None:
         return None
     gid_raw = os.environ.get("CLAUDE_CLI_GID", "").strip()
     return uid, int(gid_raw) if gid_raw.isdigit() else uid
+
+
+class ClaudeCliUnavailableError(AgentError):
+    """The Claude Code CLI may not be spawned in this deployment (SEC-006, option F).
+
+    Deterministic configuration refusal: retrying cannot help, so it is a plain
+    ``AgentError`` (never ``TransientAgentError``) and fails the stage fast.
+    ``type(exc).__name__`` is the stable ``error_class`` metric label.
+    """
+
+
+#: Refusals by the spawn guard. Labels are low-cardinality enums only.
+CLI_SPAWN_REFUSALS = Counter(
+    "studyaio_claude_cli_spawn_refusals_total",
+    "Claude Code CLI spawns refused by the shared-uid guard.",
+    ["stage", "outcome", "error_class"],
+)
+
+_SHARED_UID_REASON = (
+    "the Claude Code backend is unavailable: this worker is non-root, so the CLI "
+    "would share its uid and could read the worker's environment and data. Use "
+    "another AI backend, run the AI pool as root with CLAUDE_CLI_UID, or set "
+    "CLAUDE_CLI_SHARED_UID_ACCEPTED=true to accept that risk."
+)
+_UID_ON_NONROOT_REASON = (
+    "CLAUDE_CLI_UID is set but this worker is not root and cannot drop privileges. "
+    "Unset CLAUDE_CLI_UID or run the AI pool as root."
+)
+_refusal_logged: set[str] = set()
+
+
+def _env_true(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def claude_cli_unavailable_reason() -> str | None:
+    """Say why the CLI must not be spawned here, or None when it may be.
+
+    Root workers keep the uid-drop path unchanged. A non-root worker cannot drop,
+    so the child would share the worker's uid: refused in multi-user mode unless
+    ``CLAUDE_CLI_SHARED_UID_ACCEPTED`` is true (``SINGLE_USER_MODE`` is one tenant).
+    ``CLAUDE_CLI_UID`` on a non-root worker is refused in every mode.
+
+    Returns:
+        A secret-free reason string, or None when spawning is allowed.
+    """
+    if os.geteuid() == 0:
+        return None
+    if os.environ.get("CLAUDE_CLI_UID", "").strip():
+        return _UID_ON_NONROOT_REASON
+    if settings.single_user_mode or _env_true("CLAUDE_CLI_SHARED_UID_ACCEPTED"):
+        return None
+    return _SHARED_UID_REASON
+
+
+def ensure_claude_cli_spawnable() -> None:
+    """Raise ``ClaudeCliUnavailableError`` (counted, logged once) when refused.
+
+    Raises:
+        ClaudeCliUnavailableError: See `claude_cli_unavailable_reason`.
+    """
+    reason = claude_cli_unavailable_reason()
+    if reason is None:
+        return
+    name = ClaudeCliUnavailableError.__name__
+    CLI_SPAWN_REFUSALS.labels(stage="claude_cli_spawn", outcome="refused", error_class=name).inc()
+    if reason not in _refusal_logged:
+        _refusal_logged.add(reason)
+        logger.error("claude_cli_spawn_refused", reason=reason)
+    raise ClaudeCliUnavailableError(reason)
 
 
 class _CliAuthError(AgentError):
@@ -290,6 +362,8 @@ class ClaudeCodeAdapter(AgentAdapter):
         Raises:
             AgentError: If the CLI fails or times out.
         """
+        # SEC-006: refuse before anything is read or spawned.
+        ensure_claude_cli_spawnable()
         # The prompt goes on stdin, not argv: rendered lecture prompts routinely
         # exceed ARG_MAX and exec() then fails with "[Errno 7] Argument list too
         # long". `claude -p` with no positional prompt reads it from stdin.

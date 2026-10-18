@@ -26,6 +26,7 @@ from starlette.requests import Request
 
 from app.config import settings
 from app.core.exceptions import RateLimiterUnavailableError
+from app.core.login_throttle import LOGIN_THROTTLE_UNAVAILABLE
 
 logger = structlog.get_logger()
 
@@ -59,6 +60,7 @@ class _OutagePolicyLimiter(Limiter):
         except Exception as exc:
             path = request["path"] or ""
             if path.startswith(FAIL_CLOSED_PREFIXES):
+                LOGIN_THROTTLE_UNAVAILABLE.labels(action="limit").inc()
                 logger.error("rate_limit_store_down_failing_closed", path=path, error=repr(exc))
                 raise RateLimiterUnavailableError("rate limit store unavailable") from exc
             logger.warning("rate_limit_store_down_failing_open", path=path, error=repr(exc))

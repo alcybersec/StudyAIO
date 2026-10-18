@@ -8,9 +8,12 @@
  * Nothing here may throw — monitoring that breaks the app is worse than none.
  */
 
-type SentryModule = typeof import('@sentry/react')
+// Keep only the three bindings we call. Holding the whole module namespace
+// (`sentry = mod`) makes the bundler retain every export, which drags in
+// Replay, Feedback and Canvas (~250 KB) that this app never enables.
+type CaptureException = typeof import('@sentry/react').captureException
 
-let sentry: SentryModule | null = null
+let captureException: CaptureException | null = null
 let initPromise: Promise<boolean> | null = null
 
 /** Query params that carry a bearer credential in reset/verification links. */
@@ -50,8 +53,8 @@ export function initMonitoring(): Promise<boolean> {
   }
 
   initPromise = import('@sentry/react')
-    .then((mod) => {
-      mod.init({
+    .then(({ init, setTag, captureException: capture }) => {
+      init({
         dsn,
         environment: import.meta.env.VITE_SENTRY_ENVIRONMENT || 'development',
         release: import.meta.env.VITE_SENTRY_RELEASE || undefined,
@@ -65,8 +68,8 @@ export function initMonitoring(): Promise<boolean> {
           return event
         },
       })
-      mod.setTag('component', 'ui')
-      sentry = mod
+      setTag('component', 'ui')
+      captureException = capture
       return true
     })
     .catch(() => {
@@ -85,7 +88,7 @@ export function initMonitoring(): Promise<boolean> {
  */
 export function captureError(error: unknown, context?: Record<string, unknown>): void {
   try {
-    sentry?.captureException(error, context ? { extra: context } : undefined)
+    captureException?.(error, context ? { extra: context } : undefined)
   } catch {
     // Never let reporting an error cause another one.
   }
@@ -93,6 +96,6 @@ export function captureError(error: unknown, context?: Record<string, unknown>):
 
 /** Test seam: reset module state between tests. */
 export function __resetMonitoringForTests(): void {
-  sentry = null
+  captureException = null
   initPromise = null
 }

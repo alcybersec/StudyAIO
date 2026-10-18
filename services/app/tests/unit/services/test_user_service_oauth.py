@@ -80,7 +80,7 @@ class TestCreateOrLinkOAuth:
             await user_service.create_or_link_oauth(session, "google", "goog-123", "")
 
     @pytest.mark.asyncio
-    async def test_existing_oauth_account_updates_tokens(self):
+    async def test_existing_oauth_account_clears_stored_tokens(self):
         session = AsyncMock()
         existing_oauth = _make_oauth_account()
         user = _make_user()
@@ -101,13 +101,11 @@ class TestCreateOrLinkOAuth:
             "goog-123",
             "test@example.com",
             email_verified=True,
-            access_token="new-access",
-            refresh_token="new-refresh",
         )
 
         assert returned is user
-        assert existing_oauth.access_token == "new-access"
-        assert existing_oauth.refresh_token == "new-refresh"
+        assert existing_oauth.access_token is None
+        assert existing_oauth.refresh_token is None
 
     @pytest.mark.asyncio
     async def test_existing_oauth_sets_avatar_if_missing(self):
@@ -193,7 +191,6 @@ class TestCreateOrLinkOAuth:
             "gh-456",
             "test@example.com",
             email_verified=True,
-            access_token=PLACEHOLDER_TOKEN,
             avatar_url="https://github.com/pic.jpg",
         )
 
@@ -226,7 +223,6 @@ class TestCreateOrLinkOAuth:
                 "gh-456",
                 "test@example.com",
                 email_verified=True,
-                access_token=PLACEHOLDER_TOKEN,
             )
 
         # Nothing was written: no OAuthAccount row, and the account untouched.
@@ -330,7 +326,6 @@ class TestProviderEmailMustBeVerified:
             "goog-123",
             "test@example.com",
             email_verified=False,
-            access_token=PLACEHOLDER_TOKEN,
         )
 
         assert returned is user
@@ -363,7 +358,6 @@ class TestProviderEmailMustBeVerified:
             "goog-789",
             "newuser@example.com",
             email_verified=True,
-            access_token=PLACEHOLDER_TOKEN,
             avatar_url="https://example.com/avatar.png",
         )
 

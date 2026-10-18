@@ -318,8 +318,19 @@ Rules: `target_type` in `AI_FEEDBACK_TARGET_TYPES`; `rating` is `1` or `-1`; `re
 exist **and** one owned by someone else both return `404` (no existence probe), resolved through the
 owner-scoped getters (floor 1). `course_id` is inferred from the target, never taken from the
 client. The admin route lives at `/admin/ai-feedback` because `/admin/feedback` is the app-bug
-inbox. `answer` resolves to an assistant `chat_message`; `/qa/ask` answers are not persisted and
-carry no id, so they cannot be rated. Account deletion removes the rows (`user_id` column).
+inbox. `answer` resolves to an assistant `chat_message`. Account deletion removes the rows
+(`user_id` column).
+
+**Study cards (M34-S3-BACKEND-012; no interface change, so no version bump).** The study surfaces
+(Study hub review, timed and plan runs) rate a card with `flashcard` and a question with
+`quiz_question`, the card's or question's own id, exactly as the week tabs do. That is `frontend`
+work; the backend already serves it. The owner-scoped getters skip archived rows, so a vote on a
+card or question archived after it was shown (`api.study-items`) is `404`; the control treats that
+as "item gone", not as an error to retry.
+
+`POST /api/qa/ask` answers are **not** rateable, by decision (2026-10-16): no UI calls that route,
+so there is no `qa_answer` target type, no `qa_answers` table and no `answer_id` on `QAResponse`.
+`AI_FEEDBACK_TARGET_TYPES` stays the five v1 types. Revisit only if a QA surface ships.
 
 ### services.usage v1
 
@@ -514,7 +525,7 @@ Account deletion removes both new tables' rows (`backend`, `account_service`).
 `services/app/tests/contracts/test_weakspot_storage_contract.py` checks this table against the ORM
 metadata.
 
-### api.study-items v1
+### api.study-items v2
 
 Owner-scoped create/edit/delete of flashcards and quiz questions (GL#48, audit PROD-05). Lives in
 `app/api/assets.py`, logic in `app/services/asset_service.py`. All routes need an authenticated
@@ -550,6 +561,21 @@ Rules:
   bounded (front/back/question/explanation 4000 chars). `422` otherwise.
 * Unknown `course_code` for the caller is `404`.
 
+**v2 (M34-S3-BACKEND-012, recorded before implementation):** `course_code` on both `POST` routes
+is matched the way upload placement matches it (`api.upload-placement v1`), not exactly. In v1
+`csit302` was `404` for a caller who owns `CSIT302`; upload placement found it.
+
+* The lookup is `course_service.get_course_by_code_ci(session, code, *, user_id) -> Course | None`:
+  `code.strip().upper()` compared with `upper(courses.code)`, filtered on `courses.user_id ==
+  user_id` (floor 1). `asset_service` resolves `course_code` through it and through nothing else.
+* `uq_courses_code_user` is case-sensitive, so legacy data can hold two codes that differ only in
+  case for one user. The exact-case match wins; otherwise the oldest by `created_at`. Never
+  `MultipleResultsFound`, never a `500`.
+* It never creates a course: unknown for the caller stays `404` (upload placement creates one;
+  card add does not). Archived courses resolve as before (v1 did not filter them).
+* `get_course_by_code` (exact match) is unchanged: the course routes keyed on `{code}` in the URL
+  keep their behaviour.
+
 ### api.upload-placement v1
 
 Optional explicit placement on upload (GL#49, audit PROD-07).
@@ -567,6 +593,520 @@ Optional explicit placement on upload (GL#49, audit PROD-07).
 * A duplicate upload returns the existing artifact untouched; the placement is ignored.
 * Failure to resolve the course (quota) fails before anything is stored. In batch it fails the
   request with the quota error (placement is a single choice for all files).
+
+### models.secrets-at-rest v2
+
+Third-party tokens and the TOTP seed encrypted at rest (M34-S2-SEC-005, R-017, M32 N-7; the seed
+added by user decision 2026-10-16). Recorded first as `models.third-party-tokens v1`; renamed
+before any implementation, because the TOTP seed is ours, not a third party's. Amended before
+implementation with the `safety` review's required changes C3-C7 (`docs/gates/M34/contracts-safety.md`).
+v1 is implemented (`871b0f8`, `05b6acb`, revision `b2d4f6a8c0e1`).
+
+v2 (M34-S2-SEC-013, `safety` R1, user decision 2026-10-16): OAuth sign-in no longer stores the
+provider's tokens. `oauth_accounts.access_token` and `.refresh_token` are never written again, a
+migration nulls the stored values, and the columns stay, always NULL, for one release (see
+"v2: OAuth sign-in tokens are not stored" below). Everything else in v1 is unchanged.
+Provider: `backend` — `services/app/app/core/secret_box.py` (`EncryptedText`), `app/cli.py`
+(rotation), `app/services/user_service.py` and `app/api/auth.py` (the unreadable-seed rules
+below), `app/services/gcal_service.py` (the unreadable calendar-token rules below),
+`app/core/database.py` (`hide_parameters`, a precondition); `data` — `app/models/oauth_account.py`,
+`app/models/calendar_sync.py`, `app/models/user.py`, one Alembic revision, `alembic/env.py`
+(`hide_parameters`); `safety` — the downgrade note in `docs/security/`. Consumers: `backend` (`user_service`, `gcal_service`, `account_service`), `safety`
+(floor-2 pin). The scheme is the one per-user AI credentials already use (SEC-06): `secret_box`,
+Fernet under `SETTINGS_ENCRYPTION_KEY`, stored as `enc:v1:<token>`. No second key and no second
+format.
+
+**Columns.** These five, and only these, hold a secret this contract covers:
+
+| Table | Column | Type | Null | Notes |
+|---|---|---|---|---|
+| `oauth_accounts` | `access_token` | `EncryptedText` | yes | was `String(1000)`; widened, since Fernet output is about 1.4x the input plus 57 bytes. v2: never written, always NULL |
+| `oauth_accounts` | `refresh_token` | `EncryptedText` | yes | was `String(1000)`. v2: never written, always NULL |
+| `calendar_syncs` | `access_token` | `EncryptedText` | no | was `Text` |
+| `calendar_syncs` | `refresh_token` | `EncryptedText` | yes | was `Text` |
+| `users` | `mfa_secret` | `EncryptedText` | yes | was `String(64)`; widened, a 32-character base32 seed encrypts to well over 64 |
+
+Looked at and **not** in scope: `calendar_syncs.sync_token` is Google's incremental-sync cursor, not
+a credential (it authorises nothing without the access token); `magic_links.token_hash`,
+`invite_codes.token_hash` and `users.backup_codes` are already digests (the backup codes as
+`hash_backup_codes` output); `push_subscriptions.p256dh` and `.auth` are the browser's
+push-encryption keys, which the push sender needs in the clear.
+
+**Accessor.** Encryption is a column type, so no call site can forget it:
+
+```python
+class EncryptedText(TypeDecorator):
+    impl = Text
+    cache_ok = True
+
+    def __init__(self, *, column: str) -> None: ...
+
+    def process_bind_param(self, value: str | None, dialect: Dialect) -> str | None: ...
+
+    def process_result_value(self, value: str | None, dialect: Dialect) -> str | None: ...
+```
+
+- Each mapped column names itself: `EncryptedText(column="users.mfa_secret")`, kept as
+  `self.column`, in `table.column` form, the five values being exactly the five rows above. It is
+  for the log line only and never changes what is stored.
+- Write: `None` stays `None`; any `str` goes through `secret_box.encrypt`. Every write produces
+  ciphertext, including a value that merely starts with `enc:v1:`. With no key on a single-user
+  instance `secret_box.encrypt` stores plaintext, as it does for AI credentials; a multi-user
+  instance refuses to start without a key (`secret_box.check_startup`).
+- Read: `None` stays `None`; legacy plaintext (no prefix) is returned as is, so rows written
+  before the migration still work; ciphertext is decrypted. Ciphertext that fails authentication
+  (tampered, or written under a key no longer configured) reads as **`None`**, logs
+  `secret_at_rest_undecryptable` at warning with one field, `column` (the type's `self.column`),
+  and no value, ciphertext or row id, and never raises: loading a user, linking an account or
+  deleting one must not fail on one bad secret. The `column` field is what tells a broken calendar
+  token apart from a broken TOTP seed. A `None` calendar token follows the calendar block below. A
+  `None` TOTP seed on an account with MFA on is **not** "no MFA": see the next block.
+- ORM attributes hold plaintext in memory, so `user_service` and `gcal_service` need no change to
+  read or write them.
+- **An ORM read is not a safe source for a write-back.** An undecryptable value loads as `None`;
+  writing that `None` back would destroy the only copy of a value that a restored key could still
+  read. So nothing reads one of these attributes in order to re-save it: the rotation command and
+  the migration work on the raw column values (Core statements over the table with a plain `Text`
+  column, not the ORM attribute), and `users.mfa_secret` is assigned only by
+  `user_service.enable_mfa`, `disable_mfa` and `clear_mfa`, each of which sets it from a fresh
+  value or to `None` on purpose.
+- **Never logged, never returned (floor 2).** No log call passes a token or seed value; no API
+  response model has a field named `access_token`, `refresh_token`, `sync_token` or `mfa_secret`.
+  `account_service.EXPORT_EXCLUDED_COLUMNS` keeps excluding `access_token`, `refresh_token`,
+  `mfa_secret` and `backup_codes` from the data export. `MFASetupResponse.secret` is not an
+  exception: it is a freshly generated seed shown to its own user once at enrolment, before
+  anything is stored.
+
+**Unreadable TOTP seed: MFA fails closed.** The state is `users.mfa_enabled` true with
+`users.mfa_secret` reading `None`. `enable_mfa` sets both and `disable_mfa`/`clear_mfa` clear both,
+so on sound data the pair never occurs; when it does, the seed was undecryptable (or the row was
+damaged). Rules:
+
+1. `mfa_enabled` is the only switch for whether a second factor is demanded. No code path treats
+   a `None` seed as "MFA off", and nothing writes `mfa_enabled = False` because the seed is
+   unreadable.
+2. **Sign-in** (`POST /api/auth/login`, `POST /api/auth/oauth/mfa`). A `totp_code` is refused
+   with the same `AuthorizationError("Invalid MFA code")` as a wrong code (no oracle on the
+   account's state), counts as a failed attempt (`login_throttle.record_failure`), and sets no
+   cookie. The route logs `mfa_secret_unavailable` at warning with `user_id` and nothing else. A
+   missing code is still `"MFA code required"`. The password-less OAuth callback still issues the
+   pending-MFA cookie and never full cookies.
+3. **Backup codes are the user's way in.** They are hashed in their own column and do not depend
+   on the key, so `backup_code` sign-in works unchanged, each code once.
+4. **Turning MFA off** (`POST /api/auth/mfa/disable`, `user_service.disable_mfa`) is refused and
+   changes nothing (`mfa_enabled`, `mfa_secret`, `backup_codes` and `tokens_valid_from` keep their
+   values): `disable_mfa` raises `ValueError("MFA secret unavailable; sign in with a backup code
+   and ask an administrator to reset MFA")`, the route answers `400` with that detail, and the
+   service logs `mfa_secret_unavailable` with `user_id`. Today it says "MFA is not enabled", which
+   is false and is what this rule replaces. Re-enrolment (`POST /api/auth/mfa/verify`) stays
+   refused while `mfa_enabled` is true, so a session cannot swap in a seed of its own.
+5. **Recovery.** For one account: the user signs in with a backup code, and an administrator,
+   after verifying identity out of band, runs `POST /api/admin/users/{id}/mfa-reset`
+   (`clear_mfa`), after which the user enrols afresh. A user with no backup codes left goes
+   straight to the administrator. For many accounts at once (a key dropped before rotation
+   finished): put the old key back at the end of `SETTINGS_ENCRYPTION_KEY`; every seed reads again
+   and nothing was lost, because rule 1 and the write-back rule kept the ciphertext in place.
+   Deliberately not offered: disabling MFA with a backup code, or any reset reachable by the
+   account holder alone (the reasoning in `clear_mfa`'s docstring).
+
+**Unreadable calendar token: refresh, or say "reconnect required".** There is no existing
+"reconnect needed" path; `gcal_service` builds this one. Rules, for every path that builds Google
+credentials from a `calendar_syncs` row (`push_events`, `pull_events`, and so `sync_calendar`
+and `handle_gcal_webhook`):
+
+1. **Access token `None`, refresh token readable:** refresh before the first Google call (not
+   only when `creds.expired`), assign the new access token to `cal_sync.access_token` and flush,
+   so the next sync reads the fresh token. A failed refresh raises the existing
+   `CalendarSyncError("Token refresh failed: …")`.
+2. **Both `None`:** make no Google call, log `calendar_reconnect_required` at warning with
+   `sync_id` and nothing else, and raise `CalendarSyncError("reconnect required")`. Nothing is
+   written to the row (`calendar_syncs.access_token` is `NOT NULL`, and the ciphertext must stay
+   for a restored key). `sync_calendar` and `sync_all_calendars` already catch the error per sync,
+   so the other users' syncs keep running.
+3. **`disconnect_calendar` with a `None` access token** skips the revoke call and still deletes
+   the row: the user asked to disconnect, and there is nothing to revoke with.
+4. **Revoke sends the token in the form body**, `httpx` `post(..., data={"token": …})`, never in
+   the query string (`params=`): a URL lands in `httpx` error text and in proxy logs.
+
+**Precondition: every engine hides bound parameters.** A failed statement's `DBAPIError` text
+renders every bound value as `[parameters: (...)]`, and `logger.exception` logs that text: today a
+failed `oauth_accounts` flush logs the plaintext tokens, and after this contract it would still log
+emails and every other bound value. Every `create_async_engine`/`create_engine` call under `app/`
+and in `alembic/env.py` passes `hide_parameters=True`. `backend` is shipping
+`app/core/database.py` now as a separate fix; `data` adds the same to `alembic/env.py`, whose
+engine runs this contract's migration. SEC-005 does not merge until both hold. Pinned by `safety`'s
+`test_floor2_engine_hides_bound_parameters_from_error_text` and by the contract test below.
+
+**Key rotation.** Same stance as SEC-06: `SETTINGS_ENCRYPTION_KEY` is a comma-separated list, the
+first key encrypts and every key decrypts. `python -m app.cli encrypt-user-secrets --apply`
+re-encrypts these five columns as well as the `user_settings` credentials, under the first key,
+reading and writing raw column values, and reports counts only. Rotation is therefore: prepend the
+new key, run the command, drop the old key only once the command reports `unreadable: 0`. A value
+unreadable under every configured key is counted and left exactly as stored.
+
+**Migration.** One Alembic revision, after the current head:
+
+- Both directions read and write the five columns as raw stored strings (`sa.table(...)` with
+  plain `Text` columns), never through `EncryptedText`, and `UPDATE` by primary key only the
+  values that change.
+- `upgrade`: first call `secret_box.check_startup()`, before altering anything. On a multi-user
+  instance with no key (or a malformed key) it raises and the upgrade **aborts**, exactly as the
+  app and `secret_box.encrypt` refuse in that case; otherwise a migration that runs before the app
+  container would report success and leave every token in plaintext. Then widen
+  `oauth_accounts.access_token`/`refresh_token` and `users.mfa_secret` to `Text`, and for every row
+  of the three tables encrypt each non-NULL value of the five columns that is not already
+  `enc:v1:`. Idempotent: a second run changes nothing. On a **single-user** instance with no key it
+  still widens, leaves the values as they are, and prints the number of plaintext values left and
+  the `python -m app.cli encrypt-user-secrets --apply` instruction.
+- `downgrade` (decrypt back to plaintext, then narrow `oauth_accounts.access_token`/`refresh_token`
+  to `String(1000)` and `users.mfa_secret` to `String(64)`) is acceptable under floor 2 as a
+  deliberate operator rollback, on these conditions:
+  - Decrypting and narrowing happen in **one transaction**: every plaintext is computed and every
+    check below is made before the first `UPDATE` or `ALTER`, and nothing commits part-way. Any
+    abort leaves every value exactly as it was, still encrypted.
+  - It **aborts**, changing and narrowing nothing, if no key is configured
+    (`secret_box.is_configured()` is false) while any `enc:v1:` value exists; if any `enc:v1:`
+    value of the five columns cannot be decrypted; or if any decrypted value is longer than its
+    narrowed width (1000 for the two `oauth_accounts` columns, 64 for `mfa_secret`).
+  - The revision's docstring, and `docs/security/` (`safety`), state that the downgrade
+    **removes at-rest protection** and is an explicit operator act, not a step in a routine
+    redeploy.
+- Neither direction prints or logs a value: counts only (per table and column), and the abort
+  messages name the table and column, never a value.
+
+`services/app/tests/contracts/test_secrets_at_rest_contract.py` checks the column types and their
+`column` names, the accessor's behaviour under the test key (including the `column` field on the
+undecryptable log), the migration's shape (key check first on upgrade; width checks, no commit and
+the docstring on downgrade; the `docs/security/` note) and CLI coverage, `hide_parameters` on every
+engine, the API response models and the export exclusions, drives the unreadable-seed rules
+through `disable_mfa` and the two sign-in routes, and drives the calendar rules through
+`pull_events`, `push_events` and `disconnect_calendar`.
+
+**v2: OAuth sign-in tokens are not stored (M34-S2-SEC-013).** Provider: `backend` —
+`app/services/user_service.py`, `app/api/auth.py`, `app/core/oauth.py`; `data` — one Alembic
+revision. At `711f591` the two columns are written by `user_service.create_or_link_oauth` (the
+known-identity branch assigns both, the link branch passes both to `OAuthAccount(...)`), fed by
+the two keyword arguments in `api/auth.py::oauth_callback`, and read by nothing in `app/`: the
+only other mentions are the rotation list (`app/cli.py::RAW_SECRET_COLUMNS`) and the export
+exclusion. Sign-in needs the provider token once, inside the callback, to fetch the userinfo.
+Not storing it is stronger than encrypting it.
+
+1. **Signature.** `create_or_link_oauth(session, provider, provider_user_id, email,
+   email_verified=False, avatar_url=None) -> User`: the `access_token` and `refresh_token`
+   parameters are removed, so no caller can hand it one. `oauth_callback` passes neither. The
+   token dict from `exchange_code_for_token` stays a local of the callback, goes to
+   `fetch_userinfo` and nowhere else, and is never logged.
+2. **Writes.** The link branch constructs `OAuthAccount` without token keywords, so both are
+   NULL. The known-identity branch sets both to `None`: that sweeps a value the previous release
+   wrote during the deploy window (see Migration). Nothing else in `app/` assigns or reads
+   `OAuthAccount.access_token` or `.refresh_token`.
+3. **Do not ask for what is discarded.** `core.oauth.build_authorize_url` no longer sends
+   `access_type=offline` to Google: it requested a refresh token that is thrown away. `prompt=
+   select_account` stays. The scopes are unchanged.
+4. **The columns stay for one release, nullable, `EncryptedText`, always NULL.** They remain in the
+   column table above, in `RAW_SECRET_COLUMNS` and in `safety`'s floor-2 pin until they are
+   dropped: an always-NULL column costs nothing to rotate, and a value the previous release
+   writes during the deploy window is still ciphertext. Why not drop them now:
+   `infra/deploy/deploy.sh` runs the new image's migration while the old api keeps serving and
+   "relies on migrations being additive/backwards-compatible for one release". With the columns
+   dropped, the old api's `SELECT` on `oauth_accounts`, made by every OAuth sign-in in that
+   window, fails on an undefined column. The drop is `models.secrets-at-rest v3`, a later
+   task: remove the two mapped columns, the two `RAW_SECRET_COLUMNS` entries and the two
+   `MUST_ENCRYPT` entries of `test_floor2_tokens_at_rest.py` together, with a revision whose
+   downgrade re-adds both columns nullable and empty.
+5. **Migration.** One Alembic revision after the head of the day (`b2d4f6a8c0e1` at `711f591`):
+   - `upgrade` sets `access_token` and `refresh_token` to NULL on every `oauth_accounts` row where
+     either is non-NULL, with one Core `UPDATE` (over `sa.table`, not the ORM, so nothing decrypts).
+     It deletes no row and changes no other column: `user_id`, `provider` and `provider_user_id`
+     are the identity link and sign-in keeps working unchanged. It needs no key and prints the
+     number of rows changed, nothing else. A second run changes nothing.
+   - `downgrade` changes nothing. The nulled values **cannot be restored**, and the revision's
+     docstring says so in those words. The last copies are in the pre-deploy dump that
+     `deploy.sh` takes, as ciphertext; no code needs them.
+6. **Other references.** `account_service.EXPORT_EXCLUDED_COLUMNS` keeps both names (still needed
+   for `calendar_syncs`). Account deletion and the admin's delete remove `oauth_accounts` rows by
+   `user_id` without reading the tokens. The admin user detail selects `provider` only. The
+   `b2d4f6a8c0e1` downgrade handles NULL. Floor 4 covers uploads and generated content, not
+   provider tokens, so nulling them loses no user data (`safety` R1).
+7. **Residual, accepted.** Tokens already issued stay valid at the provider until they expire or
+   the user revokes the grant (GitHub OAuth-app tokens do not expire; a Google refresh token lasts
+   until revoked or unused for six months). Their scopes are sign-in only (`openid email profile`,
+   `read:user user:email`). Nothing revokes them at deploy: the copies we held are gone, and a
+   migration that calls providers is not acceptable.
+
+`services/app/tests/contracts/test_oauth_tokens_not_stored_contract.py` pins the v2 rules: the
+signature, the callback's call, both write branches, the authorize URL, and the revision run on a
+scratch SQLite database (rows kept, other columns unchanged, idempotent, downgrade a no-op with
+the docstring).
+
+### models.telegram-pairing-code v1
+
+Telegram pairing codes stored as SHA-256 digests (M34-S2-SEC-014, `safety` R3, user decision
+2026-10-16). Provider: `backend` — `app/services/telegram_service.py`; `data` —
+`app/models/telegram_link.py` (docstring only, no type change), one Alembic revision. Consumers:
+`backend` (`api/notifications.py`), `safety` (`test_floor2_tokens_at_rest.py` classifies the
+column). Today `generate_link_token` stores `secrets.token_urlsafe(32)` (43 characters) in
+`telegram_links.link_token` and `verify_link` looks it up as plaintext, so anyone who reads the
+database (dump, backup, replica, SQL injection) can pair their own Telegram chat with any account
+holding an unused code and receive that user's notifications. The codes never expire. Magic-link
+and invite tokens are already stored as digests; this does the same.
+
+**Column.** Unchanged in name and type: `telegram_links.link_token`, `String(64)`, nullable,
+unique, indexed. From this version it holds `hash_magic_link_token(code)`, the lowercase hex
+SHA-256 of the code (exactly 64 characters), or NULL once consumed. Keeping the name keeps the
+previous release's api working during the deploy window (the rule in `models.secrets-at-rest v2`
+item 4); the model's docstring says the column holds a digest.
+
+**Hash.** `app.core.auth.hash_magic_link_token`, reused as `invite_service` reuses it: SHA-256,
+not a slow KDF, because the code is a 256-bit random value with nothing to brute-force. No second
+digest function.
+
+**Rules.**
+
+1. `generate_link_token(session, user_id) -> str` still returns the plaintext code, generated as
+   today (`secrets.token_urlsafe(32)`), and stores only its digest. The plaintext exists in the
+   return value and in `TelegramLinkResponse.link_token` / `deep_link`, shown once to its own user
+   (like `MFASetupResponse.secret`), and nowhere else.
+2. `verify_link(session, token, chat_id, username=None) -> bool` looks the row up by
+   `TelegramLink.link_token == hash_magic_link_token(token)` in SQL, as magic links and invites
+   do. Nothing compares the presented code, or a digest, as a Python string; if a later change
+   must compare in Python it uses `hmac.compare_digest`. On a match it consumes the code
+   (`link_token = None`) as today; on a miss it raises
+   `TelegramLinkError("Invalid or expired link token")` as today. Presenting the stored digest
+   itself is a miss.
+3. **Never logged.** No log call in `telegram_service` or `api/notifications.py` carries the code
+   or its digest, on success or failure; `handle_telegram_webhook` does not log the `/start` text.
+   Events keep their current fields (`user_id`, `chat_id`).
+
+**Migration.** One Alembic revision (it may be the same revision as `models.secrets-at-rest v2`'s
+or its own):
+
+- `upgrade` sets `link_token` to NULL on every row where it is non-NULL (every unused code).
+  Rows are not deleted, and `verified`, `chat_id` and `username` are unchanged, so every linked
+  chat stays linked: a consumed code is already NULL. Prints the count only. Idempotent.
+- **Why invalidate rather than hash in place.** Hashing the stored plaintext would keep pending
+  codes working, but those codes never expire and their plaintext is already in every backup and
+  pre-deploy dump up to this one; hashing in place would leave each of them usable by whoever
+  holds such a dump. Invalidating costs a user with a pending code one click on "Link Telegram"
+  (most pending codes are abandoned: a used code is NULL already). This matches the user's
+  decision of 2026-10-16 ("unused codes at deploy time stop working"), which goes in the release
+  notes. A code generated by the previous release during the deploy window is stored as
+  plaintext and simply never matches; the user generates a new one.
+- `downgrade` also sets every non-NULL `link_token` to NULL: the previous code compares plaintext,
+  and a stored digest presented as a code would match. The docstring says so.
+- Both directions use a Core `UPDATE` over `sa.table` and need no key.
+
+`services/app/tests/contracts/test_telegram_pairing_code_contract.py` drives
+`generate_link_token`, `verify_link` and `handle_telegram_webhook` with a mock session and
+captured logs, and runs the revision on a scratch SQLite database.
+
+### models.stripe-webhook-events v1
+
+Stripe webhook dedupe and ordering state in Postgres (M34-S2-SEC-008, M32 N-8). Provider: `data` —
+`app/models/stripe_webhook_event.py`, one Alembic revision; `backend` —
+`app/services/billing_service.py` (`handle_webhook_event`), `app/services/account_service.py`
+(account deletion, below). Amended before implementation with the `safety` review's R2 and R4
+(`docs/gates/M34/contracts-safety.md`). Replaces the Redis keys
+`stripe:event:<id>` (dedupe, 30-day TTL) and `stripe:last_created:<customer>` (ordering watermark,
+90-day TTL). With this, `billing_service` does not touch Redis at all, so a Redis flush or outage
+can no longer re-apply a delivered event or let a stale one undo a newer state.
+
+| Table | Column | Type | Null | Notes |
+|---|---|---|---|---|
+| `stripe_webhook_events` | `stripe_event_id` | `String(255)` | no | unique |
+| `stripe_webhook_events` | `event_type` | `String(100)` | no | |
+| `stripe_webhook_events` | `stripe_customer_id` | `String(255)` | yes | index `(stripe_customer_id, stripe_created)` |
+| `stripe_webhook_events` | `stripe_created` | `DateTime(timezone=True)` | yes | the event's `created` |
+| `stripe_webhook_events` | `outcome` | `String(20)` | no | `applied` \| `stale` |
+
+Plus `id` (`String(36)`, `generate_id`) and `created_at`. No payload, no user id, no email: the
+row is Stripe's ids and our decision, nothing else.
+
+`handle_webhook_event(session, event_type, data, *, event_id=None, created=None) -> None` keeps its
+signature. For the three `customer.subscription.*` types (every other type is still ignored and
+records nothing):
+
+1. **Claim.** `INSERT … ON CONFLICT (stripe_event_id) DO NOTHING RETURNING id` in the request's
+   transaction. No row back means the event was already processed: log `webhook_replay_ignored`,
+   change nothing, return. An event without an id is processed without a claim, as today.
+2. **Order.** Only when `created` is given **and** the event names a customer
+   (`data["object"]["customer"]` is a non-empty string). An event with no customer skips this
+   step and is applied: comparing `stripe_customer_id == None` renders `IS NULL` and would order
+   it against every other customer-less row. Otherwise, first take the per-customer lock
+   `SELECT pg_advisory_xact_lock(hashtextextended('stripe:customer:' || :customer, 0))`, held to
+   the end of the transaction, **before** reading the watermark; then, if an `applied` row for the
+   same customer has a later `stripe_created`, mark the claimed row `stale`, commit, log
+   `webhook_stale_ignored`, return.
+3. **Apply.** Run the subscription handler and mark the row `applied`; one commit covers the claim
+   and the effect.
+4. **Failure.** Any exception rolls the transaction back, claim included, so Stripe's retry is
+   processed afresh. The exception propagates (the route answers `500`, Stripe retries).
+
+**Concurrent duplicate delivery.** Two requests carrying one event id race on the unique index:
+the second `INSERT` waits for the first transaction. If the first commits, the second gets no row
+and is a replay (step 1). If the first rolls back, the second claims and applies. The effect is
+applied exactly once either way, with no lock beyond the index.
+
+**Concurrent different events for one customer.** Without a lock, two events for one customer
+delivered at once could both read the watermark before either commits, and the older could commit
+last and undo the newer (the Redis version had the same race). The step-2 advisory lock serialises
+them: the second waits until the first commits, then reads a watermark that includes it. The lock
+is transaction-scoped, so a rollback or a commit releases it; nothing unlocks it by hand.
+
+**Retention: kept indefinitely, by decision (user, 2026-10-16).** No beat task, CLI command or
+migration deletes rows from this table, and that is the design, not a gap to fill later. Volume is a
+handful per subscriber per month, the table is the only record of which Stripe events changed a
+plan, and the ordering watermark is read from it, so pruning would also weaken the stale-event
+check. Changing this needs a new version of this entry. The table has no `user_id`, so account deletion
+leaves its rows; it holds only Stripe's opaque ids. `account_service` lists it among the tables that
+belong to nobody (`GLOBAL_TABLES`), and `safety` adds it to `tests/safety/_tenant.py::UNOWNED_TABLES`
+in the same change.
+
+**Account deletion removes the link to the person.** `delete_user_account` reads the user's
+`subscriptions.stripe_customer_id` values **before** it deletes their `subscriptions` rows, then sets
+`stripe_customer_id = NULL` on every `stripe_webhook_events` row carrying one of them (an `UPDATE`,
+never a `DELETE`). The rows, the dedupe on `stripe_event_id` and the retention decision stay intact;
+only the pseudonymous link to a deleted person goes. A later event for that customer finds no
+subscription and is logged `webhook_subscription_not_found`, as today.
+
+Required behaviour tests (`backend` unit, `qa` integration on Postgres): replay of an applied event
+is a no-op; replay after a failed first attempt applies; a stale `updated` after a newer one is
+ignored and recorded `stale`; two concurrent deliveries of one id apply once; two concurrent
+different events for one customer end in the newer state; an event with no customer is applied and
+compares with no other row; account deletion nulls the customer id on that customer's rows and
+deletes none; no Redis call on any path.
+`services/app/tests/contracts/test_stripe_webhook_events_contract.py` pins the table, the
+Redis-free service, the lock-before-watermark order, the customer-less skip and the deletion
+update.
+
+### core.login-throttle-metrics v1
+
+A counter for the auth throttle's Redis being unreachable (M34-S3-BACKEND-012). Provider:
+`backend` — `app/core/login_throttle.py` (defines it) and `app/core/rate_limit.py` (also
+increments it). Consumer: whoever reads `/metrics` (alert rules are `devops`').
+
+```python
+LOGIN_THROTTLE_UNAVAILABLE = Counter(
+    "studyaio_login_throttle_unavailable_total",
+    "Auth throttle store unreachable, by operation.",
+    ["action"],
+)
+```
+
+`action` is exactly one of four values; never an email, a key or a path:
+
+| `action` | Where | What the caller gets |
+|---|---|---|
+| `read` | `login_throttle.apply_delay` could not read the failure count | login proceeds with no delay (fails open) |
+| `record` | `login_throttle.record_failure` could not count a failure | the failure is not counted (fails open) |
+| `clear` | `login_throttle.clear` could not reset the count | nothing visible |
+| `limit` | the rate limiter's store failed on an `/api/auth/` path | `503` with `Retry-After: 5` (fails closed) |
+
+Incremented once per occurrence, next to the existing `login_throttle_unavailable` and
+`rate_limit_store_down_failing_closed` log lines, which stay. The limiter's fail-open branch on
+non-auth paths is not counted here. Exported on `/metrics` from the default registry.
+`services/app/tests/contracts/test_login_throttle_metrics_contract.py` checks the definition and
+drives each `action` against a store that raises.
+
+### api.onboarding v1
+
+Server-side first-run status, the source the dashboard checklist reads (M34-S3-BACKEND-012).
+Provider: `backend` — `app/services/onboarding_service.py`, `app/api/onboarding.py`; `data` — one
+column on `users`, one Alembic revision. Consumer: `frontend` (`FirstRunChecklist`, which today
+derives the same steps from three queries and keeps dismissal in `localStorage`).
+
+| Method | Path | Body / query | Result |
+|---|---|---|---|
+| `GET` | `/api/onboarding` | none | `200` `OnboardingResponse` |
+| `PATCH` | `/api/onboarding` | `{checklist}` | `200` `OnboardingResponse`; `422` for a value outside `ONBOARDING_CHECKLIST_STATES` |
+
+`OnboardingResponse` = `{phase, steps: {upload, summary, check_in}, summary_target: {course_id,
+course_code, week} | null, checklist, visible}`. Both routes require a caller
+(`get_current_user_or_default`); neither spends AI or takes an id.
+
+Storage: `users.onboarding_checklist` `String(20)`, NOT NULL, server default `'auto'`, so existing
+users backfill to `auto` without a data migration. It is the only stored state; everything else is
+derived on read, per caller, with every query filtered on the caller (floor 1):
+
+- `uploaded`: the caller has at least one `lecture_artifacts` row, any status.
+- `summary_target`: the caller's first summary in a non-archived course, ordered by course code
+  then week (`summaries` joined to `courses` on `courses.user_id`).
+- `summary_read`: the caller has a `summary_viewed` usage event (`services.usage v1`, already sent
+  by the summary view).
+- `check_in_done`: the caller has a `flashcard_reviews` row (filtered on
+  `flashcard_reviews.user_id`), or a `quiz_attempts` row on a quiz question in a course they own.
+  `quiz_attempts` has **no `user_id` column**, so that branch joins `quiz_attempts` to
+  `quiz_questions` to `courses` and filters on `courses.user_id == caller`. An unscoped `EXISTS`
+  on `quiz_attempts` would light one user's checklist from another user's activity.
+
+`set_checklist` writes only the caller's row: one Core `update(User).where(User.id == user_id)`
+setting `onboarding_checklist`, keyed on `users.id` and nothing else (`users` is not swept by the
+route-scoping guard, so the key is this entry's to state), then returns `get_status` for the same
+`user_id`. The route passes the caller's id, never a request-supplied one; `backend`'s unit test
+asserts that key on the mock (`await_args.kwargs["user_id"]`), not only the status code.
+
+```python
+ONBOARDING_CHECKLIST_STATES = ("auto", "dismissed", "pinned")
+ONBOARDING_PHASES = ("new", "processing", "has_summary", "done")
+ONBOARDING_STEP_STATUSES = ("done", "active", "locked")
+
+
+@dataclass(frozen=True)
+class SummaryTarget:
+    course_id: str
+    course_code: str
+    week: int
+
+
+@dataclass(frozen=True)
+class OnboardingStatus:
+    phase: str
+    upload: str
+    summary: str
+    check_in: str
+    summary_target: SummaryTarget | None
+    checklist: str
+    visible: bool
+
+
+def derive_status(
+    *,
+    uploaded: bool,
+    summary_target: SummaryTarget | None,
+    summary_read: bool,
+    check_in_done: bool,
+    checklist: str,
+) -> OnboardingStatus: ...
+
+
+async def get_status(session: AsyncSession, *, user_id: str) -> OnboardingStatus: ...
+
+
+async def set_checklist(
+    session: AsyncSession, *, user_id: str, checklist: str
+) -> OnboardingStatus: ...
+```
+
+`derive_status` is the UI's `deriveOnboarding` moved server-side: a check-in finishes the checklist
+whichever door the user came through, and a summary target unlocks both later steps. `visible` is
+`checklist != "dismissed" and (phase != "done" or checklist == "pinned")`: `pinned` is the "show it
+again" choice in settings, `dismissed` hides it. Worked examples (`set` is any `SummaryTarget`):
+
+| uploaded | target | summary_read | check_in_done | checklist | phase | upload | summary | check_in | visible |
+|---|---|---|---|---|---|---|---|---|---|
+| no | none | no | no | auto | new | active | locked | locked | yes |
+| yes | none | no | no | auto | processing | done | locked | locked | yes |
+| yes | set | no | no | auto | has_summary | done | active | active | yes |
+| yes | set | yes | no | auto | has_summary | done | done | active | yes |
+| yes | set | no | yes | auto | done | done | done | done | no |
+| yes | set | no | yes | pinned | done | done | done | done | yes |
+| no | none | no | no | dismissed | new | active | locked | locked | no |
+| no | none | no | yes | auto | done | done | done | done | no |
+
+`services/app/tests/contracts/test_onboarding_contract.py` compares the block with the source, runs
+the table through `derive_status`, checks the routes and the column, asserts that every statement
+`get_status` issues carries the caller's id and that the `quiz_attempts` branch filters on
+`courses.user_id`, and that `set_checklist` and the `PATCH` route are keyed on the caller.
 
 ## Change log
 
@@ -590,3 +1130,17 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-15 | api.weak-spots | v1 | Additive as built: `error_code` on `TargetedGenerationResponse`, `items` on the diagnostic, `GET /api/study/items`, `origin`/`focus_topic` on card and quiz payloads, `plan_split` on the retention readout. | M33-S2-BACKEND-020 |
 | 2026-10-15 | api.study-items | v1 | New contract, recorded before implementation: manual create, archive-and-copy edit, soft delete of flashcards and quiz questions; `origin="user"`. | M33-S3-BACKEND-027 |
 | 2026-10-15 | api.upload-placement | v1 | New contract, recorded before implementation: optional `course_code` + `week` on single and batch upload skip classification. | M33-S3-FRONTEND-028 |
+| 2026-10-16 | models.third-party-tokens | v1 | New contract, recorded before implementation: `EncryptedText` column type over `secret_box` on the four OAuth/calendar token columns, read failure is `None`, rotation through `encrypt-user-secrets`, reversible re-encrypting migration. Contract test written red. | M34-S2-SEC-005 |
+| 2026-10-16 | models.stripe-webhook-events | v1 | New contract, recorded before implementation: `stripe_webhook_events` (unique event id) replaces the Redis dedupe and ordering keys; claim, apply and commit in one transaction. Contract test written red. | M34-S2-SEC-008 |
+| 2026-10-16 | api.study-items | v2 | `course_code` on card and quiz create is matched case-insensitively through `course_service.get_course_by_code_ci`, as upload placement does; exact case wins a tie; still never creates. Contract test written red. | M34-S3-BACKEND-012 |
+| 2026-10-16 | core.login-throttle-metrics | v1 | New contract, recorded before implementation: `studyaio_login_throttle_unavailable_total{action}`, `read`/`record`/`clear` (fail open) and `limit` (fail closed). Contract test written red. | M34-S3-BACKEND-012 |
+| 2026-10-16 | api.onboarding | v1 | New contract, recorded before implementation: `GET`/`PATCH /api/onboarding`, `users.onboarding_checklist`, pure `derive_status` with worked examples. Contract test written red. | M34-S3-BACKEND-012 |
+| 2026-10-16 | api.ai_feedback | v2 | Additive: `qa_answer` target type, `qa_answers` table (no text), `answer_id` on `QAResponse`; study cards use the existing `flashcard`/`quiz_question` types. Contract test written red. | M34-S3-BACKEND-012 |
+| 2026-10-16 | models.secrets-at-rest | v1 | Renamed from `models.third-party-tokens` before implementation and widened by user decision: `users.mfa_secret` (TOTP seed) joins the four token columns under the same `EncryptedText`, migration and rotation. An unreadable seed fails closed (refused like a wrong code, throttled, valueless `mfa_secret_unavailable` log, disable refused, recovery by backup code plus admin reset or by restoring the key). No ORM write-back of an unreadable value. Undecryptable log event renamed `secret_at_rest_undecryptable`. Contract test renamed and extended, red. | M34-S2-SEC-005 |
+| 2026-10-16 | api.ai_feedback | v1 | The v2 recorded earlier today is withdrawn before implementation, by user decision: no `qa_answer` target type, no `qa_answers` table, no `QAResponse.answer_id` (no UI calls `/api/qa/ask`). Nothing in the interface changes, so the entry returns to v1 with a note that study cards use the existing `flashcard`/`quiz_question` types. Contract test reduced to green pins. | M34-S3-BACKEND-012 |
+| 2026-10-16 | models.stripe-webhook-events | v1 | Retention made an explicit decision (user): rows are kept indefinitely; nothing prunes the table. No interface change. | M34-S2-SEC-008 |
+| 2026-10-16 | models.secrets-at-rest | v1 | Amended before implementation with `safety`'s required changes (`docs/gates/M34/contracts-safety.md` C3-C7); no version bump, nothing is implemented. C3: `EncryptedText(*, column)` and a `column` field (no value) on `secret_at_rest_undecryptable`. C4: `upgrade` calls `secret_box.check_startup()` first and aborts on a multi-user instance with no key; single-user prints counts and the CLI instruction. C5: `downgrade` decrypts and narrows in one transaction, aborts with no key, on an undecryptable value or on a value longer than its narrowed width (1000 / 64), prints counts only; the revision docstring and `docs/security/` state it removes at-rest protection. C6: `hide_parameters=True` on every engine (`app/core/database.py`, `alembic/env.py`) is a precondition. C7: calendar rules named (refresh and persist on a `None` access token; both `None` raise `CalendarSyncError("reconnect required")`, logged with `sync_id` only; disconnect skips revoke on `None`; revoke sends `data=`). Contract test extended, red. | M34-S2-SEC-005 |
+| 2026-10-16 | models.stripe-webhook-events | v1 | Amended before implementation with `safety`'s R2 and R4; no interface change. R2: per-customer `pg_advisory_xact_lock` before the watermark read; an event with no customer skips ordering. R4: account deletion nulls `stripe_customer_id` on that customer's rows, deleting none. Contract test extended, red. | M34-S2-SEC-008 |
+| 2026-10-16 | api.onboarding | v1 | Amended before implementation per `safety`'s review: the `quiz_attempts` branch of `check_in_done` is scoped through `courses.user_id` (`quiz_attempts` has no `user_id`); `set_checklist` is one `update(User)` keyed on `users.id == caller`, with a wiring assertion required. No interface change. Contract test extended, red. | M34-S3-BACKEND-012 |
+| 2026-10-16 | models.secrets-at-rest | v2 | OAuth sign-in tokens are not stored (`safety` R1): `create_or_link_oauth` loses its `access_token`/`refresh_token` parameters, the link branch writes NULL and the known-identity branch writes `None`, Google's authorize URL drops `access_type=offline`; one revision nulls both columns (no row deleted, no other column changed; downgrade cannot restore them). The columns stay, `EncryptedText` and always NULL, for one release because `deploy.sh` migrates while the old api serves; v3 drops them with the rotation and floor-2 entries. Contract test written red. | M34-S2-SEC-013 |
+| 2026-10-16 | models.telegram-pairing-code | v1 | New contract, recorded before implementation (`safety` R3): `telegram_links.link_token` holds `hash_magic_link_token(code)` (64 hex, same column), looked up by digest in SQL, never logged; the revision invalidates every unused code (NULL) in both directions rather than hashing in place, since the codes never expire and their plaintext is in existing dumps. Contract test written red. | M34-S2-SEC-014 |

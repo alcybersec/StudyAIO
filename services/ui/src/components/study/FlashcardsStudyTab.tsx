@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { useStudyDue, useRecordReview, useExamDetail } from '../../hooks/useApi'
@@ -9,6 +9,9 @@ import { StudySetup } from './StudySetup'
 import { StudyCard } from './StudyCard'
 import { RatingButtons } from './RatingButtons'
 import { SessionSummary } from './SessionSummary'
+import type { Flashcard } from '../../types'
+import { AiFeedbackControl } from '../ui/AiFeedbackControl'
+import { isFromAiFeedback } from '../../lib/aiFeedbackTarget'
 
 type Phase = 'setup' | 'studying' | 'done'
 
@@ -37,18 +40,27 @@ export function FlashcardsStudyTab() {
   )
   const reviewMutation = useRecordReview()
 
-  const cards = dueCards ?? []
+  // Rating a card invalidates the due query, so the live list shrinks by the card
+  // just rated. Walk a snapshot taken when the run starts instead, or the index
+  // would step over every other card.
+  const [deck, setDeck] = useState<Flashcard[] | null>(null)
+  if (phase === 'studying' && deck === null && dueCards && dueCards.length > 0) {
+    setDeck(dueCards)
+  }
+  const cards = useMemo(() => deck ?? dueCards ?? [], [deck, dueCards])
   const currentCard = cards[currentIndex]
+  const cardIds = useMemo(() => cards.map((c) => c.id), [cards])
 
   const handleStart = useCallback(() => {
-    if (cards.length > 0) {
+    if ((dueCards?.length ?? 0) > 0) {
+      setDeck(dueCards ?? null)
       setCurrentIndex(0)
       setFlipped(false)
       setSessionRatings({})
       setTotalReviewed(0)
       setPhase('studying')
     }
-  }, [cards.length])
+  }, [dueCards])
 
   const handleFlip = useCallback(() => {
     setFlipped((f) => !f)
@@ -96,6 +108,7 @@ export function FlashcardsStudyTab() {
 
   const handleRestart = useCallback(() => {
     refetch()
+    setDeck(null)
     setPhase('setup')
     setCurrentIndex(0)
     setFlipped(false)
@@ -107,6 +120,7 @@ export function FlashcardsStudyTab() {
 
     function handleKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
+      if (isFromAiFeedback(e.target)) return
 
       if ((e.key === ' ' || e.key === 'Enter') && !flipped) {
         e.preventDefault()
@@ -166,6 +180,9 @@ export function FlashcardsStudyTab() {
         {t('Card {{number}} of {{total}}', { number: currentIndex + 1, total: cards.length })}
       </p>
       <StudyCard card={currentCard} onFlip={handleFlip} flipped={flipped} />
+      <div className="flex justify-center">
+        <AiFeedbackControl key={currentCard.id} targetType="flashcard" targetId={currentCard.id} batchIds={cardIds} />
+      </div>
       {flipped && (
         <RatingButtons onRate={handleRate} disabled={reviewMutation.isPending} />
       )}

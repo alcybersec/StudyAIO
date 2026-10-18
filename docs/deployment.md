@@ -667,24 +667,60 @@ mounts have a source). The image's `~/.claude` is not overlaid as a directory.
 The api and beat containers get nothing. The operator's personal `~/.claude` is
 never mounted.
 
-**Claude CLI isolation (GL#12, R-030):** the worker stays root, but the adapter
-spawns `claude -p` as uid/gid 10001 (`claudecli`, created in
-`services/app/Dockerfile`; set by `CLAUDE_CLI_UID`/`CLAUDE_CLI_GID` on the worker
-service in every compose file). The worker keeps its default capabilities
-(CAP_SETUID/SETGID/CHOWN are needed; do not add `cap_drop: ALL`).
-uid 10001 **can** run `claude`/node and read `/app` code and the baked
-`/opt/models` cache (no secrets in either) and its own per-call scratch dir.
-It **cannot** read: `/app/data` (uploads, extractions, summaries), `/root`
-(including `/root/.claude`), `/run/claude-host` (0700 owned by the host operator
-uid), or `/proc/1/environ` of the worker. The OAuth token reaches it only
-through the child's environment. In the image `/app/data` is 0750
-`studyaio:studyaio`, but compose bind-mounts `./data` over it, so **the host
-directory's mode is what counts**: keep `./data` without "other" access
-(`chmod o-rwx data`) and never make it world-readable or group 10001.
+**Claude CLI isolation (GL#12, R-030):** see "AI pool user" below. The adapter
+still drops `claude -p` to uid/gid 10001 (`claudecli`, `services/app/Dockerfile`,
+`CLAUDE_CLI_UID`/`CLAUDE_CLI_GID`) when it runs as root with CAP_SETUID/CAP_CHOWN,
+but no shipped compose file configures that any more. The host directory's mode is
+what counts for `./data`, because compose bind-mounts it over the image's copy.
 
 **Read-only on purpose:** a writable mount would let a compromised worker plant
 hooks or settings into a Claude config that a host-side `claude` may later load.
 The adapter never writes back to this directory.
+
+### AI pool user
+
+The AI worker pools (`worker`, `worker-ondemand`, `worker-maintenance`) and `api`/`beat`
+run as `studyaio`, uid/gid **999** (pinned in `services/app/Dockerfile`), not root
+(SEC-006, option F). Parsing untrusted PDF/DOCX/PPTX therefore no longer happens as
+root. Each AI pool has a private `HOME` (`/tmp/claude-home`, a uid-999 `0700` tmpfs).
+
+**Consequence for the Claude CLI.** A non-root worker cannot give `claude -p` a
+separate uid. So on a multi-user instance the adapter **refuses the `claude_code`
+backend** (the job fails closed) unless one of these is true:
+
+- `SINGLE_USER_MODE=true` (one tenant, nothing to protect from the CLI); or
+- `CLAUDE_CLI_SHARED_UID_ACCEPTED=true` in `.env`. **Accepted risk:** the CLI then
+  runs at the worker's uid, so a compromised CLI can read `data/` (every user's
+  files) and the worker's environment (database password, `JWT_SECRET_KEY`, instance
+  AI keys, `SETTINGS_ENCRYPTION_KEY`, which together decrypt every user's stored AI
+  credentials). It is never defaulted on by compose or `.env.example`.
+
+The other backends (`anthropic_api`, `openai`, `zai`, `ollama`) are unaffected. This
+applies to users who choose `claude_code` in Settings too, not only the instance
+default. `scripts/preflight-check.sh` warns when `AGENT_BACKEND=claude_code` on a
+multi-user stack without the opt-in. The planned fix is option B, a Claude CLI
+sidecar with its own uid, after which the opt-in goes away.
+
+**One-time host actions for the first non-root deploy.** Ownership only; nothing is
+deleted. On the host, as root (or via sudo):
+
+```bash
+chown -R 999:999 /opt/studyaio/claude-login   # or your STUDYAIO_CLAUDE_LOGIN_DIR
+chown -R 999:999 /opt/studyaio/data           # the ./data bind mount
+```
+
+Keep `data/` without "other" access (`chmod o-rwx data`) and the login dir `0700`.
+Then deploy as usual (CI `deploy-selfhosted`), and verify:
+
+```bash
+docker compose exec worker id -u              # expect 999
+docker compose exec worker-ondemand id -u     # expect 999
+```
+
+Finally run one AI job through each pool and confirm it completes: upload a small
+lecture (the `pipeline` queue, `worker`) and request a flashcard or quiz generation
+(the `ai_ondemand` queue, `worker-ondemand`). If either fails with a permission
+error under `data/`, the `chown` above was missed.
 
 ---
 
@@ -754,6 +790,30 @@ old dumps age out.
 
 ---
 
+## Telegram webhook secret
+
+The Telegram webhook only accepts calls that carry the shared secret Telegram
+echoes in its `X-Telegram-Bot-Api-Secret-Token` header. In multi-user mode,
+with `TELEGRAM_WEBHOOK_SECRET` unset, every call is rejected (fail closed).
+
+1. Generate a secret (32-256 characters of `A-Za-z0-9_-`; a shorter or
+   otherwise malformed value makes the app refuse to start):
+   `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+2. Put it in the server's secret store as `TELEGRAM_WEBHOOK_SECRET`.
+3. Deploy so the api container sees it.
+4. Re-register the webhook, which sends the secret to Telegram. This needs
+   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_URL` and `TELEGRAM_WEBHOOK_SECRET`:
+   `docker compose exec api python -m app.cli register-telegram-webhook`
+
+Until the webhook is re-registered, Telegram updates are rejected. Rotate by
+repeating the steps with a new value.
+
+To let users link their Telegram account, also set `TELEGRAM_BOT_USERNAME` (the
+bot handle without the `@`). The link endpoint builds the `t.me` deep link from
+it and returns 400 until it is set.
+
+---
+
 ## Environment Variable Reference
 
 | Variable | Default | Description |
@@ -772,6 +832,8 @@ old dumps age out.
 | `SINGLE_USER_MODE` | `false` | Opt-in no-login mode (one default admin). Requires `BIND_HOST` loopback or `I_UNDERSTAND_NO_AUTH=true` |
 | `JWT_SECRET_KEY` | (insecure default) | **Change in production** |
 | `SETTINGS_ENCRYPTION_KEY` | | **Required** unless `SINGLE_USER_MODE=true`. Fernet key (or comma-separated list for rotation) that encrypts per-user AI credentials at rest. See [SETTINGS_ENCRYPTION_KEY](#settings_encryption_key). |
+| `TELEGRAM_WEBHOOK_SECRET` | | 32-256 chars of `A-Za-z0-9_-`; the app refuses to start on any other value. Required in multi-user mode, else the webhook rejects every call. See [Telegram webhook secret](#telegram-webhook-secret). |
+| `TELEGRAM_BOT_USERNAME` | | Bot handle without `@`. Required for Telegram linking: the link endpoint returns 400 until set. |
 | `CORS_ORIGINS` | `http://localhost:3001` | Comma-separated origins |
 | `MAX_UPLOAD_SIZE_MB` | `100` | Max upload file size (compressed bytes on the wire) |
 | `MAX_ARCHIVE_DECOMPRESSED_MB` | `500` | Most a DOCX/PPTX archive may expand to in the worker. Checked before parsing; over it, that artifact fails |

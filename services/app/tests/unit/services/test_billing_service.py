@@ -350,3 +350,38 @@ class TestCancelSubscription:
 
         with pytest.raises(ValueError, match="No active subscription"):
             await billing_service.cancel_subscription(mock_session, "user-1")
+
+
+class TestNoStripeCustomerIdInLogs:
+    """Stripe customer ids are account identifiers: never logged raw (floor 2)."""
+
+    CUS = "cus_SENTINEL123456"
+
+    @pytest.mark.asyncio
+    async def test_logs_carry_no_customer_id(self, mock_session):
+        none_result = MagicMock()
+        none_result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = none_result
+        mock_session.add = MagicMock()
+        # A patched logger, not capture_logs: other tests leave structlog's cached
+        # loggers configured, which capture_logs cannot intercept.
+        with patch.object(billing_service, "logger") as log:
+            await billing_service.get_or_create_subscription(mock_session, "u1", self.CUS)
+            await billing_service.handle_webhook_event(
+                mock_session, "checkout.session.completed", {"object": {"customer": self.CUS}}
+            )
+            await billing_service._handle_subscription_update(mock_session, {"customer": self.CUS})
+            await billing_service._handle_subscription_deleted(mock_session, {"customer": self.CUS})
+        logs = log.method_calls
+        events = [call.args[0] for call in logs]
+        assert "subscription_created" in events
+        assert "checkout_completed" in events
+        assert events.count("webhook_subscription_not_found") == 2
+        assert "cus_" not in repr(logs)
+
+    def test_fingerprint_is_short_stable_and_not_the_id(self):
+        fp = billing_service.customer_fingerprint(self.CUS)
+        assert fp == billing_service.customer_fingerprint(self.CUS)
+        assert len(fp) == 8
+        assert fp != billing_service.customer_fingerprint("cus_other")
+        assert billing_service.customer_fingerprint(None) is None

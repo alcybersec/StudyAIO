@@ -220,3 +220,33 @@ class TestQACitationsDerived:
         bogus = [{"ref": 1, "chunk_id": "FAKE", "text_snippet": "x"}]
         response = await _ask(async_client, "No markers here.", bogus)
         assert response.json()["citations"] == []
+
+
+class TestQAErrorLogCarriesNoQuestion:
+    """SEC-009: the question is user content; the agent-error log holds only its length."""
+
+    async def test_agent_error_logs_length_not_text(self, async_client, mock_session):
+        from structlog.testing import capture_logs
+
+        secret = "my private exam question about CSIT999"
+        provider = MagicMock()
+        provider.embed_texts.return_value = [[0.1] * 384]
+        agent = AsyncMock()
+        agent.answer_question.side_effect = RuntimeError("agent down")
+        chunks = [{"chunk_id": "c", "text": "t", "similarity": 0.9, "course_code": "X"}]
+        with (
+            patch("app.api.qa.get_embedding_provider", return_value=provider),
+            patch(
+                "app.api.qa.search_service.search_chunks",
+                new_callable=AsyncMock,
+                return_value=chunks,
+            ),
+            patch("app.api.qa.get_agent", return_value=agent),
+            capture_logs() as logs,
+        ):
+            response = await async_client.post("/api/qa/ask", json={"question": secret})
+        assert response.status_code == 500
+        event = next(e for e in logs if e["event"] == "qa_agent_error")
+        assert "question" not in event
+        assert event["question_chars"] == len(secret)
+        assert "private exam" not in str(logs)

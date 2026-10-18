@@ -14,11 +14,17 @@ e2e-tests job already exports it.
     python3 e2e/seed_e2e.py course CODE [--concepts N]
     python3 e2e/seed_e2e.py admin EMAIL PASSWORD
     python3 e2e/seed_e2e.py user EMAIL PASSWORD
-    python3 e2e/seed_e2e.py session EMAIL PASSWORD   # as `user`, then print the session cookies as JSON
+    python3 e2e/seed_e2e.py session EMAIL PASSWORD [--admin]   # as `user` (or `admin`), then print the session cookies as JSON
     python3 e2e/seed_e2e.py weakspots CODE
     python3 e2e/seed_e2e.py studyitems CODE
+    python3 e2e/seed_e2e.py learner EMAIL CODE   # a seeded user's own course: summary, 2 cards, 3 questions
 
-Both are idempotent. `course` seeds for the owner a self-hosted API resolves
+Guard (GL SEC-009): the script resets passwords, grants admin and mints sessions,
+so it refuses to run unless STUDYAIO_E2E_SEED=1 is set (the Playwright `seedDb`
+fixture sets it for the process it spawns) AND the database host is local or the
+CI service alias. It exits 2 before opening a connection.
+
+All are idempotent. `course` seeds for the owner a self-hosted API resolves
 requests to (the default admin, created here if no API request has made it yet).
 """
 
@@ -33,6 +39,7 @@ APP_DIR = Path(__file__).resolve().parents[2] / "app"
 sys.path.insert(0, str(APP_DIR))
 
 from sqlalchemy import create_engine, select  # noqa: E402
+from sqlalchemy.engine import make_url  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 import app.models  # noqa: E402,F401  (registers every mapper)
@@ -57,6 +64,7 @@ from app.models.flashcard import Flashcard  # noqa: E402
 from app.models.flashcard_review import FlashcardReview  # noqa: E402
 from app.models.quiz import QuizQuestion  # noqa: E402
 from app.models.quiz_attempt import QuizAttempt  # noqa: E402
+from app.models.summary import Summary  # noqa: E402
 from app.models.user import User  # noqa: E402
 
 
@@ -275,6 +283,79 @@ def seed_studyitems(session: Session, code: str) -> None:
     )
 
 
+def seed_learner(session: Session, email: str, code: str) -> None:
+    """Give a seeded (non-default) user a course with a week-1 summary and study items.
+
+    What the pipeline would have produced for that user's first upload: a
+    processed lecture, its summary, two flashcards and three multiple-choice
+    questions (the check-in picks three). Everything is owned by `email`, so a
+    spec can walk the first-run checklist as that user without a worker.
+    Idempotent: a course that already has a summary is left as it is.
+    """
+    user = session.execute(select(User).where(User.email == email)).scalar_one()
+    course = session.execute(
+        select(Course).where(Course.code == code, Course.user_id == user.id)
+    ).scalar_one_or_none()
+    if course is None:
+        course = Course(code=code, name=f"{code} (e2e)", user_id=user.id)
+        session.add(course)
+        session.flush()
+    if session.execute(
+        select(Summary.id).where(Summary.course_id == course.id)
+    ).first():
+        return
+    artifact = LectureArtifact(
+        user_id=user.id,
+        course_id=course.id,
+        week=1,
+        title=f"{code} week 1",
+        original_filename=f"{code}-w1.pdf",
+        file_path=f"uploads/e2e-learner-{code}-w1.pdf",
+        file_type="pdf",
+        sha256=f"learner{code}".encode().hex().ljust(64, "0")[:64],
+        file_size_bytes=1,
+        status="processed",
+    )
+    session.add(artifact)
+    session.flush()
+    session.add(
+        Summary(
+            course_id=course.id,
+            week=1,
+            content_md=f"# {code} - Week 1: Seeded topic\n\n## Overview\n\nA seeded summary for the first-run e2e.\n",
+            file_path=f"summaries/e2e-learner-{code}-w1.md",
+            version=1,
+            source_artifacts=[artifact.id],
+        )
+    )
+    for i in range(1, 3):
+        session.add(
+            Flashcard(
+                course_id=course.id,
+                week=1,
+                front=f"Learner front {i}",
+                back=f"Learner back {i}",
+                tags=[],
+                source_artifact_id=artifact.id,
+                source_page_ref=i,
+            )
+        )
+    for i in range(1, 4):
+        session.add(
+            QuizQuestion(
+                course_id=course.id,
+                week=1,
+                question_type="multiple_choice",
+                question=f"Learner question {i}: which letter is second?",
+                options_json=["A. Alpha", "B. Beta", "C. Gamma"],
+                correct_answer="B",
+                explanation="Beta is second.",
+                source_artifact_id=artifact.id,
+                source_page_ref=i,
+            )
+        )
+
+
 def seed_admin(session: Session, email: str, password: str) -> None:
     """Create (or reset the password of) an admin who can actually log in."""
     user = session.execute(select(User).where(User.email == email)).scalar_one_or_none()
@@ -323,7 +404,29 @@ def session_cookies(session: Session, email: str) -> dict[str, str]:
     }
 
 
+E2E_MARKER = "STUDYAIO_E2E_SEED"
+# Loopback, plus the `postgres` service alias the CI e2e-tests job uses.
+ALLOWED_DB_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres"})
+
+
+def refuse_unless_e2e(url: str) -> None:
+    """Exit non-zero unless this is an explicit e2e run against a test database."""
+    if os.environ.get(E2E_MARKER) != "1":
+        sys.exit(
+            f"seed_e2e.py: refusing to run: {E2E_MARKER}=1 is not set. This script "
+            "resets passwords and mints sessions; it is for the e2e database only."
+        )
+    host = make_url(url).host or ""
+    if host not in ALLOWED_DB_HOSTS:
+        sys.exit(
+            f"seed_e2e.py: refusing to run: database host {host!r} is not one of "
+            f"{sorted(ALLOWED_DB_HOSTS)}."
+        )
+
+
 def main() -> None:
+    url = os.environ.get("DATABASE_URL_SYNC") or settings.database_url_sync
+    refuse_unless_e2e(url)
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("course")
@@ -339,12 +442,17 @@ def main() -> None:
     u = sub.add_parser("user")
     u.add_argument("email")
     u.add_argument("password")
+    le = sub.add_parser("learner")
+    le.add_argument("email")
+    le.add_argument("code")
     ss = sub.add_parser("session")
     ss.add_argument("email")
     ss.add_argument("password")
+    ss.add_argument(
+        "--admin", action="store_true", help="make the user an admin before minting"
+    )
     args = parser.parse_args()
 
-    url = os.environ.get("DATABASE_URL_SYNC") or settings.database_url_sync
     engine = create_engine(url)
     with Session(engine) as session:
         if args.cmd == "course":
@@ -353,10 +461,15 @@ def main() -> None:
             seed_studyitems(session, args.code)
         elif args.cmd == "weakspots":
             seed_weakspots(session, args.code)
+        elif args.cmd == "learner":
+            seed_learner(session, args.email, args.code)
         elif args.cmd == "user":
             seed_user(session, args.email, args.password)
         elif args.cmd == "session":
-            seed_user(session, args.email, args.password)
+            if args.admin:
+                seed_admin(session, args.email, args.password)
+            else:
+                seed_user(session, args.email, args.password)
             session.flush()
             print(json.dumps(session_cookies(session, args.email)))
         else:

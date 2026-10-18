@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useAiFeedback } from '../../hooks/useAiFeedback'
+import { AI_FEEDBACK_ATTR } from '../../lib/aiFeedbackTarget'
 import type { AIFeedbackReason, AIFeedbackTargetType } from '../../types'
 
 const COMMENT_MAX = 1000
@@ -65,7 +66,7 @@ export function AiFeedbackControl({ targetType, targetId, batchIds, className = 
   }
 
   return (
-    <div className={`inline-flex flex-col gap-2 ${className}`}>
+    <div {...{ [AI_FEEDBACK_ATTR]: '' }} className={`inline-flex flex-col gap-2 ${className}`}>
       <div role="group" aria-label={t('Rate this AI answer')} className="inline-flex items-center gap-1">
         <button
           type="button"

@@ -18,6 +18,9 @@ engine = create_async_engine(
     max_overflow=settings.db_max_overflow,
     pool_recycle=settings.db_pool_recycle,
     pool_pre_ping=True,
+    # DBAPI errors otherwise render `[parameters: ...]` with every bound value
+    # (OAuth tokens, emails, credential ciphertext) into logger.exception output.
+    hide_parameters=True,
     # asyncpg waits 60 seconds to connect by default. An unreachable database
     # then hangs every request for a full minute before failing, which reads as
     # a deadlock rather than an outage — and in the unit suite it was exactly

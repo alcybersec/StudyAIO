@@ -93,7 +93,8 @@ note without a pasted run is not evidence and the Orchestrator re-runs the tests
 |---|---|---|
 | M31 | Maintenance | closed 2026-10-08 (CONDITIONAL; C1–C6 → M32) |
 | M32 | Safe to grow (audit S1 + security/money/integrity S2) | closed 2026-10-11 (CONDITIONAL accepted; G4 → M33) |
-| M33 | Trust and retention + weak-spot engine | open |
+| M33 | Trust and retention + weak-spot engine | closed 2026-10-15 (CONDITIONAL accepted; C1–C4 → M34) |
+| M34 | Prove retention, close carried debt | open (2026-10-16) |
 
 ## 11. Task graph
 
@@ -256,6 +257,54 @@ non-regression threshold; summary and Q&A citations grounded and pinned; per-fea
 with a D7/D30 readout; weak-spot engine live: plans generated for active users, targeted items cite slides, D7/D30
 of users with a plan reported against those without; `safety` APPROVE.
 
+### M34 — Prove retention, close carried debt
+
+Theme: read the retention signal M33 was built to produce, and close the security and maintenance notes that have
+stayed open since M32. **Scope confirmed by the user 2026-10-16: hardening and debt only, no strategic bet** — the
+bet is chosen at the M34 gate. With three users, the D7/D30 readouts are descriptive.
+
+**Entry conditions**
+
+- [x] M33 gate accepted by the user (2026-10-15, CONDITIONAL; C1–C4 carried).
+- [x] Scope confirmed by the user (2026-10-16): hardening and debt, as drafted; bet deferred to the M34 gate.
+
+*S1 — carried M33 conditions*
+
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M34-OPS-001 | Orchestrator, `backend` | M33 C1 | D7 readout from 2026-10-22: users with a Study-tonight plan vs without, from the admin cohort readout, reported descriptively |
+| M34-OPS-002 | Orchestrator, `backend` | M33 C2 | D30 readout from 2026-11-14, same comparison |
+| M34-OPS-003 | Orchestrator, `devops` | M33 C3 | First nightly `run_backup` under the non-root maintenance pool writes db + data archives; `BACKUP_RUNS{outcome="success"}` advances |
+| M34-OPS-004 | Orchestrator, `ai` | M33 C4 | First prod targeted generation observed; every item cites a page that exists in its lecture |
+
+*S2 — security notes open since M32 (`docs/gates/M33/floors.md` N-1…N-6)*
+
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M34-S2-SEC-005 | `backend`, `data`, `safety` | R-017: OAuth and calendar tokens plaintext at rest | Encrypted at rest with the settings key, migration re-encrypts existing rows, no plaintext token in DB or logs (floor-2 pin) |
+| M34-S2-SEC-006 | `devops`, `safety` | M32 N-3: AI worker pools run as root | `worker` and `worker-ondemand` run non-root with the Claude login readable; floor-2 guard unchanged |
+| M34-S2-SEC-007 | `devops`, `backend` | pip-audit unpinned; `fastapi <0.137` cap; deploy key check tests presence only | pip-audit pinned; fastapi cap lifted with the route sweep proven non-vacuous (R-040); deploy key check verifies the key works |
+| M34-S2-SEC-008 | `backend`, `data` | Stripe webhook dedupe state lives in Redis | Dedupe in Postgres (unique event id), idempotent on replay |
+| M34-S2-SEC-009 | `qa`, `backend`, `architect` | N-1 `seed_e2e.py` has no guard; N-3 untyped admin feedback view; N-4 ADR 0003 line drift; N-5 `email_sent` logs a file name/course/exam title; empty `proof.py` | Seed refuses without an explicit e2e marker; typed response model; ADR 0003 table refreshed; email logs carry the template name only; `proof.py` removed |
+| M34-S2-SEC-013 | `backend`, `data`, `architect` | Safety R1: OAuth sign-in tokens stored but never read | Sign-in no longer writes them; a migration nulls existing values; secrets-at-rest entry bumped to drop the two columns |
+| M34-S2-SEC-014 | `backend`, `data` | Safety R3: Telegram pairing codes stored in plain text | Stored as SHA-256 digests, compared by digest; unused codes invalidated at deploy, noted in release notes |
+| M34-S2-SEC-015 | `backend`, `devops` | R-052: Telegram webhook compares its secret header against the public webhook URL with `!=` | Random `TELEGRAM_WEBHOOK_SECRET` registered via `setWebhook(secret_token=…)`, compared with `hmac.compare_digest`; forged calls rejected (pinned) |
+
+*S3 — debt*
+
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M34-S3-AI-010 | `ai`, `backend` | Index stage embeds via a `_Precomputed` stand-in | `index_service` split into embed + store; stand-in removed; no session across the encode (pinned) |
+| M34-S3-FRONTEND-011 | `frontend` | R-043: a lazy chunk is 482 KB of a 500 KB budget; R-045 load-sensitive QuickCaptureModal test | Chunk ≤ 420 KB; QuickCaptureModal test deterministic |
+| M34-S3-BACKEND-012 | `backend`, `frontend` | Backlog: card add matches course code exactly (upload is case-insensitive); no login-throttle-unavailable counter; no server-side first-run status; no feedback on study cards and Q&A answers | Case-insensitive course lookup; counter exported; first-run status field; feedback controls on both surfaces |
+
+**Gate additions (draft):** C1–C4 closed or reported; every S2 item closed or explicitly accepted by the user; no
+security note older than one milestone left untallied; `safety` APPROVE.
+
 ### Later milestones (outline only, not yet scoped)
+
+- Backlog: `models.secrets-at-rest v3` — drop the always-NULL `oauth_accounts.access_token`/`refresh_token` columns one release after SEC-013 (with their rotation and pin entries; downgrade re-adds them empty).
+- Backlog: expiry for Telegram pairing codes (R-048).
+- Backlog: Claude CLI sidecar (SEC-006 option B) — lifts the option-F refusal.
 
 _none yet_

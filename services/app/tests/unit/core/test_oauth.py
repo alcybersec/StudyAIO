@@ -124,6 +124,7 @@ class TestBuildAuthorizeUrl:
         assert "response_type=code" in url
         assert "redirect_uri=" in url
         assert "prompt=select_account" in url
+        assert "access_type" not in url
 
     def test_github_url_does_not_include_prompt(self):
         with patch("app.core.oauth.get_provider_config") as mock_config:

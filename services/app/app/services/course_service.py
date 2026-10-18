@@ -60,6 +60,32 @@ async def get_course_by_code(session: AsyncSession, code: str, *, user_id: str) 
     return result.scalar_one_or_none()
 
 
+async def get_course_by_code_ci(session: AsyncSession, code: str, *, user_id: str) -> Course | None:
+    """Get a course by code, matched case-insensitively, scoped to its owner.
+
+    Matches the way upload placement does (``api.study-items v2``). Codes are
+    unique per user only case-sensitively, so legacy data can hold two that
+    differ in case: the exact-case match wins, else the oldest. Never creates.
+
+    Args:
+        session: Database session.
+        code: Course code as typed; trimmed and upper-cased before matching.
+        user_id: Owner user UUID; only a course this user owns is returned.
+
+    Returns:
+        The course, or None if the caller has none with that code.
+    """
+    typed = code.strip()
+    query = (
+        select(Course)
+        .where(func.upper(Course.code) == typed.upper(), Course.user_id == user_id)
+        .order_by((Course.code == typed).desc(), Course.created_at.asc())
+        .limit(1)
+    )
+    result = await session.execute(query)
+    return result.scalars().first()
+
+
 async def get_or_create_course(
     session: AsyncSession, code: str, *, user_id: str, tier: str
 ) -> Course:

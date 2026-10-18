@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -23,6 +23,10 @@ vi.mock('sonner', () => ({
 }))
 
 const mockedCapture = vi.mocked(uploadApi.capture)
+
+// Field values are set with a single change event rather than userEvent.type:
+// typing is one async tick per keystroke, so its cost scales with string
+// length and CPU load and used to blow the 5 s test timeout on a busy runner.
 
 function renderModal() {
   const client = new QueryClient({
@@ -78,7 +82,7 @@ describe('QuickCaptureModal', () => {
     })
     renderModal()
 
-    await user.type(screen.getByLabelText('Text'), 'ASLR notes')
+    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'ASLR notes' } })
     await user.click(screen.getByRole('button', { name: 'Capture' }))
 
     await waitFor(() => expect(mockedCapture).toHaveBeenCalledWith({ text: 'ASLR notes' }))
@@ -99,8 +103,8 @@ describe('QuickCaptureModal', () => {
     renderModal()
 
     await user.click(screen.getByRole('tab', { name: 'From URL' }))
-    await user.type(screen.getByLabelText('URL'), 'https://example.com/aslr')
-    await user.type(screen.getByLabelText('Title (optional)'), 'ASLR article')
+    fireEvent.change(screen.getByLabelText('URL'), { target: { value: 'https://example.com/aslr' } })
+    fireEvent.change(screen.getByLabelText('Title (optional)'), { target: { value: 'ASLR article' } })
     await user.click(screen.getByRole('button', { name: 'Capture' }))
 
     await waitFor(() =>
@@ -125,7 +129,7 @@ describe('QuickCaptureModal', () => {
     mockedCapture.mockRejectedValue(new AppApiError('Captured text exceeds 1 MB limit', 413))
     renderModal()
 
-    await user.type(screen.getByLabelText('Text'), 'big')
+    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'big' } })
     await user.click(screen.getByRole('button', { name: 'Capture' }))
 
     await waitFor(() =>
