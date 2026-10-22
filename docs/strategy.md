@@ -94,7 +94,8 @@ note without a pasted run is not evidence and the Orchestrator re-runs the tests
 | M31 | Maintenance | closed 2026-10-08 (CONDITIONAL; C1–C6 → M32) |
 | M32 | Safe to grow (audit S1 + security/money/integrity S2) | closed 2026-10-11 (CONDITIONAL accepted; G4 → M33) |
 | M33 | Trust and retention + weak-spot engine | closed 2026-10-15 (CONDITIONAL accepted; C1–C4 → M34) |
-| M34 | Prove retention, close carried debt | open (2026-10-16) |
+| M34 | Prove retention, close carried debt | closed 2026-10-22 (CONDITIONAL accepted; C1–C2 → M35) |
+| M35 | Draft | draft — scope and bet awaiting the user |
 
 ## 11. Task graph
 
@@ -300,6 +301,33 @@ bet is chosen at the M34 gate. With three users, the D7/D30 readouts are descrip
 
 **Gate additions (draft):** C1–C4 closed or reported; every S2 item closed or explicitly accepted by the user; no
 security note older than one milestone left untallied; `safety` APPROVE.
+
+### M35 — DRAFT (scope and strategic bet awaiting the user)
+
+**Entry conditions**
+
+- [x] M34 gate accepted by the user (2026-10-22, CONDITIONAL; C1, C2 carried — both now carried twice).
+- [ ] Scope and strategic bet confirmed by the user.
+
+*S1 — carried conditions and open decisions*
+
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M35-OPS-001 | Orchestrator, `backend` | M34 C1 (was M33 C2): D30 readout | From 2026-11-14: plan vs no plan, descriptive |
+| M35-OPS-002 | Orchestrator, `ai` | M34 C2 (was M33 C4): first prod targeted generation | Items cite pages that exist in their lecture |
+| M35-DEC-003 | user, `data`, `safety` | R-010 (open since M31): `review_items`, `quiz_attempts` have no `user_id` | Decision: add the column (migration + backfill + floor pin) or rule a permanent exception |
+| M35-DEC-004 | user, `devops` | R-009 (open since M31): no secret scanning in CI | Decision: add detect-secrets (audited baseline) to CI, or close as superseded by the floor-2 tree scan |
+
+*S2 — backlog carried from M34 (candidates)*
+
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M35-S2-ARCH-005 | `architect`, `ai`, `devops`, `safety` | SEC-006 option B: Claude CLI sidecar | ADR; CLI runs in its own container as its own uid with no data/ access and no environment file; option-F refusal lifted |
+| M35-S2-DATA-006 | `data`, `backend` | secrets-at-rest v3: drop the always-NULL OAuth token columns | Columns, rotation and pin entries removed together; downgrade re-adds them empty |
+| M35-S2-BACKEND-007 | `backend`, `data` | R-048: Telegram pairing codes never expire | Codes expire (e.g. 15 min); expired codes rejected (pinned) |
+| M35-S2-ARCH-008 | `architect` | ADR 0003 `file:line` column keeps drifting; `test_no_response_model_carries_a_token_field` has no own non-vacuity floor | Line column dropped or marked informative; minimum route count asserted |
+
+**Gate additions (draft):** C1–C2 closed or reported; R-010 and R-009 decided; `safety` APPROVE.
 
 ### Later milestones (outline only, not yet scoped)
 
