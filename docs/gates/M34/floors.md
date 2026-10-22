@@ -2,7 +2,7 @@
 
 **Reviewer:** `safety` (veto role), review mode · **Date:** 2026-10-22
 **Tree:** `kit/retrofit` @ `25b8538`. The gated code is `main` @ `b637dd2`, deployed to prod on 2026-10-18 by
-`deploy-selfhosted` in `main` pipeline #710. `git diff --stat b637dd2 25b8538` shows `docs/plan/README.md` and
+`deploy-selfhosted` in the `main` pipeline for `b637dd2`. `git diff --stat b637dd2 25b8538` shows `docs/plan/README.md` and
 `docs/risk-register.md` only. **Range:** everything after the M33 gate commit (`d06dbda`): 98 commits excluding
 merges. That is SEC-005 (secrets at rest), SEC-006 option F (non-root AI pools), SEC-007 (FastAPI lift),
 SEC-008 (Stripe state in Postgres), SEC-009 (M33 follow-ups), SEC-013/014 (OAuth tokens not stored, hashed
@@ -44,7 +44,7 @@ nothing. The floor tier above is `make test`'s second half. CI's `backend-tests`
 
 ### Pipeline, read by job name
 
-`glab api "projects/:fullpath/pipelines/710/jobs?include_retried=true"`, for `main` @ `b637dd2`. The pipeline
+The jobs of the `main` pipeline for `b637dd2`, read with `glab api` (`include_retried=true`). The pipeline
 is `success`, and no job is skipped, manual or retried.
 
 | Job | Status, from the trace |
