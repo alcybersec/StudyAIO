@@ -412,7 +412,7 @@ knob. Review: `docs/gates/M34/sec015-safety.md` §7.
 | Test | Fails when |
 |---|---|
 | `test_floor2_url_logging_library_capped_at_warning[httpx\|httpcore\|googleapiclient\|stripe]` | After `configure_logging("DEBUG")`, a library that logs full request URLs has an effective level below `WARNING`. |
-| `test_floor2_credential_logging_libraries_capped_at_warning` | **Strict `xfail`, finding F2.** XPASSes, and so fails, once `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` and `urllib3` are capped; then remove the marker. |
+| `test_floor2_credential_logging_libraries_capped_at_warning` | Finding F2. After `configure_logging("DEBUG")`, any of `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` or `urllib3` has an effective level below `WARNING` (at `DEBUG` they log a refresh token, a client secret, STS session headers or a Web Push capability path). A strict `xfail` until `backend` `5e1eda8` capped them; a plain test since. |
 | `test_floor2_openai_adapter_logs_no_user_key_at_debug[ok\|rejected]` | A per-user OpenAI key reaches the log stream at `DEBUG`, on success or on a 401. |
 | `test_floor2_anthropic_adapter_logs_no_user_key_at_debug[ok\|rejected]` | The same for the Anthropic adapter. |
 | `test_floor2_settings_has_secret_fields` | The `SecretStr` field discovery below collects nothing, which would empty the parametrisation. |
@@ -422,7 +422,7 @@ knob. Review: `docs/gates/M34/sec015-safety.md` §7.
 Mutation-checked on a scratch copy: removing the `httpx`/`httpcore` cap fails the two cap pins and
 `test_floor2_register_webhook_logs_no_bot_token_at_info` on the token assertion; removing
 `hide_input_in_errors` fails all 15 settings pins; a debug log of the key in each adapter fails all 4 adapter
-pins; capping the F2 set makes the strict `xfail` fail.
+pins; capping the F2 set made the strict `xfail` fail, and the marker came off with `5e1eda8`. Re-mutated at the M34 gate (`docs/gates/M34/floors.md` §2).
 
 ### Metrics labels (M32 G3)
 
