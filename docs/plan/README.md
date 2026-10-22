@@ -34,6 +34,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M34 S2/S3 (SEC-005…015, AI-010, FRONTEND-011, BACKEND-012) + R-046, R-049…R-051 fixes | `backend`, `data`, `ai`, `frontend`, `devops`, `qa`, `safety`, `architect` | → `main` `b637dd2` (MR !45) | Pipeline on b637dd2 all 11 jobs green; local unit 89.91%, floor 97.79%, integration 84.07%, vitest 836, e2e 155; safety APPROVE per change and at the gate; prod verified 2026-10-18 | 2026-10-18 |
 | M34-OPS-001 (M33 C1): D7 readout, users with a Study-tonight plan vs without | Orchestrator | — (prod query, counts only) | Window: day 1–7 after each user's first plan (no-plan users anchored on the 2026-10-15 launch). With plan: 1 user, 1 active in days 1–7, 1 active in the last 7 days. Without plan: 2 users, 0 and 0. Descriptive only (n=3; ADR 0007: no hold-out group) | 2026-10-22 |
 | M34-OPS-003 (M33 C3): first nightly backup under the non-root maintenance pool | Orchestrator | — (prod check) | 2026-10-16 02:00 UTC run: db + data archives written, owned by uid 999; `run_backup` status ok in 23 s; `studyaio_backup_last_success_timestamp_seconds` advanced | 2026-10-16 |
 
@@ -47,5 +48,6 @@ at its gate, leaving one pointer line here._
 
 | Gate | Verdict | Summary | Date |
 |---|---|---|---|
+| M34 | **CONDITIONAL** — awaiting user acceptance; C1 D30 readout (≥ 2026-11-14), C2 first prod targeted generation, C3 pillow/certifi advisories (M35-SEC-001, dispatched). C1/C2 have survived two milestones. | [`summary.md`](../gates/M34/summary.md) · floors: [`floors.md`](../gates/M34/floors.md) (APPROVE) | 2026-10-22 |
 | M33 | **CONDITIONAL — accepted by the user 2026-10-15**; C1 D7 readout (≥ 2026-10-22), C2 D30 readout (≥ 2026-11-14), C3 first non-root nightly backup (2026-10-16), C4 first prod targeted generation cites valid pages | [`summary.md`](../gates/M33/summary.md) · floors: [`floors.md`](../gates/M33/floors.md) (APPROVE) | 2026-10-15 |
 | M32 | **CONDITIONAL — accepted by the user 2026-10-11**; G1–G4 all closed (G4: scheduled backup verified 2026-10-12) | [`summary.md`](../gates/M32/summary.md) · floors: [`floors.md`](../gates/M32/floors.md) | 2026-10-12 |
