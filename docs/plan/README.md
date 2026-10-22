@@ -13,7 +13,7 @@ Orchestrator updates here.
 
 ## Next task
 
-**M34 deployed 2026-10-18** — `main` @ `b637dd2` (MR !45; pipeline all 11 jobs green incl. `deploy-selfhosted`). Prod verified: all services on `b637dd2`, AI and maintenance pools run as uid 999 with writable data/HOME and a readable login copy, migrations at head `c3e5a7b9d1f2`, OAuth tokens all NULL, three Celery nodes answer, health ready, 0 errors; pre-deploy dump taken. Host prep: login dir and data/ owner uid 999 (groups unchanged), deploy.sh reinstalled (backup `deploy.sh.bak-20261018-m34`). Remaining M34: M34-OPS-001 D7 readout (from 2026-10-22), M34-OPS-002 D30 (from 2026-11-14), M34-OPS-004 first prod targeted generation; then the M34 gate.
+**M34 deployed 2026-10-18** — `main` @ `b637dd2` (MR !45; pipeline all 11 jobs green incl. `deploy-selfhosted`). Prod verified: all services on `b637dd2`, AI and maintenance pools run as uid 999 with writable data/HOME and a readable login copy, migrations at head `c3e5a7b9d1f2`, OAuth tokens all NULL, three Celery nodes answer, health ready, 0 errors; pre-deploy dump taken. Host prep: login dir and data/ owner uid 999 (groups unchanged), deploy.sh reinstalled (backup `deploy.sh.bak-20261018-m34`). Remaining M34: M34-OPS-002 D30 (from 2026-11-14), M34-OPS-004 first prod targeted generation (none yet as of 2026-10-22); then the M34 gate. M34-OPS-001 D7 done 2026-10-22.
 
 ## Active
 
@@ -34,6 +34,7 @@ at its gate, leaving one pointer line here._
 
 | Task | Owner | Branch | Evidence | Completed |
 |---|---|---|---|---|
+| M34-OPS-001 (M33 C1): D7 readout, users with a Study-tonight plan vs without | Orchestrator | — (prod query, counts only) | Window: day 1–7 after each user's first plan (no-plan users anchored on the 2026-10-15 launch). With plan: 1 user, 1 active in days 1–7, 1 active in the last 7 days. Without plan: 2 users, 0 and 0. Descriptive only (n=3; ADR 0007: no hold-out group) | 2026-10-22 |
 | M34-OPS-003 (M33 C3): first nightly backup under the non-root maintenance pool | Orchestrator | — (prod check) | 2026-10-16 02:00 UTC run: db + data archives written, owned by uid 999; `run_backup` status ok in 23 s; `studyaio_backup_last_success_timestamp_seconds` advanced | 2026-10-16 |
 
 
