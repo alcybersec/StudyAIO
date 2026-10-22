@@ -16,13 +16,14 @@ Pins:
 * a ``Settings`` validation error never echoes the rejected value of any
   ``SecretStr`` setting, whether passed directly or read from the environment.
 
-Finding F2 (strict ``xfail``, not blocking): at ``DEBUG``, ``requests_oauthlib``
-logs the Google token request body (client secret, auth code) and the obtained
-token (the user's refresh token); ``botocore`` logs the signed request headers,
-including ``X-Amz-Security-Token`` when the credentials are temporary; ``urllib3``
-logs request paths (a Web Push endpoint path is a capability). None of them logs
-at ``INFO``, the default. **RED until** ``backend`` adds ``requests_oauthlib``,
-``oauthlib``, ``botocore``, ``boto3`` and ``urllib3`` to the capped set.
+Finding F2 (fixed in ``5e1eda8``, plain test since): at ``DEBUG``,
+``requests_oauthlib`` logs the Google token request body (client secret, auth code)
+and the obtained token (the user's refresh token); ``botocore`` logs the signed
+request headers, including ``X-Amz-Security-Token`` when the credentials are
+temporary; ``urllib3`` logs request paths (a Web Push endpoint path is a
+capability). ``configure_logging`` now caps ``requests_oauthlib``, ``oauthlib``,
+``botocore``, ``boto3`` and ``urllib3`` as well, and
+``test_floor2_credential_logging_libraries_capped_at_warning`` holds that.
 """
 
 from __future__ import annotations
@@ -41,8 +42,8 @@ AI_KEY = "sk-floor2-ai-key-7c4e1d9b2a6f40e8b3c5d7e9f1a2b4c6"
 PROBE = "f2pr0be7"
 
 CAPPED = ("httpx", "httpcore", "googleapiclient", "stripe")
-# F2: credential-bearing at DEBUG only; see the module docstring.
-F2_UNCAPPED = ("requests_oauthlib", "oauthlib", "botocore", "boto3", "urllib3")
+# F2: credential-bearing at DEBUG only; capped since 5e1eda8 (module docstring).
+F2_CAPPED = ("requests_oauthlib", "oauthlib", "botocore", "boto3", "urllib3")
 
 
 @pytest.fixture
@@ -53,7 +54,7 @@ def stream():
     root = logging.getLogger()
     saved_handlers, saved_level = root.handlers[:], root.level
     saved_config = structlog.get_config()
-    names = CAPPED + F2_UNCAPPED
+    names = CAPPED + F2_CAPPED
     saved_levels = {n: logging.getLogger(n).level for n in names}
     out = io.StringIO()
     root.handlers = [logging.StreamHandler(out)]
@@ -83,7 +84,7 @@ def test_floor2_url_logging_library_capped_at_warning(stream, name):
 
 
 def test_floor2_credential_logging_libraries_capped_at_warning(stream):
-    low = [n for n in F2_UNCAPPED if logging.getLogger(n).getEffectiveLevel() < logging.WARNING]
+    low = [n for n in F2_CAPPED if logging.getLogger(n).getEffectiveLevel() < logging.WARNING]
     assert not low, f"credential-bearing DEBUG loggers not capped: {low}"
 
 
