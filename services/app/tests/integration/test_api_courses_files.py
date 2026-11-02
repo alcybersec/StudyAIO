@@ -309,6 +309,7 @@ class TestReviewItems:
         seeded.artifact.status = "waiting_review"
         item = ReviewItem(
             id=generate_id(),
+            user_id=user.id,
             review_type="classification_course",
             entity_type="lecture_artifact",
             entity_id=seeded.artifact.id,

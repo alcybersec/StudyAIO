@@ -121,6 +121,7 @@ async def _seed_user(session, tag: str) -> dict[str, str]:
     session.add(
         ReviewItem(
             id=f"{tag}-review",
+            user_id=uid,
             review_type="classification",
             entity_type="lecture_artifact",
             entity_id=aid,

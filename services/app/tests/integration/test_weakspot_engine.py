@@ -96,8 +96,21 @@ async def _cards(db, world, week, n) -> list[str]:
 
 async def _attempts(db, qids, correct: list[bool], *, age_days: float = 0.0) -> None:
     at = datetime.now(UTC) - timedelta(days=age_days)
+    owner = await db.scalar(
+        select(Course.user_id)
+        .join(QuizQuestion, QuizQuestion.course_id == Course.id)
+        .where(QuizQuestion.id == qids[0])
+    )
     for qid, ok in zip(qids, correct, strict=True):
-        db.add(QuizAttempt(quiz_question_id=qid, selected_answer="x", is_correct=ok, created_at=at))
+        db.add(
+            QuizAttempt(
+                user_id=owner,
+                quiz_question_id=qid,
+                selected_answer="x",
+                is_correct=ok,
+                created_at=at,
+            )
+        )
     await db.flush()
 
 
