@@ -55,7 +55,7 @@ class TestReminderQueriesUseRealColumns:
         assert "flashcards.archived_at is null" in sql
         assert "user-001" in seen[1].compile().params.values()
 
-    async def test_weekly_quiz_count_scoped_via_course(self):
+    async def test_weekly_quiz_count_scoped_by_attempt_owner(self):
         from app.pipeline.notification_tasks import _send_weekly_digest
 
         session, seen = _capturing_session(["user-001"])
@@ -69,6 +69,6 @@ class TestReminderQueriesUseRealColumns:
         quiz_sql = [(s, _sql(s)) for s in seen if "from quiz_attempts" in _sql(s)]
         assert quiz_sql, "weekly digest must query quiz attempts"
         stmt, sql = quiz_sql[0]
-        assert "quiz_attempts.user_id" not in sql
-        assert "courses.user_id" in sql
+        assert "quiz_attempts.user_id =" in sql
+        assert "join" not in sql
         assert "user-001" in stmt.compile().params.values()
