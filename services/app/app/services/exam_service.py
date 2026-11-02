@@ -236,6 +236,8 @@ async def record_quiz_attempt(
     is_correct: bool,
     exam_id: str | None = None,
     time_spent_ms: int | None = None,
+    *,
+    user_id: str,
 ) -> QuizAttempt:
     """Record an answer to a quiz question.
 
@@ -246,12 +248,14 @@ async def record_quiz_attempt(
         is_correct: Whether the answer was correct.
         exam_id: Optional exam to scope this attempt.
         time_spent_ms: Optional time spent in milliseconds.
+        user_id: Owner user UUID (required, keyword-only); stored on the row.
 
     Returns:
         Created QuizAttempt.
     """
     attempt = QuizAttempt(
         id=generate_id(),
+        user_id=user_id,
         quiz_question_id=quiz_question_id,
         exam_id=exam_id,
         selected_answer=selected_answer,
@@ -267,6 +271,8 @@ async def get_weak_topics(
     session: AsyncSession,
     course_id: str,
     weeks_scope: list[int],
+    *,
+    user_id: str,
 ) -> list[dict]:
     """Identify weak topics by combining quiz accuracy and flashcard ease per week.
 
@@ -277,12 +283,13 @@ async def get_weak_topics(
         session: Database session.
         course_id: Course UUID.
         weeks_scope: List of week numbers to analyze.
+        user_id: Owner user UUID; only this user's quiz attempts are counted.
 
     Returns:
         List of dicts with week, quiz_accuracy, avg_ease, reason.
     """
     quiz_by_week, ease_by_week = await readiness_service.collect_week_stats(
-        session, course_id, weeks_scope
+        session, course_id, weeks_scope, user_id=user_id
     )
 
     weak = []
@@ -342,6 +349,7 @@ async def get_exam_progress(
         )
         .join(QuizQuestion, QuizAttempt.quiz_question_id == QuizQuestion.id)
         .where(
+            QuizAttempt.user_id == user_id,
             QuizQuestion.course_id == exam.course_id,
             QuizQuestion.week.in_(exam.weeks_scope),
             QuizQuestion.archived_at.is_(None),
@@ -384,7 +392,7 @@ async def get_exam_progress(
     session_count = session_count_result.scalar() or 0
 
     # Weak topics
-    weak_topics = await get_weak_topics(session, exam.course_id, exam.weeks_scope)
+    weak_topics = await get_weak_topics(session, exam.course_id, exam.weeks_scope, user_id=user_id)
     weak_weeks = [w["week"] for w in weak_topics]
 
     return {

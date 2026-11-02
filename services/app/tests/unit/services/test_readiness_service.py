@@ -155,7 +155,9 @@ class TestWeakTopicsRegression:
 
         mock_session.execute = AsyncMock(side_effect=[quiz_result, ease_result])
 
-        weak = await exam_service.get_weak_topics(mock_session, "course-001", [3])
+        weak = await exam_service.get_weak_topics(
+            mock_session, "course-001", [3], user_id="user-001"
+        )
         assert len(weak) == 1
         assert weak[0]["week"] == 3
         assert weak[0]["quiz_accuracy"] == 40.0

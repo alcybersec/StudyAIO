@@ -19,6 +19,8 @@ async def create_review_item(
     entity_id: str,
     payload: dict,
     suggested_values: dict,
+    *,
+    user_id: str,
 ) -> ReviewItem:
     """Create a new ReviewItem for human review.
 
@@ -29,12 +31,15 @@ async def create_review_item(
         entity_id: ID of the entity needing review.
         payload: Context for the reviewer.
         suggested_values: System's best guesses.
+        user_id: Owner user UUID (required, keyword-only); stored on the row so
+            every read can filter on it directly.
 
     Returns:
         The created ReviewItem.
     """
     review = ReviewItem(
         id=generate_id(),
+        user_id=user_id,
         review_type=review_type,
         entity_type=entity_type,
         entity_id=entity_id,
@@ -56,14 +61,16 @@ async def create_review_item(
 
     # Emit inbox notification to the owner (best-effort). lecture_artifact is
     # the only type this needs to cover, because it is the only type anything
-    # creates — see _owned_by on why the summary branch there outlives it.
+    # creates.
     try:
         if entity_type == "lecture_artifact":
             from app.models.artifact import LectureArtifact
             from app.services import notification_service
 
             result = await session.execute(
-                select(LectureArtifact).where(LectureArtifact.id == entity_id)
+                select(LectureArtifact).where(
+                    LectureArtifact.id == entity_id, LectureArtifact.user_id == user_id
+                )
             )
             artifact = result.scalar_one_or_none()
             if artifact:
@@ -85,18 +92,12 @@ async def create_review_item(
 async def list_pending_reviews(session: AsyncSession, *, user_id: str) -> list[ReviewItem]:
     """Get all pending review items, scoped by owner.
 
-    Ownership is resolved with _owned_by, the same predicate the
-    id-addressed paths use. This used to be an inner join onto
-    LectureArtifact, which structurally excluded every ``summary``-backed
-    item -- a merge-conflict review was created and then unreachable by the
-    user who owned it (#58). A single predicate is also the only way the two
-    paths can stay in agreement: an item listed here must be openable, and
-    an item openable must be listed.
+    Ownership is ``ReviewItem.user_id``, the same predicate the id-addressed
+    paths use, so an item listed here is openable and an openable item is listed.
 
     Args:
         session: Database session.
-        user_id: Owner user UUID (required); only items whose referenced entity belongs to
-            this user.
+        user_id: Owner user UUID (required); only this user's items.
 
     Returns:
         List of pending ReviewItem records, newest first.
@@ -106,7 +107,7 @@ async def list_pending_reviews(session: AsyncSession, *, user_id: str) -> list[R
         .where(ReviewItem.status == "pending")
         .order_by(ReviewItem.created_at.desc())
     )
-    query = query.where(_owned_by(user_id))
+    query = query.where(ReviewItem.user_id == user_id)
     result = await session.execute(query)
     return list(result.scalars().all())
 
@@ -117,15 +118,14 @@ async def list_reviews_by_status(
     """List review items with a given status, scoped by owner.
 
     The non-pending counterpart to list_pending_reviews. It exists so the
-    API layer does not have to hand-roll the ownership join -- the version
-    inlined in the endpoint had no scoping at all and listed every user's
-    resolved and dismissed items (#53).
+    API layer does not have to hand-roll the scoping -- the version
+    inlined in the endpoint had none and listed every user's resolved and
+    dismissed items (#53).
 
     Args:
         session: Database session.
         status: Review status to filter on (e.g. "resolved", "dismissed").
-        user_id: Owner user UUID (required); only items whose referenced entity belongs to
-            this user.
+        user_id: Owner user UUID (required); only this user's items.
 
     Returns:
         List of ReviewItem records, newest first.
@@ -133,52 +133,16 @@ async def list_reviews_by_status(
     query = (
         select(ReviewItem).where(ReviewItem.status == status).order_by(ReviewItem.created_at.desc())
     )
-    query = query.where(_owned_by(user_id))
+    query = query.where(ReviewItem.user_id == user_id)
     result = await session.execute(query)
     return list(result.scalars().all())
 
 
-def _owned_by(user_id: str):
-    """A predicate matching review items whose referenced entity is user_id's.
-
-    ReviewItem is polymorphic (entity_type + entity_id, no FK) and has no
-    user_id column, so ownership has to be resolved per entity type:
-
-      * ``lecture_artifact`` -> LectureArtifact.user_id  (pipeline/classify.py)
-      * ``summary``          -> Summary -> Course.user_id  (legacy)
-
-    Nothing creates ``summary`` items any more — ``course_service.merge_courses``
-    settles week conflicts inline instead of filing one it had no way to resolve
-    (#63). The branch stays because rows written before that change can still be
-    in the table, and they must remain owner-scoped: dropping it would make a
-    user's own legacy item 404 for them while leaving it in the database.
-
-    An entity type not listed here matches nothing, so a new one is invisible
-    rather than public. That is deliberate: an authorization check should fail
-    closed, and a 404 on your own item is a bug report, while the other way
-    round is an incident.
-    """
-    from sqlalchemy import or_
-
-    from app.models.artifact import LectureArtifact
-    from app.models.course import Course
-    from app.models.summary import Summary
-
-    owns_artifact = (
-        select(LectureArtifact.id)
-        .where(
-            LectureArtifact.id == ReviewItem.entity_id,
-            LectureArtifact.user_id == user_id,
-        )
-        .exists()
-    )
-    owns_summary = (
-        select(Summary.id)
-        .join(Course, Summary.course_id == Course.id)
-        .where(Summary.id == ReviewItem.entity_id, Course.user_id == user_id)
-        .exists()
-    )
-    return or_(owns_artifact, owns_summary)
+# Ownership of a review item is the row's own ``user_id`` (R-010); there is no
+# longer a predicate resolving it through the artifact or summary it references.
+# Legacy rows orphaned before the column existed may keep a NULL ``user_id`` on
+# prod. ``user_id = <caller>`` never matches NULL, so those items are invisible
+# to everyone rather than public -- deliberately fail-closed.
 
 
 async def get_review_item(
@@ -186,20 +150,18 @@ async def get_review_item(
 ) -> ReviewItem | None:
     """Get a single review item by ID, scoped by owner.
 
-    ReviewItem has no user_id column of its own; ownership runs through the
-    entity it references. See _owned_by for the per-entity-type mapping.
+    Ownership is the row's own ``user_id``.
 
     Args:
         session: Database session.
         review_id: ReviewItem UUID.
-        user_id: Owner user UUID (required); only return the item when the entity it
-            references belongs to this user.
+        user_id: Owner user UUID (required); only return the item when it belongs to this user.
 
     Returns:
         ReviewItem if found, None otherwise.
     """
     query = select(ReviewItem).where(ReviewItem.id == review_id)
-    query = query.where(_owned_by(user_id))
+    query = query.where(ReviewItem.user_id == user_id)
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
@@ -217,7 +179,7 @@ async def resolve_review_item(
         session: Database session.
         review_id: ReviewItem UUID.
         resolution: Resolution data dict.
-        user_id: Owner user UUID (required); only resolve an item whose artifact belongs to
+        user_id: Owner user UUID (required); only resolve an item that belongs to
             this user; a foreign item is reported as not found. Endpoints
             MUST pass this -- resolving mutates state and resumes a pipeline.
 
@@ -253,7 +215,7 @@ async def dismiss_review_item(session: AsyncSession, review_id: str, *, user_id:
     Args:
         session: Database session.
         review_id: ReviewItem UUID.
-        user_id: Owner user UUID (required); only dismiss an item whose artifact belongs to
+        user_id: Owner user UUID (required); only dismiss an item that belongs to
             this user; a foreign item is reported as not found. Endpoints
             MUST pass this -- dismissing mutates state.
 
@@ -280,7 +242,7 @@ async def dismiss_review_item(session: AsyncSession, review_id: str, *, user_id:
 async def count_pending_reviews(session: AsyncSession, *, user_id: str) -> int:
     """Count pending review items, scoped by owner.
 
-    Uses the same _owned_by predicate as list_pending_reviews. The two must
+    Uses the same ``user_id`` predicate as list_pending_reviews. The two must
     agree: this count is what the inbox badge shows, and a badge that
     disagrees with the list it links to is its own bug report.
 
@@ -293,6 +255,6 @@ async def count_pending_reviews(session: AsyncSession, *, user_id: str) -> int:
         Number of pending reviews.
     """
     query = select(func.count(ReviewItem.id)).where(ReviewItem.status == "pending")
-    query = query.where(_owned_by(user_id))
+    query = query.where(ReviewItem.user_id == user_id)
     result = await session.execute(query)
     return result.scalar_one()

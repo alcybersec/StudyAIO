@@ -42,8 +42,10 @@ def _recording_session():
     result.first.return_value = None
     result.scalars.return_value.all.return_value = []
     result.scalar_one.return_value = 0
+    result.scalar.return_value = 0
     result.scalar_one_or_none.return_value = None
     result.rowcount = 0
+    result.one.return_value = MagicMock(total=0, correct=0)
     session.execute = AsyncMock(return_value=result)
     session.scalar = AsyncMock(return_value=None)
     return session
@@ -189,7 +191,6 @@ class TestQuizAttemptReads:
             await exam_service.get_exam_progress(session, "e1", user_id=OWNER)
         attempts = [s for s in _executed(session) if "quiz_attempts" in s]
         _assert_attempts_scoped(attempts)
-        assert all("JOIN quiz_questions" not in s for s in attempts)
 
     async def test_onboarding_attempt_check_filters_directly(self):
         session = _recording_session()
@@ -200,6 +201,10 @@ class TestQuizAttemptReads:
 
     async def test_weakspot_inputs_filter_attempts_directly(self):
         session = _recording_session()
+        default = session.execute.return_value
+        courses = MagicMock()
+        courses.all.return_value = [("c1", "X")]
+        session.execute = AsyncMock(side_effect=[courses] + [default] * 20)
         await weakspot_service._load_inputs(
             session, user_id=OWNER, course_id=None, now=datetime.now(UTC)
         )

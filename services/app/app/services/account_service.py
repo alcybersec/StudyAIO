@@ -192,11 +192,6 @@ def _build_predicates(table: Any, user_id: str, owned: OwnedIds) -> Any:
         return cols.source_concept_id.in_(owned.concepts) | cols.target_concept_id.in_(
             owned.concepts
         )
-    if name == "quiz_attempts":
-        return cols.exam_id.in_(owned.exams) | cols.quiz_question_id.in_(owned.quiz_questions)
-    if name == "review_items":
-        # Polymorphic: no FK, referenced by entity_type + entity_id.
-        return cols.entity_id.in_(owned.artifacts + owned.courses)
 
     return None
 

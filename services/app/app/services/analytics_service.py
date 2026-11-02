@@ -323,7 +323,7 @@ async def get_exam_readiness(
 
     readiness_score = round(mastery_score * 0.4 + quiz_score * 0.3 + consistency_score * 0.3, 1)
 
-    weak_topics = await get_weak_topics(session, exam.course_id, exam.weeks_scope)
+    weak_topics = await get_weak_topics(session, exam.course_id, exam.weeks_scope, user_id=user_id)
 
     return {
         "exam_id": exam.id,
