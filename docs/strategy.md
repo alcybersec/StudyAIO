@@ -302,37 +302,102 @@ bet is chosen at the M34 gate. With three users, the D7/D30 readouts are descrip
 **Gate additions (draft):** C1–C4 closed or reported; every S2 item closed or explicitly accepted by the user; no
 security note older than one milestone left untallied; `safety` APPROVE.
 
-### M35 — DRAFT (scope and strategic bet awaiting the user)
+### M35 — Delivery-chain hardening (DevSecOps 90-day plan)
+
+**Strategic bet (user, 2026-11-02).** The M35 scope is the whole 90-day plan from the 2026-11-02 DevSecOps audit:
+- close every S1;
+- supply chain, secrets management, backup & DR and release integrity to maturity level 3, every other applicable domain to at least 2;
+- tooling: GitLab-native plus self-hosted OSS;
+- delivery model: keep the CI-push deploy and harden it;
+- framework lens: SLSA Build track, from L0 now to L1 by day 30 and roughly L2 by day 90.
+
+The audit and plan are local working files, not tracked: `.devsecops/AUDIT.md`, `PLAN.md` (§11 holds the red-team corrections, which override earlier sections), `tasks/<ID>.md`, `proposed/` (the end state, **not** per-task diffs) and `OPERATOR-ACTIONS.md`. Every task ships its own minimal patch as its own MR.
 
 **Entry conditions**
 
-- [x] M34 gate accepted by the user (2026-10-22, CONDITIONAL; C1, C2 carried — both now carried twice).
-- [ ] Scope and strategic bet confirmed by the user.
+- [x] M34 gate accepted by the user (2026-10-22, CONDITIONAL; C1 and C2 carried, both now carried twice).
+- [x] Scope and strategic bet confirmed by the user (2026-11-02).
 
-*S1 — carried conditions and open decisions*
+*S1 — carried conditions and open decision*
 
 | ID | Owner | Finding | Acceptance |
 |---|---|---|---|
 | M35-OPS-001 | Orchestrator, `backend` | M34 C1 (was M33 C2): D30 readout | From 2026-11-14: plan vs no plan, descriptive |
 | M35-OPS-002 | Orchestrator, `ai` | M34 C2 (was M33 C4): first prod targeted generation | Items cite pages that exist in their lecture |
-| M35-DEC-003 | user, `data`, `safety` | R-010 (open since M31): `review_items`, `quiz_attempts` have no `user_id` | Decision: add the column (migration + backfill + floor pin) or rule a permanent exception |
-| M35-DEC-004 | user, `devops` | R-009 (open since M31): no secret scanning in CI | Decision: add detect-secrets (audited baseline) to CI, or close as superseded by the floor-2 tree scan |
+| M35-DEC-003 | user, `data`, `safety` | R-010 (open since M31): `review_items` and `quiz_attempts` have no `user_id` | Decision: add the column (migration + backfill + floor pin) or rule a permanent exception |
 
-*S2 — backlog carried from M34 (candidates)*
+R-009 (no secret scan in CI) is decided by this scope: M35-D30-05 adds a gating gitleaks job, and floor 2 stays the floor.
+
+*Week 1 — "stop the bleeding" (closes every S1; about 9.5 operator hours, so roughly day 17)*
 
 | ID | Owner | Finding | Acceptance |
 |---|---|---|---|
-| M35-S2-ARCH-005 | `architect`, `ai`, `devops`, `safety` | SEC-006 option B: Claude CLI sidecar | ADR; CLI runs in its own container as its own uid with no data/ access and no environment file; option-F refusal lifted |
-| M35-S2-DATA-006 | `data`, `backend` | secrets-at-rest v3: drop the always-NULL OAuth token columns | Columns, rotation and pin entries removed together; downgrade re-adds them empty |
-| M35-S2-BACKEND-007 | `backend`, `data` | R-048: Telegram pairing codes never expire | Codes expire (e.g. 15 min); expired codes rejected (pinned) |
-| M35-S2-ARCH-008 | `architect` | ADR 0003 `file:line` column keeps drifting; `test_no_response_model_carries_a_token_field` has no own non-vacuity floor | Line column dropped or marked informative; minimum route count asserted |
+| M35-W1-01 | `devops`, user | CI-02 (S1): the registry token and deploy key reach every job on main | Token scoped to environment `registry`, deploy key to `production`. Jobs holding the token 11 → 2, the deploy key 11 → 1 (probe job). Land in the same sitting as W1-10 tags and W1-04 |
+| M35-W1-02 | `devops`, user | SC-07 + Chain D (S1): `deploy.sh` deploys any fetched commit; no host-key check | Only ancestors of origin/main deploy (a branch SHA exits 65). Drift guard accepts main's current or previous `deploy.sh` blob. Pinned `known_hosts`. Digest-pinned deploy image |
+| M35-W1-03 | `devops`, `safety` | RL-01 (S1): self-host single-user mode is published on all interfaces | UI publishes on `${BIND_HOST:-127.0.0.1}` only; API unpublished; safety test fails on the old tree; release note |
+| M35-W1-04 | `devops`, user | Chain A (S1): shared shell runner, persisted registry login | Per-job `DOCKER_CONFIG` plus logout; runner protected refs only **and** this project only; persisted login purged; token rotated |
+| M35-W1-05 | `backend`, `frontend`, `devops` | SO-01, CT-01/02/05: open advisories; UI image runs as root on an EOL nginx | pyasn1, joserfc, filelock, setuptools and zod bumped; UI on digest-pinned unprivileged nginx 1.30 with `apk upgrade`. Fixable HIGH/CRIT: UI 60 → 0, API 5 → 0. Merges before or with W1-06 |
+| M35-W1-06 | `devops` | CI-03, RL-04, SC-05: audit and eval don't gate deploy; CI images unpinned | dependency-audit and summary-eval in the `needs:` of build and deploy; build-ui needs e2e; 6 of 6 CI images digest-pinned (re-resolved at acceptance) |
+| M35-W1-07 | `devops`, user | OP-01 (S1, conditional): every backup on the prod VM's own disk | VM-level backup confirmed; `BACKUP_ENABLED` confirmed; encrypted append-only restic off-host copy, daily; backup.sh fails when the off-site upload fails |
+| M35-W1-08 | `devops`, user | OP-02, IN-10: no restore ever tested; `restore.sh` hazards | `restore.sh` fixed (stack's compose files, safety dump, ON_ERROR_STOP); drill restores the off-host copy into a scratch project; RTO recorded under `docs/gates/` |
+| M35-W1-09 | user | Chain C (S1): agent sessions on the dev box hold a standing root path to prod and GitLab admin | Root paths from an agent shell 2 → 0; `/kit-doctor` clean; Bash deny rules; untrusted v0 lecture files never processed in a session that holds prod access |
+| M35-W1-10 | user | Source-control posture | `v*` tags protected; 2FA required; pipeline-variable override `no_one_allowed`; job-token scope on; repo deploy key has an expiry |
 
-**Gate additions (draft):** C1–C2 closed or reported; R-010 and R-009 decided; `safety` APPROVE.
+*Day 30 — "gates & speed" (realistically about day 40)*
+
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M35-D30-01 | `devops`, user | SO-02, SC-02, RL-05, CI-06: nothing scanned, signed or attested; mutable tags | Trivy gate before push (with an expiring-ignore break-glass); push `:sha7` only; syft SBOM; SLSA v1 provenance; cosign sign + attest; `:latest` only after a healthy deploy. 0% → 100% signed. SLSA L0 → L1 |
+| M35-D30-02 | `devops` | CI-04: the shipped image is never run before prod | `image-smoke` runs the signed digests against db and redis on every main build; deploy needs it |
+| M35-D30-03 | `devops`, user | IN-02, Chain E: prod pulls mutable tags; a bad release stays live | Host verifies cosign; deploy pinned by digest; no `latest` fallback (fails closed); auto-rollback on a failed health check within 5 min |
+| M35-D30-04 | `devops`, user | SC-04, SO-05: no update automation; Node 20 EOL | Renovate (non-`-full` image, Developer-role bot) nightly for pip, npm, Dockerfile, compose and CI; 14-day minimum release age; Node 24 LTS |
+| M35-D30-05 | `devops`, user | SO-04, SC-03, R-009 | Nightly dependency audit and image rescan; gitleaks gating on every push and over full history weekly; semgrep advisory only |
+| M35-D30-06 | `devops` | CT-03, CT-06: no runtime hardening | no-new-privileges, cap_drop ALL, calibrated memory caps (measured peak × 1.5), log rotation, read-only UI, nginx header snippet. Original prod-overlay comments kept. 0/6 → 6/6 |
+| M35-D30-07 | `devops`, user | IN-06: prod api and ui listen on all interfaces | Bound to loopback plus `APP_BIND_ADDR` (guarded against double-bind); host firewall allows the proxy only. All-interface publishes 2 → 0 |
+| M35-D30-10 | Orchestrator, user | CI-05, OP-08, SO-07: no runbook, disclosure policy or key escrow | Rollback-and-restore runbook; `SECURITY.md` (dedicated alias); key-escrow record; timed rollback drill |
+| M35-D30-11 | `devops`, user | OP-04: no alert reaches a human | Alert rules loaded (corrected metric names); external probe of `/health/ready`; paging route; each page rule fired once in a test |
+
+*Day 90 — "measured & resilient"*
+
+| ID | Owner | Finding | Acceptance |
+|---|---|---|---|
+| M35-D30-08 | `devops`, Orchestrator, user | RL-02, RL-07, IN-08: the self-host kit promises TLS it lacks; images are private | User decides on image visibility; Caddy TLS profile; `COOKIE_SECURE`; random DB password; env file 0600; docs fixed; fresh-VM install passes over TLS. Deferred from day 30 |
+| M35-D30-09 | `devops` | CI-08: slow pipeline | Docs-only pushes skip heavy jobs (after D30-05). p50 16 → ≤ 12 min; failure rate 19% → ≤ 10%. Deferred from day 30 |
+| M35-N90-01 | `devops` | SLSA L2 | `deploy.sh` verifies provenance (builder, main ref, `gitCommit` equals SHA) — "signed L1 / L2-equivalent" |
+| M35-N90-02 | `devops`, user | Chain A remainder | Dedicated project runner; publish token limited to the two packages |
+| M35-N90-03 | `devops`, `backend` | SC-06, RL-09 | Hashed lock (`--require-hashes`); per-index install; model revision pinned. Deploys whose digest matches the CI-tested one: 0 → 100% |
+| M35-N90-04 | `backend`, `devops` | OP-05, OP-06 | Worker, beat and queue liveness gauges with alerts; correlation id across Celery |
+| M35-N90-05 | `devops`, user | OP-02, OP-07 | Monthly automated restore drill, alerted at > 35 days; migrations rehearsed on a restored dump before schema-changing releases |
+| M35-N90-06 | `devops` | CI-09, IN-07 | Drift detection (digests, compose labels, `deploy.sh` hash) found within 24 h |
+| M35-N90-07 | `devops` | DORA | All four DORA metrics measured monthly into `docs/gates/` |
+| M35-N90-08 | `devops`, user | Host posture | Read-only monthly host baseline check; fixable findings older than 14 days: 0 |
+| M35-N90-09 | `frontend`, `devops` | SO-06 | CSP without `script-src 'unsafe-inline'` (stretch) |
+| M35-N90-10 | user | Secrets level 3 | 90-day rotation drill for the registry token, deploy key and cosign key, timed |
+| M35-N90-11 | `devops` | CT-09 | Redis `requirepass`; no default DB password; front/back networks. Hygiene items 10 → 0 |
+
+**Sequencing.** These are hard constraints, from PLAN §5 and §11:
+- W1-01, W1-04 and W1-10 (tags) land in one sitting.
+- W1-05 lands before or with W1-06.
+- `DEPLOY_KNOWN_HOSTS` exists before W1-02 merges, and the host `deploy.sh` is reinstalled after it.
+- D30-01 → D30-02 → D30-03, with the cosign key committed in D30-01 and the host trust anchor installed before D30-03.
+- `APP_BIND_ADDR` is exported before D30-07.
+- D30-06 comes after W1-05.
+- D30-09 comes after D30-05.
+
+**Capacity.** About 51 operator hours against about 52 available at 4 h/week, with no slack and MR review not counted. Day-30 targets land around day 40.
+
+**Gate additions:**
+- every S1 closed;
+- scorecard average ≥ 2.6 at the M35 gate, re-measured by a fresh `/devsecops:recheck`;
+- C1–C2 closed or reported;
+- R-010 decided;
+- `safety` APPROVE.
 
 ### Later milestones (outline only, not yet scoped)
 
 - Backlog: `models.secrets-at-rest v3` — drop the always-NULL `oauth_accounts.access_token`/`refresh_token` columns one release after SEC-013 (with their rotation and pin entries; downgrade re-adds them empty).
 - Backlog: expiry for Telegram pairing codes (R-048).
 - Backlog: Claude CLI sidecar (SEC-006 option B) — lifts the option-F refusal.
+- Backlog: ADR 0003 `file:line` column drift and a non-vacuity floor for `test_no_response_model_carries_a_token_field` (was M35-S2-ARCH-008).
 
 _none yet_

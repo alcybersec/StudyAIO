@@ -9,11 +9,11 @@ Orchestrator updates here.
 
 ## Current milestone
 
-**M35 — draft** (outlined 2026-10-22 at the M34 gate, CONDITIONAL accepted). Scope in `docs/strategy.md` §11, awaiting the user's confirmation. M34 is archived in [`archive/M34.md`](archive/M34.md).
+**M35 — Delivery-chain hardening** (scope confirmed by the user 2026-11-02: the whole DevSecOps 90-day plan; Week 1 closes every S1). Scope in `docs/strategy.md` §11. M34 is archived in [`archive/M34.md`](archive/M34.md).
 
 ## Next task
 
-**M34 closed 2026-10-22** (CONDITIONAL accepted; C1 D30 readout and C2 first prod targeted generation → M35, both carried twice; C3 dependency advisories fixed via MR !46). M35 drafted — awaiting the user's scope, the strategic bet, and decisions on R-010 and R-009.
+**M34 closed 2026-10-22** (CONDITIONAL accepted; C1 D30 readout and C2 first prod targeted generation → M35, both carried twice; C3 dependency advisories fixed via MR !46). **Next: M35-W1-01** (registry token and deploy key scoped to environments), dispatched together with M35-W1-04 and the W1-10 tag protection (one sitting). Then W1-02, W1-03, W1-07, W1-09. Open decision: R-010 (M35-DEC-003). Time-bound: M35-OPS-001 from 2026-11-14.
 
 ## Active
 
