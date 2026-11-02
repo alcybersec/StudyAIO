@@ -6,8 +6,10 @@ five facts about the caller, and one preference is stored on the caller's
 light one user's checklist from another user's activity:
 
 * every statement the routes run carries the caller's id;
-* ``quiz_attempts`` has no ``user_id``, so its branch must be scoped through
-  ``quiz_questions`` to ``courses.user_id`` (contracts-safety review, M34);
+* ``quiz_attempts`` carries its own ``user_id`` since R-010 (migration
+  ``d4f6b8c0e2a3``), so its branch must filter ``quiz_attempts.user_id``
+  directly, like every other user-owned table (it was join-scoped through
+  ``quiz_questions`` to ``courses.user_id`` before, contracts-safety review M34);
 * ``users`` is unowned to the route sweep, so ``PATCH`` must be keyed on
   ``users.id == caller``, and must leave every other user's row alone.
 
@@ -87,6 +89,7 @@ def _fact(db: MiniDB, owner: str, fact: str) -> None:
             question,
             QuizAttempt(
                 id=f"att-{tag}",
+                user_id=owner,
                 quiz_question_id=question.id,
                 selected_answer="a",
                 is_correct=True,
@@ -180,9 +183,9 @@ async def test_floor1_onboarding_each_fact_is_the_callers_own(
 ):
     """Another user's fact never moves the caller's status; the caller's own does.
 
-    ``quiz_attempt`` is the branch with no ``user_id`` on its table: an
-    ``EXISTS`` over ``quiz_attempts`` without the ``courses.user_id`` join would
-    report the caller ``done`` from the other user's answer.
+    ``quiz_attempt`` was the join-scoped branch before R-010: an ``EXISTS`` over
+    ``quiz_attempts`` without its ``user_id`` predicate would report the caller
+    ``done`` from the other user's answer.
     """
     client, db, _log = world
     for base in baseline:
@@ -201,7 +204,7 @@ def test_floor1_onboarding_fact_cases_cover_every_fact():
 
 @pytest.mark.asyncio
 async def test_floor1_onboarding_every_statement_carries_the_caller(world):
-    """Each statement ``GET`` runs binds the caller's id; the quiz branch via ``courses``."""
+    """Each statement ``GET`` runs binds the caller's id; the quiz branch on its own row."""
     client, _db, log = world
     r = await client.get("/api/onboarding")
     assert r.status_code == 200
@@ -215,7 +218,7 @@ async def test_floor1_onboarding_every_statement_carries_the_caller(world):
             quiz.append(sql)
     assert quiz, "the quiz_attempts branch was never queried"
     for sql in quiz:
-        assert "courses.user_id = " in sql, f"quiz_attempts not scoped through courses: {sql}"
+        assert "quiz_attempts.user_id = " in sql, f"quiz_attempts not scoped on its user_id: {sql}"
 
 
 # ── PATCH ──────────────────────────────────────────────────────────────

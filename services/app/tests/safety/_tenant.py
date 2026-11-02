@@ -2,8 +2,9 @@
 
 A table is *user-owned* when it carries a ``user_id`` column, or when a foreign
 key reaches a user-owned table (``summaries`` -> ``courses``, ``chunks`` ->
-``lecture_artifacts``). ``review_items`` points at its subject polymorphically
-(``entity_type`` + ``entity_id``) with no foreign key, so it is named by hand.
+``lecture_artifacts``). A table that is owned but carries neither would have to
+be named by hand in ``POLYMORPHIC_OWNED``; none does since R-010 gave
+``review_items`` (and ``quiz_attempts``) its own ``user_id`` column.
 
 Tables that belong to nobody are pinned in ``UNOWNED_TABLES``; a new table must
 land in one set or the other (``test_floor1_every_table_is_classified``), so a
@@ -34,8 +35,12 @@ UNOWNED_TABLES = frozenset(
     {"users", "invite_codes", "achievements", "daily_challenges", "stripe_webhook_events"}
 )
 
-#: Owned, but with no foreign key a closure over the schema could follow.
-POLYMORPHIC_OWNED = frozenset({"review_items"})
+#: Owned, but with no ``user_id`` and no foreign key a closure over the schema
+#: could follow. Empty since R-010 (migration ``d4f6b8c0e2a3``): ``review_items``
+#: was the one entry and now carries its own ``user_id``, so it is classified by
+#: its column like every other owned table. A table listed here that has a
+#: ``user_id`` fails ``test_floor1_r010_tables_are_directly_owned_not_polymorphic``.
+POLYMORPHIC_OWNED: frozenset[str] = frozenset()
 
 
 def all_tables() -> dict[str, Any]:
