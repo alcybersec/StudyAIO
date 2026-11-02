@@ -162,7 +162,8 @@ class TestRoundTrip:
             assert "user_id" not in _columns(engine, table)
             names = {i["name"] for i in sa.inspect(engine).get_indexes(table)}
             assert f"ix_{table}_user_id" not in names
-        assert len(_owners(engine, "review_items")) == 3
+        with engine.connect() as conn:
+            assert conn.execute(sa.text("SELECT COUNT(*) FROM review_items")).scalar_one() == 3
 
     def test_up_down_up_on_populated_database(self, engine, migration):
         _seed_owned(engine)

@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Index, String, text
+from sqlalchemy import DateTime, ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,6 +16,9 @@ class ReviewItem(Base):
     __tablename__ = "review_items"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     review_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
@@ -29,6 +32,7 @@ class ReviewItem(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
+        Index("ix_review_items_user_id", "user_id"),
         Index(
             "ix_review_items_status_pending",
             "status",

@@ -15,6 +15,9 @@ class QuizAttempt(Base):
     __tablename__ = "quiz_attempts"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     quiz_question_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("quiz_questions.id", ondelete="CASCADE"),
@@ -37,6 +40,7 @@ class QuizAttempt(Base):
     exam: Mapped["Exam | None"] = relationship(back_populates="quiz_attempts")
 
     __table_args__ = (
+        Index("ix_quiz_attempts_user_id", "user_id"),
         Index("ix_quiz_attempts_question", "quiz_question_id"),
         Index("ix_quiz_attempts_exam", "exam_id"),
         Index("ix_quiz_attempts_created", "created_at"),
