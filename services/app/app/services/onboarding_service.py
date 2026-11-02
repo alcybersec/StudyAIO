@@ -2,8 +2,8 @@
 
 Only the checklist preference is stored (``users.onboarding_checklist``);
 every step is derived on read from the caller's own rows. Every query here is
-filtered on the caller (floor 1): ``quiz_attempts`` has no ``user_id``, so that
-branch is scoped through ``quiz_questions`` to ``courses.user_id``.
+filtered on the caller (floor 1): each user-owned table, ``quiz_attempts``
+included, is filtered directly on its own ``user_id`` column.
 """
 
 from dataclasses import dataclass
