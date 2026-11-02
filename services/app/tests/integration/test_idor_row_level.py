@@ -3,7 +3,7 @@
 `tests/unit/services/test_review_service.py` asserts on *compiled SQL*. That was
 not a stylistic choice: `tests/unit` has no database (no sqlite driver is
 installed, and the models use JSONB), so when #58/PR #62 rewrote the pending
-listing to resolve ownership through `_owned_by` it could only prove which
+listing to resolve ownership it could only prove which
 tables the query names and that every ownership branch is bound to the caller's
 id. Whether Postgres then hands back the owner's rows *and only* the owner's
 rows was left to CI, and its author flagged the row-level version as belonging
@@ -13,17 +13,17 @@ So these tests deliberately do not mock anything. Two real users own two real
 graphs of rows, and each service call is asked the only question a compiled
 query cannot answer: which rows come back.
 
-The pending-review predicate is the one worth this much attention because
-`ReviewItem` is polymorphic -- `entity_type` + `entity_id`, no foreign key --
-so ownership resolves per entity type through a different table each time
-(`lecture_artifacts.user_id`, or `summaries` -> `courses.user_id`). That is a
-join the type checker cannot see and a compiled-SQL assertion can only describe.
+Ownership of a review item is `review_items.user_id` (R-010). Before that it
+was inferred per `entity_type` through a different table each time
+(`lecture_artifacts.user_id`, or `summaries` -> `courses.user_id`); the rows
+here still anchor to real entities where they can, to show the two agree.
 """
 
 import hashlib
 
 import pytest
 import sqlalchemy
+from sqlalchemy import text
 
 from app.core.utils import generate_id
 from app.models.artifact import LectureArtifact
@@ -214,26 +214,60 @@ class TestPendingReviewsAreScopedByRow:
         assert await review_service.count_pending_reviews(db_session, user_id=test_user_id) == 2
         assert await review_service.count_pending_reviews(db_session, user_id=stranger_id) == 1
 
-    async def test_an_unhandled_entity_type_is_returned_to_nobody(self, db_session, test_user_id):
-        """Fail-closed, proven by rows rather than by reading the predicate.
+    async def test_an_unhandled_entity_type_belongs_to_its_user_id_owner_only(
+        self, db_session, test_user_id
+    ):
+        """Ownership is `review_items.user_id`, whatever the entity type says.
 
-        `_owned_by` is an allow-list of entity tables. An entity type nobody
-        added a branch for must be invisible to everyone -- a bug report -- and
-        never fall through to being visible to everyone, which is an incident.
+        An item whose `entity_type` nothing knows about, pointing at an entity
+        that exists nowhere, is still its owner's: visible to them and to
+        nobody else. The entity is not consulted.
         """
         stranger_id = await _stranger(db_session)
+        mine = await _pending(db_session, test_user_id, "flashcard", generate_id())
+
+        mine_ids = {
+            i.id
+            for i in await review_service.list_pending_reviews(db_session, user_id=test_user_id)
+        }
+        their_ids = {
+            i.id for i in await review_service.list_pending_reviews(db_session, user_id=stranger_id)
+        }
+
+        assert mine.id in mine_ids
+        assert mine.id not in their_ids
+
+    async def test_an_item_with_no_user_id_is_returned_to_nobody(self, db_session, test_user_id):
+        """A legacy orphan (NULL `user_id`) fails closed.
+
+        The migration leaves the column nullable when a row cannot be
+        attributed, and never deletes it. Such a row must not match any
+        caller. The test database has the column NOT NULL, so the constraint
+        is dropped inside the test's own transaction (Postgres DDL rolls back).
+        """
+        await db_session.execute(
+            text("ALTER TABLE review_items ALTER COLUMN user_id DROP NOT NULL")
+        )
+        stranger_id = await _stranger(db_session)
         orphan = await _pending(db_session, test_user_id, "flashcard", generate_id())
+        await db_session.execute(
+            text("UPDATE review_items SET user_id = NULL WHERE id = :id"), {"id": orphan.id}
+        )
 
         for user_id in (test_user_id, stranger_id):
             listed = {
                 i.id for i in await review_service.list_pending_reviews(db_session, user_id=user_id)
             }
             assert orphan.id not in listed
+            assert (
+                await review_service.get_review_item(db_session, orphan.id, user_id=user_id) is None
+            )
 
-        # ...and it is not hidden by being absent: the row really is in the
-        # table, pending (the service has no unscoped path left to prove it).
-        row = await db_session.get(ReviewItem, orphan.id)
-        assert row is not None and row.status == "pending"
+        # Not hidden by being absent: the row is really there, still pending.
+        status = await db_session.scalar(
+            text("SELECT status FROM review_items WHERE id = :id"), {"id": orphan.id}
+        )
+        assert status == "pending"
 
     async def test_empty_user_id_returns_nothing_rather_than_everything(
         self, db_session, test_user_id
@@ -254,7 +288,7 @@ class TestPendingReviewsAreScopedByRow:
         assert await review_service.count_pending_reviews(db_session, user_id="") == 0
 
     async def test_list_by_status_is_scoped_the_same_way(self, db_session, test_user_id):
-        """Resolved/dismissed items go through `_owned_by` too (#53).
+        """Resolved/dismissed items are scoped by `user_id` too (#53).
 
         The version this replaced was inlined in the endpoint with no scoping
         at all, and listed every user's resolved items.

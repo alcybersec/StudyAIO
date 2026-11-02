@@ -95,7 +95,12 @@ class TestReviewItemsAreOwnedDirectly:
 
         resp = await client_factory(bob).post(f"/api/review-items/{item.id}/dismiss")
 
-        assert resp.status_code == 404
+        # Deliberately a 400 "not found", not a 404: a foreign item must be
+        # indistinguishable from a missing one (no existence oracle). The
+        # detail pins the cause -- an "already ..." 400 would be a different bug.
+        assert resp.status_code == 400
+        detail = resp.json()["detail"].lower()
+        assert "not found" in detail and "already" not in detail
         await db_session.refresh(item)
         assert item.status == "pending"
 
@@ -165,8 +170,12 @@ class TestQuizAttemptsAreOwnedDirectly:
     ):
         alice, bob = await make_user(), await make_user()
         a = await seed_course(db_session, alice.id, code="OWN202", week=3, quizzes=4)
-        await seed_course(db_session, bob.id, code="OWN202", week=3, quizzes=4)
+        b = await seed_course(db_session, bob.id, code="OWN202", week=3, quizzes=4)
         await _attempts(db_session, alice.id, [q.id for q in a.questions], correct=True)
+        # A row stamped with Alice but sitting on Bob's question: Bob's progress
+        # must still not count it. Only a direct `user_id` predicate excludes
+        # it; the question -> course join alone would include it.
+        await _attempts(db_session, alice.id, [q.id for q in b.questions], correct=True)
 
         body = {
             "course_code": "OWN202",
@@ -180,7 +189,7 @@ class TestQuizAttemptsAreOwnedDirectly:
             client = client_factory(who)
             created = await client.post("/api/exams", json=body)
             assert created.status_code == 201, created.text
-            resp = await client.get(f"/api/exams/{created.json()['id']}/progress")
+            resp = await client.get(f"/api/exams/{created.json()['id']}")
             assert resp.status_code == 200, resp.text
             progress[who.id] = resp.json()
 
