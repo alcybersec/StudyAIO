@@ -526,6 +526,7 @@ async def seed():
         if not existing_ri and artifact_ids:
             ri_pending = ReviewItem(
                 id=generate_id(),
+                user_id=DEMO_USER_ID,
                 review_type="classification",
                 entity_type="lecture_artifact",
                 entity_id=artifact_ids[0],
@@ -546,6 +547,7 @@ async def seed():
 
             ri_resolved = ReviewItem(
                 id=generate_id(),
+                user_id=DEMO_USER_ID,
                 review_type="classification",
                 entity_type="lecture_artifact",
                 entity_id=artifact_ids[1] if len(artifact_ids) > 1 else artifact_ids[0],
