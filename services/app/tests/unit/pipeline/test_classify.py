@@ -130,6 +130,7 @@ class TestClassifyStage:
         artifact.file_path = "/app/data/uploads/test.pdf"
         artifact.file_type = "pdf"
         artifact.original_filename = "unknown_lecture.pdf"
+        artifact.user_id = "owner-1"
 
         session = AsyncMock()
         session.add = MagicMock()
@@ -168,10 +169,15 @@ class TestClassifyStage:
 
         mock_review_svc.create_review_item = AsyncMock(return_value=MagicMock())
 
-        result = await _classify("art-001")
+        result = await _classify("art-001", user_id="payload-other")
 
         assert result["status"] == "waiting_review"
         mock_review_svc.create_review_item.assert_called_once()
+        # The artifact's own owner is authoritative, never the task payload's.
+        assert (
+            mock_review_svc.create_review_item.await_args.kwargs["user_id"]
+            == artifact.user_id == "owner-1"
+        )
 
     @patch("app.pipeline.classify._extract_text_preview")
     @patch("app.pipeline.classify.async_session_factory")
@@ -367,6 +373,7 @@ class TestCourseQuota:
         assert artifact.course_id != "NEW101"
         kwargs = mock_review_svc.create_review_item.await_args.kwargs
         assert kwargs["entity_id"] == "art-001"
+        assert kwargs["user_id"] == artifact.user_id == "owner-1"
         assert kwargs["payload"]["reason_code"] == "course_limit_reached"
         assert "course limit" in kwargs["payload"]["reason"].lower()
         assert kwargs["suggested_values"]["course_code"] == "NEW101"

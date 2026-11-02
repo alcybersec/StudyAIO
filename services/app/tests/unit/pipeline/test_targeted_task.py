@@ -326,6 +326,14 @@ class TestQueriesAreOwnerScoped:
         sql, _ = _sql(tt._existing_stmt("quiz", OWNER, "course-1", 5))
         assert "archived_at IS NULL" in sql
 
+    def test_attempts_filter_on_the_attempt_owner_not_the_course(self):
+        sql, params = _sql(
+            tt._attempts_stmt(OWNER, "course-1", 5, datetime(2026, 9, 1, tzinfo=UTC))
+        )
+        assert "quiz_attempts.user_id =" in sql
+        assert "courses" not in sql
+        assert OWNER in params.values()
+
     def test_attempts_keep_archived_questions(self):
         sql, _ = _sql(tt._attempts_stmt(OWNER, "course-1", 5, datetime(2026, 9, 1, tzinfo=UTC)))
         assert "archived_at" not in sql
