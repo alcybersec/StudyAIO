@@ -70,6 +70,7 @@ class TestReviewService:
         """Create a review item, verify it appears in pending list."""
         item = await review_service.create_review_item(
             db_session,
+            user_id=test_user_id,
             review_type="classification_course",
             entity_type="lecture_artifact",
             entity_id=(await _owned_artifact(db_session, test_user_id)).id,
@@ -87,6 +88,7 @@ class TestReviewService:
         """Create → resolve → verify status and resolution."""
         item = await review_service.create_review_item(
             db_session,
+            user_id=test_user_id,
             review_type="classification_course",
             entity_type="lecture_artifact",
             entity_id=(await _owned_artifact(db_session, test_user_id)).id,
@@ -108,6 +110,7 @@ class TestReviewService:
         """Create → dismiss → verify status."""
         item = await review_service.create_review_item(
             db_session,
+            user_id=test_user_id,
             review_type="classification_course",
             entity_type="lecture_artifact",
             entity_id=(await _owned_artifact(db_session, test_user_id)).id,
@@ -128,6 +131,7 @@ class TestReviewService:
         """Resolving an already-resolved item raises ValueError."""
         item = await review_service.create_review_item(
             db_session,
+            user_id=test_user_id,
             review_type="classification_course",
             entity_type="lecture_artifact",
             entity_id=(await _owned_artifact(db_session, test_user_id)).id,

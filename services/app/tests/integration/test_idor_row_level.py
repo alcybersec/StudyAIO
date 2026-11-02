@@ -96,9 +96,10 @@ async def _summary(db_session, user_id: str, code: str, week: int) -> Summary:
     return summary
 
 
-async def _pending(db_session, entity_type: str, entity_id: str) -> ReviewItem:
+async def _pending(db_session, user_id: str, entity_type: str, entity_id: str) -> ReviewItem:
     item = ReviewItem(
         id=generate_id(),
+        user_id=user_id,
         review_type="classification_course",
         entity_type=entity_type,
         entity_id=entity_id,
@@ -122,11 +123,13 @@ class TestPendingReviewsAreScopedByRow:
         stranger_id = await _stranger(db_session)
         mine = await _pending(
             db_session,
+            test_user_id,
             "lecture_artifact",
             (await _artifact(db_session, test_user_id, "mine.pdf")).id,
         )
         theirs = await _pending(
             db_session,
+            stranger_id,
             "lecture_artifact",
             (await _artifact(db_session, stranger_id, "theirs.pdf")).id,
         )
@@ -156,10 +159,16 @@ class TestPendingReviewsAreScopedByRow:
         """
         stranger_id = await _stranger(db_session)
         mine = await _pending(
-            db_session, "summary", (await _summary(db_session, test_user_id, "CSIT302", 3)).id
+            db_session,
+            test_user_id,
+            "summary",
+            (await _summary(db_session, test_user_id, "CSIT302", 3)).id,
         )
         theirs = await _pending(
-            db_session, "summary", (await _summary(db_session, stranger_id, "CSIT302", 3)).id
+            db_session,
+            stranger_id,
+            "summary",
+            (await _summary(db_session, stranger_id, "CSIT302", 3)).id,
         )
 
         mine_ids = {
@@ -180,14 +189,19 @@ class TestPendingReviewsAreScopedByRow:
         stranger_id = await _stranger(db_session)
         await _pending(
             db_session,
+            test_user_id,
             "lecture_artifact",
             (await _artifact(db_session, test_user_id, "a.pdf")).id,
         )
         await _pending(
-            db_session, "summary", (await _summary(db_session, test_user_id, "CSIT101", 1)).id
+            db_session,
+            test_user_id,
+            "summary",
+            (await _summary(db_session, test_user_id, "CSIT101", 1)).id,
         )
         await _pending(
             db_session,
+            stranger_id,
             "lecture_artifact",
             (await _artifact(db_session, stranger_id, "b.pdf")).id,
         )
@@ -208,7 +222,7 @@ class TestPendingReviewsAreScopedByRow:
         never fall through to being visible to everyone, which is an incident.
         """
         stranger_id = await _stranger(db_session)
-        orphan = await _pending(db_session, "flashcard", generate_id())
+        orphan = await _pending(db_session, test_user_id, "flashcard", generate_id())
 
         for user_id in (test_user_id, stranger_id):
             listed = {
@@ -231,6 +245,7 @@ class TestPendingReviewsAreScopedByRow:
         """
         await _pending(
             db_session,
+            test_user_id,
             "lecture_artifact",
             (await _artifact(db_session, test_user_id, "c.pdf")).id,
         )
@@ -247,6 +262,7 @@ class TestPendingReviewsAreScopedByRow:
         stranger_id = await _stranger(db_session)
         theirs = await _pending(
             db_session,
+            stranger_id,
             "lecture_artifact",
             (await _artifact(db_session, stranger_id, "d.pdf")).id,
         )
@@ -269,6 +285,7 @@ class TestPendingReviewsAreScopedByRow:
         stranger_id = await _stranger(db_session)
         theirs = await _pending(
             db_session,
+            stranger_id,
             "lecture_artifact",
             (await _artifact(db_session, stranger_id, "e.pdf")).id,
         )

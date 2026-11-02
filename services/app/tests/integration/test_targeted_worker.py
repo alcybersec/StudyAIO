@@ -209,6 +209,7 @@ class TestCompleted:
             async with async_session_factory() as s:
                 s.add(
                     QuizAttempt(
+                        user_id=alice.id,
                         quiz_question_id=world.questions[0].id,
                         selected_answer="x",
                         is_correct=False,
@@ -425,7 +426,14 @@ def test_chain_attempts_scores_plan_request_task_poll_study_items(users):
     async def answer_wrong() -> None:
         async with async_session_factory() as s:
             for q in world.questions:
-                s.add(QuizAttempt(quiz_question_id=q.id, selected_answer="x", is_correct=False))
+                s.add(
+                    QuizAttempt(
+                        user_id=alice.id,
+                        quiz_question_id=q.id,
+                        selected_answer="x",
+                        is_correct=False,
+                    )
+                )
             await s.commit()
 
     _run(answer_wrong())
