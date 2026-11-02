@@ -116,7 +116,7 @@ second user who has done every step.
 |---|---|
 | `…::test_floor1_onboarding_get_ignores_another_users_activity` | The caller with no rows is not `new`, or reads the other user's checklist preference. |
 | `…::test_floor1_onboarding_each_fact_is_the_callers_own[<fact>]`, `…::test_floor1_onboarding_fact_cases_cover_every_fact` | Another user's artifact, summary, `summary_viewed` event, flashcard review or quiz attempt moves the caller's status; or the caller's own fact does not (positive control, so the pin cannot pass on a fact never read). |
-| `…::test_floor1_onboarding_every_statement_carries_the_caller` | A statement `GET` runs does not bind the caller's id or binds another user's, or the `quiz_attempts` branch (no `user_id` column) is not scoped through `courses.user_id`. |
+| `…::test_floor1_onboarding_every_statement_carries_the_caller` | A statement `GET` runs does not bind the caller's id or binds another user's, or the `quiz_attempts` branch does not filter `quiz_attempts.user_id` directly (R-010; it was join-scoped through `courses.user_id` before). |
 | `…::test_floor1_onboarding_patch_writes_only_the_callers_row[…]`, `…::test_floor1_onboarding_patch_rejects_a_named_target[…]` | `PATCH` changes another user's `onboarding_checklist`, issues other than one `UPDATE users … WHERE users.id = <caller>`, or accepts a body naming a user. |
 
 ### User-authored study items and upload placement (GL#48, GL#49; backend `3c1ef9c`, SAFETY-059)
@@ -149,6 +149,29 @@ them red.
 
 Mutation-checked in SAFETY-033, all red: `_search` keyed on another user; the history query's
 `session_id` filter replaced by `role == "user"`.
+
+### `review_items` and `quiz_attempts` own their rows (R-010, M35-R010-03; migration `d4f6b8c0e2a3`)
+
+`test_floor1_r010_direct_ownership.py`. Both tables were join-scoped until M35; the route sweep accepts a
+`user_id` comparison anywhere in a statement, so it cannot tell a direct predicate from one on a joined
+parent. These pins can. `_tenant.POLYMORPHIC_OWNED` is now empty: both tables are owned by their column.
+
+| Test | Fails when |
+|---|---|
+| `…::test_floor1_r010_tables_carry_their_own_user_id` | Either model loses `user_id`, makes it nullable, drops the `users.id` `ON DELETE CASCADE` FK, or drops its index. |
+| `…::test_floor1_r010_tables_are_directly_owned_not_polymorphic` | Either table is not classified owned, or `POLYMORPHIC_OWNED` names a table that has a `user_id`. |
+| `…::test_floor1_r010_every_statement_filters_its_own_user_id` | A `select`/`update`/`delete` in `app/` naming `ReviewItem` or `QuizAttempt` has no `<Model>.user_id == <value>` (or `.in_`) for **that model**, in the statement chain or in a `.where` on the variable it is assigned to. A predicate on `courses.user_id` or a join condition does not count. Fewer than 15 sites fails as blind. |
+| `…::test_floor1_r010_every_insert_names_its_owner` | A `ReviewItem(...)` / `QuizAttempt(...)` in `app/` omits `user_id=`. |
+| `…::test_floor1_r010_no_raw_sql_over_the_tables` | A string literal in `app/` is raw SQL over either table. |
+| `…::test_floor1_r010_null_owner_review_item_is_invisible_to_every_user` | Over MiniDB with a legacy `user_id IS NULL` item beside one per user: any user lists, counts, opens or dismisses the legacy or the other user's item, or does not see their own (positive control). |
+| `…::test_floor1_r010_scan_flags_what_it_must` | The scan stops flagging a join-scoped, unscoped, join-condition-only or second unscoped statement in a fixed sample. |
+
+Mutation-checked in M35-R010-03, all red: `review_service.list_pending_reviews` without its
+`ReviewItem.user_id` `.where`; `weakspot_service.get_diagnostic_questions` with the outer join's
+`QuizAttempt.user_id` term removed (the older function-level detectors stay green on that one, since the
+function still filters `courses.user_id`); `QuizAttempt.user_id` removed from the model;
+`get_review_item` widened to `user_id = :caller OR user_id IS NULL` (only the behavioural pin sees that
+one, as the static scan accepts any equality on the column).
 
 The deeper layers live in other tiers: `tests/integration/test_idor_row_level.py`
 runs against a real database, and `tests/unit/api/test_endpoint_scoping_guard.py`

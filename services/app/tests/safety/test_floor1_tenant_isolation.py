@@ -1086,6 +1086,9 @@ def test_floor1_chunk_store_is_worker_only():
 # So each such function must be classified below with the reason it is safe.
 # A fix that threads the caller through (a ``user_id`` parameter the body uses,
 # or a ``Model.user_id`` predicate) takes the function off the list by itself.
+# R-010 did that for ``readiness_service.collect_week_stats`` and
+# ``review_service.create_review_item``: both now take a required ``user_id``
+# and use it, so their entries were removed (the stale check enforces it).
 
 #: Statement builders whose first arguments name the model being queried.
 QUERY_BUILDERS = frozenset({"select", "update", "delete", "insert", "sa_delete", "sa_update"})
@@ -1172,12 +1175,6 @@ UNSCOPED_FUNCTION_ALLOWED = {
     ("app/services/pipeline_service.py", "get_artifact_pipeline_runs"): (
         "FK traversal: api/uploads.py resolves the artifact with user_id first (comment at "
         "the call site); the owned-parent sweep pins the route"
-    ),
-    ("app/services/readiness_service.py", "collect_week_stats"): (
-        "FK traversal: called with exam.course_id of an exam already resolved for the caller"
-    ),
-    ("app/services/review_service.py", "create_review_item"): (
-        "pipeline write path (classify stage) with the worker's own artifact id"
     ),
     ("app/services/summary_service.py", "get_week_extractions"): (
         "pipeline summarize stage, with the course id of the worker's own artifact"
