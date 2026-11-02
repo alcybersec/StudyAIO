@@ -324,7 +324,10 @@ The audit and plan are local working files, not tracked: `.devsecops/AUDIT.md`, 
 |---|---|---|---|
 | M35-OPS-001 | Orchestrator, `backend` | M34 C1 (was M33 C2): D30 readout | From 2026-11-14: plan vs no plan, descriptive |
 | M35-OPS-002 | Orchestrator, `ai` | M34 C2 (was M33 C4): first prod targeted generation | Items cite pages that exist in their lecture |
-| M35-DEC-003 | user, `data`, `safety` | R-010 (open since M31): `review_items` and `quiz_attempts` have no `user_id` | Decision: add the column (migration + backfill + floor pin) or rule a permanent exception |
+| M35-DEC-003 | user, `data`, `safety` | R-010 (open since M31): `review_items` and `quiz_attempts` have no `user_id` | **Decided 2026-11-02: add the column** (M35-R010-01..03) |
+| M35-R010-01 | `data` | R-010: schema | `user_id` (FK `users.id`, `ON DELETE CASCADE`, indexed) on `review_items` and `quiz_attempts`; backfilled from the owning row (`quiz_questions`; the `entity_type` target for review items); `NOT NULL` once no row is left unowned, and nothing deleted to get there; downgrade drops the column; migration tested up, down and up on a populated database |
+| M35-R010-02 | `backend` | R-010: queries | Every create sets `user_id`; every read and mutation of the two tables filters on it directly, not through a join; wiring assertions per `docs/developer_guide.md`, each watched fail with the filter removed. Needs R010-01 |
+| M35-R010-03 | `safety` | R-010: floor pin | The floor-1 sweep treats both tables as directly owned; a pin test fails if either loses `user_id` or an unscoped query is added; R-010 closed. Needs R010-02 |
 
 R-009 (no secret scan in CI) is decided by this scope: M35-D30-05 adds a gating gitleaks job, and floor 2 stays the floor.
 
@@ -390,7 +393,7 @@ R-009 (no secret scan in CI) is decided by this scope: M35-D30-05 adds a gating 
 - every S1 closed;
 - scorecard average ≥ 2.6 at the M35 gate, re-measured by a fresh `/devsecops:recheck`;
 - C1–C2 closed or reported;
-- R-010 decided;
+- R-010 closed (M35-R010-01..03);
 - `safety` APPROVE.
 
 ### Later milestones (outline only, not yet scoped)

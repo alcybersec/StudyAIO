@@ -13,7 +13,7 @@ Orchestrator updates here.
 
 ## Next task
 
-**M34 closed 2026-10-22** (CONDITIONAL accepted; C1 D30 readout and C2 first prod targeted generation → M35, both carried twice; C3 dependency advisories fixed via MR !46). **Next: M35-W1-01** (registry token and deploy key scoped to environments), dispatched together with M35-W1-04 and the W1-10 tag protection (one sitting). Then W1-02, W1-03, W1-07, W1-09. Open decision: R-010 (M35-DEC-003). Time-bound: M35-OPS-001 from 2026-11-14.
+**M34 closed 2026-10-22** (CONDITIONAL accepted; C1 D30 readout and C2 first prod targeted generation → M35, both carried twice; C3 dependency advisories fixed via MR !46). **Next: M35-W1-01** (registry token and deploy key scoped to environments), dispatched together with M35-W1-04 and the W1-10 tag protection (one sitting). Then W1-02, W1-03, W1-07, W1-09. R-010 decided (add the column): M35-R010-01 (`data`) runs in parallel with W1-01/W1-04, then R010-02, R010-03. Time-bound: M35-OPS-001 from 2026-11-14.
 
 ## Active
 
