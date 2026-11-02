@@ -22,6 +22,16 @@
 # logs in to GHCR to pull, so repointing at the GitLab registry would mean
 # changing production compose, the host's docker login and the .env pinning.
 # Keeping GHCR makes this migration purely a change of WHO RUNS THE BUILD.
+#
+# Credential map (CI variables are protected AND environment-scoped):
+#   environment `registry`   -> GHCR_TOKEN, VITE_SENTRY_DSN (if defined)
+#                               jobs: build-api, build-ui
+#   environment `production` -> DEPLOY_SSH_KEY (file), DEPLOY_HOST, DEPLOY_USER,
+#                               DEPLOY_SSH_PORT, DEPLOY_DIR   jobs: deploy-selfhosted
+#   unscoped (`*`)           -> GHCR_OWNER (a namespace, not a secret)
+# No other job declares an environment, so no other job receives any scoped
+# variable -- in particular not the jobs that run `npm ci` / `pip install`
+# (third-party code). credential-scope-probe proves it.
 
 stages:
   - lint
@@ -82,6 +92,25 @@ python-lint:
     - cd services/app
     - ruff check .
     - ruff format --check .
+
+# Proves the scoping: a job with NO environment must see none of the scoped
+# credentials. Run it by hand on main after the variables are rescoped. Prints
+# only set/unset per name, never a value, and always exits 0.
+credential-scope-probe:
+  stage: lint
+  image: alpine:3.24
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+  needs: []
+  script:
+    - |
+      for v in GHCR_TOKEN DEPLOY_SSH_KEY DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_PORT DEPLOY_DIR VITE_SENTRY_DSN; do
+        eval "val=\${$v:-}"
+        if [ -n "$val" ]; then echo "$v: set"; else echo "$v: unset"; fi
+      done
+      exit 0
 
 backend-tests:
   stage: test
@@ -328,6 +357,9 @@ e2e-tests:
   stage: build
   tags: [shell]
   interruptible: false          # an interrupted push can leave a partial tag
+  environment:                  # receives the `registry`-scoped variables
+    name: registry
+    action: prepare
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_TAG =~ /^v/
@@ -339,6 +371,12 @@ e2e-tests:
     # `blob unknown to registry` / MANIFEST_BLOB_UNKNOWN -- AFTER every layer has
     # pushed successfully, so it reads as a registry fault.
     BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
+    # Job-scoped docker config. The shell runner shares one user and one daemon
+    # across jobs, so a plain `docker login` would leave the GHCR token in that
+    # user's ~/.docker/config.json for every later job to read. Logging in to
+    # this per-job directory, then deleting it in after_script, keeps the
+    # credential on disk only for the life of the job.
+    DOCKER_CONFIG: $CI_PROJECT_DIR/.docker-job
   before_script:
     # IMAGE_TAG is computed HERE, not in `variables:`. GitLab expands only $VAR /
     # ${VAR} in a variables block -- it does NOT do bash substring expansion, so
@@ -353,9 +391,10 @@ e2e-tests:
     - IMAGE_TAG="${CI_COMMIT_SHA:0:7}"
     - test -n "$IMAGE_TAG" || { echo "IMAGE_TAG is empty - refusing to push an untagged image"; exit 1; }
     - echo "Building ${IMAGE_NAME}:${IMAGE_TAG}"
+    - install -d -m 700 "$DOCKER_CONFIG"
     - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_OWNER" --password-stdin
   script:
-    - docker build --provenance=false --sbom=false
+    - docker build --pull --provenance=false --sbom=false
       $EXTRA_BUILD_ARGS
       -t "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:$IMAGE_TAG"
       -t "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:latest"
@@ -363,6 +402,9 @@ e2e-tests:
     - docker push "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:$IMAGE_TAG"
     - docker push "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:latest"
   after_script:
+    # after_script is a separate shell but sees job variables, so DOCKER_CONFIG is set.
+    - docker --config "$DOCKER_CONFIG" logout ghcr.io || true
+    - rm -rf "$DOCKER_CONFIG"
     # The runner host shares one Docker daemon, so free the disk.
     # after_script is a SEPARATE shell, so IMAGE_TAG must be recomputed.
     - docker image rm "ghcr.io/$GHCR_OWNER/$IMAGE_NAME:${CI_COMMIT_SHA:0:7}" || true
