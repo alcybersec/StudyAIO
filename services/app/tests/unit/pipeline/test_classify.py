@@ -176,7 +176,8 @@ class TestClassifyStage:
         # The artifact's own owner is authoritative, never the task payload's.
         assert (
             mock_review_svc.create_review_item.await_args.kwargs["user_id"]
-            == artifact.user_id == "owner-1"
+            == artifact.user_id
+            == "owner-1"
         )
 
     @patch("app.pipeline.classify._extract_text_preview")

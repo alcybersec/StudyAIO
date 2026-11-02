@@ -270,10 +270,8 @@ async def _send_weekly_digest() -> int:
     Returns:
         Number of users notified.
     """
-    from app.models.course import Course
     from app.models.flashcard_review import FlashcardReview
     from app.models.notification_preference import NotificationPreference
-    from app.models.quiz import QuizQuestion
     from app.models.quiz_attempt import QuizAttempt
     from app.models.study_session import StudySession
     from app.models.user_settings import UserSettings
@@ -316,11 +314,8 @@ async def _send_weekly_digest() -> int:
 
                 # Quiz attempts this week
                 quiz_result = await session.execute(
-                    select(func.count(QuizAttempt.id))
-                    .join(QuizQuestion, QuizQuestion.id == QuizAttempt.quiz_question_id)
-                    .join(Course, Course.id == QuizQuestion.course_id)
-                    .where(
-                        Course.user_id == user_id,
+                    select(func.count(QuizAttempt.id)).where(
+                        QuizAttempt.user_id == user_id,
                         QuizAttempt.created_at >= week_ago,
                     )
                 )

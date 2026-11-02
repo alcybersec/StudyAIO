@@ -130,9 +130,8 @@ def _attempts_stmt(owner_id: str, course_id: str, week: int, since: datetime) ->
             QuizAttempt.created_at,
         )
         .join(QuizAttempt, QuizAttempt.quiz_question_id == QuizQuestion.id)
-        .join(Course, Course.id == QuizQuestion.course_id)
         .where(
-            Course.user_id == owner_id,
+            QuizAttempt.user_id == owner_id,
             QuizQuestion.course_id == course_id,
             QuizQuestion.week == week,
             QuizAttempt.created_at >= since,

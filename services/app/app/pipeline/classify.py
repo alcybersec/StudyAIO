@@ -335,6 +335,7 @@ async def _classify(artifact_id: str, user_id: str | None = None) -> dict:
                     review_type=review_type,
                     entity_type="lecture_artifact",
                     entity_id=artifact_id,
+                    user_id=artifact.user_id,
                     payload=payload,
                     suggested_values=suggested_values,
                 )
