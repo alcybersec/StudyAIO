@@ -22,6 +22,16 @@
 # logs in to GHCR to pull, so repointing at the GitLab registry would mean
 # changing production compose, the host's docker login and the .env pinning.
 # Keeping GHCR makes this migration purely a change of WHO RUNS THE BUILD.
+#
+# Credential map (CI variables are protected AND environment-scoped):
+#   environment `registry`   -> GHCR_TOKEN, VITE_SENTRY_DSN (if defined)
+#                               jobs: build-api, build-ui
+#   environment `production` -> DEPLOY_SSH_KEY (file), DEPLOY_HOST, DEPLOY_USER,
+#                               DEPLOY_SSH_PORT, DEPLOY_DIR   jobs: deploy-selfhosted
+#   unscoped (`*`)           -> GHCR_OWNER (a namespace, not a secret)
+# No other job declares an environment, so no other job receives any scoped
+# variable -- in particular not the jobs that run `npm ci` / `pip install`
+# (third-party code). credential-scope-probe proves it.
 
 stages:
   - lint
@@ -82,6 +92,25 @@ python-lint:
     - cd services/app
     - ruff check .
     - ruff format --check .
+
+# Proves the scoping: a job with NO environment must see none of the scoped
+# credentials. Run it by hand on main after the variables are rescoped. Prints
+# only set/unset per name, never a value, and always exits 0.
+credential-scope-probe:
+  stage: lint
+  image: alpine:3.24
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+  needs: []
+  script:
+    - |
+      for v in GHCR_TOKEN DEPLOY_SSH_KEY DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_PORT DEPLOY_DIR VITE_SENTRY_DSN; do
+        eval "val=\${$v:-}"
+        if [ -n "$val" ]; then echo "$v: set"; else echo "$v: unset"; fi
+      done
+      exit 0
 
 backend-tests:
   stage: test
@@ -328,6 +357,9 @@ e2e-tests:
   stage: build
   tags: [shell]
   interruptible: false          # an interrupted push can leave a partial tag
+  environment:                  # receives the `registry`-scoped variables
+    name: registry
+    action: prepare
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_TAG =~ /^v/

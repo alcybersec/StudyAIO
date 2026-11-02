@@ -220,14 +220,18 @@ existed — the retired `deploy.yml` had only `build-api`, `build-ui` and
 Set in GitLab → Settings → CI/CD → Variables. Mask every credential; none of
 these belong in the repository.
 
-| Variable | Protected | Description |
-|----------|-----------|-------------|
-| `GHCR_OWNER` | no | GHCR namespace — also the `docker login` username |
-| `GHCR_TOKEN` | yes | GitHub PAT with `write:packages`, for pushing images |
-| `DEPLOY_SSH_KEY` | yes | File-type variable: private key whose public half is command-restricted to `deploy.sh` on the host |
-| `DEPLOY_HOST` | yes | Deployment target host |
-| `DEPLOY_USER` | yes | SSH user on that host |
-| `VITE_SENTRY_DSN` | yes | Frontend Sentry DSN. Vite inlines `VITE_*` at **build** time, so this is consumed by `build-ui`, not at runtime. Unset builds a UI with monitoring off. |
+| Variable | Protected | Environment scope | Description |
+|----------|-----------|-------------------|-------------|
+| `GHCR_OWNER` | yes | `*` | GHCR namespace — also the `docker login` username. Not a secret, so it stays unscoped |
+| `GHCR_TOKEN` | yes | `registry` | GitHub PAT with `write:packages`, for pushing images. Only the build jobs (`environment: registry`) receive it |
+| `DEPLOY_SSH_KEY` | yes | `production` | File-type variable: private key whose public half is command-restricted to `deploy.sh` on the host |
+| `DEPLOY_HOST` | yes | `production` | Deployment target host |
+| `DEPLOY_USER` | yes | `production` | SSH user on that host |
+| `VITE_SENTRY_DSN` | yes | `registry` | Frontend Sentry DSN. Vite inlines `VITE_*` at **build** time, so this is consumed by `build-ui`, not at runtime. Unset builds a UI with monitoring off. |
+
+A variable scoped to an environment is delivered only to jobs that declare that
+environment. After changing scopes, run the manual `credential-scope-probe` job
+on main: every name must print `unset`.
 
 > Runners are registered `run_untagged:false`, so every job must carry tags. The
 > default tag set targets the Docker-executor runner; the image builds override to
