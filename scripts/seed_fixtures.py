@@ -317,12 +317,16 @@ async def seed():
         if result.scalar_one_or_none() is None:
             # Get first artifact for a review item
             result = await session.execute(
-                select(LectureArtifact.id).limit(1)
+                select(LectureArtifact.id, LectureArtifact.user_id).limit(1)
             )
-            first_artifact_id = result.scalar_one_or_none()
-            if first_artifact_id:
+            first_artifact = result.first()
+            if first_artifact and first_artifact.user_id:
+                first_artifact_id = first_artifact.id
+                # A review item belongs to the user who owns the artifact.
+                owner_user_id = first_artifact.user_id
                 ri = ReviewItem(
                     id=generate_id(),
+                    user_id=owner_user_id,
                     review_type="classification",
                     entity_type="lecture_artifact",
                     entity_id=first_artifact_id,
@@ -343,6 +347,7 @@ async def seed():
 
                 ri2 = ReviewItem(
                     id=generate_id(),
+                    user_id=owner_user_id,
                     review_type="classification",
                     entity_type="lecture_artifact",
                     entity_id=first_artifact_id,
