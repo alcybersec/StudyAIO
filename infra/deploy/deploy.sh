@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
 # Forced command for the CI deploy key (authorized_keys).
-# Rewritten 2026-09-27 when CI moved to GitLab.
+# Rewritten 2026-09-27 when CI moved to GitLab. Hardened per M35-W1-02:
+#   only commits on origin/main are deployable; only main is fetched;
+#   the script refuses to run when it differs from main's copy of itself.
 #
 # CANONICAL COPY: infra/deploy/deploy.sh in the StudyAIO repo. The live file is
 # /opt/studyaio/deploy.sh on the deploy host and is deliberately UNTRACKED there
 # -- `git checkout --force` during a deploy must not rewrite the script that is
 # currently executing, because bash reads a script incrementally and would run
 # the tail of the new file against the state of the old one. So this is applied
-# by hand; see docs/deployment.md. Keep the two in step.
+# by hand; see docs/deployment.md. Drift is not silent: the script compares itself
+# with infra/deploy/deploy.sh on origin/main (current or previous version) and
+# refuses (exit 71) until the host copy is reinstalled.
 #
 # The CI job supplies ONE argument -- the commit SHA that passed CI -- via
 # SSH_ORIGINAL_COMMAND. Everything else happens here, which is what lets the key
 # stay command-restricted: the deploy needs no scp and no arbitrary ssh, so a
-# leaked key still cannot run anything but this script.
+# leaked key still cannot run anything but this script. The commit must also be
+# an ancestor of origin/main, i.e. it went through review and a green pipeline;
+# "any fetched commit" used to be deployable, including one from a branch.
 #
 # Deliberately pulls images rather than building locally. The previous version
 # ran `compose build`, and because the base compose declares build: for
@@ -74,6 +80,55 @@ prune_old_app_images() {
     docker image prune -f >/dev/null 2>&1 || true
 }
 
+# --- Deployability guards (M35-W1-02) ------------------------------------------
+# enforce_main_only SELF SHA
+# Run inside the deploy checkout after origin/main has been fetched.
+#   * Drift guard: SELF (the running script) must be byte-identical to
+#     infra/deploy/deploy.sh at origin/main, OR to its most recent DIFFERENT
+#     earlier version on main. The previous version is accepted because the
+#     deploy of the very commit that changes this file necessarily runs the old
+#     host copy; refusing it would make every deploy.sh change fail its own
+#     deploy. Otherwise exit 71 (host copy must be reinstalled).
+#   * SHA must resolve to a commit that is an ancestor of origin/main, else
+#     exit 65. Sets FULL_SHA on success.
+# The comparison is with main's script, not the target commit's, so re-deploying
+# an older commit still works.
+enforce_main_only() {
+    local self="$1" sha="$2" self_sha main_sha c blob prev_sha="" matched=0
+    self_sha="$(sha256sum "$self" | cut -d' ' -f1)"
+    main_sha="$(git show refs/remotes/origin/main:infra/deploy/deploy.sh 2>/dev/null | sha256sum | cut -d' ' -f1)"
+    echo "deploy.sh sha256=${self_sha}"
+    if [ "$self_sha" = "$main_sha" ]; then
+        matched=1
+    else
+        while read -r c; do
+            [ -n "$c" ] || continue
+            blob="$(git show "${c}:infra/deploy/deploy.sh" 2>/dev/null | sha256sum | cut -d' ' -f1)"
+            if [ "$blob" != "$main_sha" ]; then
+                prev_sha="$blob"
+                break
+            fi
+        done < <(git log --format=%H refs/remotes/origin/main -- infra/deploy/deploy.sh 2>/dev/null)
+        if [ -n "$prev_sha" ] && [ "$self_sha" = "$prev_sha" ]; then
+            matched=1
+        fi
+    fi
+    if [ "$matched" -ne 1 ]; then
+        echo "refusing: this host's deploy.sh (${self_sha:0:12}) is neither infra/deploy/deploy.sh on origin/main (${main_sha:0:12}) nor its previous version (${prev_sha:0:12})." >&2
+        echo "  Reinstall it from the repo (docs/deployment.md, 'Installing deploy.sh'), then retry the job. Nothing was changed." >&2
+        exit 71
+    fi
+
+    if ! FULL_SHA="$(git rev-parse --verify --quiet "${sha}^{commit}")"; then
+        echo "refusing: commit ${sha} is not on origin/main -- was it actually pushed and merged?" >&2
+        exit 65
+    fi
+    if ! git merge-base --is-ancestor "${FULL_SHA}" refs/remotes/origin/main; then
+        echo "refusing: ${sha} is not an ancestor of origin/main; only merged commits deploy" >&2
+        exit 65
+    fi
+}
+
 # Sourced (by a test): stop after the definitions instead of deploying.
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
@@ -98,25 +153,21 @@ TAG="${SHA:0:7}"
 
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 
-# origin is GITLAB as of 2026-09-27 (read-only deploy key
-# scoped to this project). The commit CI just built is therefore available
-# immediately -- the deploy no longer waits on GitLab->GitHub mirror propagation,
-# which is what it depended on when origin was the GitHub mirror.
-echo "==> Fetching ${SHA}..."
-if ! git fetch --quiet origin; then
-    echo "refusing: git fetch from origin failed" >&2
+# origin is GITLAB (read-only deploy key scoped to this project), so the commit
+# CI just built is available immediately. Fetch main ONLY: `git fetch origin`
+# used to bring in every branch, and any fetched commit was then deployable.
+echo "==> Fetching origin/main..."
+if ! git fetch --quiet origin "+refs/heads/main:refs/remotes/origin/main"; then
+    echo "refusing: git fetch of origin/main failed" >&2
     exit 65
 fi
 
-# Distinguish "the mirror has not propagated" from "the checkout was blocked".
-# The first version of this script piped checkout's stderr to /dev/null and
-# reported EVERY failure as a missing commit, which sent the first real deploy
-# chasing a mirror problem that did not exist -- the actual error was a dirty
-# working tree.
-if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then
-    echo "refusing: commit ${SHA} is not on origin -- was it actually pushed?" >&2
-    exit 65
-fi
+# Drift guard + ancestor-of-main check (see enforce_main_only). A checkout
+# failure is reported separately below: the first version of this script
+# reported EVERY failure as a missing commit, which sent a deploy chasing a
+# mirror problem when the real error was a dirty working tree.
+FULL_SHA=""
+enforce_main_only "${BASH_SOURCE[0]}" "${SHA}"
 
 # A deploy's contract is "run exactly this commit", so local edits to TRACKED
 # files are drift and get discarded. Silently preserving them is how this tree
@@ -127,7 +178,7 @@ if [ -n "$DRIFT" ]; then
     echo "==> Discarding local modifications to tracked files:"
     echo "${DRIFT}" | sed 's/^/      /'
 fi
-git checkout --force --quiet --detach "${SHA}"
+git checkout --force --quiet --detach "${FULL_SHA}"
 echo "==> Checked out $(git rev-parse --short=12 HEAD)"
 
 echo "==> Pinning images to ${TAG}..."
