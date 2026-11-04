@@ -27,7 +27,8 @@
 #   environment `registry`   -> GHCR_TOKEN, VITE_SENTRY_DSN (if defined)
 #                               jobs: build-api, build-ui
 #   environment `production` -> DEPLOY_SSH_KEY (file), DEPLOY_HOST, DEPLOY_USER,
-#                               DEPLOY_SSH_PORT, DEPLOY_DIR   jobs: deploy-selfhosted
+#                               DEPLOY_SSH_PORT, DEPLOY_DIR,
+#                               DEPLOY_KNOWN_HOSTS (file)     jobs: deploy-selfhosted
 #   unscoped (`*`)           -> GHCR_OWNER (a namespace, not a secret)
 # No other job declares an environment, so no other job receives any scoped
 # variable -- in particular not the jobs that run `npm ci` / `pip install`
@@ -431,7 +432,10 @@ build-ui:
 
 deploy-selfhosted:
   stage: deploy
-  image: alpine:latest
+  # Pinned by digest (alpine 3.24): this job holds the deploy key, so its image
+  # must not move under it. Bump tag and digest together.
+  image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+  interruptible: false          # never cancel a deploy midway
   needs: [build-api, build-ui, e2e-tests]
   # Auto-deploys on main, matching the previous GitHub behaviour. The first run
   # was gated manual while deploy.sh was unproven; it succeeded on
@@ -444,8 +448,17 @@ deploy-selfhosted:
       when: on_success
   resource_group: studyaio-prod   # serialize deploys; never cancel one midway
   before_script:
-    - apk add --no-cache openssh-client
+    - apk add --no-cache openssh-client-default
     - chmod 600 "$DEPLOY_SSH_KEY"
+    # The host key is pinned, never trusted on first use. DEPLOY_KNOWN_HOSTS is a
+    # File variable (known_hosts format) scoped to environment `production`.
+    - |
+      if [ -z "${DEPLOY_KNOWN_HOSTS:-}" ] || [ ! -s "$DEPLOY_KNOWN_HOSTS" ]; then
+        echo "FATAL: DEPLOY_KNOWN_HOSTS is missing or empty (File variable, scope production)."
+        echo "Refusing to connect without a pinned host key. Nothing was sent to the server."
+        exit 1
+      fi
+    - chmod 600 "$DEPLOY_KNOWN_HOSTS"
   script:
     # Ref guard, kept as a SHELL assertion on purpose. The GitHub job deliberately
     # avoided a job-level `if:` because a condition that does not match makes the
@@ -467,8 +480,8 @@ deploy-selfhosted:
     #
     # It also means no GHCR token is sent to the server -- the host already holds
     # persistent `docker login ghcr.io` credentials.
-    - ssh -i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new
-      -o UserKnownHostsFile=/dev/null -o BatchMode=yes
+    - ssh -i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=yes
+      -o UserKnownHostsFile="$DEPLOY_KNOWN_HOSTS" -o BatchMode=yes
       -p "${DEPLOY_SSH_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST" "$CI_COMMIT_SHA"
   environment:
     name: production
