@@ -81,7 +81,7 @@ async def generate_study_schedule(
     total_due = due_count_result.scalar() or 0
 
     # Weak topics
-    weak_topics = await get_weak_topics(session, exam.course_id, exam.weeks_scope)
+    weak_topics = await get_weak_topics(session, exam.course_id, exam.weeks_scope, user_id=user_id)
     weak_weeks = [w["week"] for w in weak_topics]
     strong_weeks = [w for w in exam.weeks_scope if w not in weak_weeks]
 

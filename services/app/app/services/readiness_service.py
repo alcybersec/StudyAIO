@@ -61,6 +61,8 @@ async def collect_week_stats(
     session: AsyncSession,
     course_id: str,
     weeks_scope: list[int],
+    *,
+    user_id: str,
 ) -> tuple[dict[int, dict], dict[int, float]]:
     """Collect per-week quiz accuracy and flashcard ease for a course scope.
 
@@ -68,6 +70,7 @@ async def collect_week_stats(
         session: Database session.
         course_id: Course UUID.
         weeks_scope: Week numbers to analyze.
+        user_id: Owner user UUID; only this user's quiz attempts are counted.
 
     Returns:
         Tuple of (quiz_by_week, ease_by_week). quiz_by_week maps week to
@@ -82,6 +85,7 @@ async def collect_week_stats(
         )
         .join(QuizAttempt, QuizQuestion.id == QuizAttempt.quiz_question_id)
         .where(
+            QuizAttempt.user_id == user_id,
             QuizQuestion.course_id == course_id,
             QuizQuestion.week.in_(weeks_scope),
             QuizQuestion.archived_at.is_(None),
@@ -143,7 +147,9 @@ async def compute_readiness_detail(
     overall = int(round(readiness["readiness_score"])) if readiness else 0
 
     weeks_scope = list(exam.weeks_scope or [])
-    quiz_by_week, ease_by_week = await collect_week_stats(session, exam.course_id, weeks_scope)
+    quiz_by_week, ease_by_week = await collect_week_stats(
+        session, exam.course_id, weeks_scope, user_id=user_id
+    )
 
     # Flashcard counts per week
     card_rows = await session.execute(

@@ -2,8 +2,8 @@
 
 Only the checklist preference is stored (``users.onboarding_checklist``);
 every step is derived on read from the caller's own rows. Every query here is
-filtered on the caller (floor 1): ``quiz_attempts`` has no ``user_id``, so that
-branch is scoped through ``quiz_questions`` to ``courses.user_id``.
+filtered on the caller (floor 1): each user-owned table, ``quiz_attempts``
+included, is filtered directly on its own ``user_id`` column.
 """
 
 from dataclasses import dataclass
@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.artifact import LectureArtifact
 from app.models.course import Course
 from app.models.flashcard_review import FlashcardReview
-from app.models.quiz import QuizQuestion
 from app.models.quiz_attempt import QuizAttempt
 from app.models.summary import Summary
 from app.models.usage_event import UsageEvent
@@ -130,11 +129,7 @@ async def get_status(session: AsyncSession, *, user_id: str) -> OnboardingStatus
         select(FlashcardReview.id).where(FlashcardReview.user_id == user_id).limit(1)
     )
     attempted = reviewed or await session.scalar(
-        select(QuizAttempt.id)
-        .join(QuizQuestion, QuizQuestion.id == QuizAttempt.quiz_question_id)
-        .join(Course, Course.id == QuizQuestion.course_id)
-        .where(Course.user_id == user_id)
-        .limit(1)
+        select(QuizAttempt.id).where(QuizAttempt.user_id == user_id).limit(1)
     )
     return derive_status(
         uploaded=uploaded or target is not None,

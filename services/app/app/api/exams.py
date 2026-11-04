@@ -197,7 +197,9 @@ async def get_weak_topics(
     exam = await exam_service.get_exam(session, exam_id, user_id=user.id)
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
-    topics = await exam_service.get_weak_topics(session, exam.course_id, exam.weeks_scope)
+    topics = await exam_service.get_weak_topics(
+        session, exam.course_id, exam.weeks_scope, user_id=user.id
+    )
     return [WeakTopicResponse(**t) for t in topics]
 
 

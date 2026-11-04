@@ -155,6 +155,7 @@ async def post_quiz_attempt(
         is_correct=body.is_correct,
         exam_id=body.exam_id,
         time_spent_ms=body.time_spent_ms,
+        user_id=user.id,
     )
     await usage_service.record(
         session,

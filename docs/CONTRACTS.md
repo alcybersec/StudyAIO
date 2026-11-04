@@ -1034,10 +1034,12 @@ derived on read, per caller, with every query filtered on the caller (floor 1):
 - `summary_read`: the caller has a `summary_viewed` usage event (`services.usage v1`, already sent
   by the summary view).
 - `check_in_done`: the caller has a `flashcard_reviews` row (filtered on
-  `flashcard_reviews.user_id`), or a `quiz_attempts` row on a quiz question in a course they own.
-  `quiz_attempts` has **no `user_id` column**, so that branch joins `quiz_attempts` to
-  `quiz_questions` to `courses` and filters on `courses.user_id == caller`. An unscoped `EXISTS`
-  on `quiz_attempts` would light one user's checklist from another user's activity.
+  `flashcard_reviews.user_id`), or a `quiz_attempts` row of their own. `quiz_attempts` carries
+  `user_id` (M35-R010), so that branch filters on `quiz_attempts.user_id == caller` directly, as a
+  top-level `AND` term of its `WHERE`, with no join through `quiz_questions` to `courses`. A
+  `user_id` elsewhere in the query (a join to `courses.user_id`, or one arm of an `OR`) does not
+  scope it. An unscoped `EXISTS` on `quiz_attempts` would light one user's checklist from another
+  user's activity.
 
 `set_checklist` writes only the caller's row: one Core `update(User).where(User.id == user_id)`
 setting `onboarding_checklist`, keyed on `users.id` and nothing else (`users` is not swept by the
@@ -1106,7 +1108,7 @@ again" choice in settings, `dismissed` hides it. Worked examples (`set` is any `
 `services/app/tests/contracts/test_onboarding_contract.py` compares the block with the source, runs
 the table through `derive_status`, checks the routes and the column, asserts that every statement
 `get_status` issues carries the caller's id and that the `quiz_attempts` branch filters on
-`courses.user_id`, and that `set_checklist` and the `PATCH` route are keyed on the caller.
+`quiz_attempts.user_id`, and that `set_checklist` and the `PATCH` route are keyed on the caller.
 
 ## Change log
 
@@ -1144,3 +1146,4 @@ The `Contract` column holds the name from that contract's `###` heading in Curre
 | 2026-10-16 | api.onboarding | v1 | Amended before implementation per `safety`'s review: the `quiz_attempts` branch of `check_in_done` is scoped through `courses.user_id` (`quiz_attempts` has no `user_id`); `set_checklist` is one `update(User)` keyed on `users.id == caller`, with a wiring assertion required. No interface change. Contract test extended, red. | M34-S3-BACKEND-012 |
 | 2026-10-16 | models.secrets-at-rest | v2 | OAuth sign-in tokens are not stored (`safety` R1): `create_or_link_oauth` loses its `access_token`/`refresh_token` parameters, the link branch writes NULL and the known-identity branch writes `None`, Google's authorize URL drops `access_type=offline`; one revision nulls both columns (no row deleted, no other column changed; downgrade cannot restore them). The columns stay, `EncryptedText` and always NULL, for one release because `deploy.sh` migrates while the old api serves; v3 drops them with the rotation and floor-2 entries. Contract test written red. | M34-S2-SEC-013 |
 | 2026-10-16 | models.telegram-pairing-code | v1 | New contract, recorded before implementation (`safety` R3): `telegram_links.link_token` holds `hash_magic_link_token(code)` (64 hex, same column), looked up by digest in SQL, never logged; the revision invalidates every unused code (NULL) in both directions rather than hashing in place, since the codes never expire and their plaintext is in existing dumps. Contract test written red. | M34-S2-SEC-014 |
+| 2026-11-02 | api.onboarding | v1 | The `quiz_attempts` branch of `check_in_done` filters on `quiz_attempts.user_id == caller` directly, now that the column exists; the scope through `courses.user_id` is retired. The contract test requires that predicate as a top-level `AND` term, so a join to `courses` or an `OR` does not pass. No interface change. | M35-R010-02 |

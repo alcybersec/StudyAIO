@@ -192,6 +192,7 @@ def _world() -> tuple[MiniDB, dict[str, Any]]:
         db.add(
             QuizAttempt(
                 id=f"att-{tag}",
+                user_id=owner,
                 quiz_question_id=question.id,
                 is_correct=False,
                 created_at=NOW - timedelta(days=1),

@@ -108,24 +108,28 @@ class TestExamsIdorScoping:
 
 
 class TestReviewItemOwnershipPredicate:
-    """ReviewItem is polymorphic, so the ownership join must cover every
-    entity_type that is actually created -- otherwise scoping it 404s the
-    owner on their own item."""
+    """R-010: a review item is owned by its own ``user_id`` column.
 
-    def test_covers_every_entity_type_that_is_created(self):
-        """Both `lecture_artifact` and `summary` items must be reachable.
+    The polymorphic ownership join (artifact / summary -> course) is gone; the
+    listing filters on the row directly, so every entity type is covered and a
+    NULL (orphaned legacy) owner matches no caller.
+    """
 
-        `summary` items come from course_service's merge_week_conflict path.
-        A join written only against LectureArtifact -- the shape
-        list_pending_reviews uses -- silently hides them from their owner.
-        """
-        from app.services.review_service import _owned_by
+    @pytest.mark.asyncio
+    async def test_listing_filters_on_the_row_s_user_id(self):
+        from app.services.review_service import list_pending_reviews
 
-        sql = str(_owned_by("some-user").compile(compile_kwargs={"literal_binds": True}))
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=MagicMock())
+        session.execute.return_value.scalars.return_value.all.return_value = []
 
-        assert "lecture_artifacts" in sql, "lecture_artifact review items unreachable"
-        assert "summaries" in sql, "summary (merge_week_conflict) review items unreachable"
-        assert "courses" in sql, "summary ownership must resolve through Course.user_id"
+        await list_pending_reviews(session, user_id="some-user")
+
+        sql = str(
+            session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+        )
+        assert "review_items.user_id = 'some-user'" in sql
+        assert "lecture_artifacts" not in sql and "summaries" not in sql
 
 
 @pytest.mark.asyncio

@@ -201,6 +201,7 @@ class TestRecordQuizAttempt:
             is_correct=True,
             exam_id="exam-001",
             time_spent_ms=5000,
+            user_id="user-001",
         )
 
         session.add.assert_called_once()
@@ -221,6 +222,7 @@ class TestRecordQuizAttempt:
             quiz_question_id="qq-001",
             selected_answer="Wrong",
             is_correct=False,
+            user_id="user-001",
         )
 
         assert attempt.exam_id is None
@@ -250,7 +252,7 @@ class TestGetWeakTopics:
 
         session.execute = AsyncMock(side_effect=[mock_quiz, mock_ease])
 
-        result = await get_weak_topics(session, "course-001", [1, 2])
+        result = await get_weak_topics(session, "course-001", [1, 2], user_id="user-001")
 
         # Both weeks should be in result
         weeks = {t["week"] for t in result}
@@ -273,7 +275,7 @@ class TestGetWeakTopics:
 
         session.execute = AsyncMock(side_effect=[mock_quiz, mock_ease])
 
-        result = await get_weak_topics(session, "course-001", [1, 2, 3])
+        result = await get_weak_topics(session, "course-001", [1, 2, 3], user_id="user-001")
 
         assert len(result) == 3
         for topic in result:

@@ -380,7 +380,11 @@ READ_PATHS = {
         {"user_id": USER},
     ),
     "exam.get_exam_progress": (exam_service.get_exam_progress, ("exam-1",), {"user_id": USER}),
-    "readiness.collect_week_stats": (readiness_service.collect_week_stats, ("c1", [1]), {}),
+    "readiness.collect_week_stats": (
+        readiness_service.collect_week_stats,
+        ("c1", [1]),
+        {"user_id": USER},
+    ),
     "readiness.compute_readiness_detail": (
         readiness_service.compute_readiness_detail,
         ("exam-1", USER),

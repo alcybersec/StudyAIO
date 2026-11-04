@@ -185,7 +185,12 @@ def seed_weakspots(session: Session, code: str) -> None:
         session.flush()
         for q, ok in zip(questions, outcomes):
             session.add(
-                QuizAttempt(quiz_question_id=q.id, selected_answer="x", is_correct=ok)
+                QuizAttempt(
+                    user_id=owner.id,
+                    quiz_question_id=q.id,
+                    selected_answer="x",
+                    is_correct=ok,
+                )
             )
     for i in range(3):
         card = Flashcard(

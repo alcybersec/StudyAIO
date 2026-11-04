@@ -147,8 +147,6 @@ class TestPredicates:
             "concept_relations",
             "assessments",
             "deadlines",
-            "quiz_attempts",
-            "review_items",
         ],
     )
     def test_child_table_has_a_predicate(self, tables, table_name):
@@ -162,6 +160,18 @@ class TestPredicates:
     def test_user_id_tables_use_the_direct_predicate(self, tables):
         clause = account_service._build_predicates(tables["courses"], "u1", _probe_ids())
         assert "user_id" in str(clause)
+
+    @pytest.mark.parametrize("table_name", ["quiz_attempts", "review_items"])
+    def test_r010_tables_use_the_direct_user_id_predicate(self, tables, table_name):
+        """R-010: both gained a user_id column, so no parent-derived special case remains."""
+        table = tables[table_name]
+        assert "user_id" in table.c
+        clause = str(
+            account_service._build_predicates(table, "u1", _probe_ids()).compile(
+                compile_kwargs={"literal_binds": True}
+            )
+        )
+        assert clause == f"{table_name}.user_id = 'u1'"
 
     def test_unknown_table_returns_none(self):
         from sqlalchemy import Column, MetaData, String, Table
@@ -198,8 +208,6 @@ class TestPredicatesUseSnapshottedIds:
             "concept_relations",
             "assessments",
             "deadlines",
-            "quiz_attempts",
-            "review_items",
         ],
     )
     def test_no_predicate_issues_a_subquery(self, tables, table_name):
@@ -214,16 +222,16 @@ class TestPredicatesUseSnapshottedIds:
             "OwnedIds instead."
         )
 
-    def test_review_items_is_scoped_by_artifact_and_course(self):
-        """The table that actually regressed."""
+    def test_review_items_is_scoped_by_its_own_user_id(self):
+        """The table that regressed is now scoped by its own column (R-010)."""
         table = {t.name: t for t in Base.metadata.sorted_tables}["review_items"]
         clause = str(
             account_service._build_predicates(table, "u1", _probe_ids()).compile(
                 compile_kwargs={"literal_binds": True}
             )
         )
-        assert "ART-1" in clause
-        assert "COURSE-1" in clause
+        assert clause == "review_items.user_id = 'u1'"
+        assert "ART-1" not in clause and "COURSE-1" not in clause
 
     @pytest.mark.asyncio
     async def test_collect_owned_ids_runs_before_any_delete(self):

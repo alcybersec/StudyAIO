@@ -50,6 +50,7 @@ class TestReviewItemsEndpoints:
 
         item = ReviewItem(
             id=generate_id(),
+            user_id=test_user_id,
             review_type="classification_course",
             entity_type="lecture_artifact",
             entity_id=artifact.id,
@@ -72,6 +73,7 @@ class TestReviewItemsEndpoints:
         artifact = await _owned_artifact(db_session, test_user_id, "dismiss_test.pdf")
         item = ReviewItem(
             id=generate_id(),
+            user_id=test_user_id,
             review_type="classification_course",
             entity_type="lecture_artifact",
             entity_id=artifact.id,
@@ -99,6 +101,7 @@ class TestReviewItemsEndpoints:
         artifact = await _owned_artifact(db_session, test_user_id, "resolved_test.pdf")
         item = ReviewItem(
             id=generate_id(),
+            user_id=test_user_id,
             review_type="classification_course",
             entity_type="lecture_artifact",
             entity_id=artifact.id,
@@ -142,6 +145,7 @@ async def _owned_summary_review_item(db_session, user_id):
 
     item = ReviewItem(
         id=generate_id(),
+        user_id=user_id,
         review_type="merge_week_conflict",
         entity_type="summary",
         entity_id=summary.id,

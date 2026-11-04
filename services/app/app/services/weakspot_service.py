@@ -483,7 +483,12 @@ async def _load_inputs(
             )
             .join(QuizQuestion, QuizQuestion.id == QuizAttempt.quiz_question_id)
             .join(Course, Course.id == QuizQuestion.course_id)
-            .where(owned, Course.id.in_(ids), QuizAttempt.created_at >= cutoff)
+            .where(
+                owned,
+                Course.id.in_(ids),
+                QuizAttempt.user_id == user_id,
+                QuizAttempt.created_at >= cutoff,
+            )
         )
     ).all()
     for cid, week, correct, created_at in attempt_rows:
@@ -663,7 +668,13 @@ async def get_diagnostic_questions(
     result = await session.execute(
         select(QuizQuestion)
         .join(Course, Course.id == QuizQuestion.course_id)
-        .outerjoin(QuizAttempt, QuizAttempt.quiz_question_id == QuizQuestion.id)
+        .outerjoin(
+            QuizAttempt,
+            and_(
+                QuizAttempt.quiz_question_id == QuizQuestion.id,
+                QuizAttempt.user_id == user_id,
+            ),
+        )
         .where(
             Course.user_id == user_id,
             QuizQuestion.course_id == course_id,
@@ -754,7 +765,13 @@ async def _practice_candidates(
                 QuizAttempt.created_at,
             )
             .join(Course, Course.id == QuizQuestion.course_id)
-            .outerjoin(QuizAttempt, QuizAttempt.quiz_question_id == QuizQuestion.id)
+            .outerjoin(
+                QuizAttempt,
+                and_(
+                    QuizAttempt.quiz_question_id == QuizQuestion.id,
+                    QuizAttempt.user_id == user_id,
+                ),
+            )
             .where(
                 Course.user_id == user_id,
                 QuizQuestion.archived_at.is_(None),
@@ -999,10 +1016,8 @@ async def resolve_plan_items(session: AsyncSession, plan: StudyPlan, *, user_id:
         alive |= {("quiz", qid): code for qid, code in rows.all()}
         attempted = await session.execute(
             select(QuizAttempt.quiz_question_id)
-            .join(QuizQuestion, QuizQuestion.id == QuizAttempt.quiz_question_id)
-            .join(Course, Course.id == QuizQuestion.course_id)
             .where(
-                Course.user_id == user_id,
+                QuizAttempt.user_id == user_id,
                 QuizAttempt.quiz_question_id.in_(quiz_ids),
                 QuizAttempt.created_at >= plan.built_at,
             )

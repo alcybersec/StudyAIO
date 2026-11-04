@@ -12,8 +12,10 @@ Server-side first-run status. Pins:
    ``'auto'``.
 5. Floor 1 (safety review, ``docs/gates/M34/contracts-safety.md``): every
    statement ``get_status`` issues carries the caller's id; the
-   ``quiz_attempts`` branch (that table has no ``user_id``) filters on
-   ``courses.user_id``; ``set_checklist`` is one ``UPDATE users`` keyed on
+   ``quiz_attempts`` branch has a top-level ``quiz_attempts.user_id = <caller>``
+   conjunct in its WHERE (the column exists since M35-R010; a ``user_id``
+   elsewhere in the query does not count); ``set_checklist`` is one
+   ``UPDATE users`` keyed on
    ``users.id == caller``; both routes hand the service the caller's id. The
    route tests patch ``app.services.onboarding_service.<fn>``, so the router
    imports the module (``from app.services import onboarding_service``), as
@@ -31,8 +33,11 @@ import pytest
 from fastapi.routing import APIRoute
 from sqlalchemy import String
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.sql import operators
+from sqlalchemy.sql import operators, visitors
 from sqlalchemy.sql.dml import Update
+from sqlalchemy.sql.elements import BinaryExpression, BindParameter, BooleanClauseList
+from sqlalchemy.sql.schema import Column
+from sqlalchemy.sql.selectable import Select
 
 from tests._routes import api_routes
 from tests.contracts._weakspot_docs import (
@@ -307,16 +312,52 @@ async def test_get_status_scopes_every_statement_to_the_caller(service):
     assert all(ident == CALLER for _entity, ident in gets), gets
 
 
-async def test_quiz_attempts_branch_is_scoped_through_courses(service):
+def _conjuncts(clause) -> list[object]:
+    """The top-level AND terms of a WHERE clause; an OR is one opaque term."""
+    if clause is None:
+        return []
+    if isinstance(clause, BooleanClauseList) and clause.operator is operators.and_:
+        return [term for sub in clause.clauses for term in _conjuncts(sub)]
+    return [clause]
+
+
+def _is_caller_eq(term, table: str, column: str) -> bool:
+    """``<table>.<column> = :param`` with the param bound to the caller, either side."""
+    if not isinstance(term, BinaryExpression) or term.operator is not operators.eq:
+        return False
+    for col, val in ((term.left, term.right), (term.right, term.left)):
+        if (
+            isinstance(col, Column)
+            and col.table is not None
+            and col.table.name == table
+            and col.key == column
+            and isinstance(val, BindParameter)
+            and val.value == CALLER
+        ):
+            return True
+    return False
+
+
+def _selects_reading(stmt, table: str) -> list[Select]:
+    return [
+        node
+        for node in visitors.iterate(stmt)
+        if isinstance(node, Select) and any(getattr(f, "name", None) == table for f in node.froms)
+    ]
+
+
+async def test_quiz_attempts_branch_filters_on_quiz_attempts_user_id(service):
     session, statements, _gets = _recording_session()
     await service.get_status(session, user_id=CALLER)
 
-    quiz = [sql for sql, _p in map(_sql_and_params, statements) if "quiz_attempts" in sql]
-    assert quiz, "no statement reads quiz_attempts: the check-in branch is missing"
-    for sql in quiz:
-        assert "courses.user_id" in sql, (
-            "quiz_attempts has no user_id; the branch must join quiz_questions to courses and "
-            f"filter on courses.user_id (floor 1): {sql[:200]}"
+    selects = [sel for stmt in statements for sel in _selects_reading(stmt, "quiz_attempts")]
+    assert selects, "no statement reads quiz_attempts: the check-in branch is missing"
+    for sel in selects:
+        assert any(
+            _is_caller_eq(term, "quiz_attempts", "user_id") for term in _conjuncts(sel.whereclause)
+        ), (
+            "the quiz_attempts branch must AND `quiz_attempts.user_id = <caller>` into its WHERE "
+            f"(floor 1): {_sql_and_params(sel)[0][:200]}"
         )
 
 

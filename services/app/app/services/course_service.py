@@ -452,7 +452,9 @@ async def delete_course(
 
     # Grandchildren first (FK order)
     await session.execute(
-        delete(QuizAttempt).where(QuizAttempt.quiz_question_id.in_(quiz_ids_subq))
+        delete(QuizAttempt).where(
+            QuizAttempt.user_id == user_id, QuizAttempt.quiz_question_id.in_(quiz_ids_subq)
+        )
     )
     await session.execute(
         delete(FlashcardReview).where(FlashcardReview.flashcard_id.in_(flashcard_ids_subq))
@@ -488,7 +490,11 @@ async def delete_course(
         await session.execute(delete(Chunk).where(Chunk.artifact_id.in_(artifact_ids)))
         await session.execute(delete(Extraction).where(Extraction.artifact_id.in_(artifact_ids)))
         await session.execute(delete(PipelineRun).where(PipelineRun.artifact_id.in_(artifact_ids)))
-        await session.execute(delete(ReviewItem).where(ReviewItem.entity_id.in_(artifact_ids)))
+        await session.execute(
+            delete(ReviewItem).where(
+                ReviewItem.user_id == user_id, ReviewItem.entity_id.in_(artifact_ids)
+            )
+        )
 
     await session.execute(delete(LectureArtifact).where(LectureArtifact.course_id == course.id))
     await session.execute(delete(Course).where(Course.id == course.id))
