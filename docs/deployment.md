@@ -8,8 +8,8 @@ The fastest path to a production deployment on your own server.
 
 - Linux server (Ubuntu 22.04+ recommended)
 - Docker Engine 24+ and Docker Compose v2
-- Domain name pointed to your server
-- Ports 80 and 443 open
+- For multi-user access: a domain and your own TLS reverse proxy in front of
+  `127.0.0.1:3001` (the stack does not terminate TLS itself)
 
 ### One-Command Setup
 
@@ -27,7 +27,24 @@ The interactive script will:
 5. Run database migrations
 6. Optionally seed data
 
-Your instance will be available at `https://your-domain.com`.
+Your instance will be available at `http://127.0.0.1:3001` on the server.
+
+### Network exposure (M35-W1-03)
+
+`docker-compose.selfhosted.yml` publishes **only the UI**, and only on
+`${BIND_HOST:-127.0.0.1}:${UI_PORT:-3001}`. The API publishes no host port; the
+UI proxies `/api` to it over the compose network. Single-user mode has no login,
+so every caller is the admin; before this change the stack published the UI and
+API on every interface, so anyone on the network had admin access (RL-01).
+
+**Upgrading:** after `up -d`, `http://<host>:3001` from another machine and
+direct `http://<host>:8000` (including `/health` and `/metrics`) stop answering.
+Check health with `docker compose ... ps` instead.
+
+**LAN access, on purpose:** set `BIND_HOST=0.0.0.0` (or one LAN IP) in `.env`
+and run `up -d` again, behind your own firewall. With `SINGLE_USER_MODE=true` a
+non-loopback `BIND_HOST` also needs `I_UNDERSTAND_NO_AUTH=true`, or the API
+refuses to start. `UI_PORT` changes the port.
 
 ### Manual Setup
 
@@ -48,8 +65,8 @@ docker compose -f docker-compose.yml -f docker-compose.selfhosted.yml up -d
 # 4. Run migrations
 docker compose exec api alembic upgrade head
 
-# 5. Verify
-curl https://your-domain.com/health
+# 5. Verify: api and ui report "healthy" (the api has no host port here)
+docker compose -f docker-compose.yml -f docker-compose.selfhosted.yml ps
 ```
 
 ---
@@ -480,14 +497,15 @@ Metric names carry the `studyaio_` prefix. Two endpoints, neither public:
 
 | Target | Endpoint | Notes |
 |---|---|---|
-| api | `http://127.0.0.1:8000/metrics` | `PROMETHEUS_ENABLED=true` |
+| api | `http://127.0.0.1:8000/metrics` | `PROMETHEUS_ENABLED=true`. Prod overlay only: the self-host overlay publishes no api port, so scrape it over the compose network |
 | worker (pipeline) | `http://127.0.0.1:9101/metrics` | `WORKER_METRICS_PORT=9101` inside each container; published on the host loopback only; multiprocess aggregation via the `/tmp/prometheus` tmpfs |
 | worker-ondemand | `http://127.0.0.1:9102/metrics` | same, host port 9102 |
 | worker-maintenance | `http://127.0.0.1:9103/metrics` | same, host port 9103 |
 
 Configure your reverse proxy to forward only `/api/*` and `/health/*` (the UI's nginx already
-answers `/metrics` with 404), so neither endpoint is reachable from the internet. The api port is still published on the host
-(`8000:8000`, needed for `/health/*`), so keep it off untrusted networks. Beat serves no metrics.
+answers `/metrics` with 404), so neither endpoint is reachable from the internet. On the prod overlay the api port is still published on the host
+(`8000:8000`, needed for `/health/*`), so keep it off untrusted networks; the
+self-host overlay does not publish it. Beat serves no metrics.
 `docker-compose.prod.yml` turns this on; `docker-compose.selfhosted.yml` leaves it off unless
 `PROMETHEUS_ENABLED=true` is set in `.env`.
 
