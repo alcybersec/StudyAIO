@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # StudyAIO — Self-Hosted Setup Script
-# Interactive setup for deploying StudyAIO with Docker Compose + Traefik TLS.
+# Interactive setup for deploying StudyAIO with Docker Compose (ui published on loopback by default).
 #
 # Usage: bash scripts/setup-selfhosted.sh
 
@@ -93,7 +93,7 @@ prompt_config() {
     SINGLE_USER="false"
     echo ""
     warn "Single-user mode removes login: EVERY caller becomes the admin."
-    warn "Use it only on a machine nobody else can reach. NEVER with a public domain/Traefik."
+    warn "Use it only on a machine nobody else can reach. NEVER behind a public domain or reverse proxy."
     read -rp "Enable single-user (no login) mode, bound to 127.0.0.1? (y/N): " SU
     if [[ "$SU" =~ ^[Yy] ]]; then
         SINGLE_USER="true"
@@ -157,7 +157,10 @@ JWT_ALGORITHM=HS256
 SETTINGS_ENCRYPTION_KEY=${SETTINGS_KEY}
 REGISTRATION_MODE=${REG_MODE}
 SINGLE_USER_MODE=${SINGLE_USER}
-BIND_HOST=$([[ "$SINGLE_USER" == "true" ]] && echo 127.0.0.1 || echo 0.0.0.0)
+# The ui is published on this address only (docker-compose.selfhosted.yml).
+# Loopback in both modes; to expose it on the LAN on purpose, edit this to
+# 0.0.0.0 or a LAN IP and keep it behind your own firewall.
+BIND_HOST=127.0.0.1
 
 # === Observability ===
 PROMETHEUS_ENABLED=${PROM_ENABLED}
@@ -184,7 +187,7 @@ start_stack() {
     docker compose -f docker-compose.yml -f docker-compose.selfhosted.yml up -d
 
     info "Waiting for database to be ready..."
-    for i in $(seq 1 30); do
+    for _ in $(seq 1 30); do
         if docker compose exec -T db pg_isready -U studyaio &>/dev/null; then
             ok "Database is ready"
             break
@@ -217,17 +220,20 @@ show_status() {
     echo -e "${GREEN}  StudyAIO is running!${NC}"
     echo -e "${GREEN}══════════════════════════════════════════${NC}"
     echo ""
-    echo "  URL:          https://${DOMAIN}"
-    echo "  API Docs:     https://${DOMAIN}/docs"
-    echo "  Health Check: https://${DOMAIN}/health"
+    echo "  Local URL:    http://127.0.0.1:3001 (published on 127.0.0.1 only)"
+    echo ""
+    if [[ "$SINGLE_USER" != "true" ]]; then
+        warn "This stack does NOT terminate TLS and listens on 127.0.0.1 only."
+        warn "Put a reverse proxy with TLS in front of 127.0.0.1:3001 for https://${DOMAIN}."
+        echo ""
+    fi
+    echo "  To reach it from your LAN on purpose, set BIND_HOST=0.0.0.0 (or a LAN IP)"
+    echo "  in .env and re-run 'up -d'. Keep it behind your own firewall."
     echo ""
     echo "  Useful commands:"
     echo "    docker compose -f docker-compose.yml -f docker-compose.selfhosted.yml logs -f"
     echo "    docker compose -f docker-compose.yml -f docker-compose.selfhosted.yml down"
     echo "    make backup"
-    echo ""
-    echo "  TLS certificate will be provisioned automatically by Let's Encrypt."
-    echo "  Make sure ports 80 and 443 are open and DNS points to this server."
     echo ""
 }
 

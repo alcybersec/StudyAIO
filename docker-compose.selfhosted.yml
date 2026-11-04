@@ -4,6 +4,17 @@
 # Uses pre-built GHCR images, removes dev bind mounts, adds restart policies.
 # Set GHCR_OWNER (default: alcybersec) and IMAGE_TAG (default: latest) to
 # control which images are used.
+#
+# Network exposure (RL-01):
+#   - The api is NEVER published on the host. The ui's nginx proxies /api to it
+#     over the compose network.
+#   - The ui is published ONLY on BIND_HOST (default 127.0.0.1). This is the same
+#     BIND_HOST the api's SINGLE_USER_MODE startup guard checks, so the guard
+#     tests the address that is really published. To reach the ui from the LAN
+#     on purpose, set BIND_HOST=0.0.0.0 (or a specific LAN IP) in .env, behind
+#     your own firewall; a non-loopback value with SINGLE_USER_MODE=true also
+#     needs I_UNDERSTAND_NO_AUTH=true. Multi-user installs should front
+#     127.0.0.1:${UI_PORT:-3001} with a TLS reverse proxy.
 
 x-worker-deploy: &worker-deploy
   image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
@@ -39,6 +50,10 @@ services:
   ui:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-ui:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # Replaces the base "${UI_PORT:-3001}:3000", which published on every
+    # interface regardless of BIND_HOST.
+    ports: !override
+      - "${BIND_HOST:-127.0.0.1}:${UI_PORT:-3001}:3000"
 
   api:
     image: ghcr.io/${GHCR_OWNER:-alcybersec}/studyaio-api:${IMAGE_TAG:-latest}
@@ -51,6 +66,9 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
     volumes: !override
       - ./data:/app/data
+    # Replaces the base "8000:8000". Container-internal 0.0.0.0 above is fine:
+    # only the compose network can reach it.
+    ports: !override []
 
   worker:
     # Pipeline pool (upload chain). Concurrency unchanged from the single worker.
