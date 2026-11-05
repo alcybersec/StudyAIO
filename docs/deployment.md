@@ -370,6 +370,11 @@ Creates `backups/studyaio_YYYYMMDD_HHMMSS_db.sql.gz` and `..._data.tar.gz`.
 S3_BACKUP_BUCKET=my-backup-bucket bash scripts/backup.sh
 ```
 
+A configured `S3_BACKUP_BUCKET` with no `aws` CLI fails the run (exit 1) instead
+of skipping the upload. Dumps are written owner-only (`umask 077`); give the
+deploy user read access with a default ACL on `backups/`
+(`setfacl -d -m u:<deploy-user>:rX backups`).
+
 ### Automated Daily Backups
 
 Enable automated backups via Celery beat by setting these environment variables:
@@ -381,6 +386,39 @@ BACKUP_RETENTION=7       # Number of backups to keep
 ```
 
 The backup task runs daily and includes dump integrity verification.
+`scripts/preflight-check.sh` fails a production deployment (`SELF_HOSTED=false`)
+when `BACKUP_ENABLED` is not `true`.
+
+### Off-host backup (M35-W1-07)
+
+The nightly dump and `data/` live on the deploy host's own disk, so losing that
+disk loses the backups too. A daily systemd timer, `studyaio-offsite-backup`
+(`infra/host/`), runs `scripts/offsite-backup.sh` on the deploy host and copies
+`backups/` and `data/` with restic to a repository on **another machine**. Data
+is encrypted client-side and deduplicated, so `data/` goes up incrementally.
+
+- **Append-only repository (required).** Run the repository server append-only,
+  e.g. restic's rest-server with `--append-only --private-repos` behind TLS and
+  htpasswd. A compromised deploy host can add snapshots but cannot delete or
+  rewrite old ones. The deploy host never runs `forget` or `prune`; retention
+  runs on the repository host only, against its local data directory:
+  `restic -r <repo> forget --keep-daily 14 --keep-weekly 8 --keep-monthly 6 --prune`.
+- **Configuration** lives in `/etc/studyaio/offsite.conf` (root-owned, group
+  `studyaio-backup`, mode 0640), never in the repo. It sets `RESTIC_REPOSITORY`
+  and `RESTIC_PASSWORD_FILE` (optionally `RESTIC_CACERT`).
+  `STUDYAIO_OFFSITE_CONF` overrides the path for tests.
+- **Freshness.** The script exits 2 and uploads nothing when no
+  `studyaio_*_db.sql.gz` is newer than 26 hours, so a stale source never makes
+  the off-site copy look fresh. Every run ends with `restic check`; on success
+  it writes `studyaio_offsite_backup_last_success_timestamp_seconds` to the
+  node_exporter textfile directory. A failed run leaves the unit `failed`.
+- **Unit.** Runs as the dedicated user `studyaio-backup` with only
+  `CAP_DAC_READ_SEARCH` and a strict sandbox. The timer fires daily at 03:30
+  UTC with a randomized delay and `Persistent=true`.
+- **Escrow.** The restic password (`/etc/studyaio/restic.pass`) is the only key
+  to the off-site copy. Keep it in the secret manager plus one offline copy on
+  neither the deploy host nor the repository host. Lose it and every snapshot is
+  unreadable.
 
 ### Retention Policy
 
