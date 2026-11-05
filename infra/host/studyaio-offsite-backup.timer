@@ -1,0 +1,11 @@
+# Daily, after the in-container nightly dump (beat run_backup, 02:00 UTC by default).
+[Unit]
+Description=Daily StudyAIO off-host backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

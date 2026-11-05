@@ -1,0 +1,51 @@
+# Off-host restic copy of StudyAIO backups and data/.  [W1-07]
+# Install: see docs/deployment.md, "Backups" (copy to /etc/systemd/system/).
+# Configuration is read from /etc/studyaio/offsite.conf (never in the repo).
+#
+# TODO pin (operator): the restic version installed on this host. Record the
+# version in use here once chosen; do not float on whatever the distro ships.
+[Unit]
+Description=StudyAIO off-host encrypted backup (restic)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Dedicated user; reads data/ and backups/ through CAP_DAC_READ_SEARCH only
+# (read anything, write nothing), as restic's own docs recommend.
+User=studyaio-backup
+AmbientCapabilities=CAP_DAC_READ_SEARCH
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+NoNewPrivileges=yes
+ExecStart=/opt/studyaio/scripts/offsite-backup.sh
+Environment=RESTIC_CACHE_DIR=/var/cache/studyaio-backup
+CacheDirectory=studyaio-backup
+UMask=0077
+
+# Sandbox: read-only view of the host, no home, no devices, no kernel knobs,
+# network limited to the repository connection.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+# The "-" prefix keeps the unit startable on a host without node_exporter.
+ReadWritePaths=-/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/opt/studyaio /etc/studyaio
+Nice=10
+IOSchedulingClass=idle
