@@ -84,7 +84,7 @@ variables:
 
 python-lint:
   stage: lint
-  image: python:3.12-slim
+  image: python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
   script:
     # The lock is the single source for the ruff version (R-053): a floating
     # install lets a formatter release fail a tree that is clean locally.
@@ -99,7 +99,7 @@ python-lint:
 # only set/unset per name, never a value, and always exits 0.
 credential-scope-probe:
   stage: lint
-  image: alpine:3.24
+  image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
@@ -115,7 +115,7 @@ credential-scope-probe:
 
 backend-tests:
   stage: test
-  image: python:3.12-slim
+  image: python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
   needs: [python-lint]
   cache: *pip-cache
   before_script:
@@ -146,7 +146,7 @@ backend-tests:
 # harness imports app.agents.base and app.config.
 summary-eval:
   stage: test
-  image: python:3.12-slim
+  image: python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
   needs: [python-lint]
   cache: *pip-cache
   before_script:
@@ -170,7 +170,7 @@ summary-eval:
 # secret-shaped sentinel in docs/ for exactly this reason.
 test-floor:
   stage: test
-  image: python:3.12-slim
+  image: python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
   needs: [python-lint]
   cache: *pip-cache
   before_script:
@@ -185,13 +185,13 @@ test-floor:
 
 integration-tests:
   stage: test
-  image: python:3.12-slim
+  image: python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
   needs: [python-lint]
   services:
     # Explicit alias REQUIRED: the derived alias would be `pgvector`.
-    - name: pgvector/pgvector:pg16
+    - name: pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f
       alias: postgres
-    - redis:7-alpine
+    - redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
   cache: *pip-cache
   variables:
     POSTGRES_USER: testuser
@@ -223,7 +223,7 @@ integration-tests:
 # finding, not flakiness.
 dependency-audit:
   stage: test
-  image: node:20-slim
+  image: node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
   needs: []
   before_script:
     - apt-get update
@@ -238,7 +238,7 @@ dependency-audit:
 
 frontend-checks:
   stage: test
-  image: node:20-slim
+  image: node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
   cache:
     key:
       files: [services/ui/package-lock.json]
@@ -276,13 +276,13 @@ e2e-tests:
   # noble (24.04) ships 3.12. jammy also ships pip 22.x, which predates
   # --break-system-packages and fails with `no such option` (seen in pipeline
   # 293); noble enforces PEP 668, so that flag is required there.
-  image: mcr.microsoft.com/playwright:v1.58.2-noble
+  image: mcr.microsoft.com/playwright:v1.58.2-noble@sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d
   needs: [frontend-checks]
   cache: *pip-cache
   services:
-    - name: pgvector/pgvector:pg16
+    - name: pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f
       alias: postgres
-    - redis:7-alpine
+    - redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
   variables:
     POSTGRES_USER: studyaio
     POSTGRES_PASSWORD: studyaio
@@ -349,7 +349,12 @@ e2e-tests:
       - ui.log
 
 # ---------------------------------------------------------------------------
-# Image build + deploy. Ported from .github/workflows/deploy.yml (2026-09-27).
+# Image build + deploy. build-api, build-ui and deploy-selfhosted all list
+# dependency-audit and summary-eval in `needs:`, so a red audit or eval stops
+# publish and deploy, not just the MR (M35-W1-06). Every `image:` is pinned by
+# digest; bump tag and digest together (re-resolve with
+# `docker buildx imagetools inspect <image:tag>`).
+# Ported from .github/workflows/deploy.yml (2026-09-27).
 #
 # Both build jobs need real host Docker, so they are the only ones on the shell
 # runner -- the docker runner is privileged:false with no socket.
@@ -412,14 +417,14 @@ e2e-tests:
 
 build-api:
   extends: .ghcr-build
-  needs: [backend-tests, test-floor, integration-tests]
+  needs: [backend-tests, test-floor, integration-tests, dependency-audit, summary-eval]
   variables:
     IMAGE_NAME: studyaio-api
     BUILD_CONTEXT: services/app
 
 build-ui:
   extends: .ghcr-build
-  needs: [frontend-checks]
+  needs: [frontend-checks, e2e-tests, dependency-audit, summary-eval]
   variables:
     IMAGE_NAME: studyaio-ui
     BUILD_CONTEXT: services/ui
@@ -436,7 +441,7 @@ deploy-selfhosted:
   # must not move under it. Bump tag and digest together.
   image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   interruptible: false          # never cancel a deploy midway
-  needs: [build-api, build-ui, e2e-tests]
+  needs: [build-api, build-ui, e2e-tests, dependency-audit, summary-eval]
   # Auto-deploys on main, matching the previous GitHub behaviour. The first run
   # was gated manual while deploy.sh was unproven; it succeeded on
   # 2026-09-27 (verified on the prod host: .env pinned to the tested tag, all four app

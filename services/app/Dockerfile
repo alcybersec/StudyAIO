@@ -1,5 +1,5 @@
 # === Stage 1: Builder — install Python dependencies ===
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30 AS builder
 
 WORKDIR /build
 
@@ -31,7 +31,7 @@ RUN pip install --no-cache-dir --prefix=/install \
     -r requirements.txt
 
 # === Stage 2: Runtime — lean image, no build tools ===
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30 AS runtime
 
 WORKDIR /app
 

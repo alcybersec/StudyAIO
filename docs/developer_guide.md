@@ -393,7 +393,9 @@ Three thresholds, defined once in `services/app/pyproject.toml` under
 the adapter, user data never lost) as its own pytest process. The floor tier
 measures the guard code, not `app`, because the checks are mostly static AST
 walks. `build-api` needs `backend-tests`, `test-floor` and `integration-tests`,
-so a red floor blocks the image build. `tests/contracts` also runs in
+so a red floor blocks the image build. `build-api`, `build-ui` and
+`deploy-selfhosted` also need `dependency-audit` and `summary-eval`, and `build-ui`
+needs `e2e-tests`, so none of them publishes or deploys past a red gate. `tests/contracts` also runs in
 `backend-tests`. Change a threshold only in `pyproject.toml`; the Makefile and
 CI both read it from there.
 

@@ -153,7 +153,7 @@ GitLab CI (`.gitlab-ci.yml`) runs five stages — `lint`, `test`, `e2e`, `build`
      not move the registry.
    - Tags: the 7-character commit SHA and `latest`
 
-2. **Deploy** (`deploy-selfhosted`) — after build and E2E both pass:
+2. **Deploy** (`deploy-selfhosted`) — after build, E2E, `dependency-audit` and `summary-eval` all pass:
    - Sends **only the commit SHA** over SSH. The deploy key on the server is
      command-restricted to `/opt/studyaio/deploy.sh`, which reads it from
      `SSH_ORIGINAL_COMMAND` — CI cannot run an arbitrary command on the host.
