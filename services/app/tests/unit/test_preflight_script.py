@@ -55,6 +55,7 @@ BASE_ENV = {
     "COOKIE_SECURE": "true",
     "OPENAPI_ENABLED": "false",
     "GLOBAL_MAX_AI_CALLS_PER_DAY": "300",
+    "BACKUP_ENABLED": "true",
 }
 
 
@@ -91,6 +92,7 @@ QUOTED_BASE_ENV = {
     "COOKIE_SECURE": "true",
     "OPENAPI_ENABLED": "false",
     "GLOBAL_MAX_AI_CALLS_PER_DAY": "300",
+    "BACKUP_ENABLED": "true",
     "AGENT_BACKEND": "claude_code",
 }
 
@@ -721,3 +723,31 @@ class TestMultiLineValues:
         text += "JWT_SECRET_KEY='<test-placeholder-unterminated\n"
         result = _run(_write_raw_env(tmp_path, text))
         assert "JWT_SECRET_KEY is not set" not in result.stdout, result.stdout
+
+
+class TestBackupEnabledGate:
+    """W1-07: a production deployment with the nightly backup off is an error."""
+
+    @staticmethod
+    def _lines(result, tag):
+        return [ln for ln in result.stdout.splitlines() if tag in ln and "BACKUP_ENABLED" in ln]
+
+    def test_production_without_backup_enabled_is_an_error(self, tmp_path):
+        result = _run(_write_env(tmp_path, BACKUP_ENABLED=None))
+        assert result.returncode == 1
+        assert self._lines(result, "[FAIL]")
+
+    def test_production_with_backup_enabled_false_is_an_error(self, tmp_path):
+        result = _run(_write_env(tmp_path, BACKUP_ENABLED="false"))
+        assert result.returncode == 1
+        assert self._lines(result, "[FAIL]")
+
+    def test_production_with_backup_enabled_true_passes(self, tmp_path):
+        result = _run(_write_env(tmp_path))
+        assert result.returncode == 0, result.stdout
+        assert "BACKUP_ENABLED=true" in result.stdout
+
+    def test_self_hosted_without_backup_enabled_only_warns(self, tmp_path):
+        result = _run(_write_env(tmp_path, SELF_HOSTED="true", BACKUP_ENABLED=None))
+        assert not self._lines(result, "[FAIL]")
+        assert self._lines(result, "[WARN]")

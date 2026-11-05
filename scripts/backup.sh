@@ -8,6 +8,8 @@
 # Keeps the last N backups (default: 7).
 
 set -euo pipefail
+# Dumps hold the whole database: never group/world readable.
+umask 077
 
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
 RETENTION="${BACKUP_RETENTION:-7}"
@@ -110,7 +112,13 @@ if [[ -n "${S3_BACKUP_BUCKET:-}" ]]; then
         [[ -f "$DATA_TAR" ]] && aws s3 cp "$DATA_TAR" "s3://${S3_BACKUP_BUCKET}/backups/" --quiet
         ok "S3 upload complete"
     else
-        err "aws CLI not found — S3 upload skipped"
+        # A configured off-site copy that cannot run is a FAILED backup, not a
+        # skipped one: exit non-zero so run_backup records outcome=failure. The
+        # supported off-host path is the host-side restic timer
+        # (scripts/offsite-backup.sh); this branch is for operators who install
+        # the aws CLI themselves.
+        err "S3_BACKUP_BUCKET is set but the aws CLI is not installed -- off-site upload FAILED"
+        exit 1
     fi
 fi
 

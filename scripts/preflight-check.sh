@@ -416,6 +416,20 @@ else
     fi
 fi
 
+# ── Backups ───────────────────────────────────────────────────────
+
+# SELF_HOSTED=false is this script's "production" gate (see the SMTP and spend
+# checks). A production deployment with the nightly dump off has no backup at
+# all, and the off-host copy (scripts/offsite-backup.sh) refuses a stale source.
+BACKUP_ENABLED_VAL=$(get_val "BACKUP_ENABLED" | tr '[:upper:]' '[:lower:]')
+if [[ "$BACKUP_ENABLED_VAL" == "true" ]]; then
+    ok "BACKUP_ENABLED=true"
+elif [[ "$SELF_HOSTED" == "false" ]]; then
+    error "BACKUP_ENABLED is not 'true' on a production deployment (SELF_HOSTED=false) -- no nightly dump is taken, so there is nothing to copy off-host. Set BACKUP_ENABLED=true."
+else
+    warn "BACKUP_ENABLED is not 'true' -- the in-app nightly backup is off."
+fi
+
 # ── Cookie Secure ─────────────────────────────────────────────────
 
 COOKIE_SECURE=$(get_val "COOKIE_SECURE")
