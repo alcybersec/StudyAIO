@@ -177,6 +177,9 @@ if argv[0] == "compose":
     elif "pg_dump" in joined:
         if fail == "dump_empty":
             sys.exit(0)
+        if fail == "dump_race":  # another run's dump lands while this one dumps
+            with open(os.environ["STUB_RACE"], "wb") as racer:
+                racer.write(b"RACER")
         sys.stdout.write("-- PostgreSQL database dump\n-- " + os.urandom(512).hex() + "\n")
         sys.stdout.flush()
         sys.exit(2 if fail == "dump_exit" else 0)
@@ -281,7 +284,8 @@ def _snapshot(root: Path) -> dict[str, bytes]:
 
 
 def _calls(root: Path) -> str:
-    return (root.parent / "docker.log").read_text()
+    log = root.parent / "docker.log"  # absent when the run never reached docker
+    return log.read_text() if log.exists() else ""
 
 
 def test_floor4_restore_keeps_every_live_file_and_swaps_in_the_backup(project):
@@ -327,35 +331,47 @@ def test_floor4_restore_with_an_existing_prerestore_tree_loses_neither(project):
     old = project / f"data.prerestore-{NOW}"
     (old / "uploads").mkdir(parents=True)
     (old / "uploads" / "older.pdf").write_text("older-generation-upload")
+    before_tree = _snapshot(project)
     before = _contents(project / "data") | _contents(old)
-    _restore(project)
+    result = _restore(project)
     after = _contents(project)
     lost = [paths for digest, paths in before.items() if digest not in after]
     assert not lost, lost
+    # Since e83851f the run refuses up front: nothing dumped, stopped or loaded.
+    assert result.returncode == 1
+    assert "exists:" in result.stderr
+    assert _snapshot(project) == before_tree
+    assert "psql" not in _calls(project) and " stop " not in _calls(project)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="RED until devops refuses to overwrite an existing prerestore_<now>.sql.gz "
-    '(restore.sh `mv "${PRE}.partial" "$PRE"` clobbers it); SAFETY M35-W1-08 V1',
-)
 def test_floor4_restore_rerun_with_same_timestamp_keeps_first_safety_dump(project):
     """Two runs that compute the same <now> must not overwrite the first safety dump.
 
     The first run's ``prerestore_<now>.sql.gz`` is the only copy of the database as
     it was before any restore. A second run with the same ``<now>`` (clock stepped
-    back by NTP or a VM snapshot revert, or two operators starting together) dumps
-    the already-restored database and renames it over the first.
+    back by NTP or a VM snapshot revert, or two operators starting together) would
+    dump the already-restored database and rename it over the first (V1, fixed in
+    e83851f).
     """
     first = _restore(project)
     assert first.returncode == 0, first.stderr
     pre = project / "backups" / f"prerestore_{NOW}.sql.gz"
     pre.write_bytes(gzip.compress(b"-- PostgreSQL database dump\nORIGINAL STATE\n"))
     original = pre.read_bytes()
-    _restore(project)
-    kept = [
-        p
-        for p in (project / "backups").iterdir()
-        if p.name.startswith("prerestore_") and p.read_bytes() == original
-    ]
-    assert kept, "the first run's safety dump was overwritten"
+    # The operator has already moved the old tree away, so only the dump check stands.
+    (project / f"data.prerestore-{NOW}").rename(project.parent / "verified-old-tree")
+    (project.parent / "load.sql").unlink()
+    second = _restore(project)
+    assert second.returncode == 1
+    assert pre.read_bytes() == original, "the first run's safety dump was overwritten"
+    assert not (project.parent / "load.sql").exists()  # nothing was loaded
+
+
+def test_floor4_restore_safety_dump_landing_mid_run_is_not_overwritten(project):
+    """The up-front check passes, then another run's dump appears before the rename."""
+    pre = project / "backups" / f"prerestore_{NOW}.sql.gz"
+    result = _restore(project, STUB_FAIL="dump_race", STUB_RACE=str(pre))
+    assert result.returncode == 1
+    assert pre.read_bytes() == b"RACER"
+    assert "psql" not in _calls(project) and " stop " not in _calls(project)
+    assert not (project / f"data.restore-{NOW}").exists()
