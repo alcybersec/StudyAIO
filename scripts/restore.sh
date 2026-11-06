@@ -59,6 +59,25 @@ ASSUME_YES="${2:-}"
 DB_DUMP="${BACKUP_DIR}/studyaio_${TIMESTAMP}_db.sql.gz"
 DATA_TAR="${BACKUP_DIR}/studyaio_${TIMESTAMP}_data.tar.gz"
 
+# -- Refuse bad paths and existing targets before anything is touched ---------
+
+[[ -n "$DATA_DIR" ]] || { err "DATA_DIR is empty"; exit 1; }
+NAME="$(basename "$DATA_DIR")"
+case "$NAME" in
+    ""|/|.|..|-*) err "refusing DATA_DIR=${DATA_DIR}: name must be a plain directory name"; exit 1 ;;
+esac
+[[ -d "$DATA_DIR" ]] || { err "DATA_DIR is not a directory: $DATA_DIR"; exit 1; }
+PARENT="$(cd "$(dirname "$DATA_DIR")" && pwd)"
+STAGE="${NAME}.restore-${NOW}"
+# The safety dump always lands in the stack's own backups/ (where backup.sh
+# writes), not in BACKUP_DIR, which may be a temporary fetched copy.
+SAFETY_DIR="${PWD}/backups"
+PRE="${SAFETY_DIR}/prerestore_${NOW}.sql.gz"
+[[ ! -e "$PRE" ]] || { err "exists: $PRE (a restore already ran in this second) -- nothing was changed"; exit 1; }
+[[ ! -e "${PARENT}/${NAME}.prerestore-${NOW}" ]] || {
+    err "exists: ${PARENT}/${NAME}.prerestore-${NOW} -- nothing was changed"; exit 1; }
+[[ ! -e "${PARENT}/${STAGE}" ]] || { err "exists: ${PARENT}/${STAGE} -- nothing was changed"; exit 1; }
+
 # -- Which compose files? The running stack's, never a guess ----------------
 
 compose_files() {
@@ -88,6 +107,9 @@ info "Compose: ${COMPOSE[*]}"
 [[ -f "$DB_DUMP" ]] || { err "Database dump not found: $DB_DUMP"; list_backups; exit 1; }
 info "Database dump: $DB_DUMP ($(du -h "$DB_DUMP" | cut -f1))"
 gunzip -t "$DB_DUMP" || { err "Dump file is corrupted -- aborting"; exit 1; }
+# A pg_dump cut short still gunzips; only the trailer proves it ran to the end.
+zcat "$DB_DUMP" | tail -n 5 | grep -q '^-- PostgreSQL database dump complete' \
+    || { err "Dump has no 'PostgreSQL database dump complete' trailer (truncated?) -- aborting"; exit 1; }
 if [[ -f "$DATA_TAR" ]]; then
     info "Data archive: $DATA_TAR ($(du -h "$DATA_TAR" | cut -f1))"
     tar tzf "$DATA_TAR" >/dev/null || { err "Data archive is corrupted -- aborting"; exit 1; }
@@ -106,9 +128,8 @@ fi
 
 # -- Safety dump of what is there now -----------------------------------------
 
-PRE="${BACKUP_DIR}/prerestore_${NOW}.sql.gz"
 info "Taking a safety dump of the current database: $PRE"
-mkdir -p "$BACKUP_DIR"
+mkdir -p "$SAFETY_DIR"
 "${COMPOSE[@]}" up -d --no-build --wait db
 # shellcheck disable=SC2016  # $POSTGRES_* expand inside the db container
 if ! "${COMPOSE[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > "${PRE}.partial" \
@@ -117,14 +138,12 @@ if ! "${COMPOSE[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB
     err "Safety dump failed -- nothing was changed"
     exit 1
 fi
-mv "${PRE}.partial" "$PRE"
+[[ ! -e "$PRE" ]] || { err "exists: $PRE (left ${PRE}.partial in place) -- nothing was changed"; exit 1; }
+mv -n "${PRE}.partial" "$PRE"
 ok "Safety dump written"
 
 # -- Stage the data archive (before the database is touched) ------------------
 
-PARENT="$(cd "$(dirname "$DATA_DIR")" && pwd)"
-NAME="$(basename "$DATA_DIR")"
-STAGE="${NAME}.restore-${NOW}"
 SWAP_DATA=0
 TOOL_IMAGE=""
 if [[ -f "$DATA_TAR" ]]; then
@@ -163,6 +182,7 @@ if [[ "$SWAP_DATA" -eq 1 ]]; then
     docker run --rm -v "${PARENT}:/parent" --entrypoint sh "$TOOL_IMAGE" -c '
         set -e
         cd /parent
+        [ ! -e "$1.prerestore-$3" ] || { echo "exists: $1.prerestore-$3" >&2; exit 1; }
         mv "$1" "$1.prerestore-$3"
         mv "$2/$1" "$1"
         rmdir "$2"' sh "$NAME" "$STAGE" "$NOW"
