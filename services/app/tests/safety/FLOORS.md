@@ -11,7 +11,7 @@ empty. The 2026-10-04 rulings emptied every one of them. The tier holds no `xfai
 the SAFETY-027 veto marker on the JWT default-secret check (floor 2) XPASSed on
 `8356b15` and was removed in SAFETY-028. SAFETY-033 added two **strict** `xfail`s on the
 email-redaction *backstop* (SEC-08), findings F1 and F2; both fixes landed (`06c4fcb`, `344ce7e`) and
-SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free. At M34-S2 SEC-015 added one strict `xfail`, finding F1 (`test_floor2_register_webhook_logs_no_bot_token_at_info`, httpx's INFO request line carries the bot token); `backend` capped the `httpx`/`httpcore` loggers in `configure_logging` and the marker was removed. The follow-up review added one strict `xfail`, finding F2 (`test_floor2_credential_logging_libraries_capped_at_warning`: at `DEBUG` only, `requests_oauthlib`, `botocore` and `urllib3` log credentials or capability URLs); it was not blocking because none of them logs at the default `INFO`. `backend` added `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` and `urllib3` to the capped set in `configure_logging` and the marker was removed, so the tier is `xfail`-free again.
+SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free. At M34-S2 SEC-015 added one strict `xfail`, finding F1 (`test_floor2_register_webhook_logs_no_bot_token_at_info`, httpx's INFO request line carries the bot token); `backend` capped the `httpx`/`httpcore` loggers in `configure_logging` and the marker was removed. The follow-up review added one strict `xfail`, finding F2 (`test_floor2_credential_logging_libraries_capped_at_warning`: at `DEBUG` only, `requests_oauthlib`, `botocore` and `urllib3` log credentials or capability URLs); it was not blocking because none of them logs at the default `INFO`. `backend` added `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` and `urllib3` to the capped set in `configure_logging` and the marker was removed, so the tier is `xfail`-free again. At M35-W1-08 the restore-script review added one strict `xfail`, finding V1 (`test_floor4_restore_rerun_with_same_timestamp_keeps_first_safety_dump`: a second `restore.sh` run that computes the same `<now>` renames its safety dump over the first); it is **RED until** `devops` makes `restore.sh` refuse to overwrite an existing `prerestore_<now>.sql.gz`.
 
 Run:
 
@@ -662,6 +662,36 @@ BACKEND-019: a snapshot row plus the prior blob under a versioned key, and
 `archived_at` instead of `DELETE`. With that fix, all of them go green. Three
 wrong fixes each stay red: a snapshot pointing at the overwritten key, a merge
 snapshot written after the overwrite, and regeneration that saves nothing.
+
+### Restore script (M35-W1-08, audit OP-02/IN-10; devops `03d94bb`)
+
+`scripts/restore.sh` replaces the live database and `data/` wholesale, so it is pinned
+here. Static pins read the script with comment lines dropped. Behavioural pins run the
+real script against a temp project, with a `docker` stand-in that runs the two
+root-container steps (`tar` extract, `sh -c` swap) on the host with the container
+paths mapped back. They find every original file by content anywhere under the project
+root. `restore-drill.sh` touches no live path and is held by
+`tests/unit/test_backup_scripts.py::TestRestoreDrill`.
+
+| Test | Fails when |
+|---|---|
+| `test_floor4_restore_never_deletes_data.py::test_floor4_restore_has_no_delete_beyond_the_sanctioned_two` | Any line gains `rm`, `rmdir`, `unlink`, `shred`, `truncate`, `find -delete`, `--delete`, `--remove-files`, `--unlink-first`, `--recursive-unlink`, tar `--overwrite`, `docker volume rm`/`prune`, `compose down`, `rsync` or `shutil`, other than `rm -f "${PRE}.partial"` (the half-written safety dump) and `rmdir "$2"` (the emptied staging dir). It also fails if either of those two disappears. |
+| `…::test_floor4_restore_extracts_only_into_staging_and_renames_live_tree_aside` | An archive extract targets anything but `/parent/${STAGE}`, `STAGE` stops being `${NAME}.restore-${NOW}`, or the live tree is no longer renamed to `.prerestore-` before the staged tree takes its place. |
+| `…::test_floor4_restore_safety_dump_precedes_every_change_and_aborts_on_failure` | `set -euo pipefail` goes, the safety dump's guard loses its `if !`, its `-lt 100` size check, its `gzip -t` or its `exit 1`, or it no longer comes before stopping services, `DROP SCHEMA`, the extract, the rename and the migration. |
+| `…::test_floor4_restore_drop_and_load_are_one_transaction` | There is more than one `psql`, `DROP SCHEMA` is not piped (before the dump) into the one `psql -v ON_ERROR_STOP=1 --single-transaction`, or the script gains `set +e`, `set +o pipefail`, `\|\| :`, `ON_ERROR_STOP=0` or a new `\|\| true`. |
+| `…::test_floor4_restore_keeps_every_live_file_and_swaps_in_the_backup` | After a successful run any file of the live `data/` is gone from the project root, `data.prerestore-<now>` does not hold the live tree, `data/` does not hold the archive's, the staging dir is left behind, or the safety dump is missing. |
+| `…::test_floor4_restore_failed_safety_dump_changes_nothing[dump_empty, dump_exit]` | An empty dump, or a `pg_dump` that exits non-zero after writing output (needs `pipefail`), does not exit 1 before any `stop` or `psql`, or leaves any file changed, added or removed under the project. |
+| `…::test_floor4_restore_failed_load_leaves_live_data_in_place` | A failed load renames or changes `data/`, or loses the safety dump. |
+| `…::test_floor4_restore_with_an_existing_prerestore_tree_loses_neither` | `data.prerestore-<now>` already exists and a run loses a file from it or from `data/`. Today coreutils `mv` nests the live tree inside it (`data.prerestore-<now>/data`): nothing is lost, but see V1. |
+| `…::test_floor4_restore_rerun_with_same_timestamp_keeps_first_safety_dump` | **Strict `xfail`, RED until devops fixes V1.** A second run with the same `<now>` (clock stepped back, two operators at once) renames its own safety dump, of the already-restored database, over the first run's `prerestore_<now>.sql.gz`, the only copy of the database as it was before any restore. A refusal (`[[ -e "$PRE" ]] && exit 1`, or `mv -n`) or a unique name turns it XPASS. Remove the marker then. |
+
+Mutation-checked in a scratch mirror, all caught: a recursive remove of the prerestore
+tree after the swap; a recursive remove of `$DATA_DIR` and `find -delete` before the
+extract; the safety dump removed; its `exit 1` removed; `pipefail` dropped;
+`--single-transaction` dropped; `ON_ERROR_STOP` dropped; the extract pointed at
+`/parent`; the swap replaced by `rsync --delete`; the rename-aside removed;
+`compose down -v`. The candidate V1 fix (refuse an existing `$PRE`, then `mv -n`) turns
+the `xfail` XPASS and keeps the rest green.
 
 ## R-023: per-user time zone (ADR 0006), across floors
 
