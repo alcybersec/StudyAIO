@@ -39,7 +39,7 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 # follows the link and calls that "absent").
 taken() { [[ -e "$1" || -L "$1" ]]; }
 # True when the dump ran to its end: a pg_dump cut short still gunzips.
-dump_complete() { zcat "$1" | tail -n 5 | grep -q '^-- PostgreSQL database dump complete'; }
+dump_complete() { zcat "$1" | tail -n 20 | grep -q '^-- PostgreSQL database dump complete'; }
 
 list_backups() {
     echo "Available backups:"
@@ -132,6 +132,10 @@ if [[ -f "$DATA_TAR" ]]; then
     TOPS="$(tar tzf "$DATA_TAR" | cut -d/ -f1 | sort -u)" || { err "Data archive is corrupted -- aborting"; exit 1; }
     [[ "$TOPS" == "$NAME" ]] || {
         err "Data archive must contain only ${NAME}/ at top level, found: ${TOPS//$'\n'/ } -- aborting"; exit 1; }
+    # A `data` member that is a symlink would make the swapped-in tree a link
+    # (to anywhere); refuse it before anything is stopped or touched.
+    tar tzvf "$DATA_TAR" | awk -v n="$NAME" '$1 ~ /^l/ && $6 == n { f = 1 } END { exit !f }' && {
+        err "Data archive's ${NAME} member is a symlink -- aborting"; exit 1; }
 else
     warn "No data archive for this timestamp -- only the database will be restored"
 fi
@@ -182,7 +186,7 @@ if [[ -f "$DATA_TAR" ]]; then
     docker run --rm -v "$(CDPATH='' cd -- "$BACKUP_DIR" && pwd):/backups:ro" -v "${PARENT}:/parent" \
         --entrypoint tar "$TOOL_IMAGE" \
         --numeric-owner -xzpf "/backups/$(basename "$DATA_TAR")" -C "/parent/${STAGE}"
-    [[ -d "${PARENT}/${STAGE}/${NAME}" ]] || {
+    [[ -d "${PARENT}/${STAGE}/${NAME}" && ! -L "${PARENT}/${STAGE}/${NAME}" ]] || {
         err "archive did not contain ${NAME}/ -- current data and database left untouched (staging: ${PARENT}/${STAGE})"
         exit 1
     }

@@ -764,3 +764,37 @@ class TestRestoreDrill:
         assert "data/" not in code
         assert "rm -r" not in code
         assert "--internal" in code
+
+
+class TestFollowups:
+    """M35-W1-08 follow-ups: trailer window and a symlinked data member."""
+
+    PADDED = (
+        b"CREATE TABLE users (id int);\n--\n-- PostgreSQL database dump complete\n--\n\n"
+        b"\\unrestrict abc\n\n" + b"-- extra\n" * 8
+    )
+
+    def test_restore_accepts_trailer_followed_by_extra_lines(self, backups, dstubs, tmp_path):
+        (backups / "backups" / f"studyaio_{TS}_db.sql.gz").write_bytes(gzip.compress(self.PADDED))
+        result, _ = _run_restore(backups, dstubs, tmp_path, TS, "--yes", **COMPOSE_ENV)
+        assert result.returncode == 0, result.stderr
+
+    def test_drill_accepts_trailer_followed_by_extra_lines(self, backups, tmp_path, dstubs):
+        (backups / "backups" / f"studyaio_{TS}_db.sql.gz").write_bytes(gzip.compress(self.PADDED))
+        result, _ = _run_drill(tmp_path, dstubs, str(backups / "backups"))
+        assert "trailer" not in result.stderr
+
+    def test_archive_whose_data_member_is_a_symlink_is_refused_up_front(
+        self, backups, dstubs, tmp_path
+    ):
+        stage = tmp_path / "linkonly"
+        stage.mkdir()
+        (stage / "data").symlink_to("/etc")
+        tar = backups / "backups" / f"studyaio_{TS}_data.tar.gz"
+        tar.unlink()
+        subprocess.run(["tar", "czf", str(tar), "-C", str(stage), "data"], check=True)
+        result, calls = _run_restore(backups, dstubs, tmp_path, TS, "--yes", **COMPOSE_ENV)
+        assert result.returncode == 1
+        assert "symlink" in result.stderr
+        assert calls == []
+        assert (backups / "data" / "keep.txt").read_text() == "precious"

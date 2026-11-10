@@ -63,7 +63,7 @@ fi
 [[ -f "$DUMP" ]] || { echo "dump for ${TS} not found under ${SRC}" >&2; exit 1; }
 gunzip -t "$DUMP" || { echo "dump is corrupted: ${DUMP}" >&2; exit 1; }
 # A pg_dump cut short still gunzips; only the trailer proves it ran to the end.
-zcat "$DUMP" | tail -n 5 | grep -q '^-- PostgreSQL database dump complete' \
+zcat "$DUMP" | tail -n 20 | grep -q '^-- PostgreSQL database dump complete' \
     || { echo "dump has no 'PostgreSQL database dump complete' trailer (truncated?): ${DUMP}" >&2; exit 1; }
 [[ -z "$DATA" ]] || tar tzf "$DATA" >/dev/null || { echo "data archive is corrupted: ${DATA}" >&2; exit 1; }
 echo "==> Drill on backup ${TS}"
