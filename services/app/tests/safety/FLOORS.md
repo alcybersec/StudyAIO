@@ -11,7 +11,7 @@ empty. The 2026-10-04 rulings emptied every one of them. The tier holds no `xfai
 the SAFETY-027 veto marker on the JWT default-secret check (floor 2) XPASSed on
 `8356b15` and was removed in SAFETY-028. SAFETY-033 added two **strict** `xfail`s on the
 email-redaction *backstop* (SEC-08), findings F1 and F2; both fixes landed (`06c4fcb`, `344ce7e`) and
-SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free. At M34-S2 SEC-015 added one strict `xfail`, finding F1 (`test_floor2_register_webhook_logs_no_bot_token_at_info`, httpx's INFO request line carries the bot token); `backend` capped the `httpx`/`httpcore` loggers in `configure_logging` and the marker was removed. The follow-up review added one strict `xfail`, finding F2 (`test_floor2_credential_logging_libraries_capped_at_warning`: at `DEBUG` only, `requests_oauthlib`, `botocore` and `urllib3` log credentials or capability URLs); it was not blocking because none of them logs at the default `INFO`. `backend` added `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` and `urllib3` to the capped set in `configure_logging` and the marker was removed, so the tier is `xfail`-free again. At M35-W1-08 the restore-script review added one strict `xfail`, finding V1 (`test_floor4_restore_rerun_with_same_timestamp_keeps_first_safety_dump`: a second `restore.sh` run that computes the same `<now>` renames its safety dump over the first); `devops` fixed it in `e83851f` (an up-front refusal, plus a second check before a `mv -n`) and the marker was removed, so the tier is `xfail`-free again.
+SAFETY-040 promoted them to plain tests, so the tier is again `xfail`-free. A test marked **RED until** names the task whose code change it waits on; none is marked at the M32 gate. At M33-S2, `test_floor4_recovered_row_gets_no_items_inserted_later` waited on M33-S2-AI-053 as a strict `xfail`; the fix landed in the same task and the marker was removed, so the tier is `xfail`-free. At M34-S2 SEC-015 added one strict `xfail`, finding F1 (`test_floor2_register_webhook_logs_no_bot_token_at_info`, httpx's INFO request line carries the bot token); `backend` capped the `httpx`/`httpcore` loggers in `configure_logging` and the marker was removed. The follow-up review added one strict `xfail`, finding F2 (`test_floor2_credential_logging_libraries_capped_at_warning`: at `DEBUG` only, `requests_oauthlib`, `botocore` and `urllib3` log credentials or capability URLs); it was not blocking because none of them logs at the default `INFO`. `backend` added `requests_oauthlib`, `oauthlib`, `botocore`, `boto3` and `urllib3` to the capped set in `configure_logging` and the marker was removed, so the tier is `xfail`-free again. At M35-W1-08 the restore-script review added one strict `xfail`, finding V1 (`test_floor4_restore_rerun_with_same_timestamp_keeps_first_safety_dump`: a second `restore.sh` run that computes the same `<now>` renames its safety dump over the first); `devops` fixed it in `e83851f` (an up-front refusal, plus a second check before a `mv -n`) and the marker was removed, so the tier is `xfail`-free again. The follow-up `c6f6c54` added no marker: two existing pins needed a stand-in dump with the trailer, and two plain pins were added for the trailer check and the lock.
 
 Run:
 
@@ -672,6 +672,10 @@ root-container steps (`tar` extract, `sh -c` swap) on the host with the containe
 paths mapped back. They find every original file by content anywhere under the project
 root. `restore-drill.sh` touches no live path and is held by
 `tests/unit/test_backup_scripts.py::TestRestoreDrill`.
+The stand-in's `pg_dump` ends with the `-- PostgreSQL database dump complete` trailer
+except in the `dump_truncated` scenario, since the follow-up `c6f6c54` rejects a safety
+dump without one. It also records, at every `pg_dump`, `stop`, `psql` and root-container
+step, whether the `backups/` lock is held at that moment.
 
 | Test | Fails when |
 |---|---|
@@ -679,12 +683,14 @@ root. `restore-drill.sh` touches no live path and is held by
 | `…::test_floor4_restore_extracts_only_into_staging_and_renames_live_tree_aside` | An archive extract targets anything but `/parent/${STAGE}`, `STAGE` stops being `${NAME}.restore-${NOW}`, or the live tree is no longer renamed to `.prerestore-` before the staged tree takes its place. |
 | `…::test_floor4_restore_safety_dump_precedes_every_change_and_aborts_on_failure` | `set -euo pipefail` goes, the safety dump's guard loses its `if !`, its `-lt 100` size check, its `gzip -t` or its `exit 1`, or it no longer comes before stopping services, `DROP SCHEMA`, the extract, the rename and the migration. |
 | `…::test_floor4_restore_drop_and_load_are_one_transaction` | There is more than one `psql`, `DROP SCHEMA` is not piped (before the dump) into the one `psql -v ON_ERROR_STOP=1 --single-transaction`, or the script gains `set +e`, `set +o pipefail`, `\|\| :`, `ON_ERROR_STOP=0` or a new `\|\| true`. |
-| `…::test_floor4_restore_keeps_every_live_file_and_swaps_in_the_backup` | After a successful run any file of the live `data/` is gone from the project root, `data.prerestore-<now>` does not hold the live tree, `data/` does not hold the archive's, the staging dir is left behind, or the safety dump is missing. |
+| `…::test_floor4_restore_keeps_every_live_file_and_swaps_in_the_backup` | After a successful run any file of the live `data/` is gone from the project root, `data.prerestore-<now>` does not hold the live tree, `data/` does not hold the archive's, the staging dir is left behind, the safety dump is missing, or the `backups/` lock is not held at the safety dump, the extract, the `stop`, the load and the swap. |
 | `…::test_floor4_restore_failed_safety_dump_changes_nothing[dump_empty, dump_exit]` | An empty dump, or a `pg_dump` that exits non-zero after writing output (needs `pipefail`), does not exit 1 before any `stop` or `psql`, or leaves any file changed, added or removed under the project. |
 | `…::test_floor4_restore_failed_load_leaves_live_data_in_place` | A failed load renames or changes `data/`, or loses the safety dump. |
 | `…::test_floor4_restore_with_an_existing_prerestore_tree_loses_neither` | `data.prerestore-<now>` already exists and a run loses a file from it or from `data/`, does not exit 1, changes anything under the project, or reaches `stop` or `psql`. Since `e83851f` the host checks for that path before anything runs, and the in-container swap checks again before its `mv`. Before that fix, coreutils `mv` nested the live tree inside it. |
 | `…::test_floor4_restore_rerun_with_same_timestamp_keeps_first_safety_dump` | V1. A second run with the same `<now>` (clock stepped back, two operators at once), after the operator has moved the old tree away, overwrites the first run's `prerestore_<now>.sql.gz` (the only copy of the database as it was before any restore), does not exit 1, or loads anything. Was a strict `xfail` until `e83851f`. |
 | `…::test_floor4_restore_safety_dump_landing_mid_run_is_not_overwritten` | Another run's `prerestore_<now>.sql.gz` appears after the up-front check passed (the stand-in writes it during `pg_dump`), and the rename overwrites it, the run does not exit 1, or it reaches `stop` or `psql`, or it leaves a staging dir. This pins the second check and the `mv -n`. |
+| `…::test_floor4_restore_truncated_safety_dump_stops_before_any_change` | B2 (`c6f6c54`). The safety dump gunzips and passes the size check but has no `dump complete` trailer, and the run does not exit 1 naming the trailer before any `docker run` (extract or swap), `stop` or `psql`, changes `data/`, or leaves a staging or prerestore tree. |
+| `…::test_floor4_restore_refuses_while_another_run_holds_the_lock` | B4 (`c6f6c54`). With another holder's `flock` on `backups/`, a run does not exit 1 naming the lock, calls `docker` at all, or changes anything under the project. |
 
 Mutation-checked in a scratch mirror, all caught: a recursive remove of the prerestore
 tree after the swap; a recursive remove of `$DATA_DIR` and `find -delete` before the
@@ -696,6 +702,13 @@ checks removed with a plain `mv`; the second check alone removed; the up-front
 prerestore-tree check removed. Removing only the up-front `$PRE` check survives on
 purpose. The second check still refuses before anything changes, so the floor holds and
 the cost is one extra `pg_dump`.
+
+After `c6f6c54` (follow-ups B1-B6) the new code was mutated, all caught: the safety-dump
+trailer check removed, left without its `exit 1`, or moved after `stop`; the `flock`
+removed, made `|| true`, or its fd closed straight after taking it. Removing either the
+second `$PRE` check or the `mv -n` post-check on its own survives on purpose: each one
+covers the other's race, and `tests/unit/test_backup_scripts.py` pins the `mv -n` skip
+directly. Removing both, with a plain `mv`, is caught.
 
 ## R-023: per-user time zone (ADR 0006), across floors
 
