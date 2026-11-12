@@ -1,4 +1,15 @@
 import '@testing-library/jest-dom'
+import { configure } from '@testing-library/react'
+import { vi } from 'vitest'
+
+// The first test in each file pays the cold cost of its first render (module
+// evaluation, JIT, jsdom layout). On a loaded shared runner that alone has
+// outlasted waitFor's 1000 ms default and vitest's 5000 ms test timeout, so
+// the first test of a file flaked while the rest passed. waitFor and findBy
+// return as soon as the condition holds, so a longer ceiling costs nothing
+// when green and only changes how long a genuine failure takes to report.
+configure({ asyncUtilTimeout: 10_000 })
+vi.setConfig({ testTimeout: 20_000 })
 
 // i18n, so components calling `t()` render text rather than warning about a
 // missing instance. English is the key set, so tests read as English.
