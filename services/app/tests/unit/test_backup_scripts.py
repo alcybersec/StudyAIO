@@ -241,7 +241,9 @@ case "$1" in
       exec)
         if [[ "$all" == *"pg_dump"* ]]; then
           [[ "${STUB_FAIL:-}" == "pg_dump" ]] && exit 0
-          head -c 4000 /dev/urandom | base64; exit 0
+          head -c 4000 /dev/urandom | base64
+          [[ "${STUB_FAIL:-}" == "no_trailer" ]] || echo "-- PostgreSQL database dump complete"
+          exit 0
         fi
         cat >/dev/null
         [[ "${STUB_FAIL:-}" == "restore" ]] && exit 3
@@ -533,6 +535,119 @@ class TestRestoreScript:
             assert banned not in code
         assert 'mv "$1" "$1.prerestore-$3"' in code
 
+    # -- M35-W1-08 follow-ups B1-B6 ------------------------------------------
+
+    def test_mv_that_skips_an_existing_target_is_not_reported_as_written(
+        self, backups, dstubs, tmp_path
+    ):
+        """B1: GNU `mv -n` exits 0 on a skip; the dump must really have moved."""
+        now = self._fixed_now(dstubs)
+        _stub(
+            dstubs, "mv", '#!/usr/bin/env bash\n[[ "$1" == "-n" ]] && exit 0\nexec /bin/mv "$@"\n'
+        )
+        result, calls = _run_restore(backups, dstubs, tmp_path, TS, "--yes", **COMPOSE_ENV)
+        assert result.returncode == 1
+        assert "Safety dump written" not in result.stdout
+        assert "was not moved into place" in result.stderr
+        assert (backups / "backups" / f"prerestore_{now}.sql.gz.partial").is_file()
+        assert not any(" stop " in c or "single-transaction" in c for c in calls)
+
+    @pytest.mark.parametrize("which", ["safety", "prerestore", "staging"])
+    def test_dangling_symlink_counts_as_existing(self, backups, dstubs, tmp_path, which):
+        """B1: `[[ -e ]]` calls a dangling symlink absent; the targets must be refused."""
+        now = self._fixed_now(dstubs)
+        link = {
+            "safety": backups / "backups" / f"prerestore_{now}.sql.gz",
+            "prerestore": backups / f"data.prerestore-{now}",
+            "staging": backups / f"data.restore-{now}",
+        }[which]
+        link.symlink_to(tmp_path / "nowhere")
+        result, calls = _run_restore(backups, dstubs, tmp_path, TS, "--yes", **COMPOSE_ENV)
+        assert result.returncode == 1
+        assert "exists:" in result.stderr
+        assert link.is_symlink()
+        assert calls == []
+
+    def test_in_container_swap_checks_for_a_symlink_too(self):
+        code = _code(RESTORE)
+        assert '[ -L "$1.prerestore-$3" ]' in code
+
+    def test_truncated_safety_dump_aborts_before_anything_is_stopped(
+        self, backups, dstubs, tmp_path
+    ):
+        """B2: a pg_dump cut short still gzips; only the trailer proves it finished."""
+        result, calls = _run_restore(
+            backups, dstubs, tmp_path, TS, "--yes", STUB_FAIL="no_trailer", **COMPOSE_ENV
+        )
+        assert result.returncode == 1
+        assert "trailer" in result.stderr
+        assert not any(" stop " in c or "single-transaction" in c for c in calls)
+
+    def test_concurrent_restore_is_refused_by_the_lock(self, backups, dstubs, tmp_path):
+        """B4: a held lock on backups/ stops a second run before it changes anything."""
+        holder = subprocess.Popen(["flock", str(backups / "backups"), "sleep", "30"])
+        try:
+            time.sleep(0.5)  # let flock take the lock
+            result, calls = _run_restore(backups, dstubs, tmp_path, TS, "--yes", **COMPOSE_ENV)
+        finally:
+            holder.kill()
+            holder.wait()
+        assert result.returncode == 1
+        assert "another restore" in result.stderr
+        assert calls == []
+        assert not list((backups / "backups").glob("prerestore_*"))
+
+    def test_lock_is_taken_before_the_first_check_or_change(self):
+        code = _code(RESTORE)
+        assert code.index("flock -n 9") < code.index("pg_dump")
+        assert code.index("flock -n 9") < code.index('! taken "$PRE"')
+
+    def test_archive_with_extra_top_level_entries_is_refused_up_front(
+        self, backups, dstubs, tmp_path
+    ):
+        """B5: otherwise the post-swap rmdir fails and the stack stays stopped."""
+        (backups / "stray.txt").write_text("not under data/")
+        tar = backups / "backups" / f"studyaio_{TS}_data.tar.gz"
+        tar.unlink()
+        subprocess.run(
+            ["tar", "czf", str(tar), "-C", str(backups), "data", "stray.txt"], check=True
+        )
+        result, calls = _run_restore(backups, dstubs, tmp_path, TS, "--yes", **COMPOSE_ENV)
+        assert result.returncode == 1
+        assert "only data/" in result.stderr and "stray.txt" in result.stderr
+        assert calls == []
+        assert (backups / "data" / "keep.txt").read_text() == "precious"
+
+    def test_archive_written_by_backup_sh_is_accepted(self, backups, dstubs, tmp_path):
+        """B5 must not refuse the real shape: one top-level `data/` entry."""
+        result, _ = _run_restore(backups, dstubs, tmp_path, TS, "--yes", **COMPOSE_ENV)
+        assert result.returncode == 0, result.stderr
+
+    def test_cdpath_does_not_redirect_path_resolution(self, backups, dstubs, tmp_path):
+        """B6: with CDPATH set, a bare `cd vol` prints the path and can pick a decoy."""
+        (backups / "vol").mkdir()
+        (backups / "data").rename(backups / "vol" / "data")
+        decoy = tmp_path / "decoy"
+        (decoy / "vol").mkdir(parents=True)
+        (decoy / "backups").mkdir()
+        result, calls = _run_restore(
+            backups,
+            dstubs,
+            tmp_path,
+            TS,
+            "--yes",
+            CDPATH=str(decoy),
+            DATA_DIR="vol/data",
+            BACKUP_DIR="backups",
+            STUB_PARENT=str(backups / "vol"),
+            **COMPOSE_ENV,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        joined = "\n".join(calls)
+        assert f"-v {backups}/vol:/parent" in joined
+        assert f"-v {backups}/backups:/backups:ro" in joined
+        assert "decoy" not in joined
+
 
 def _run_drill(tmp_path, dstubs, *args, **extra):
     log = tmp_path / "drill-docker.log"
@@ -578,6 +693,16 @@ class TestRestoreDrill:
         (backups / "backups" / f"studyaio_{TS}_db.sql.gz").write_bytes(b"junk" * 50)
         result, calls = _run_drill(tmp_path, dstubs, str(backups / "backups"))
         assert result.returncode == 1
+        assert calls == []
+
+    def test_truncated_dump_exits_1_without_docker(self, backups, tmp_path, dstubs):
+        """B3: a dump cut short still gunzips; the trailer is the proof it finished."""
+        (backups / "backups" / f"studyaio_{TS}_db.sql.gz").write_bytes(
+            gzip.compress(b"CREATE TABLE users (id int);\n" * 20)
+        )
+        result, calls = _run_drill(tmp_path, dstubs, str(backups / "backups"))
+        assert result.returncode == 1
+        assert "trailer" in result.stderr
         assert calls == []
 
     def test_unknown_api_image_exits_1(self, backups, tmp_path, dstubs):
@@ -639,3 +764,37 @@ class TestRestoreDrill:
         assert "data/" not in code
         assert "rm -r" not in code
         assert "--internal" in code
+
+
+class TestFollowups:
+    """M35-W1-08 follow-ups: trailer window and a symlinked data member."""
+
+    PADDED = (
+        b"CREATE TABLE users (id int);\n--\n-- PostgreSQL database dump complete\n--\n\n"
+        b"\\unrestrict abc\n\n" + b"-- extra\n" * 8
+    )
+
+    def test_restore_accepts_trailer_followed_by_extra_lines(self, backups, dstubs, tmp_path):
+        (backups / "backups" / f"studyaio_{TS}_db.sql.gz").write_bytes(gzip.compress(self.PADDED))
+        result, _ = _run_restore(backups, dstubs, tmp_path, TS, "--yes", **COMPOSE_ENV)
+        assert result.returncode == 0, result.stderr
+
+    def test_drill_accepts_trailer_followed_by_extra_lines(self, backups, tmp_path, dstubs):
+        (backups / "backups" / f"studyaio_{TS}_db.sql.gz").write_bytes(gzip.compress(self.PADDED))
+        result, _ = _run_drill(tmp_path, dstubs, str(backups / "backups"))
+        assert "trailer" not in result.stderr
+
+    def test_archive_whose_data_member_is_a_symlink_is_refused_up_front(
+        self, backups, dstubs, tmp_path
+    ):
+        stage = tmp_path / "linkonly"
+        stage.mkdir()
+        (stage / "data").symlink_to("/etc")
+        tar = backups / "backups" / f"studyaio_{TS}_data.tar.gz"
+        tar.unlink()
+        subprocess.run(["tar", "czf", str(tar), "-C", str(stage), "data"], check=True)
+        result, calls = _run_restore(backups, dstubs, tmp_path, TS, "--yes", **COMPOSE_ENV)
+        assert result.returncode == 1
+        assert "symlink" in result.stderr
+        assert calls == []
+        assert (backups / "data" / "keep.txt").read_text() == "precious"

@@ -29,6 +29,7 @@ The drill (``scripts/restore-drill.sh``) is held by
 
 from __future__ import annotations
 
+import fcntl
 import gzip
 import hashlib
 import os
@@ -158,11 +159,27 @@ def test_floor4_restore_drop_and_load_are_one_transaction():
 
 DOCKER = r'''#!__PY__
 """docker stand-in: logs calls; runs the root-container tar/sh steps on the host."""
-import os, subprocess, sys
+import fcntl, os, subprocess, sys
 
 argv = sys.argv[1:]
+
+
+def lock_state():
+    """Is restore.sh's lock on backups/ held right now? (A fresh fd is a new lock.)"""
+    fd = os.open(os.path.join(os.getcwd(), "backups"), os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return "LOCK free"
+    except BlockingIOError:
+        return "LOCK held"
+    finally:
+        os.close(fd)
+
+
 with open(os.environ["STUB_LOG"], "a") as log:
     log.write(" ".join(argv) + "\n")
+    if argv[0] == "run" or any(k in " ".join(argv) for k in ("pg_dump", "psql", " stop")):
+        log.write(lock_state() + "\n")
 fail = os.environ.get("STUB_FAIL", "")
 
 if argv[0] == "compose":
@@ -181,6 +198,8 @@ if argv[0] == "compose":
             with open(os.environ["STUB_RACE"], "wb") as racer:
                 racer.write(b"RACER")
         sys.stdout.write("-- PostgreSQL database dump\n-- " + os.urandom(512).hex() + "\n")
+        if fail != "dump_truncated":  # a pg_dump cut short has no trailer
+            sys.stdout.write("--\n-- PostgreSQL database dump complete\n--\n\n")
         sys.stdout.flush()
         sys.exit(2 if fail == "dump_exit" else 0)
     elif "psql" in joined:
@@ -304,6 +323,10 @@ def test_floor4_restore_keeps_every_live_file_and_swaps_in_the_backup(project):
     assert gzip.decompress(pre.read_bytes()).startswith(b"-- PostgreSQL database dump")
     sql = (project.parent / "load.sql").read_bytes()
     assert sql.startswith(b"DROP SCHEMA public CASCADE; CREATE SCHEMA public;\n")
+    # B4: the lock is held through every destructive step, not just taken and dropped.
+    calls = _calls(project)
+    assert calls.count("LOCK held") >= 5, calls  # pg_dump, extract, stop, psql, swap
+    assert "LOCK free" not in calls, calls
 
 
 @pytest.mark.parametrize("fail", ["dump_empty", "dump_exit"])
@@ -375,3 +398,32 @@ def test_floor4_restore_safety_dump_landing_mid_run_is_not_overwritten(project):
     assert pre.read_bytes() == b"RACER"
     assert "psql" not in _calls(project) and " stop " not in _calls(project)
     assert not (project / f"data.restore-{NOW}").exists()
+
+
+def test_floor4_restore_truncated_safety_dump_stops_before_any_change(project):
+    """B2: a safety dump that gunzips but lacks the trailer is no safety dump."""
+    before = _snapshot(project / "data")
+    result = _restore(project, STUB_FAIL="dump_truncated")
+    assert result.returncode == 1
+    assert "Safety dump has no 'PostgreSQL database dump complete' trailer" in result.stderr
+    calls = _calls(project)
+    assert "psql" not in calls and " stop " not in calls
+    assert "\nrun " not in f"\n{calls}"  # no extract, no swap
+    assert _snapshot(project / "data") == before
+    assert not (project / f"data.restore-{NOW}").exists()
+    assert not (project / f"data.prerestore-{NOW}").exists()
+
+
+def test_floor4_restore_refuses_while_another_run_holds_the_lock(project):
+    """B4: a second run while one holds the backups/ lock exits 1 and touches nothing."""
+    before = _snapshot(project)
+    fd = os.open(project / "backups", os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = _restore(project)
+    finally:
+        os.close(fd)
+    assert result.returncode == 1
+    assert "another restore holds the lock" in result.stderr
+    assert _calls(project) == ""  # not even the compose lookup
+    assert _snapshot(project) == before

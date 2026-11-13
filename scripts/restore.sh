@@ -14,6 +14,8 @@
 #   - takes a safety dump of the current database first and aborts if it fails;
 #   - restores with ON_ERROR_STOP in ONE transaction that also drops the old
 #     schema, so a bad dump rolls back and leaves the current database intact;
+#   - holds an exclusive non-blocking flock on the safety-dump directory for the
+#     whole run, so two restores cannot interleave (the second exits 1);
 #   - never deletes data/: the current tree is renamed to data.prerestore-<ts>
 #     after the archive has been extracted beside it. The operator removes the
 #     old tree by hand once the restore is verified.
@@ -33,6 +35,11 @@ info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 ok()   { echo -e "${GREEN}[OK]${NC} $*"; }
 err()  { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+# True for anything at the path, including a dangling symlink ([[ -e ]] alone
+# follows the link and calls that "absent").
+taken() { [[ -e "$1" || -L "$1" ]]; }
+# True when the dump ran to its end: a pg_dump cut short still gunzips.
+dump_complete() { zcat "$1" | tail -n 20 | grep -q '^-- PostgreSQL database dump complete'; }
 
 list_backups() {
     echo "Available backups:"
@@ -67,16 +74,23 @@ case "$NAME" in
     ""|/|.|..|-*) err "refusing DATA_DIR=${DATA_DIR}: name must be a plain directory name"; exit 1 ;;
 esac
 [[ -d "$DATA_DIR" ]] || { err "DATA_DIR is not a directory: $DATA_DIR"; exit 1; }
-PARENT="$(cd "$(dirname "$DATA_DIR")" && pwd)"
+PARENT="$(CDPATH='' cd -- "$(dirname "$DATA_DIR")" && pwd)"
 STAGE="${NAME}.restore-${NOW}"
 # The safety dump always lands in the stack's own backups/ (where backup.sh
 # writes), not in BACKUP_DIR, which may be a temporary fetched copy.
 SAFETY_DIR="${PWD}/backups"
 PRE="${SAFETY_DIR}/prerestore_${NOW}.sql.gz"
-[[ ! -e "$PRE" ]] || { err "exists: $PRE (a restore already ran in this second) -- nothing was changed"; exit 1; }
-[[ ! -e "${PARENT}/${NAME}.prerestore-${NOW}" ]] || {
+# One restore at a time. The lock is on the directory itself (flock accepts a
+# directory), so no lock file is left lying in backups/. The fd closes, and the
+# lock with it, when the script exits.
+mkdir -p "$SAFETY_DIR"
+command -v flock >/dev/null || { err "flock not found -- cannot guard against a concurrent restore"; exit 1; }
+exec 9<"$SAFETY_DIR"
+flock -n 9 || { err "another restore holds the lock on ${SAFETY_DIR} -- nothing was changed"; exit 1; }
+! taken "$PRE" || { err "exists: $PRE (a restore already ran in this second) -- nothing was changed"; exit 1; }
+! taken "${PARENT}/${NAME}.prerestore-${NOW}" || {
     err "exists: ${PARENT}/${NAME}.prerestore-${NOW} -- nothing was changed"; exit 1; }
-[[ ! -e "${PARENT}/${STAGE}" ]] || { err "exists: ${PARENT}/${STAGE} -- nothing was changed"; exit 1; }
+! taken "${PARENT}/${STAGE}" || { err "exists: ${PARENT}/${STAGE} -- nothing was changed"; exit 1; }
 
 # -- Which compose files? The running stack's, never a guess ----------------
 
@@ -108,11 +122,20 @@ info "Compose: ${COMPOSE[*]}"
 info "Database dump: $DB_DUMP ($(du -h "$DB_DUMP" | cut -f1))"
 gunzip -t "$DB_DUMP" || { err "Dump file is corrupted -- aborting"; exit 1; }
 # A pg_dump cut short still gunzips; only the trailer proves it ran to the end.
-zcat "$DB_DUMP" | tail -n 5 | grep -q '^-- PostgreSQL database dump complete' \
+dump_complete "$DB_DUMP" \
     || { err "Dump has no 'PostgreSQL database dump complete' trailer (truncated?) -- aborting"; exit 1; }
 if [[ -f "$DATA_TAR" ]]; then
     info "Data archive: $DATA_TAR ($(du -h "$DATA_TAR" | cut -f1))"
-    tar tzf "$DATA_TAR" >/dev/null || { err "Data archive is corrupted -- aborting"; exit 1; }
+    # backup.sh writes `tar czf -C <parent> <name>`: the one top-level entry is
+    # the data directory's name. Anything else would leave the staging directory
+    # non-empty after the swap, with the stack stopped -- refuse it now.
+    TOPS="$(tar tzf "$DATA_TAR" | cut -d/ -f1 | sort -u)" || { err "Data archive is corrupted -- aborting"; exit 1; }
+    [[ "$TOPS" == "$NAME" ]] || {
+        err "Data archive must contain only ${NAME}/ at top level, found: ${TOPS//$'\n'/ } -- aborting"; exit 1; }
+    # A `data` member that is a symlink would make the swapped-in tree a link
+    # (to anywhere); refuse it before anything is stopped or touched.
+    tar tzvf "$DATA_TAR" | awk -v n="$NAME" '$1 ~ /^l/ && $6 == n { f = 1 } END { exit !f }' && {
+        err "Data archive's ${NAME} member is a symlink -- aborting"; exit 1; }
 else
     warn "No data archive for this timestamp -- only the database will be restored"
 fi
@@ -138,8 +161,15 @@ if ! "${COMPOSE[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB
     err "Safety dump failed -- nothing was changed"
     exit 1
 fi
-[[ ! -e "$PRE" ]] || { err "exists: $PRE (left ${PRE}.partial in place) -- nothing was changed"; exit 1; }
+taken "$PRE" && { err "exists: $PRE (left ${PRE}.partial in place) -- nothing was changed"; exit 1; }
 mv -n "${PRE}.partial" "$PRE"
+# GNU mv -n exits 0 when it skips an existing target (also a dangling symlink):
+# insist the dump really moved before anything is stopped.
+if taken "${PRE}.partial" || [[ ! -f "$PRE" ]]; then
+    err "Safety dump was not moved into place (left ${PRE}.partial) -- nothing was changed"
+    exit 1
+fi
+dump_complete "$PRE" || { err "Safety dump has no 'PostgreSQL database dump complete' trailer (truncated?) -- nothing was changed"; exit 1; }
 ok "Safety dump written"
 
 # -- Stage the data archive (before the database is touched) ------------------
@@ -153,10 +183,10 @@ if [[ -f "$DATA_TAR" ]]; then
     TOOL_IMAGE="$("${COMPOSE[@]}" config --images | grep -m1 pgvector || true)"
     [[ -n "$TOOL_IMAGE" ]] || { err "cannot find the db image for the extract step"; exit 1; }
     mkdir -p "${PARENT}/${STAGE}"
-    docker run --rm -v "$(cd "$BACKUP_DIR" && pwd):/backups:ro" -v "${PARENT}:/parent" \
+    docker run --rm -v "$(CDPATH='' cd -- "$BACKUP_DIR" && pwd):/backups:ro" -v "${PARENT}:/parent" \
         --entrypoint tar "$TOOL_IMAGE" \
         --numeric-owner -xzpf "/backups/$(basename "$DATA_TAR")" -C "/parent/${STAGE}"
-    [[ -d "${PARENT}/${STAGE}/${NAME}" ]] || {
+    [[ -d "${PARENT}/${STAGE}/${NAME}" && ! -L "${PARENT}/${STAGE}/${NAME}" ]] || {
         err "archive did not contain ${NAME}/ -- current data and database left untouched (staging: ${PARENT}/${STAGE})"
         exit 1
     }
@@ -182,7 +212,7 @@ if [[ "$SWAP_DATA" -eq 1 ]]; then
     docker run --rm -v "${PARENT}:/parent" --entrypoint sh "$TOOL_IMAGE" -c '
         set -e
         cd /parent
-        [ ! -e "$1.prerestore-$3" ] || { echo "exists: $1.prerestore-$3" >&2; exit 1; }
+        if [ -e "$1.prerestore-$3" ] || [ -L "$1.prerestore-$3" ]; then echo "exists: $1.prerestore-$3" >&2; exit 1; fi
         mv "$1" "$1.prerestore-$3"
         mv "$2/$1" "$1"
         rmdir "$2"' sh "$NAME" "$STAGE" "$NOW"
