@@ -1,0 +1,12 @@
+# gitleaks configuration  [D30-05]
+# Extends the default rules. Known false positives are NOT allowlisted by path
+# pattern (that would hide a real secret in the same place later); they are
+# listed one by one, by fingerprint, in .gitleaksignore.
+title = "StudyAIO"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "detect-secrets baseline: stores SHA-1 hashes of reviewed findings, never secrets"
+paths = ['''^\.secrets\.baseline$''']

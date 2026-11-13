@@ -394,8 +394,13 @@ the adapter, user data never lost) as its own pytest process. The floor tier
 measures the guard code, not `app`, because the checks are mostly static AST
 walks. `build-api` needs `backend-tests`, `test-floor` and `integration-tests`,
 so a red floor blocks the image build. `build-api`, `build-ui` and
-`deploy-selfhosted` also need `dependency-audit` and `summary-eval`, and `build-ui`
-needs `e2e-tests`, so none of them publishes or deploys past a red gate. `tests/contracts` also runs in
+`deploy-selfhosted` also need `dependency-audit`, `summary-eval` and `secret-scan`
+(gitleaks over the commits a push adds; false positives by fingerprint in
+`.gitleaksignore`), and `build-ui` needs `e2e-tests`, so none of them publishes or
+deploys past a red gate. `sast` (semgrep) is advisory for now (`allow_failure`, not
+in any `needs:`). Scheduled pipelines on main (variable `SCHEDULE_KIND`) run only
+`dependency-audit` and `image-rescan` (`nightly`) or `gitleaks-history` (`weekly`);
+they never build or deploy. `tests/contracts` also runs in
 `backend-tests`. Change a threshold only in `pyproject.toml`; the Makefile and
 CI both read it from there.
 

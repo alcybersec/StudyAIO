@@ -1,0 +1,35 @@
+# Secret-scanner false positives, one fingerprint per line (M35-D30-05).
+# Reviewed 2026-11: every entry is a synthetic value in a test file (a fake
+# token, API key or web-push auth string used as a fixture, or a revision-id-like
+# string inside an assertion message). None is a credential. Do not add a line
+# without reading the finding; a real secret is rotated, never listed here.
+#
+# Working-tree form (file:rule:line), used by the directory scan:
+services/app/tests/golden/test_push_structure.py:generic-api-key:28
+services/app/tests/safety/test_floor2_claude_oauth_token.py:generic-api-key:398
+services/app/tests/safety/test_floor2_email_delivery_logs.py:generic-api-key:26
+services/app/tests/safety/test_floor2_library_log_levels.py:generic-api-key:39
+services/app/tests/unit/pipeline/test_targeted_task.py:generic-api-key:21
+services/app/tests/unit/services/test_floor_fixes.py:generic-api-key:81
+services/ui/src/lib/schemas.test.ts:generic-api-key:35
+services/ui/src/pages/RegisterPage.test.tsx:generic-api-key:117
+
+# History form (commit:file:rule:line), used by the push and weekly history scans:
+119369369f5a5fef482ae05392a25e863f2aa650:services/app/tests/integration/test_idor_row_level.py:generic-api-key:343
+1c930481f12a1120d71d34fec855c1069ca49a73:services/app/tests/integration/test_idor_row_level.py:generic-api-key:343
+2099c43eb46a74055dbc9a4da10fd14865d76924:services/app/tests/safety/test_floor2_claude_oauth_token.py:generic-api-key:387
+313cc0e222cb1c73431035a592d64d5df2daa203:services/ui/src/lib/schemas.test.ts:generic-api-key:33
+3f6b51b1ed6c463fc7d568646d2471d9fae2252a:services/app/tests/unit/pipeline/test_targeted_task.py:generic-api-key:20
+4003008f3c0056a236ee173f9eddad386dcaaef2:services/app/tests/integration/test_idor_row_level.py:generic-api-key:343
+4a271036215c0b642ffdada7dd8bedf0629d69b8:services/app/tests/unit/pipeline/test_targeted_task.py:generic-api-key:20
+4d2d81588b6cf0db8be8dc64d8f59c712ea97eb3:services/app/tests/safety/test_floor2_library_log_levels.py:generic-api-key:38
+4f6d2f3be27fde25598c2cc4c4397a9b5af03376:services/ui/src/pages/RegisterPage.test.tsx:generic-api-key:117
+53ca535dfcd9dd454d74f14895a36ef89188bfa8:services/ui/src/lib/schemas.test.ts:generic-api-key:33
+74c60ca465a19a9c60352c0ad8ab000856f68c9d:services/app/tests/golden/test_push_structure.py:generic-api-key:29
+7eecbacb31d1c7327855dddaab228b7cdbe3700e:services/app/tests/unit/services/test_floor_fixes.py:generic-api-key:81
+aaeee0fc76362a938e156558598e93b6b3864316:services/app/tests/integration/test_idor_row_level.py:generic-api-key:343
+b2d4dde889d5c0640b287a49b41c94709deac292:services/app/tests/safety/test_floor2_claude_oauth_token.py:generic-api-key:387
+c79326045c3dd7c95155af35b9d6365af80e0181:services/app/tests/unit/services/test_floor_fixes.py:generic-api-key:81
+d06dbda95eb8a41d969d37d82f88b135bfd09497:services/app/tests/safety/test_floor2_email_delivery_logs.py:generic-api-key:26
+ecf20aaf6211548c75338a3228aa2afb2adacc68:services/app/tests/golden/test_push_structure.py:generic-api-key:29
+f8f363b1b424324726e6d0158752c4d96e130fcd:services/ui/src/pages/RegisterPage.test.tsx:generic-api-key:117
