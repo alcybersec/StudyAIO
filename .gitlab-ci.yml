@@ -83,7 +83,7 @@ variables:
     when: never
   - when: on_success
 
-# Docs-only fast path (M35-D30-09). A branch push whose diff against main touches
+# Docs-only fast path (M35-D30-09). A branch or merge request pipeline whose diff against main touches
 # only documentation runs just python-lint, secret-scan and dependency-audit
 # (those use .rules-push or an unconditional rule and must never gain a changes
 # condition). The heavy jobs use .rules-code, which runs them
