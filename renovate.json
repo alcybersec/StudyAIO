@@ -64,10 +64,10 @@
       "allowedVersions": "<25"
     },
     {
-      "description": "Postgres major = data migration; never automatic.",
+      "description": "pgvector/pgvector bundles Postgres: a tag change (pg16 to pg17, or another tag form) is a data migration and never automatic. Every update type except digest and pinDigest is off, so only a new digest of the tag already in use is proposed (base-image rebuilds); those stay in the weekly \"container images\" group above. Do not use a bare enabled:false here: it disables the dependency before lookup and no later rule can re-enable it.",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["pgvector/pgvector"],
-      "matchUpdateTypes": ["major"],
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "rollback", "bump", "replacement"],
       "enabled": false
     },
     {
