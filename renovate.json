@@ -1,0 +1,104 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "StudyAIO update policy [D30-04]. Runs as the `renovate` job in a nightly GitLab pipeline schedule; every MR still needs a green pipeline and a human merge.",
+  "extends": [
+    "config:recommended",
+    "docker:pinDigests",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "timezone": "UTC",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 6,
+  "prHourlyLimit": 3,
+  "minimumReleaseAge": "14 days",
+  "internalChecksFilter": "strict",
+  "labels": ["dependencies"],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"],
+    "minimumReleaseAge": null,
+    "labels": ["security"]
+  },
+  "ignorePaths": ["design/prototypes/**", "lecture_manager/**"],
+  "packageRules": [
+    {
+      "description": "Python: one MR per week for non-major bumps; the generated lock is edited per package and CI's pip check proves it stays consistent.",
+      "matchManagers": ["pip_requirements"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "python non-major"
+    },
+    {
+      "description": "torch/torchvision carry +cpu local versions that only exist on the PyTorch index; bump them with scripts/lock-requirements.sh by hand.",
+      "matchManagers": ["pip_requirements"],
+      "matchPackageNames": ["torch", "torchvision", "torchaudio"],
+      "enabled": false
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm non-major"
+    },
+    {
+      "description": "The Playwright image tag must equal @playwright/test (see .gitlab-ci.yml e2e-tests).",
+      "matchPackageNames": ["@playwright/test", "mcr.microsoft.com/playwright"],
+      "groupName": "playwright"
+    },
+    {
+      "description": "Container and CI image digests: one weekly MR.",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["digest", "pinDigest", "patch", "minor"],
+      "groupName": "container images"
+    },
+    {
+      "description": "Stay on Python 3.12 until a deliberate upgrade.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["python"],
+      "allowedVersions": "<3.13"
+    },
+    {
+      "description": "Node 24 LTS line.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["node"],
+      "allowedVersions": "<25"
+    },
+    {
+      "description": "Postgres major = data migration; never automatic.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["pgvector/pgvector"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "Redis stays on 7 until a deliberate decision (licence and protocol changes in 8).",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["redis"],
+      "allowedVersions": "<8"
+    },
+    {
+      "description": "nginx: even minor = stable branch only.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["nginxinc/nginx-unprivileged"],
+      "allowedVersions": "/^1\\.(30|32|34)\\./"
+    },
+    {
+      "description": "cosign 3 changes signing defaults and flags used in ci-publish-image.sh and deploy.sh; upgrade deliberately.",
+      "matchPackageNames": ["ghcr.io/sigstore/cosign/cosign"],
+      "allowedVersions": "<3"
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "Images run via `docker run` in CI scripts and deploy.sh, annotated with a renovate comment.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.gitlab-ci\\.yml$/",
+        "/^infra/deploy/deploy\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s*\\n\\s*[A-Z_]+[:=]\\s*\"(?:[^\"@:]+):(?<currentValue>[^\"@]+)@(?<currentDigest>sha256:[a-f0-9]{64})\""
+      ]
+    }
+  ]
+}

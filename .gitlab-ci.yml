@@ -103,6 +103,7 @@ variables:
         - docs/strategy.md
         - docs/decisions.md
         - Makefile
+        - renovate.json
         - docker-compose*.yml
         - .gitlab-ci.yml
         - .gitleaks.toml
@@ -320,7 +321,7 @@ integration-tests:
 # finding, not flakiness.
 dependency-audit:
   stage: test
-  image: node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
+  image: node:24.22.1-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c
   needs: []
   # Also runs nightly (schedule with SCHEDULE_KIND=nightly), so an advisory
   # published after the last push is noticed within a day, not at the next push.
@@ -356,7 +357,7 @@ sast:
 
 frontend-checks:
   stage: test
-  image: node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
+  image: node:24.22.1-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c
   rules: *rules-code
   cache:
     key:
@@ -619,7 +620,7 @@ deploy-selfhosted:
 # ---------------------------------------------------------------------------
 # Scheduled jobs (M35-D30-05). Two pipeline schedules on main pick their jobs by
 # the SCHEDULE_KIND variable:
-#   SCHEDULE_KIND=nightly -> dependency-audit (rule above), image-rescan
+#   SCHEDULE_KIND=nightly -> dependency-audit (rule above), image-rescan, renovate
 #   SCHEDULE_KIND=weekly  -> gitleaks-history
 # Every other job opts out of schedules (.rules-push and the build/deploy rules),
 # so a schedule never builds or deploys. A failed scheduled pipeline e-mails the
@@ -677,3 +678,40 @@ gitleaks-history:
   script:
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - gitleaks git --redact --no-banner --exit-code 1 --config .gitleaks.toml --log-opts="--all" .
+
+# Dependency update bot (M35-D30-04). Opens grouped, CI-tested MRs per
+# renovate.json; a human still merges. Nightly schedule only: never on push, MR
+# or tag, and in no `needs:`. RENOVATE_TOKEN is a bot user's access token
+# (scopes api, write_repository), masked, protected and scoped to environment
+# `renovate`; the job refuses to run without it and never prints it.
+renovate:
+  stage: test
+  image:
+    name: renovate/renovate:44.175.5-full@sha256:ba02b2275f068fee81d90e2021f6b5b7848b75646102e22e0e0f82610a5b3b39
+    entrypoint: [""]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_KIND == "nightly"
+  needs: []
+  interruptible: false
+  environment:
+    name: renovate
+    action: prepare
+  variables:
+    RENOVATE_PLATFORM: gitlab
+    RENOVATE_ENDPOINT: $CI_API_V4_URL
+    RENOVATE_REPOSITORIES: $CI_PROJECT_PATH
+    RENOVATE_AUTODISCOVER: "false"
+    RENOVATE_ONBOARDING: "false"
+    RENOVATE_REQUIRE_CONFIG: required
+    RENOVATE_BASE_DIR: $CI_PROJECT_DIR/.renovate
+    LOG_LEVEL: info
+  cache:
+    key: renovate
+    paths: [.renovate/cache]
+  script:
+    - |
+      if [ -z "${RENOVATE_TOKEN:-}" ]; then
+        echo "FATAL: RENOVATE_TOKEN is not set for environment renovate. Nothing was updated."
+        exit 1
+      fi
+    - renovate
