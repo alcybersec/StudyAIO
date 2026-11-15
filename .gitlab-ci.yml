@@ -41,6 +41,23 @@ stages:
   - build
   - deploy
 
+# One pipeline per push (M35-CI-dedup). A push to a branch with an open merge
+# request used to start both a branch pipeline and a merge request pipeline.
+#   - merge request events run (the MR pipeline is the one that gates a merge);
+#   - a plain push to a branch that has an open MR is skipped, its MR pipeline
+#     covers it. CI_OPEN_MERGE_REQUESTS is empty on main, on tags and on a branch
+#     before its MR exists, so those keep their branch pipeline;
+#   - everything else (schedule, web, api, trigger, tags, main) runs as before.
+# In an MR pipeline CI_COMMIT_BRANCH is unset, so no job may depend on it to run;
+# every job's rules must match merge_request_event as well as push. The
+# job-level `rules` below are audited by test_ci_workflow.py.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - when: always
+
 default:
   tags: [homelab, docker]
   interruptible: true
@@ -66,7 +83,7 @@ variables:
     when: never
   - when: on_success
 
-# Docs-only fast path (M35-D30-09). A branch push whose diff against main touches
+# Docs-only fast path (M35-D30-09). A branch or merge request pipeline whose diff against main touches
 # only documentation runs just python-lint, secret-scan and dependency-audit
 # (those use .rules-push or an unconditional rule and must never gain a changes
 # condition). The heavy jobs use .rules-code, which runs them
