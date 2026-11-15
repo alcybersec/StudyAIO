@@ -81,6 +81,9 @@ header = f"""\
 # new dependency conflicts with a pin below, the install fails, and that is the
 # cue to re-run the script.
 #
+# Renovate may bump single pins here between regenerations; CI's `pip check`
+# keeps the set consistent.
+#
 # Resolved {datetime.now(UTC).strftime('%Y-%m-%d')} on python:3.12-slim,
 # linux/amd64, with extra index {extra_index}.
 # {len(pins)} packages.
